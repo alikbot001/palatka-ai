@@ -1644,10 +1644,11 @@ function DSP.ui.draw()
     imgui.SetNextWindowBgAlpha(DSP.theme.opacity)
 
     local ncol = DSP.theme.push_window()
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12 * dpi)
-    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 8 * dpi)
-    imgui.PushStyleVarFloat(imgui.StyleVar.ChildRounding, 9 * dpi)
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8 * dpi, 6 * dpi))
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.WindowRounding, 12 * dpi) then pushed_vars = pushed_vars + 1 end
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.FrameRounding, 8 * dpi) then pushed_vars = pushed_vars + 1 end
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.ChildRounding, 9 * dpi) then pushed_vars = pushed_vars + 1 end
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(8 * dpi, 6 * dpi)) then pushed_vars = pushed_vars + 1 end
 
     -- v1.2 sync: if numeric tab was changed externally (tests / old code),
     -- bring the screen id in line so the dispatcher renders the right panel.
@@ -1665,8 +1666,12 @@ function DSP.ui.draw()
         imgui.EndChild()
     end
     imgui.End()
-    imgui.PopStyleVar(4)
-    imgui.PopStyleColor(ncol)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
+    if ncol and ncol > 0 then
+        pcall(imgui.PopStyleColor, ncol)
+    end
     if DSP.ui.open_ref and DSP.ui.open_ref[0] == false then
         DSP.ui.open = false
     end
@@ -1709,9 +1714,10 @@ function DSP.ui.install()
                 + imgui.WindowFlags.NoSavedSettings + imgui.WindowFlags.NoMove
             if imgui.Begin('##dsp_cr_btn', nil, flags) then
                 -- Drag handle (left 18*dpi)
-                pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.30))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 0.50))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 0.70))
+                local p1 = 0
+                if pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.30)) then p1 = p1 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 0.50)) then p1 = p1 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 0.70)) then p1 = p1 + 1 end
                 pcall(imgui.Button, DSP.utf8('::##cr_drag'), imgui.ImVec2(18 * dpi, -1))
                 -- Drag detection: if the handle is being held AND the mouse moved,
                 -- shift the saved position by the mouse delta (clamped to screen).
@@ -1730,19 +1736,20 @@ function DSP.ui.install()
                         end
                     end
                 end
-                pcall(imgui.PopStyleColor, 3)
+                if p1 > 0 then pcall(imgui.PopStyleColor, p1) end
                 imgui.SameLine(0, 0)
                 -- Open button (right 58*dpi)
-                pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.85))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 1.00))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 1.00))
+                local p2 = 0
+                if pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.85)) then p2 = p2 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 1.00)) then p2 = p2 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 1.00)) then p2 = p2 + 1 end
                 if imgui.Button(DSP.utf8('[CR]'), imgui.ImVec2(58 * dpi, -1)) then
                     DSP.ui.set_open(true)
                 end
-                pcall(imgui.PopStyleColor, 3)
+                if p2 > 0 then pcall(imgui.PopStyleColor, p2) end
                 imgui.End()
             end
-            pcall(imgui.PopStyleColor, ncol)
+            if ncol and ncol > 0 then pcall(imgui.PopStyleColor, ncol) end
             -- Persist drag-moved position every 5s (avoids writing on every frame).
             if DSP.ui._cr_pos_dirty and (os.time() - (DSP.ui._cr_last_save or 0)) > 5 then
                 pcall(DSP.save_ui_state)

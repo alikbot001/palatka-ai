@@ -385,8 +385,12 @@ function DSP.theme.push_window()
         local p = t[k] or { 0.5, 0.5, 0.5 }
         return imgui.ImVec4(p[1], p[2], p[3], alpha == nil and 1 or alpha)
     end
+    local count = 0
     local function push(col_enum, vec)
-        pcall(imgui.PushStyleColor, col_enum, vec)
+        if col_enum and vec then
+            local ok = pcall(imgui.PushStyleColor, col_enum, vec)
+            if ok then count = count + 1 end
+        end
     end
     push(imgui.Col.WindowBg,        c('bg',     a))
     push(imgui.Col.TitleBg,         c('panel',  1))
@@ -414,19 +418,26 @@ function DSP.theme.push_window()
     push(imgui.Col.CheckMark,      c('accent', 1))
     push(imgui.Col.SliderGrab,      c('accent', 1))
     push(imgui.Col.SliderGrabActive, c('accent', 1))
-    return 22
+    return count
 end
 
 -- Compact 4-color push for overlay subwindows that already manage their own layout.
--- v1.2 hotfix: pcall'd to prevent color stack corruption.
+-- v1.2 hotfix: dynamically counts pushed colors so pop never mismatches.
 function DSP.theme.push_overlay(accent_alpha)
     local t = DSP.theme.get()
     local a = DSP.theme.opacity
-    pcall(imgui.PushStyleColor, imgui.Col.WindowBg,      imgui.ImVec4(t.bg[1], t.bg[2], t.bg[3], a))
-    pcall(imgui.PushStyleColor, imgui.Col.Border,        imgui.ImVec4(t.accent[1], t.accent[2], t.accent[3], accent_alpha or 0.95))
-    pcall(imgui.PushStyleColor, imgui.Col.Button,        imgui.ImVec4(t.panel[1], t.panel[2], t.panel[3], 1))
-    pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, imgui.ImVec4(t.accent[1]*0.7, t.accent[2]*0.7, t.accent[3]*0.7, 1))
-    return 4
+    local count = 0
+    local function push(col_enum, vec)
+        if col_enum and vec then
+            local ok = pcall(imgui.PushStyleColor, col_enum, vec)
+            if ok then count = count + 1 end
+        end
+    end
+    push(imgui.Col.WindowBg,      imgui.ImVec4(t.bg[1], t.bg[2], t.bg[3], a))
+    push(imgui.Col.Border,        imgui.ImVec4(t.accent[1], t.accent[2], t.accent[3], accent_alpha or 0.95))
+    push(imgui.Col.Button,        imgui.ImVec4(t.panel[1], t.panel[2], t.panel[3], 1))
+    push(imgui.Col.ButtonHovered, imgui.ImVec4(t.accent[1]*0.7, t.accent[2]*0.7, t.accent[3]*0.7, 1))
+    return count
 end
 
 -- UI state persistence (CR button position, screen, theme transient)
@@ -4121,10 +4132,11 @@ function DSP.ui.draw()
     imgui.SetNextWindowBgAlpha(DSP.theme.opacity)
 
     local ncol = DSP.theme.push_window()
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding, 12 * dpi)
-    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 8 * dpi)
-    imgui.PushStyleVarFloat(imgui.StyleVar.ChildRounding, 9 * dpi)
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing, imgui.ImVec2(8 * dpi, 6 * dpi))
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.WindowRounding, 12 * dpi) then pushed_vars = pushed_vars + 1 end
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.FrameRounding, 8 * dpi) then pushed_vars = pushed_vars + 1 end
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.ChildRounding, 9 * dpi) then pushed_vars = pushed_vars + 1 end
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(8 * dpi, 6 * dpi)) then pushed_vars = pushed_vars + 1 end
 
     -- v1.2 sync: if numeric tab was changed externally (tests / old code),
     -- bring the screen id in line so the dispatcher renders the right panel.
@@ -4142,8 +4154,12 @@ function DSP.ui.draw()
         imgui.EndChild()
     end
     imgui.End()
-    imgui.PopStyleVar(4)
-    imgui.PopStyleColor(ncol)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
+    if ncol and ncol > 0 then
+        pcall(imgui.PopStyleColor, ncol)
+    end
     if DSP.ui.open_ref and DSP.ui.open_ref[0] == false then
         DSP.ui.open = false
     end
@@ -4186,9 +4202,10 @@ function DSP.ui.install()
                 + imgui.WindowFlags.NoSavedSettings + imgui.WindowFlags.NoMove
             if imgui.Begin('##dsp_cr_btn', nil, flags) then
                 -- Drag handle (left 18*dpi)
-                pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.30))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 0.50))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 0.70))
+                local p1 = 0
+                if pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.30)) then p1 = p1 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 0.50)) then p1 = p1 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 0.70)) then p1 = p1 + 1 end
                 pcall(imgui.Button, DSP.utf8('::##cr_drag'), imgui.ImVec2(18 * dpi, -1))
                 -- Drag detection: if the handle is being held AND the mouse moved,
                 -- shift the saved position by the mouse delta (clamped to screen).
@@ -4207,19 +4224,20 @@ function DSP.ui.install()
                         end
                     end
                 end
-                pcall(imgui.PopStyleColor, 3)
+                if p1 > 0 then pcall(imgui.PopStyleColor, p1) end
                 imgui.SameLine(0, 0)
                 -- Open button (right 58*dpi)
-                pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.85))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 1.00))
-                pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 1.00))
+                local p2 = 0
+                if pcall(imgui.PushStyleColor, imgui.Col.Button,        DSP.theme.col('accent', 0.85)) then p2 = p2 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, DSP.theme.col('accent', 1.00)) then p2 = p2 + 1 end
+                if pcall(imgui.PushStyleColor, imgui.Col.ButtonActive,  DSP.theme.col('accent', 1.00)) then p2 = p2 + 1 end
                 if imgui.Button(DSP.utf8('[CR]'), imgui.ImVec2(58 * dpi, -1)) then
                     DSP.ui.set_open(true)
                 end
-                pcall(imgui.PopStyleColor, 3)
+                if p2 > 0 then pcall(imgui.PopStyleColor, p2) end
                 imgui.End()
             end
-            pcall(imgui.PopStyleColor, ncol)
+            if ncol and ncol > 0 then pcall(imgui.PopStyleColor, ncol) end
             -- Persist drag-moved position every 5s (avoids writing on every frame).
             if DSP.ui._cr_pos_dirty and (os.time() - (DSP.ui._cr_last_save or 0)) > 5 then
                 pcall(DSP.save_ui_state)
@@ -4360,8 +4378,13 @@ function DSP.screens.topbar()
     if bw < 60 * dpi then bw = 60 * dpi end
     local bh = 38 * dpi
 
-    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6 * dpi)
-    imgui.PushStyleVarFloat(imgui.StyleVar.ItemSpacing, 4 * dpi)
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.FrameRounding, 6 * dpi) then
+        pushed_vars = pushed_vars + 1
+    end
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(4 * dpi, 4 * dpi)) then
+        pushed_vars = pushed_vars + 1
+    end
     for i, e in ipairs(DSP.screens.list) do
         local active = (i == cur_idx)
         if active then
@@ -4378,7 +4401,9 @@ function DSP.screens.topbar()
         end
         if active then imgui.PopStyleColor(3) end
     end
-    imgui.PopStyleVar(2)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
     imgui.Spacing()
 end
 
@@ -4407,7 +4432,10 @@ function DSP.screens.pager(total_rows, per_page, id)
     local bw_qx   = 95 * dpi
     local bh      = 36 * dpi
 
-    imgui.PushStyleVarFloat(imgui.StyleVar.ItemSpacing, 6 * dpi)
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(6 * dpi, 6 * dpi)) then
+        pushed_vars = pushed_vars + 1
+    end
     if imgui.Button(DSP.utf8('< Предыдущая'), imgui.ImVec2(bw_prev, bh)) then
         DSP.screens.set_page(id, page - 1)
     end
@@ -4425,7 +4453,9 @@ function DSP.screens.pager(total_rows, per_page, id)
     if imgui.Button(DSP.utf8('v ВНИЗ'), imgui.ImVec2(bw_qx, bh)) then
         DSP.screens.set_page(id, pages)
     end
-    imgui.PopStyleVar(1)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
     return from, to
 end
 
@@ -4435,7 +4465,10 @@ end
 function DSP.screens.per_page_selector()
     local dpi = d()
     local per = math.max(5, tonumber(DSP.settings.per_page) or 20)
-    imgui.PushStyleVarFloat(imgui.StyleVar.ItemSpacing, 4 * dpi)
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(4 * dpi, 4 * dpi)) then
+        pushed_vars = pushed_vars + 1
+    end
     imgui.TextDisabled(DSP.utf8('Строк/стр:'))
     imgui.SameLine(0, 6 * dpi)
     if imgui.Button(DSP.utf8('-##per_minus'), imgui.ImVec2(34 * dpi, 32 * dpi)) then
@@ -4449,7 +4482,9 @@ function DSP.screens.per_page_selector()
         DSP.settings.per_page = math.min(50, per + 5)
         DSP.save_settings()
     end
-    imgui.PopStyleVar(1)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
 end
 
 -- =========================================================================

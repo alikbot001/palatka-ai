@@ -376,8 +376,12 @@ function DSP.theme.push_window()
         local p = t[k] or { 0.5, 0.5, 0.5 }
         return imgui.ImVec4(p[1], p[2], p[3], alpha == nil and 1 or alpha)
     end
+    local count = 0
     local function push(col_enum, vec)
-        pcall(imgui.PushStyleColor, col_enum, vec)
+        if col_enum and vec then
+            local ok = pcall(imgui.PushStyleColor, col_enum, vec)
+            if ok then count = count + 1 end
+        end
     end
     push(imgui.Col.WindowBg,        c('bg',     a))
     push(imgui.Col.TitleBg,         c('panel',  1))
@@ -405,19 +409,26 @@ function DSP.theme.push_window()
     push(imgui.Col.CheckMark,      c('accent', 1))
     push(imgui.Col.SliderGrab,      c('accent', 1))
     push(imgui.Col.SliderGrabActive, c('accent', 1))
-    return 22
+    return count
 end
 
 -- Compact 4-color push for overlay subwindows that already manage their own layout.
--- v1.2 hotfix: pcall'd to prevent color stack corruption.
+-- v1.2 hotfix: dynamically counts pushed colors so pop never mismatches.
 function DSP.theme.push_overlay(accent_alpha)
     local t = DSP.theme.get()
     local a = DSP.theme.opacity
-    pcall(imgui.PushStyleColor, imgui.Col.WindowBg,      imgui.ImVec4(t.bg[1], t.bg[2], t.bg[3], a))
-    pcall(imgui.PushStyleColor, imgui.Col.Border,        imgui.ImVec4(t.accent[1], t.accent[2], t.accent[3], accent_alpha or 0.95))
-    pcall(imgui.PushStyleColor, imgui.Col.Button,        imgui.ImVec4(t.panel[1], t.panel[2], t.panel[3], 1))
-    pcall(imgui.PushStyleColor, imgui.Col.ButtonHovered, imgui.ImVec4(t.accent[1]*0.7, t.accent[2]*0.7, t.accent[3]*0.7, 1))
-    return 4
+    local count = 0
+    local function push(col_enum, vec)
+        if col_enum and vec then
+            local ok = pcall(imgui.PushStyleColor, col_enum, vec)
+            if ok then count = count + 1 end
+        end
+    end
+    push(imgui.Col.WindowBg,      imgui.ImVec4(t.bg[1], t.bg[2], t.bg[3], a))
+    push(imgui.Col.Border,        imgui.ImVec4(t.accent[1], t.accent[2], t.accent[3], accent_alpha or 0.95))
+    push(imgui.Col.Button,        imgui.ImVec4(t.panel[1], t.panel[2], t.panel[3], 1))
+    push(imgui.Col.ButtonHovered, imgui.ImVec4(t.accent[1]*0.7, t.accent[2]*0.7, t.accent[3]*0.7, 1))
+    return count
 end
 
 -- UI state persistence (CR button position, screen, theme transient)

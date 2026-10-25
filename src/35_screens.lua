@@ -97,8 +97,13 @@ function DSP.screens.topbar()
     if bw < 60 * dpi then bw = 60 * dpi end
     local bh = 38 * dpi
 
-    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding, 6 * dpi)
-    imgui.PushStyleVarFloat(imgui.StyleVar.ItemSpacing, 4 * dpi)
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarFloat, imgui.StyleVar.FrameRounding, 6 * dpi) then
+        pushed_vars = pushed_vars + 1
+    end
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(4 * dpi, 4 * dpi)) then
+        pushed_vars = pushed_vars + 1
+    end
     for i, e in ipairs(DSP.screens.list) do
         local active = (i == cur_idx)
         if active then
@@ -115,7 +120,9 @@ function DSP.screens.topbar()
         end
         if active then imgui.PopStyleColor(3) end
     end
-    imgui.PopStyleVar(2)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
     imgui.Spacing()
 end
 
@@ -144,7 +151,10 @@ function DSP.screens.pager(total_rows, per_page, id)
     local bw_qx   = 95 * dpi
     local bh      = 36 * dpi
 
-    imgui.PushStyleVarFloat(imgui.StyleVar.ItemSpacing, 6 * dpi)
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(6 * dpi, 6 * dpi)) then
+        pushed_vars = pushed_vars + 1
+    end
     if imgui.Button(DSP.utf8('< Предыдущая'), imgui.ImVec2(bw_prev, bh)) then
         DSP.screens.set_page(id, page - 1)
     end
@@ -162,7 +172,9 @@ function DSP.screens.pager(total_rows, per_page, id)
     if imgui.Button(DSP.utf8('v ВНИЗ'), imgui.ImVec2(bw_qx, bh)) then
         DSP.screens.set_page(id, pages)
     end
-    imgui.PopStyleVar(1)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
     return from, to
 end
 
@@ -172,7 +184,10 @@ end
 function DSP.screens.per_page_selector()
     local dpi = d()
     local per = math.max(5, tonumber(DSP.settings.per_page) or 20)
-    imgui.PushStyleVarFloat(imgui.StyleVar.ItemSpacing, 4 * dpi)
+    local pushed_vars = 0
+    if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(4 * dpi, 4 * dpi)) then
+        pushed_vars = pushed_vars + 1
+    end
     imgui.TextDisabled(DSP.utf8('Строк/стр:'))
     imgui.SameLine(0, 6 * dpi)
     if imgui.Button(DSP.utf8('-##per_minus'), imgui.ImVec2(34 * dpi, 32 * dpi)) then
@@ -186,7 +201,9 @@ function DSP.screens.per_page_selector()
         DSP.settings.per_page = math.min(50, per + 5)
         DSP.save_settings()
     end
-    imgui.PopStyleVar(1)
+    if pushed_vars > 0 then
+        pcall(imgui.PopStyleVar, pushed_vars)
+    end
 end
 
 -- =========================================================================
