@@ -1,0 +1,13 @@
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*backup.lua
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
