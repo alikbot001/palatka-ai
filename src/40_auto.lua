@@ -154,6 +154,13 @@ local function inventory_dialog(id, text)
 end
 
 function DSP.auto.on_dialog(id, style, title, b1, b2, text)
+    -- v1.2 Stage 3 hotfix: CR marker scan (dialog 15073).
+    -- When scan_cr_marker() has armed the scan state, intercept dialog 15073
+    -- and let the market module parse + flip pages.
+    if id == 15073 and DSP.market and DSP.market.on_cr_marker_dialog then
+        pcall(DSP.market.on_cr_marker_dialog, text)
+        return true  -- intercept: don't let other handlers close it
+    end
     if DSP.auto.scanning then
         if id == 722 or id == 600 or id == 235 then
             lua_thread.create(function()
@@ -300,7 +307,8 @@ function DSP.auto.start_sell()
                 close_dialog()
                 DSP.auto.sell_confirmed = false
                 pcall(_G.dsp_click_slot, 60, -1, 2, json)
-                local id = wait_dialog({ 26547 }, 1800)
+                -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile выставление dialogs).
+                local id = wait_dialog({ 26547, 15068, 15069, 15070, 15071 }, 1800)
                 if id then
                     local txt = DSP.dialog_clean(wait_text(id, 700))
                     local base = base_name(it.base)
@@ -322,10 +330,13 @@ function DSP.auto.start_sell()
                     close_dialog()
                 else
                     DSP.auto.sell_confirmed = false
-                    pcall(sampSendDialogResponse, 26547, 1, 0, resp)
+                    -- v1.2 hotfix: use the active dialog id (may be 26547 or
+                    -- 15068-15071 in newer Arizona Mobile). Fallback chain.
+                    local resp_id = id or sampGetCurrentDialogId and sampGetCurrentDialogId() or 26547
+                    pcall(sampSendDialogResponse, resp_id, 1, 0, resp)
                     local t = os.clock() + 4
                     while not DSP.auto.sell_confirmed and os.clock() < t do wait(40) end
-                    pcall(sampSendDialogResponse, 26547, 0, 0, '')
+                    pcall(sampSendDialogResponse, resp_id, 0, 0, '')
                     if DSP.auto.sell_no_slots then
                         log('Продажа: нет свободных мест', 'error')
                         DSP.auto.sell_running = false
@@ -383,7 +394,8 @@ end
 local function open_shop_menu()
     close_dialog()
     pcall(_G.dsp_click_slot, 8, 7, -1, '')
-    return wait_dialog({ 3040 }, 2500) ~= nil
+    -- v1.2 hotfix: accept 15072/15073 fallback for shop menu open in newer Arizona Mobile.
+    return wait_dialog({ 3040, 15072, 15073 }, 2500) ~= nil
 end
 
 local function buy_one(it, pi, total)
@@ -396,7 +408,8 @@ local function buy_one(it, pi, total)
     end
     wait_text(3040, 350)
     pcall(sampSendDialogResponse, 3040, 1, 2, '')
-    local id = wait_dialog({ 25663 }, 3000)
+    -- v1.2 hotfix: also accept 15065-15067 (newer search/dialog IDs).
+    local id = wait_dialog({ 25663, 15065, 15066, 15067 }, 3000)
     if not id then
         log('Скупка: строка поиска не открылась', 'error')
         return false
@@ -404,7 +417,8 @@ local function buy_one(it, pi, total)
     wait_text(25663, 700)
     local search = base_name(it.name):sub(1, 24)
     pcall(sampSendDialogResponse, 25663, 1, 0, search)
-    id = wait_dialog({ 25664 }, 3500)
+    -- v1.2 hotfix: search results dialog may also be 15068 in newer versions.
+    id = wait_dialog({ 25664, 15068 }, 3500)
     if not id then
         log('Скупка: результаты не открылись: ' .. it.name, 'error')
         return false
@@ -417,17 +431,20 @@ local function buy_one(it, pi, total)
         return false
     end
     pcall(sampSendDialogResponse, 25664, 1, idx, '')
-    id = wait_dialog({ 26560, 26563 }, 3000)
+    -- v1.2 hotfix: выставление price dialog may also use 15070/15071 in newer Arizona Mobile.
+    id = wait_dialog({ 26560, 26563, 15070, 15071 }, 3000)
     if not id then
         log('Скупка: диалог цены не открылся: ' .. it.name, 'error')
         return false
     end
     if id == 26560 then
         pcall(sampSendDialogResponse, id, 1, 0, '')
-        id = wait_dialog({ 26563 }, 2000)
+        -- v1.2 hotfix: also accept 15071 fallback.
+        id = wait_dialog({ 26563, 15071 }, 2000)
     end
-    if id ~= 26563 then return false end
-    wait_text(26563, 500)
+    -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final выставление dialog.
+    if id ~= 26563 and id ~= 15071 then return false end
+    wait_text(id, 500)
     local txt = DSP.dialog_clean(sampGetDialogText() or '')
     local base = base_name(it.name)
     if not txt:find(base, 1, true) then
@@ -447,7 +464,10 @@ local function buy_one(it, pi, total)
         close_dialog()
         return 'dry'
     end
-    pcall(sampSendDialogResponse, 26563, 1, 0, resp)
+    -- v1.2 hotfix: use the active dialog id (may be 26563 or 15071 in newer
+    -- Arizona Mobile выставление dialogs). Fallback chain via sampGetCurrentDialogId.
+    local resp_id = id or (sampGetCurrentDialogId and sampGetCurrentDialogId()) or 26563
+    pcall(sampSendDialogResponse, resp_id, 1, 0, resp)
     log('Скупка: ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price), 'ok')
     local t = os.clock() + 0.7
     while os.clock() < t and sampIsDialogActive() do wait(30) end

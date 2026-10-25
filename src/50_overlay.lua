@@ -1,4 +1,8 @@
--- Automatic trade/lavka evaluation overlay.
+-- 50_overlay.lua
+-- v1.2 overlay windows: trade eval + shop scan + crlog mini-window.
+-- All colors now flow from DSP.theme so the overlay respects the active
+-- theme + opacity slider.
+
 DSP.overlay = DSP.overlay or {}
 DSP.overlay.shop_tab = 1
 DSP.overlay.trade_closed = 0
@@ -22,11 +26,15 @@ local function u(s)
     return DSP.utf8(s)
 end
 
-local GREEN = col(0.45, 0.95, 0.45)
-local YELLOW = col(1.0, 0.82, 0.30)
-local RED = col(1.0, 0.42, 0.38)
-local GRAY = col(0.62, 0.64, 0.70)
-local BLUE = col(0.55, 0.72, 1.0)
+-- Theme-backed semantic colors (still cache locals for hot path speed).
+local GREEN, YELLOW, RED, GRAY, BLUE
+local function refresh_palette()
+    GREEN  = DSP.theme.col('good', 1)
+    YELLOW = DSP.theme.col('warn', 1)
+    RED    = DSP.theme.col('bad',  1)
+    GRAY   = DSP.theme.col('muted',1)
+    BLUE   = DSP.theme.col('accent', 1)
+end
 
 local function base_label()
     local sid = tonumber(DSP.db.sid) or 0
@@ -125,15 +133,15 @@ local function trade_item_row(it, kind)
 end
 
 function DSP.overlay.draw_trade()
+    refresh_palette()
     local t = DSP.live.trade
     local sw, sh = imgui.GetIO().DisplaySize.x, imgui.GetIO().DisplaySize.y
     local w = math.min(sw * 0.40, 480 * d())
     imgui.SetNextWindowPos(imgui.ImVec2(sw - 8 * d(), 76 * d()), imgui.Cond.FirstUseEver, imgui.ImVec2(1, 0))
     imgui.SetNextWindowSize(imgui.ImVec2(w, 0), imgui.Cond.FirstUseEver)
     if DSP.settings.overlay_top ~= false then imgui.SetNextWindowFocus() end
-    imgui.SetNextWindowBgAlpha(0.97)
-    imgui.PushStyleColor(imgui.Col.WindowBg, col(0.055, 0.06, 0.085, 0.97))
-    imgui.PushStyleColor(imgui.Col.Border, col(0.35, 0.36, 0.72, 0.95))
+    imgui.SetNextWindowBgAlpha(DSP.theme.opacity)
+    local ncol = DSP.theme.push_overlay(0.95)
     local open = imgui.new.bool(true)
     local flags = imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize
         + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings
@@ -165,15 +173,15 @@ function DSP.overlay.draw_trade()
             local c, s
             if r < 0.85 then c, s = RED, 'СКУП НИЖЕ РЫНКА'
             elseif r <= 1.10 then c, s = YELLOW, 'НОРМ ЦЕНА'
-            else c, s = GREEN, 'ОВЕР — ВЫГОДНО ВАМ' end
-            imgui.TextColored(c, u(string.format('Скуп: %.0f%% рынка — %s', r * 100, s)))
+            else c, s = GREEN, 'ОВЕР - ВЫГОДНО ВАМ' end
+            imgui.TextColored(c, u(string.format('Скуп: %.0f%% рынка - %s', r * 100, s)))
         elseif (t.money_give or 0) > 0 and (t.money_get or 0) == 0 and get_v > 0 then
             local r = (t.money_give or 0) / get_v
             local c, s
-            if r < 0.85 then c, s = GREEN, 'ДЕШЕВО — БРАТЬ'
+            if r < 0.85 then c, s = GREEN, 'ДЕШЕВО - БРАТЬ'
             elseif r <= 1.10 then c, s = YELLOW, 'НОРМ ЦЕНА'
-            else c, s = RED, 'ОВЕР — ПЕРЕПЛАТА' end
-            imgui.TextColored(c, u(string.format('Покупка: %.0f%% рынка — %s', r * 100, s)))
+            else c, s = RED, 'ОВЕР - ПЕРЕПЛАТА' end
+            imgui.TextColored(c, u(string.format('Покупка: %.0f%% рынка - %s', r * 100, s)))
         end
         imgui.Separator()
 
@@ -193,14 +201,14 @@ function DSP.overlay.draw_trade()
         if #(t.get or {}) == 0 and (t.money_get or 0) == 0 then imgui.TextDisabled(u('—')) end
         imgui.EndChild()
         if miss_get + miss_give > 0 then
-            imgui.TextColored(YELLOW, u('Нет базы: ' .. tostring(miss_get + miss_give) .. ' поз. — обнови рынок'))
+            imgui.TextColored(YELLOW, u('Нет базы: ' .. tostring(miss_get + miss_give) .. ' поз. - обнови рынок'))
         end
         if imgui.SmallButton(u('ОБНОВИТЬ БАЗУ##dsp_trade_refresh')) then
             DSP.market.pull(DSP.market.state.sid)
         end
     end
     imgui.End()
-    imgui.PopStyleColor(2)
+    imgui.PopStyleColor(ncol)
     if not open[0] then DSP.overlay.trade_closed = t.opened end
 end
 
@@ -210,7 +218,7 @@ local function shop_verdict_sell(price, e)
     local p25 = e.sell.p25 or low
     local med = e.sell.med or low
     local pct = med > 0 and (price / med * 100) or 0
-    if price <= low * 1.02 or (p25 > 0 and price <= p25) then return GREEN, 'ДЕШЕВО — БРАТЬ', pct end
+    if price <= low * 1.02 or (p25 > 0 and price <= p25) then return GREEN, 'ДЕШЕВО - БРАТЬ', pct end
     if price <= med * 1.05 then return YELLOW, 'НОРМ', pct end
     return RED, 'ОВЕР', pct
 end
@@ -226,15 +234,15 @@ local function shop_verdict_buy(price, e)
 end
 
 function DSP.overlay.draw_shop()
+    refresh_palette()
     local s = DSP.live.shop
     local sw, sh = imgui.GetIO().DisplaySize.x, imgui.GetIO().DisplaySize.y
     local w = math.min(sw * 0.46, 560 * d())
     imgui.SetNextWindowPos(imgui.ImVec2(sw - 8 * d(), 76 * d()), imgui.Cond.FirstUseEver, imgui.ImVec2(1, 0))
     imgui.SetNextWindowSize(imgui.ImVec2(w, 0), imgui.Cond.FirstUseEver)
     if DSP.settings.overlay_top ~= false then imgui.SetNextWindowFocus() end
-    imgui.SetNextWindowBgAlpha(0.97)
-    imgui.PushStyleColor(imgui.Col.WindowBg, col(0.055, 0.06, 0.085, 0.97))
-    imgui.PushStyleColor(imgui.Col.Border, col(0.28, 0.62, 0.48, 0.95))
+    imgui.SetNextWindowBgAlpha(DSP.theme.opacity)
+    local ncol = DSP.theme.push_overlay(0.85)
     local open = imgui.new.bool(true)
     local flags = imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize
         + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings
@@ -306,7 +314,7 @@ function DSP.overlay.draw_shop()
         end
     end
     imgui.End()
-    imgui.PopStyleColor(2)
+    imgui.PopStyleColor(ncol)
     if not open[0] then DSP.overlay.shop_closed = s.opened end
 end
 
@@ -316,7 +324,15 @@ function DSP.overlay.install()
     imgui.OnFrame(function()
         return DSP.overlay.show_trade() or DSP.overlay.show_shop()
     end, function()
-        if DSP.overlay.show_trade() then DSP.overlay.draw_trade() end
-        if DSP.overlay.show_shop() then DSP.overlay.draw_shop() end
+        -- v1.2 hotfix: pcall so a bad imgui call doesn't crash the game.
+        local ok, err = pcall(function()
+            if DSP.overlay.show_trade() then DSP.overlay.draw_trade() end
+            if DSP.overlay.show_shop() then DSP.overlay.draw_shop() end
+        end)
+        if not ok then
+            if DSP and DSP.flog then
+                DSP.flog('overlay frame error: ' .. tostring(err))
+            end
+        end
     end)
 end

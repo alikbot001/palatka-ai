@@ -16,6 +16,20 @@ DSP.settings.stats_tab = DSP.settings.stats_tab or 'day'
 
 local LOG_DIR = DSP.dir .. '/logs'
 
+-- v1.2 fix: moved `name_ench` declaration ABOVE `parse_chat_drop`.
+-- In v1.1 this was a latent bug: parse_chat_drop referenced `name_ench` as a
+-- local, but `local function name_ench` was declared later in the file, so
+-- Lua's lexical scoping meant parse_chat_drop saw `name_ench` as a global
+-- (which is nil since the local never escapes to _G). The first call would
+-- crash with "attempt to call a nil value". Declaring it here first ensures
+-- both functions see the same local upvalue.
+local function name_ench(s)
+    s = DSP.clean_text(s or '')
+    local base, e = s:match('^(.-)%s*%(%+(%d+)%)%s*$')
+    if base and base ~= '' then return base, tonumber(e) or 0 end
+    return s, 0
+end
+
 local function mkdir_p(p)
     if not ok_lfs or not lfs then return end
     if type(lfs.attributes) == 'function' then
@@ -139,6 +153,11 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
     DSP.settings.trades[entry_id] = entry
     DSP.db.save_trades()
     DSP.logs.save_daily_log()
+    -- v1.2 Stage 3: push to craglog ring buffer + append-only file.
+    -- Independent of save_daily_log which rewrites today's file each trade.
+    if DSP.craglog and DSP.craglog.log_trade then
+        pcall(DSP.craglog.log_trade, entry)
+    end
     if DSP.live and DSP.live.reset_trade then DSP.live.reset_trade(partner) end
     DSP.notify('СДЕЛКА: ' .. DSP.money(profit) .. ' (' .. string.format('%+.1f%%', delta_pct) .. ')', kind == 'profit' and 'ok' or 'error')
     DSP.add_log('СДЕЙКА с ' .. tostring(partner) .. ': ' .. DSP.money(profit) .. ' (' .. DSP.money(total_get) .. '/' .. DSP.money(total_give) .. ')',
@@ -170,24 +189,33 @@ function DSP.logs.stall_dropped(owner, shop_num, item_name, price)
         .. ' / ' .. tostring(item_name) .. ' @ ' .. DSP.money(entry.price), 'ok')
 end
 
-function DSP.logs.crate_opened(item_name, price, count)
+function DSP.logs.crate_opened(item_name, price, count, source, ench)
     local entry = {
         type = 'crate',
         ts = os.time(),
         item_name = tostring(item_name or ''),
+        item = tostring(item_name or ''),
         price = tonumber(price) or 0,
         count = tonumber(count) or 1,
+        qty = tonumber(count) or 1,
+        crate_type = tostring(source or 'тайник'),
+        source = tostring(source or 'тайник'),
+        ench = tonumber(ench) or 0,
         server = DSP.settings.server or 102,
     }
     DSP.settings.crates[tostring(entry.ts)] = entry
     DSP.db.save_trades()
     DSP.logs.save_daily_log()
-    DSP.add_log('Тайник: +' .. tostring(entry.count) .. 'x ' .. tostring(item_name)
+    DSP.add_log('Тайник (' .. entry.source .. '): +' .. tostring(entry.count) .. 'x ' .. tostring(item_name)
         .. ' @ ' .. DSP.money(entry.price), 'ok')
+    -- v1.2 Stage 3: push to craglog ring buffer + crates.log file.
+    if DSP.craglog and DSP.craglog.log_crate then
+        pcall(DSP.craglog.log_crate, entry)
+    end
     -- Telegram notification for crate drop
     if DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
-        send_telegram('[palatka ai] [+] Ларец: +' .. tostring(entry.count)
-            .. 'x ' .. tostring(item_name) .. (entry.ench and entry.ench > 0 and (' +' .. tostring(entry.ench) .. '') or ''))
+        send_telegram('[palatka ai] [+] ' .. entry.source .. ': +' .. tostring(entry.count)
+            .. 'x ' .. tostring(item_name) .. (entry.ench and entry.ench > 0 and (' +' .. tostring(entry.ench)) or ''))
     end
 end
 
@@ -291,45 +319,69 @@ end
 function DSP.logs.parse_chat_drop(text)
     local s = DSP.clean_text(text or '')
     if s == '' then return nil end
+    -- v1.2 Stage 3: 6 strict patterns per ТЗ.
+    -- Each pattern captures (source, item, qty) variants.
+    -- The leading source field feeds the per-tайник stats table
+    -- (Тайник VC, Тайник Илона Маска, etc.).
     local patterns = {
-        { 'вам выпло', '(вам выпло[а-я]*)%s+[:%s]*%s*(.-)%s+(%d+)%s*шт', 'амели', 3 },
-        { 'вы получили', '(вы получили[а-я]*)[:%s]*%s*(.-)%s+(%d+)%s*шт', 'received', 3 },
-        { 'выпал предмет', '(выпал[а-я]*)?%s*[:%s]*%s*(.+)', 'dropped', 2 },
+        -- 1. "Вам выпало из {source}: {item} ({qty} шт.)"
+        { '^Вам выпало из (.+): (.+) %((%d+) шт%.%)', 3 },
+        -- 2. "Вы открыли {source} и получили {item}"
+        { '^Вы открыли (.+) и получили (.+)', 2 },
+        -- 3. "Вам выпало: {item} ({qty} шт.)"
+        { '^Вам выпало: (.+) %((%d+) шт%.%)', 2 },
+        -- 4. "Вам выпал[оа]? {item}" (муж/жен/ср род)
+        { '^Вам выпал[оа]? (.+)', 1 },
+        -- 5. "Вы использовали {source} и получили {item}"
+        { '^Вы использовали (.+) и получили (.+)', 2 },
+        -- 6. "Вы успешно открыли {source} и вам выпало {item}"
+        { '^Вы успешно открыли (.+) и вам выпало (.+)', 2 },
     }
     for _, pat in ipairs(patterns) do
-        local m1, m2, m3 = s:match(pat[2])
-        if m1 and m2 then
-            local name = (m3 and pat[3] == 'амели') and m3 or m2
-            if pat[3] == 'dropped' then name, m3 = m2, 1 end
-            local qty = tonumber(m3) or 1
-            local item_name = DSP.clean_text(name or '')
-            local ench = 0
-            local base, e = name_ench(item_name)
-            if base and base ~= '' then item_name, ench = base, e end
-            return { name = item_name, ench = ench, qty = qty }
+        local m = { s:match(pat[1]) }
+        if m[1] then
+            local source, item, qty
+            if pat[2] == 3 then
+                source = m[1]
+                item = m[2]
+                qty = tonumber(m[3]) or 1
+            elseif pat[2] == 2 then
+                source = m[1]
+                item = m[2]
+                qty = 1
+            else
+                source = 'тайник'
+                item = m[1]
+                qty = 1
+            end
+            item = DSP.clean_text(item or '')
+            local base, e = name_ench(item)
+            if base and base ~= '' then item, e = base, e end
+            return {
+                name = item,
+                ench = e or 0,
+                qty = qty,
+                source = DSP.clean_text(source or 'тайник'),
+            }
         end
     end
     return nil
-end
-
-local function name_ench(s)
-    s = DSP.clean_text(s or '')
-    local base, e = s:match('^(.-)%s*%(%+(%d+)%)%s*$')
-    if base and base ~= '' then return base, tonumber(e) or 0 end
-    return s, 0
 end
 
 function DSP.logs.log_chat(text)
     if not DSP.settings.log_chat_drops then return end
     local s = DSP.clean_text(text or '')
     if s == '' then return end
-    -- Check for item drop messages
+    -- v1.2 Stage 3: PayDay detection. The hook in 45_live.lua checks the
+    -- message for the payday marker and triggers Telegram. The detection
+    -- function lives in 45_live.lua to keep this module focused on logging.
+    if DSP.live and DSP.live.check_payday_message then
+        pcall(DSP.live.check_payday_message, s)
+    end
+    -- Check for item drop messages (now with source + ench propagation)
     local drop = DSP.logs.parse_chat_drop(s)
     if drop and drop.name and drop.name ~= '' then
-        DSP.logs.crate_opened(drop.name, 0, drop.qty)
-        if DSP.settings.tg_notify then
-            send_telegram('[palatka ai] Тайник: +' .. drop.qty .. 'x ' .. drop.name)
-        end
+        DSP.logs.crate_opened(drop.name, 0, drop.qty, drop.source, drop.ench)
     end
     -- Store in chat log
     local entry = {

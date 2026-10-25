@@ -310,8 +310,11 @@ function L.parse_dialog_trade(title, text)
     t = L.trade
     local sec = ''
     local give, get = {}, {}
-    for line in tostring(text or ''):gsub('{[%x]+}', ''):gmatch('[^\r\n]+') do
-        line = strip(line)
+    -- v1.2 hotfix: Lua 5.5 forbids reassigning for-loop variables.
+    -- Use a separate local `ln` instead of reassigning `line`.
+    -- (LuaJIT 5.1 permits it but lupa's Lua 5.5 sandbox test enforces the rule.)
+    for raw_line in tostring(text or ''):gsub('{[%x]+}', ''):gmatch('[^\r\n]+') do
+        local line = strip(raw_line)
         if line:find('Перед', 1, true) then
             sec = 'give'
         elseif line:find('Получ', 1, true) then
@@ -409,4 +412,69 @@ end
 function L.shop_age()
     if not L.shop or L.shop.updated == 0 then return 9999 end
     return now() - L.shop.updated
+end
+
+-- =========================================================================
+-- v1.2 Stage 3: PayDay detector + Telegram trigger.
+--
+-- Arizona RP sends a chat message at the start of every in-game hour
+-- containing "PayDay" (or localized variant). When we see it, we:
+--   1. Compute today's profit summary via DSP.logs.profit_summary('day')
+--   2. Push a PayDay marker into the craglog ring buffer
+--   3. Send a UTF-8 Telegram message with the day's stats
+--   4. Throttle by remembering the last payday epoch (avoid dupes within
+--      the same in-game hour)
+-- =========================================================================
+
+local PAYDAY_PATTERNS = {
+    'PayDay',
+    'ПэйДэй',
+    'ПейДей',
+    'вы получили зарплату',
+    'Вам начислена заработная плата',
+}
+
+function L.check_payday_message(text)
+    if not text or text == '' then return false end
+    if not DSP.settings.tg_payday_enabled then return false end
+    local s = DSP.lower(text)
+    local hit = false
+    for _, pat in ipairs(PAYDAY_PATTERNS) do
+        if s:find(DSP.lower(pat), 1, true) then
+            hit = true
+            break
+        end
+    end
+    if not hit then return false end
+    -- Throttle: don't fire twice within the same real-world hour.
+    local ts = os.time()
+    if ts - (tonumber(DSP.settings.tg_payday_last) or 0) < 1800 then
+        return false
+    end
+    DSP.settings.tg_payday_last = ts
+    DSP.save_settings()
+    -- Build daily summary
+    local summary = DSP.logs.profit_summary('day')
+    -- Push marker to craglog ring buffer + file
+    if DSP.craglog and DSP.craglog.log_payday then
+        pcall(DSP.craglog.log_payday, summary)
+    end
+    DSP.add_log(string.format('PayDay: %d сделок, %s%s',
+        summary.count,
+        summary.profit >= 0 and '+' or '',
+        DSP.money(summary.profit)))
+    -- Telegram notification (UTF-8 over HTTP)
+    if DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
+        local msg = '[palatka ai] PayDay ' .. os.date('%H:%M') .. '\n'
+            .. 'Сделок за день: ' .. summary.count .. '\n'
+            .. 'Прибыль: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit) .. '\n'
+            .. 'Получено: ' .. DSP.money(summary.total_get) .. '\n'
+            .. 'Отдано: ' .. DSP.money(summary.total_give) .. '\n'
+            .. 'ROI: ' .. string.format('%.1f%%', summary.roi) .. '\n'
+            .. 'Средняя сделка: ' .. DSP.money(summary.avg_profit)
+        if DSP.logs and DSP.logs.send_telegram then
+            pcall(DSP.logs.send_telegram, msg)
+        end
+    end
+    return true
 end

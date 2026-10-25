@@ -51,7 +51,12 @@ im.Selectable = function() return false end
 im.Checkbox = function() return false end
 im.InputTextWithHint = function() return false end
 im.InputText = function() return false end
-im.GetIO = function() return {} end
+im.InputTextMultiline = function() return false end       -- v1.2 Stage 3
+im.SliderFloat = function() return false end             -- v1.2 Stage 1 (settings_tab)
+im.IsItemActive = function() return false end            -- v1.2 Stage 3 (drag handle)
+im.GetWindowPos = function() return { x = 28, y = 215 } end
+im.InputTextFlags = { Multiline = 0x2000 }               -- v1.2 Stage 3
+im.GetIO = function() return { DisplaySize = { x = 2340, y = 1080 }, MouseDelta = { x = 0, y = 0 } } end
 im.OnFrame = function() end
 im.PushStyleColor = function() end
 im.PopStyleColor = function() end
@@ -98,6 +103,8 @@ DSP.auto = {
   status_text = function() return 'готов' end,
 }
 loadmod('30_ui.lua')
+loadmod('35_screens.lua')
+loadmod('55_craglog.lua')
 
 local payload = { shops = {
   { owner = 'A', shop_num = '1', server_id = 102, updated_at = os.time(), sell_slots = {

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Build the standalone DsPic Helper into one CP1251 Lua file."""
+"""Build the standalone Palatka AI into one CP1251 Lua file.
+
+v1.2: adds 35_screens.lua between 30_ui.lua and 50_overlay.lua so that
+DSP.theme (defined in 00_core.lua) and DSP.ui.* (defined in 30_ui.lua) are
+already populated when the screen dispatcher wires them up.
+"""
 from pathlib import Path
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
-OUT = ROOT / "DsPic_Standalone.lua"
+OUT = ROOT / "palatka_ai.lua"
 
 MODULES = [
     "00_core.lua",
@@ -16,16 +21,18 @@ MODULES = [
     "05_trades.lua",
     "20_presets.lua",
     "30_ui.lua",
+    "35_screens.lua",
     "40_auto.lua",
     "45_live.lua",
     "50_overlay.lua",
+    "55_craglog.lua",
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v1.2, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.0.0')
+script_version('1.2.0')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
