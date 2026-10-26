@@ -43,8 +43,42 @@ function M.paint_button(role,active)
     imgui.PushStyleColor(imgui.Col.Text,primary and DSP.theme.col('bg',1) or DSP.theme.col(active and 'accent' or 'text',1))
 end
 function M.queue_scroll(direction)
-    local step=DSP.clamp(tonumber(DSP.settings.scroll_step) or 300,100,1200)
+    local h=(M.content_height or 480)
+    -- Full visible page per press. The user never has to catch the scrollbar.
+    local step=math.max(260,math.floor(h*.8))
     M.scroll_delta=(M.scroll_delta or 0)+direction*step
+end
+-- Accept vertical finger movement on empty areas or plain text in a scrolling
+-- child. Never steal drags from text fields, sliders and other active controls.
+function M.touch_scroll(io,screen)
+    if not imgui.IsWindowHovered or not imgui.GetScrollY or not imgui.SetScrollY then return end
+    local hovered=imgui.IsWindowHovered()
+    local held=false
+    if io and io.MouseDown then
+        local ok,value=pcall(function() return io.MouseDown[0] end)
+        held=ok and value and true or false
+    end
+    if not held then M._touch_active=false; M._touch_screen=nil;return end
+    if not hovered then return end
+    local active=imgui.IsAnyItemActive and imgui.IsAnyItemActive() or false
+    if active then return end
+    local delta=io.MouseDelta and io.MouseDelta.y or 0
+    if M._touch_screen~=screen then M._touch_screen=screen;M._touch_active=true end
+    if M._touch_active and math.abs(delta)>.01 then
+        local max=imgui.GetScrollMaxY and imgui.GetScrollMaxY() or 100000
+        imgui.SetScrollY(DSP.clamp((imgui.GetScrollY() or 0)-delta*1.15,0,max))
+    end
+end
+-- UI edits are saved after a short idle period instead of writing JSON once
+-- per keystroke (a noticeable delay on low-end Android storage).
+function M.defer_save()
+    M._save_pending=true
+    M._last_edit=os.time()
+end
+function M.flush_save(force)
+    if M._save_pending and (force or os.time()-(M._last_edit or 0)>=2) then
+        M._save_pending=not DSP.save_settings()
+    end
 end
 function M.scroll_rail(height)
     local h=math.max(48,(height-80)/2)
@@ -68,8 +102,10 @@ function M.title(s) imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8(s)) e
 M.icon_textures={}
 M.icon_attempted={}
 function M.item_icon_kind(it)
-    local n=DSP.lower(DSP.clean_text(it.name or ''))
-    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then return 'medical' end
+    local raw=tostring(it.name or '')
+    if it._icon_raw==raw and it._icon_kind then return it._icon_kind end
+    local n=DSP.lower(DSP.clean_text(raw))
+    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then it._icon_raw=raw;it._icon_kind='medical';return 'medical' end
     if n:find('патрон',1,true) or n:find('пистолет',1,true) or n:find('deagle',1,true) then return 'ammo' end
     if n:find('рюкзак',1,true) or n:find('сумка',1,true) then return 'bag' end
     if n:find('металл',1,true) or n:find('слиток',1,true) then return 'metal' end
@@ -122,7 +158,7 @@ function M.compact_number(it,key,id,width,minimum)
     local buf=M.edit_buffer(it,key)
     imgui.SetNextItemWidth(width or 140)
     if imgui.InputText('##compact_'..id,buf,64) then
-        if M.apply_number(it,key,buf,minimum or 1) then DSP.save_settings(); return true end
+        if M.apply_number(it,key,buf,minimum or 1) then M.defer_save(); return true end
     end
     return false
 end
@@ -147,7 +183,10 @@ end
 function M.inline() imgui.SameLine(0, 12) end
 function M.child(id, w, h, fn)
     local shown = imgui.BeginChild('##mobile_'..id, imgui.ImVec2(w or 0, h or 0), true)
-    if shown then fn() end
+    if shown then
+        fn()
+        M.touch_scroll(imgui.GetIO(),'child_'..id)
+    end
     imgui.EndChild()
 end
 function M.toggle(label, parent, key, default)
@@ -269,6 +308,7 @@ local function workspace()
     if M.button('Закрыть','header_close',165) then DSP.ui.set_open(false) end
     M.footers={}
     local height=math.max(120,imgui.GetContentRegionAvail().y-66)
+    M.content_height=height
     M.child('body_'..screen,0,height,function()
         if M.reset_scroll then
             if imgui.SetScrollY then imgui.SetScrollY(0) end
@@ -283,6 +323,7 @@ local function workspace()
         M.sticky=true
         DSP.screens.draw(screen)
         M.sticky=false
+        M.touch_scroll(imgui.GetIO(),screen)
     end)
     if #M.footers>0 then
         for i,entry in ipairs(M.footers) do
@@ -290,7 +331,9 @@ local function workspace()
             M.draw_pager(entry.total,entry.per,entry.id)
         end
     else
-        if M.button('Наверх','content_top',165) then M.reset_scroll=true end
+        if M.button('Листать вверх','content_page_up',225) then M.queue_scroll(-1) end
+        M.inline()
+        if M.button('Листать вниз','content_page_down',225) then M.queue_scroll(1) end
     end
 end
 function DSP.ui.header()
@@ -324,6 +367,7 @@ function DSP.ui.draw()
     imgui.PushStyleVarFloat(imgui.StyleVar.ChildRounding,12)
     local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize
         +imgui.WindowFlags.NoSavedSettings
+    M.flush_save(false)
     if imgui.Begin('##palatka_mobile',DSP.ui.open_ref,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.05 * M.scale() / 1.25) end
         M.paint_button('quiet',false)
@@ -363,7 +407,7 @@ function DSP.ui.draw()
     imgui.End()
     imgui.PopStyleVar(5)
     if colors and colors>0 then imgui.PopStyleColor(colors) end
-    if DSP.ui.open_ref and not DSP.ui.open_ref[0] then DSP.ui.open=false end
+    if DSP.ui.open_ref and not DSP.ui.open_ref[0] then M.flush_save(true); DSP.ui.open=false end
 end
 -- The old settings screen remains complete and scrolls vertically in the content child.
 -- Wrap rows on wider settings selectors instead of forcing them beyond the edge.

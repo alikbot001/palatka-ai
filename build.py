@@ -43,10 +43,10 @@ MODULES = [
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v1.5.0, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v1.5.1, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.5.0')
+script_version('1.5.1')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}

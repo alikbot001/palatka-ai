@@ -1,7 +1,7 @@
--- Palatka AI v1.5.0, built from src/*.lua (independent of Market Helper)
+-- Palatka AI v1.5.1, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.5.0')
+script_version('1.5.1')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -10,7 +10,7 @@ local function __mod_00_core()
 -- DsPic Helper standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '1.5.0'
+DSP.version = '1.5.1'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -5878,8 +5878,42 @@ function M.paint_button(role,active)
     imgui.PushStyleColor(imgui.Col.Text,primary and DSP.theme.col('bg',1) or DSP.theme.col(active and 'accent' or 'text',1))
 end
 function M.queue_scroll(direction)
-    local step=DSP.clamp(tonumber(DSP.settings.scroll_step) or 300,100,1200)
+    local h=(M.content_height or 480)
+    -- Full visible page per press. The user never has to catch the scrollbar.
+    local step=math.max(260,math.floor(h*.8))
     M.scroll_delta=(M.scroll_delta or 0)+direction*step
+end
+-- Accept vertical finger movement on empty areas or plain text in a scrolling
+-- child. Never steal drags from text fields, sliders and other active controls.
+function M.touch_scroll(io,screen)
+    if not imgui.IsWindowHovered or not imgui.GetScrollY or not imgui.SetScrollY then return end
+    local hovered=imgui.IsWindowHovered()
+    local held=false
+    if io and io.MouseDown then
+        local ok,value=pcall(function() return io.MouseDown[0] end)
+        held=ok and value and true or false
+    end
+    if not held then M._touch_active=false; M._touch_screen=nil;return end
+    if not hovered then return end
+    local active=imgui.IsAnyItemActive and imgui.IsAnyItemActive() or false
+    if active then return end
+    local delta=io.MouseDelta and io.MouseDelta.y or 0
+    if M._touch_screen~=screen then M._touch_screen=screen;M._touch_active=true end
+    if M._touch_active and math.abs(delta)>.01 then
+        local max=imgui.GetScrollMaxY and imgui.GetScrollMaxY() or 100000
+        imgui.SetScrollY(DSP.clamp((imgui.GetScrollY() or 0)-delta*1.15,0,max))
+    end
+end
+-- UI edits are saved after a short idle period instead of writing JSON once
+-- per keystroke (a noticeable delay on low-end Android storage).
+function M.defer_save()
+    M._save_pending=true
+    M._last_edit=os.time()
+end
+function M.flush_save(force)
+    if M._save_pending and (force or os.time()-(M._last_edit or 0)>=2) then
+        M._save_pending=not DSP.save_settings()
+    end
 end
 function M.scroll_rail(height)
     local h=math.max(48,(height-80)/2)
@@ -5903,8 +5937,10 @@ function M.title(s) imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8(s)) e
 M.icon_textures={}
 M.icon_attempted={}
 function M.item_icon_kind(it)
-    local n=DSP.lower(DSP.clean_text(it.name or ''))
-    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then return 'medical' end
+    local raw=tostring(it.name or '')
+    if it._icon_raw==raw and it._icon_kind then return it._icon_kind end
+    local n=DSP.lower(DSP.clean_text(raw))
+    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then it._icon_raw=raw;it._icon_kind='medical';return 'medical' end
     if n:find('патрон',1,true) or n:find('пистолет',1,true) or n:find('deagle',1,true) then return 'ammo' end
     if n:find('рюкзак',1,true) or n:find('сумка',1,true) then return 'bag' end
     if n:find('металл',1,true) or n:find('слиток',1,true) then return 'metal' end
@@ -5957,7 +5993,7 @@ function M.compact_number(it,key,id,width,minimum)
     local buf=M.edit_buffer(it,key)
     imgui.SetNextItemWidth(width or 140)
     if imgui.InputText('##compact_'..id,buf,64) then
-        if M.apply_number(it,key,buf,minimum or 1) then DSP.save_settings(); return true end
+        if M.apply_number(it,key,buf,minimum or 1) then M.defer_save(); return true end
     end
     return false
 end
@@ -5982,7 +6018,10 @@ end
 function M.inline() imgui.SameLine(0, 12) end
 function M.child(id, w, h, fn)
     local shown = imgui.BeginChild('##mobile_'..id, imgui.ImVec2(w or 0, h or 0), true)
-    if shown then fn() end
+    if shown then
+        fn()
+        M.touch_scroll(imgui.GetIO(),'child_'..id)
+    end
     imgui.EndChild()
 end
 function M.toggle(label, parent, key, default)
@@ -6104,6 +6143,7 @@ local function workspace()
     if M.button('Закрыть','header_close',165) then DSP.ui.set_open(false) end
     M.footers={}
     local height=math.max(120,imgui.GetContentRegionAvail().y-66)
+    M.content_height=height
     M.child('body_'..screen,0,height,function()
         if M.reset_scroll then
             if imgui.SetScrollY then imgui.SetScrollY(0) end
@@ -6118,6 +6158,7 @@ local function workspace()
         M.sticky=true
         DSP.screens.draw(screen)
         M.sticky=false
+        M.touch_scroll(imgui.GetIO(),screen)
     end)
     if #M.footers>0 then
         for i,entry in ipairs(M.footers) do
@@ -6125,7 +6166,9 @@ local function workspace()
             M.draw_pager(entry.total,entry.per,entry.id)
         end
     else
-        if M.button('Наверх','content_top',165) then M.reset_scroll=true end
+        if M.button('Листать вверх','content_page_up',225) then M.queue_scroll(-1) end
+        M.inline()
+        if M.button('Листать вниз','content_page_down',225) then M.queue_scroll(1) end
     end
 end
 function DSP.ui.header()
@@ -6159,6 +6202,7 @@ function DSP.ui.draw()
     imgui.PushStyleVarFloat(imgui.StyleVar.ChildRounding,12)
     local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize
         +imgui.WindowFlags.NoSavedSettings
+    M.flush_save(false)
     if imgui.Begin('##palatka_mobile',DSP.ui.open_ref,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.05 * M.scale() / 1.25) end
         M.paint_button('quiet',false)
@@ -6198,7 +6242,7 @@ function DSP.ui.draw()
     imgui.End()
     imgui.PopStyleVar(5)
     if colors and colors>0 then imgui.PopStyleColor(colors) end
-    if DSP.ui.open_ref and not DSP.ui.open_ref[0] then DSP.ui.open=false end
+    if DSP.ui.open_ref and not DSP.ui.open_ref[0] then M.flush_save(true); DSP.ui.open=false end
 end
 -- The old settings screen remains complete and scrolls vertically in the content child.
 -- Wrap rows on wider settings selectors instead of forcing them beyond the edge.
@@ -6220,43 +6264,51 @@ local function set_price(kind,it,value)
     M.refresh_buffer(it,'price')
     DSP.save_settings()
 end
--- Compact, single-card editor: icon + inline price/amount + direct deletion.
+-- Market Helper-style row: toggle, name, market guidance, price, quantity, delete.
+-- The editor lives in a fixed-height preset panel, not in the global scroll body.
 local function item_card(kind,it,index)
     local id=kind..'_'..index
     local valid=(tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0
     if not valid and it.enabled then it.enabled=false end
     imgui.Separator()
-    -- Two clean rows instead of four crowded editable columns.
-    imgui.Columns(2,'##trade_head_'..id,false)
-    M.thumbnail(it,46)
-    M.text(tostring(it.name or '?')..((tonumber(it.ench) or 0)>0 and (' (+'..it.ench..')') or ''))
-    imgui.NextColumn()
-    M.toggle('Выставлять##'..id,it,'enabled',valid)
-    imgui.Columns(1)
-    imgui.Columns(2,'##trade_fields_'..id,false)
-    imgui.TextDisabled(DSP.utf8('ЦЕНА ЗА 1 ШТ. ($)'))
-    if M.compact_number(it,'price','price_'..id,205,1) then it.needs_price=nil end
-    imgui.NextColumn()
-    imgui.TextDisabled(DSP.utf8('КОЛИЧЕСТВО (ШТ.)'))
-    M.compact_number(it,'qty','qty_'..id,205,1)
-    imgui.Columns(1)
-    if M.button('- 1','qty_sub_'..id,94) then
-        it.qty=math.max(1,(tonumber(it.qty) or 1)-1)
-        M.refresh_buffer(it,'qty'); DSP.save_settings()
+    local enabled=it.enabled~=false
+    if imgui.Checkbox and imgui.new and imgui.new.bool then
+        local tick=imgui.new.bool(enabled)
+        if imgui.Checkbox('##trade_enabled_'..id,tick) then
+            it.enabled=tick[0]; if M.defer_save then M.defer_save() else DSP.save_settings() end
+        end
+    else
+        M.toggle('Выставлять##'..id,it,'enabled',valid)
     end
     M.inline()
-    if M.button('+ 1','qty_add_'..id,94) then
-        it.qty=math.min(1000000,(tonumber(it.qty) or 1)+1)
-        M.refresh_buffer(it,'qty'); DSP.save_settings()
+    if imgui.SameLine then
+        -- Thumbnail is optional; it never blocks the row or breaks missing images.
+        M.thumbnail(it,34)
+        M.inline()
     end
+    M.text(tostring(it.name or '?'))
+    local row=DSP.presets.find_row and DSP.presets.find_row(it)
+    if row then
+        local buy=row.buy and row.buy.max or 0
+        local sell=row.sell and row.sell.min or 0
+        M.text('Рынок: продают '..DSP.money(sell)..' / скупают '..DSP.money(buy))
+    end
+    local available=imgui.GetContentRegionAvail and imgui.GetContentRegionAvail().x or 700
+    local price_w=math.max(110,math.floor(available*.42))
+    local qty_w=math.max(80,math.floor(available*.28))
+    imgui.TextDisabled(DSP.utf8('Цена ($/шт.)'))
     M.inline()
-    if M.button('Удалить','delete_'..id,145) then
+    imgui.TextDisabled(DSP.utf8('Количество'))
+    imgui.SetNextItemWidth(price_w)
+    if M.compact_number(it,'price','p_'..id,price_w,1) then it.needs_price=nil end
+    M.inline()
+    M.compact_number(it,'qty','q_'..id,qty_w,1)
+    M.inline()
+    if M.button('X','delete_'..id,62) then
         DSP.presets.remove(kind,index)
         return true
     end
-    if not valid then
-        imgui.TextColored(DSP.theme.col('warn',1),DSP.utf8('Укажите цену и количество. Предмет пока выключен.'))
-    end
+    if not valid then M.text('Не выставляется: укажите цену и количество.') end
     return false
 end
 local function preset_library(kind,p)
@@ -6382,86 +6434,173 @@ local function catalog_picker(kind)
     if #rows==0 then M.text('Нет в рынке. Перейдите на «Вручную» и укажите цену.') end
 end
 
+-- Compact two-column editor based on the practical Market Helper workflow.
+-- Inventory/catalog on the left, active preset on the right. No nested navigation
+-- is needed to add a product; the primary action is pinned below the lists.
+U.trade_picker=U.trade_picker or 'inventory'
+U.trade_picker_page=U.trade_picker_page or 1
+U.trade_preset_page=U.trade_preset_page or 1
+local function pane(id,width,height,draw)
+    if M.child then M.child(id,width,height,draw) else draw() end
+end
+local function page_buttons(key,count,per)
+    local pages=math.max(1,math.ceil(count/per))
+    local v=math.max(1,math.min(pages,tonumber(U[key]) or 1))
+    U[key]=v
+    if M.button('<','mh_prev_'..key,76) then U[key]=math.max(1,v-1);v=U[key] end
+    M.inline()
+    if M.button(v..' / '..pages,'mh_pages_'..key,90) then U[key]=1;v=1 end
+    M.inline()
+    if M.button('>','mh_next_'..key,76) then U[key]=math.min(pages,v+1);v=U[key] end
+    return (v-1)*per+1,math.min(count,v*per)
+end
+local function catalog_rows(query)
+    query=DSP.trim(query or '')
+    if query=='' then return {} end
+    local sid=DSP.market and DSP.market.state and DSP.market.state.sid or 0
+    local stamp=DSP.market and DSP.market.state and (tostring(DSP.market.state.rows)..':'..tostring(DSP.market.state.version or 0)) or '0'
+    local key=tostring(sid)..':'..tostring(stamp)..':'..DSP.lower(query)
+    if U._catalog_key~=key then
+        U._catalog_key=key
+        U._catalog_rows=DSP.market.find_item(query) or {}
+    end
+    return U._catalog_rows or {}
+end
+local function picker_row(kind,it,idx,source)
+    imgui.Separator()
+    M.thumbnail(it,30)
+    M.inline()
+    M.text(tostring(it.display or it.name or '?')..(source=='inventory' and (' x'..tostring(it.count or it.qty or 1)) or ''))
+    if M.button('+ В набор','mh_pick_'..source..idx,185) then
+        local ok,err
+        if source=='inventory' then
+            local name=tostring(it.name or '')
+            local ench=tonumber(it.ench) or tonumber(name:match('%(%+(%d+)%)%s*$')) or 0
+            local base=name:gsub('%s+%(%+%d+%)%s*$','')
+            local row=DSP.market.row_for(base,ench)
+            if row then ok,err=DSP.presets.add(row,kind)
+            else ok,err=DSP.presets.add_manual(kind,{name=base,ench=ench,price=0,
+                qty=math.max(1,tonumber(it.count or it.qty) or 1),enabled=false,needs_price=true}) end
+        else
+            ok,err=DSP.presets.add(it,kind)
+            if not ok and err=='нет цены для расчёта' then
+                ok,err=DSP.presets.add_manual(kind,{name=it.name or it.display,ench=it.ench or 0,
+                    price=0,qty=1,enabled=false,needs_price=true})
+            end
+        end
+        report(ok,err)
+        if ok then U.trade_preset_page=math.max(1,math.ceil(#DSP.presets.items(kind)/5)) end
+    end
+end
 function U.trade_tab()
     U.preset_kind=U.preset_kind or 'buy'
+    U.trade_section=U.trade_section or 'items'
     local kind=U.preset_kind
-    M.title('МОЯ ЛАВКА')
-    if M.button('СКУПКА','kind_buy',230,kind=='buy','segment') then
-        U.preset_kind='buy'; U.trade_section='items'; kind='buy'
+    local running=DSP.auto.buy_running or DSP.auto.sell_running
+    -- Keep advanced management accessible without occupying the everyday workspace.
+    if U.trade_section=='library' then
+        if M.button('< Назад к торговле','mh_back_library',250) then U.trade_section='items' end
+        preset_library(kind)
+        return
+    elseif U.trade_section=='manual' then
+        if M.button('< Назад к торговле','mh_back_manual',250) then U.trade_section='items' end
+        manual_entry(kind)
+        return
+    elseif U.trade_section=='inventory' then
+        if M.button('< Назад к торговле','mh_back_inv',250) then U.trade_section='items' end
+        inventory(kind)
+        return
+    end
+    if M.button('СКУПКА','kind_buy',210,kind=='buy','segment') then
+        U.preset_kind='buy';kind='buy';U.trade_preset_page=1
     end
     M.inline()
-    if M.button('ПРОДАЖА','kind_sell',230,kind=='sell','segment') then
-        U.preset_kind='sell'; U.trade_section='items'; kind='sell'
+    if M.button('ПРОДАЖА','kind_sell',210,kind=='sell','segment') then
+        U.preset_kind='sell';kind='sell';U.trade_preset_page=1
     end
-    local running=DSP.auto.buy_running or DSP.auto.sell_running
     local p=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
-    local list=DSP.presets.list and DSP.presets.list(kind) or {{name=p.name}}
-    local selected=DSP.presets.selected and DSP.presets.selected(kind) or 1
-    imgui.Separator()
-    M.title('НАБОР  '..tostring(p.name or 'Основной'))
-    if M.button('<','preset_prev',78) and not running then
+    local list=(DSP.presets.list and DSP.presets.list(kind)) or {{name=p.name}}
+    local selected=(DSP.presets.selected and DSP.presets.selected(kind)) or 1
+    M.text('Набор: '..tostring(p.name or 'Основной'))
+    if M.button('<','preset_prev',68) and not running then
         DSP.presets.select(kind,selected>1 and selected-1 or #list)
     end
     M.inline()
-    if M.button('>','preset_next',78) and not running then
+    if M.button('>','preset_next',68) and not running then
         DSP.presets.select(kind,selected<#list and selected+1 or 1)
     end
     M.inline()
-    if M.button('Управление наборами','trade_library',310,U.trade_section=='library') then
-        U.trade_section=U.trade_section=='library' and 'items' or 'library'
-    end
-    local section=U.trade_section or 'items'
-    if section=='library' then
-        if M.button('< К товарам','close_library',220) then U.trade_section='items' end
-        preset_library(kind,p)
-        return
-    end
-    if section=='catalog' or section=='inventory' or section=='manual' then
-        M.title('ДОБАВИТЬ ПРЕДМЕТ')
-        if M.button('Поиск','source_catalog',180,section=='catalog') then U.trade_section='catalog'; section='catalog' end
+    if M.button('Пресеты','trade_library',160) then U.trade_section='library';return end
+    M.inline()
+    if M.button('Добавить вручную','trade_manual',230) then U.trade_section='manual';return end
+    -- Shared availability: on smaller windows switch between the two panels
+    -- instead of crushing numeric controls into unreadable columns.
+    local available=imgui.GetContentRegionAvail and imgui.GetContentRegionAvail() or {x=900,y=600}
+    local total_width=available and available.x or 900
+    local height=available and available.y or 540
+    local per=math.max(2,math.min(5,math.floor((height-125)/130)))
+    local picker=U.trade_picker or 'inventory'
+    local two=total_width>=980 and M.child~=nil
+    local panel_h=math.max(160,height-102)
+    if not two then
+        if M.button('Добавить товар','mh_switch_picker',190,U.trade_narrow_picker) then U.trade_narrow_picker=true end
         M.inline()
-        if M.button('Инвентарь','source_inventory',220,section=='inventory') then U.trade_section='inventory'; section='inventory' end
-        M.inline()
-        if M.button('Вручную','source_manual',195,section=='manual') then U.trade_section='manual'; section='manual' end
-        if M.button('< К моему набору','source_close',285) then U.trade_section='items'; return end
-        imgui.Separator()
-        if section=='catalog' then catalog_picker(kind)
-        elseif section=='inventory' then inventory(kind)
-        else manual_entry(kind) end
-        return
+        if M.button('Мой набор','mh_switch_preset',180,not U.trade_narrow_picker) then U.trade_narrow_picker=false end
     end
-    -- Main workflow: edit item quantities and prices and publish. Advanced
-    -- inventory/manual/list-management actions stay one tap away.
-    local positions,subtotal=0,0
-    for _,it in ipairs(p.items) do
-        if it.enabled~=false and (tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0 then
-            positions=positions+1
-            subtotal=subtotal+(tonumber(it.price) or 0)*(tonumber(it.qty) or 0)
+    local function draw_picker()
+        if M.button('Инвентарь','mh_source_inv',182,picker=='inventory') then picker='inventory';U.trade_picker=picker;U.trade_picker_page=1 end
+        M.inline()
+        if M.button('Поиск','mh_source_catalog',144,picker=='catalog') then picker='catalog';U.trade_picker=picker;U.trade_picker_page=1 end
+        local entries={}
+        if picker=='inventory' then
+            if M.button('Сканировать','scan_inventory',180) then DSP.auto.scan_inventory() end
+            M.text('Инвентарь: '..tostring(DSP.auto.inv_status or 'не сканирован'))
+            entries=DSP.auto.inv or {}
+        else
+            U.catalog_search=U.catalog_search or imgui.new.char[128]()
+            imgui.SetNextItemWidth(math.min(430,imgui.GetContentRegionAvail().x))
+            if imgui.InputTextWithHint('##catalog_quick_search',DSP.utf8('Название предмета...'),U.catalog_search,128) then
+                U.trade_picker_page=1
+            end
+            entries=catalog_rows(DSP.to_cp(ffi.string(U.catalog_search)))
+            if #entries==0 then M.text('Введите название предмета.') end
         end
+        M.text('Найдено: '..tostring(#entries))
+        local start,finish=page_buttons('trade_picker_page',#entries,per)
+        for i=start,finish do picker_row(kind,entries[i],i,picker) end
     end
-    M.text('Активных: '..positions..'  |  Всего товаров: '..#p.items..'  |  Сумма: '..DSP.money(subtotal))
-    if M.button('+ ДОБАВИТЬ ПРЕДМЕТ','trade_add',365,false,'primary') and not running then
-        U.trade_section='catalog'
-        return
+    local function draw_preset()
+        local current=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
+        local positions,subtotal=0,0
+        for _,it in ipairs(current.items or {}) do
+            if it.enabled~=false and (tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0 then
+                positions=positions+1;subtotal=subtotal+it.price*it.qty
+            end
+        end
+        M.text('В наборе: '..#current.items..' | Активных: '..positions..' | '..DSP.money(subtotal))
+        local start,finish=page_buttons('trade_preset_page',#current.items,per)
+        for i=start,finish do if item_card(kind,current.items[i],i) then break end end
+        if #current.items==0 then M.text('Добавьте предмет слева: он сразу появится в наборе.') end
+        U.trade_active_positions=positions
     end
-    if #p.items==0 then M.text('Набор пуст. Добавьте предмет из поиска, инвентаря или вручную.') end
-    for i,it in ipairs(p.items) do
-        if item_card(kind,it,i) then break end
-    end
-    imgui.Separator()
-    if running then
-        M.text(DSP.auto.status_text())
-        local progress=DSP.auto.progress
-        if progress then M.text('Выставлено позиций: '..tostring(progress.done or 0)..' из '..tostring(progress.total or 0)) end
+    if two then
+        local left=math.max(340,math.floor(total_width*.39))
+        pane('mh_inventory',left,panel_h,draw_picker)
+        M.inline()
+        pane('mh_preset',0,panel_h,draw_preset)
+    elseif U.trade_narrow_picker then
+        pane('mh_picker_single',0,panel_h,draw_picker)
     else
-        -- Safety option is deliberately near the publishing action, not lost in settings.
-        M.toggle('Проверить без выставления (тест)',DSP.settings,'dry_run',true)
+        pane('mh_preset_single',0,panel_h,draw_preset)
     end
+    -- Always-visible controls, independent of either list's scrolling position.
+    if running then M.text(DSP.auto.status_text())
+    else M.toggle('Тест без выставления',DSP.settings,'dry_run',true) end
     local label=running and 'ОСТАНОВИТЬ' or (DSP.settings.dry_run and 'ПРОВЕРИТЬ НАБОР' or 'ВЫСТАВИТЬ '..(kind=='buy' and 'СКУПКУ' or 'ПРОДАЖУ'))
-    if M.button(label,'run_'..kind,550,true,'primary') then
+    if M.button(label,'run_'..kind,500,true,'primary') then
         if DSP.auto.buy_running then DSP.auto.stop_buy()
         elseif DSP.auto.sell_running then DSP.auto.stop_sell()
-        elseif positions==0 then DSP.notify('Нет включённых товаров с ценой и количеством')
+        elseif DSP.presets.active_count(kind)==0 then DSP.notify('Включите товары с ценой и количеством')
         elseif kind=='buy' then DSP.auto.start_buy() else DSP.auto.start_sell() end
     end
 end
@@ -7138,6 +7277,7 @@ function N.open(note)
     U.note_shop=buffer(note.shop,64)
     U.notes_buf=buffer(note.text,8192)
     U.note_delete=false
+    U.note_delete_pending=false
     return true
 end
 function M.save_notes()
@@ -7179,13 +7319,39 @@ function U.notes_tab()
         if note.shop and note.shop:match('^%d+$') and M.button('Найти лавку #'..note.shop,'note_mark',380) then DSP.market.mark_shop(note.shop) end
         M.text('Текст заметки')
         if imgui.InputTextMultiline('##mobile_note_text',U.notes_buf,8192,imgui.ImVec2(-1,280),0) then changed() end
-        if M.button('Удалить заметку','note_delete',350) then U.note_delete=not U.note_delete end
-        if U.note_delete then
-            M.text('Удалить заметку безвозвратно?')
-            if M.button('Да, удалить','note_delete_confirm',350) then
-                for i,v in ipairs(N.all()) do if v==note then table.remove(DSP.settings.notes,i); break end end
-                if save() then U.note_current=nil else DSP.settings.notes[#DSP.settings.notes+1]=note end
+        local popup_id=DSP.utf8('Удалить заметку?')..'##note_delete_modal'
+        if M.button('Удалить заметку','note_delete',350) then
+            U.note_delete_pending=true
+            if imgui.OpenPopup then imgui.OpenPopup(popup_id) end
+        end
+        -- Proper modal, not a red confirmation block hidden below the form.
+        if imgui.GetIO and imgui.SetNextWindowPos and imgui.Cond and imgui.ImVec2 then
+            local io=imgui.GetIO()
+            if io and io.DisplaySize then
+                imgui.SetNextWindowPos(imgui.ImVec2(io.DisplaySize.x*.5,io.DisplaySize.y*.5),
+                    imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
             end
+        end
+        if imgui.BeginPopupModal and imgui.BeginPopupModal(popup_id,nil,
+            imgui.WindowFlags and imgui.WindowFlags.AlwaysAutoResize or 0) then
+            M.title('Удалить заметку?')
+            M.text('"'..tostring(note.title or '')..'" будет удалена безвозвратно.')
+            if M.button('Отмена','note_cancel_modal',190) then
+                U.note_delete_pending=false
+                if imgui.CloseCurrentPopup then imgui.CloseCurrentPopup() end
+            end
+            M.inline()
+            if M.button('Да, удалить','note_delete_confirm',220) then
+                local old_index
+                for i,v in ipairs(N.all()) do if v==note then old_index=i;table.remove(DSP.settings.notes,i);break end end
+                if save() then
+                    U.note_current=nil;U.note_delete_pending=false
+                elseif old_index then
+                    table.insert(DSP.settings.notes,old_index,note)
+                end
+                if imgui.CloseCurrentPopup then imgui.CloseCurrentPopup() end
+            end
+            imgui.EndPopup()
         end
         return
     end

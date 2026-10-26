@@ -59,6 +59,7 @@ function N.open(note)
     U.note_shop=buffer(note.shop,64)
     U.notes_buf=buffer(note.text,8192)
     U.note_delete=false
+    U.note_delete_pending=false
     return true
 end
 function M.save_notes()
@@ -100,13 +101,39 @@ function U.notes_tab()
         if note.shop and note.shop:match('^%d+$') and M.button('Найти лавку #'..note.shop,'note_mark',380) then DSP.market.mark_shop(note.shop) end
         M.text('Текст заметки')
         if imgui.InputTextMultiline('##mobile_note_text',U.notes_buf,8192,imgui.ImVec2(-1,280),0) then changed() end
-        if M.button('Удалить заметку','note_delete',350) then U.note_delete=not U.note_delete end
-        if U.note_delete then
-            M.text('Удалить заметку безвозвратно?')
-            if M.button('Да, удалить','note_delete_confirm',350) then
-                for i,v in ipairs(N.all()) do if v==note then table.remove(DSP.settings.notes,i); break end end
-                if save() then U.note_current=nil else DSP.settings.notes[#DSP.settings.notes+1]=note end
+        local popup_id=DSP.utf8('Удалить заметку?')..'##note_delete_modal'
+        if M.button('Удалить заметку','note_delete',350) then
+            U.note_delete_pending=true
+            if imgui.OpenPopup then imgui.OpenPopup(popup_id) end
+        end
+        -- Proper modal, not a red confirmation block hidden below the form.
+        if imgui.GetIO and imgui.SetNextWindowPos and imgui.Cond and imgui.ImVec2 then
+            local io=imgui.GetIO()
+            if io and io.DisplaySize then
+                imgui.SetNextWindowPos(imgui.ImVec2(io.DisplaySize.x*.5,io.DisplaySize.y*.5),
+                    imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
             end
+        end
+        if imgui.BeginPopupModal and imgui.BeginPopupModal(popup_id,nil,
+            imgui.WindowFlags and imgui.WindowFlags.AlwaysAutoResize or 0) then
+            M.title('Удалить заметку?')
+            M.text('"'..tostring(note.title or '')..'" будет удалена безвозвратно.')
+            if M.button('Отмена','note_cancel_modal',190) then
+                U.note_delete_pending=false
+                if imgui.CloseCurrentPopup then imgui.CloseCurrentPopup() end
+            end
+            M.inline()
+            if M.button('Да, удалить','note_delete_confirm',220) then
+                local old_index
+                for i,v in ipairs(N.all()) do if v==note then old_index=i;table.remove(DSP.settings.notes,i);break end end
+                if save() then
+                    U.note_current=nil;U.note_delete_pending=false
+                elseif old_index then
+                    table.insert(DSP.settings.notes,old_index,note)
+                end
+                if imgui.CloseCurrentPopup then imgui.CloseCurrentPopup() end
+            end
+            imgui.EndPopup()
         end
         return
     end
