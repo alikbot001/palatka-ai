@@ -63,6 +63,70 @@ function M.scroll_rail(height)
 end
 function M.text(s) imgui.TextWrapped(DSP.utf8(tostring(s or ''))) end
 function M.title(s) imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8(s)) end
+-- Images are optional; official item icons can be installed as
+-- PalatkaAI/icons/items/<id>.png. Bundled category pictures are fallbacks.
+M.icon_textures={}
+M.icon_attempted={}
+function M.item_icon_kind(it)
+    local n=DSP.lower(DSP.clean_text(it.name or ''))
+    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then return 'medical' end
+    if n:find('патрон',1,true) or n:find('пистолет',1,true) or n:find('deagle',1,true) then return 'ammo' end
+    if n:find('рюкзак',1,true) or n:find('сумка',1,true) then return 'bag' end
+    if n:find('металл',1,true) or n:find('слиток',1,true) then return 'metal' end
+    if n:find('пластик',1,true) or n:find('провод',1,true) or n:find('микросхем',1,true) then return 'electronics' end
+    if n:find('бронежилет',1,true) then return 'armor' end
+    if n:find('ключ',1,true) or n:find('отмычк',1,true) then return 'tool' end
+    return 'other'
+end
+function M.thumbnail(it, size)
+    size=size or 66
+    local id=tonumber(it.id or it.item_id)
+    local category=M.item_icon_kind(it)
+    local paths={}
+    if id and id>0 then paths[1]=DSP.dir..'/icons/items/'..math.floor(id)..'.png' end
+    paths[#paths+1]=DSP.dir..'/icons/categories/'..category..'.png'
+    if (imgui.CreateTextureFromFile or imgui.CreateTextureFromFileInMemory) and imgui.Image then
+        for _,path in ipairs(paths) do
+            local texture=M.icon_textures[path]
+            if not texture and not M.icon_attempted[path] then
+                M.icon_attempted[path]=true
+                local f=io.open(path,'rb')
+                if f then f:close()
+                    local ok,result=false,nil
+                    if imgui.CreateTextureFromFile then
+                        ok,result=pcall(imgui.CreateTextureFromFile,path)
+                    end
+                    if (not ok or not result) and imgui.CreateTextureFromFileInMemory then
+                        local src=io.open(path,'rb')
+                        if src then
+                            local raw=src:read('*a');src:close()
+                            local data=ffi.new('uint8_t[?]',#raw)
+                            ffi.copy(data,raw,#raw)
+                            ok,result=pcall(imgui.CreateTextureFromFileInMemory,data,#raw)
+                        end
+                    end
+                    if ok and result then M.icon_textures[path]=result; texture=result end
+                end
+            end
+            if texture then
+                local ok=pcall(imgui.Image,texture,imgui.ImVec2(size,size))
+                if ok then return true end
+            end
+        end
+    end
+    -- Don't display the wrong item's artwork when no matching icon is available.
+    imgui.TextColored(DSP.theme.col('muted',1),DSP.utf8('[ '..string.upper(category:sub(1,2))..' ]'))
+    return false
+end
+function M.compact_number(it,key,id,width,minimum)
+    local buf=M.edit_buffer(it,key)
+    imgui.SetNextItemWidth(width or 140)
+    if imgui.InputText('##compact_'..id,buf,64) then
+        if M.apply_number(it,key,buf,minimum or 1) then DSP.save_settings(); return true end
+    end
+    return false
+end
+
 function M.button(label, id, width, active, role)
     M.paint_button(role or 'secondary',active)
     if role=='nav' then imgui.PushStyleVarVec2(imgui.StyleVar.ButtonTextAlign,imgui.ImVec2(.12,.5)) end

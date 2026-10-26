@@ -387,12 +387,29 @@ function L.install()
     end
     local ok, sampev = pcall(require, 'samp.events')
     if ok and sampev then
-        -- Chat message capture for item drops
+        -- SA-MP server notifications use onServerMessage(color, text).
+        -- onChatMessage is for player chat in some event implementations.
+        -- Process both with same short-lived deduplication guard.
+        local last_chat_text, last_chat_at = nil, 0
+        local function capture(text)
+            if type(text) ~= 'string' or text == '' then return end
+            local ts = os.time()
+            if last_chat_text == text and ts - last_chat_at <= 1 then return end
+            last_chat_text, last_chat_at = text, ts
+            if DSP.logs and DSP.logs.log_chat then
+                local success, err = pcall(DSP.logs.log_chat, text)
+                if not success then DSP.flog('CHAT capture error: '..tostring(err)) end
+            end
+        end
+        L.capture_server_chat = capture
+        local prev_server = sampev.onServerMessage
+        sampev.onServerMessage = function(color, text)
+            capture(text)
+            if prev_server then return prev_server(color, text) end
+        end
         local prev_chat = sampev.onChatMessage
         sampev.onChatMessage = function(message, author, answer)
-            if DSP.logs and DSP.logs.log_chat then
-                DSP.logs.log_chat(message)
-            end
+            capture(message)
             if prev_chat then return prev_chat(message, author, answer) end
         end
         local prev = sampev.onShowDialog
@@ -426,6 +443,51 @@ end
 --      the same in-game hour)
 -- =========================================================================
 
+-- Recognize only explicit cash receipt messages, not account balances or
+-- speculative market valuations. Reward 'Вы получили $' is handled by R.parse.
+function L.check_income_message(text)
+    local s=DSP.lower(DSP.clean_text(text or ''))
+    local words={
+        'вы заработали', 'доход от бизнеса', 'доход от аренды',
+        'доход с депозита', 'вам выплачена зарплата', 'зарплата за работу',
+    }
+    local label
+    for _,word in ipairs(words) do
+        if s:find(DSP.lower(word),1,true) then label=word; break end
+    end
+    if not label then return false end
+    local sum=s:match('%$%s*([%d%., ]+)')
+    if not sum then sum=s:match('([%d][%d%., ]*)%s*%$') end
+    local amount=sum and DSP.money_val(sum) or 0
+    if amount<=0 then return false end
+    if DSP.craglog and DSP.craglog.log_income then
+        pcall(DSP.craglog.log_income,label,amount,text)
+    end
+    return true
+end
+
+-- Conservative bazaar receipt parser. Ignores offers and listed prices.
+function L.check_market_message(raw)
+    local s=DSP.clean_text(raw or '')
+    local dir, item, amount
+    for _,side in ipairs({{'sell','продали'},{'buy','купили'}}) do
+        local verb=side[2]
+        item,amount=s:match('^Вы '..verb..' (.-) за %$([%d%., ]+)')
+        if not item then item,amount=s:match('^Вы '..verb..' (.-) за ([%d%., ]+)%$') end
+        if item and amount then dir=side[1];break end
+    end
+    if not dir then
+        item,amount=s:match('^Игрок .- купил у вас (.-) за %$([%d%., ]+)')
+        if item then dir='sell' end
+    end
+    local cash=amount and DSP.money_val(amount) or 0
+    if not dir or not item or item=='' or cash<=0 then return false end
+    if DSP.craglog and DSP.craglog.log_market then
+        pcall(DSP.craglog.log_market,dir,item,cash,raw)
+    end
+    return true
+end
+
 local PAYDAY_PATTERNS = {
     'PayDay',
     'ПэйДэй',
@@ -436,7 +498,6 @@ local PAYDAY_PATTERNS = {
 
 function L.check_payday_message(text)
     if not text or text == '' then return false end
-    if not DSP.settings.tg_payday_enabled then return false end
     local s = DSP.lower(text)
     local hit = false
     for _, pat in ipairs(PAYDAY_PATTERNS) do
@@ -464,7 +525,7 @@ function L.check_payday_message(text)
         summary.profit >= 0 and '+' or '',
         DSP.money(summary.profit)))
     -- Telegram notification (UTF-8 over HTTP)
-    if DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
+    if DSP.settings.tg_payday_enabled and DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
         local msg = '[palatka ai] PayDay ' .. os.date('%H:%M') .. '\n'
             .. 'Сделок за день: ' .. summary.count .. '\n'
             .. 'Прибыль: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit) .. '\n'

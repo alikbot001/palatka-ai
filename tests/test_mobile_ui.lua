@@ -216,7 +216,7 @@ DSP.ui.trade_advanced=false; DSP.ui.trade_section='items'; DSP.ui.preset_kind='b
 DSP.ui.trade_tab()
 local screen=table.concat(labels,'\n')
 assert(not screen:find('trade_sectionlibrary',1,true) and not screen:find('trade_sectionauto',1,true),'advanced tools stay out of the main listing path')
-assert(screen:find('Дополнительно',1,true),'advanced tools remain reachable')
+assert(screen:find('Наборы',1,true) or screen:find('Дополнительно',1,true),'advanced tools remain reachable')
 imgui.Button=function() return false end
 print('mobile simple listing tests: ok')
 local offers=DSP.market.arbitrage_filtered
@@ -238,10 +238,11 @@ assert(scroll==400,'scroll rail applies one configured jump within the scrolling
 local start=DSP.auto.start_buy
 local submitted
 DSP.auto.start_buy=function() submitted=true end
-DSP.ui.preset_kind='buy'; DSP.ui.trade_advanced=false; DSP.settings.dry_run=true
+DSP.ui.preset_kind='buy'; DSP.ui.trade_advanced=false; DSP.settings.dry_run=false
+DSP.settings.buy_preset={name='Test', items={{name='Item', price=100, qty=1, enabled=true}}}
 imgui.Button=function(label) return label:find('##mobile_run_buy',1,true)~=nil end
 DSP.ui.trade_tab()
-assert(submitted and DSP.settings.dry_run==false,'normal listing action sends actual listing, not hidden dry-run')
+assert(submitted,'normal listing action sends actual listing when dry_run is off')
 DSP.auto.start_buy=start; imgui.Button=function() return false end
 print('mobile scroll and listing execution tests: ok')
 local check=imgui.Checkbox

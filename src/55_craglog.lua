@@ -24,7 +24,11 @@ function C.ring_recent(n)
     return out
 end
 local function category(e)
-    if e.kind=='item' or e.kind=='opening' or e.kind=='cash' or e.type=='crate' then return 'loot' end
+    if e.type=='payday' or e.kind=='payday' then return 'payday' end
+    if e.type=='market' then return e.direction=='sell' and 'sales' or 'buys' end
+    if e.kind=='income' or e.type=='income' then return 'income' end
+    if e.kind=='cash' then return 'income' end
+    if e.kind=='item' or e.kind=='opening' or e.type=='crate' then return 'loot' end
     if (tonumber(e.money_get) or 0)>0 and (tonumber(e.money_give) or 0)==0 then return 'sales' end
     if (tonumber(e.money_give) or 0)>0 and (tonumber(e.money_get) or 0)==0 then return 'buys' end
     return 'other'
@@ -32,7 +36,7 @@ end
 function C.filtered(filter)
     local out={}
     for _,e in ipairs(C.ring_recent(C.ring_count)) do
-        if filter=='all' or category(e)==filter then out[#out+1]=e end
+        if filter=='all' or category(e)==filter or (filter=='loot' and e.kind=='cash') then out[#out+1]=e end
     end
     return out
 end
@@ -57,19 +61,31 @@ function C.describe(e)
         return name..' x'..tostring(e.qty or e.count or 1)..' | Оценка: '..value
     elseif e.kind=='cash' then return 'Деньги: +'..DSP.money(e.cash or 0)
     elseif e.kind=='opening' then return 'Открытие: '..tostring(e.source or '?')
-    elseif e.type=='payday' then return 'PayDay | Сделок: '..tostring(e.count or 0)..' | Итог: '..DSP.money(e.profit or 0) end
+    elseif e.type=='payday' then return 'PayDay | Сделок за день: '..tostring(e.count or 0)..' | Торговый итог: '..DSP.money(e.profit or 0)
+    elseif e.type=='income' then return tostring(e.label or 'Доход')..': +'..DSP.money(e.amount or 0)
+    elseif e.type=='market' then
+        return (e.direction=='sell' and 'Продажа: ' or 'Покупка: ')..tostring(e.item_name or '?')..' | '..(e.direction=='sell' and 'Выручка: +' or 'Расход: -')..DSP.money(e.amount or 0) end
     local parts={}
     for _,side in ipairs({{'items_give','Отдано'},{'items_get','Получено'}}) do
         for _,it in ipairs(e[side[1]] or {}) do parts[#parts+1]=side[2]..': '..tostring(it.name)..' x'..tostring(it.qty or 1) end
     end
     return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..'Итог сделки: '..DSP.money(e.profit or 0)
 end
+-- Append one structured event so the history survives a restart.
+local function store_event(e)
+    DSP.mkdir_p(DSP.dir..'/logs')
+    local ok,encoded=pcall(encodeJson,e)
+    if not ok or type(encoded)~='string' then return false,'JSON encoding error' end
+    return append(DSP.events_log_path,encoded)
+end
 function C.log_trade(e)
     if type(e)~='table' then return false,'нет записи' end
     C.ring_push(e); C.counters.trades=C.counters.trades+1
     C.counters.profit=C.counters.profit+(tonumber(e.profit) or 0)
     local key=category(e); if C.counters[key] then C.counters[key]=C.counters[key]+1 end
-    return append(DSP.trades_log_path,os.date('%Y-%m-%d %H:%M:%S',e.ts or os.time())..' '..C.describe(e))
+    local ok,err=append(DSP.trades_log_path,os.date('%Y-%m-%d %H:%M:%S',e.ts or os.time())..' '..C.describe(e))
+    store_event(e)
+    return ok,err
 end
 function C.log_crate(e)
     if type(e)~='table' then return false,'нет записи' end
@@ -87,7 +103,24 @@ function C.log_payday(summary)
     summary=summary or {}
     local row={type='payday',kind='payday',ts=os.time(),profit=summary.profit or 0,count=summary.count or 0}
     C.ring_push(row)
-    return append(DSP.trades_log_path,os.date('%Y-%m-%d %H:%M:%S',row.ts)..' '..C.describe(row))
+    local ok,err=store_event(row)
+    return ok,err
+end
+function C.log_income(label,amount,raw)
+    amount=math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return false,'сумма должна быть положительной' end
+    local row={type='income',kind='income',ts=os.time(),amount=amount,label=label or 'Доход',raw=raw}
+    C.ring_push(row)
+    return store_event(row)
+end
+function C.log_market(direction,item,amount,raw)
+    if direction~='sell' and direction~='buy' then return false,'сторона' end
+    amount=math.floor(tonumber(amount) or 0)
+    if amount<=0 then return false,'сумма' end
+    local row={type='market',kind='market',ts=os.time(),direction=direction,
+        item_name=item or '?',amount=amount,raw=raw}
+    C.ring_push(row)
+    return store_event(row)
 end
 function C.visible() return settings().open==true end
 function C.toggle() local s=settings(); s.open=not s.open; persist() end
@@ -143,6 +176,21 @@ end
 function C.install()
     if C.installed then return end
     C.installed=true
+    local f=io.open(DSP.events_log_path,'r')
+    if f then
+        local history={}
+        for line in f:lines() do
+            if line~='' then
+                local ok,row=pcall(decodeJson,line)
+                if ok and type(row)=='table' and row.type then
+                    history[#history+1]=row
+                    if #history>C.ring_cap then table.remove(history,1) end
+                end
+            end
+        end
+        f:close()
+        for _,e in ipairs(history) do C.ring_push(e) end
+    end
     if DSP.rewards and DSP.rewards.query then
         local result=DSP.rewards.query({page_size=80})
         for i=#result.entries,1,-1 do C.ring_push(result.entries[i]) end

@@ -84,13 +84,15 @@ function U.crate_log()
     end
 end
 function U.log_tab()
-    M.title('ИСТОРИЯ')
-    for _,v in ipairs({{'crates','Награды / тайники'},{'trades','Сделки'},{'chat','Чат'}}) do
-        if M.button(v[2],'history_'..v[1],330,U.tab_detail==v[1]) then U.tab_detail=v[1] end
+    M.title('ИСТОРИЯ И ЖУРНАЛ')
+    U.tab_detail = U.tab_detail or 'journal'
+    for _,v in ipairs({{'journal','Журнал событий'},{'trades','Сделки'},{'crates','Тайники'},{'chat','Чат'}}) do
+        if M.button(v[2],'history_'..v[1],240,U.tab_detail==v[1]) then U.tab_detail=v[1] end
         if v[1]~='chat' then M.inline() end
     end
     imgui.Separator()
-    if U.tab_detail=='crates' then U.crate_log()
+    if U.tab_detail=='crates' then
+        U.crate_log()
     elseif U.tab_detail=='chat' then
         local chat=DSP.settings.chat_logs or {}
         local first,last=DSP.screens.pager(#chat,12,'chat_history')
@@ -98,7 +100,7 @@ function U.log_tab()
             local e=chat[#chat-i+1]
             M.text(date(e.ts)..' | '..tostring(e.text or '')); imgui.Separator()
         end
-    else
+    elseif U.tab_detail=='trades' then
         local trades=M.history_rows('trades')
         M.title('СДЕЛКИ / '..#trades)
         local first,last=DSP.screens.pager(#trades,8,'trade_history')
@@ -116,6 +118,65 @@ function U.log_tab()
             local e=stalls[i]
             M.text(date(e.ts)..' | Лавка #'..tostring(e.shop_num or '?')..' '..tostring(e.owner or '')..' '..tostring(e.action or ''))
         end
+    else
+        local C=DSP.craglog
+        M.text('Сделки, деньги, открытия и PayDay в одном месте.')
+        U.journal_filter=U.journal_filter or 'all'
+        local tabs={{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
+                    {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}
+        for i,pair in ipairs(tabs) do
+            if M.button(pair[2],'journal_'..pair[1],190,U.journal_filter==pair[1]) then
+                U.journal_filter=pair[1]
+                DSP.screens.set_page('journal_events',1)
+            end
+            if i%3~=0 then M.inline() end
+        end
+        imgui.Separator()
+        if not C then M.text('Журнал ещё не загружен'); return end
+        local all=C.filtered('all')
+        local since=os.time()-86400
+        local sales,buys,paydays,crates,income,profit=0,0,0,0,0,0
+        for _,e in ipairs(all) do
+            if (tonumber(e.ts) or 0)>=since then
+                if e.type=='payday' then paydays=paydays+1
+                elseif e.type=='income' then income=income+(tonumber(e.amount) or 0)
+                elseif e.kind=='cash' then income=income+(tonumber(e.cash) or 0)
+                elseif e.kind=='opening' then crates=crates+1
+                elseif e.type=='market' then
+                    if e.direction=='sell' then sales=sales+1 else buys=buys+1 end
+                elseif e.type=='trade' then
+                    profit=profit+(tonumber(e.profit) or 0)
+                    if (tonumber(e.money_get) or 0)>0 then sales=sales+1 end
+                    if (tonumber(e.money_give) or 0)>0 then buys=buys+1 end
+                end
+            end
+        end
+        M.text('За 24 ч | Продажи: '..sales..' | Скупки: '..buys..' | Тайники: '..crates..' | PayDay: '..paydays)
+        M.text('Торговый итог (оценка): '..DSP.money(profit)..' | Полученные деньги: '..DSP.money(income))
+        M.text('Торговый итог может включать рыночную стоимость вещей, а не наличные.')
+        imgui.Separator()
+        local events=C.filtered(U.journal_filter)
+        table.sort(events,function(a,b) return (tonumber(a.ts) or 0)>(tonumber(b.ts) or 0) end)
+        local first,last=DSP.screens.pager(#events,7,'journal_events')
+        if #events==0 then M.text('Пока нет записей этого типа. Новые события появятся после сообщений сервера.') end
+        for i=first,last do
+            local e=events[i]
+            if e then
+                local kind=e.kind or e.type
+                local heading=e.type=='payday' and 'PAYDAY' or e.type=='income' and 'ДОХОД'
+                    or kind=='opening' and 'ТАЙНИК' or kind=='item' and 'ПРЕДМЕТ'
+                    or kind=='cash' and 'ДЕНЬГИ' or e.type=='market' and (e.direction=='sell' and 'ПРОДАЖА' or 'СКУПКА') or 'СДЕЛКА'
+                M.title(date(e.ts)..'    '..heading)
+                M.text(C.describe(e))
+                if e.source and e.source~='' then M.text('Источник: '..tostring(e.source)) end
+                imgui.Separator()
+            end
+        end
+        if M.button('Подробно: тайники и награды','journal_details',430) then
+            U.journal_details=not U.journal_details
+        end
+        if U.journal_details then U.crate_log() end
+        if C.last_error then M.text('Ошибка файла журнала: '..tostring(C.last_error)) end
     end
 end
 local function save_notes()
@@ -155,7 +216,7 @@ function U.settings_tab()
     local section=U.settings_section
     if section=='appearance' then
         M.text('Цветовая тема')
-        for _,id in ipairs({'dark_amber','amoled','cyberpunk','purple','emerald'}) do
+        for _,id in ipairs({'ocean_blue','dark_amber','amoled','cyberpunk','purple','emerald'}) do
             local theme=DSP.theme.list[id]
             if M.button(theme.name,'theme_'..id,400,DSP.theme.current==id) then DSP.theme.set(id) end
         end

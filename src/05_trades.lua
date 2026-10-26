@@ -351,7 +351,6 @@ function DSP.logs.parse_chat_drop(text)
 end
 
 function DSP.logs.log_chat(text)
-    if not DSP.settings.log_chat_drops then return end
     local s = DSP.clean_text(text or '')
     if s == '' then return end
     -- v1.2 Stage 3: PayDay detection. The hook in 45_live.lua checks the
@@ -360,12 +359,20 @@ function DSP.logs.log_chat(text)
     if DSP.live and DSP.live.check_payday_message then
         pcall(DSP.live.check_payday_message, s)
     end
+    if DSP.live and DSP.live.check_income_message then
+        pcall(DSP.live.check_income_message,s)
+    end
+    if DSP.live and DSP.live.check_market_message then
+        pcall(DSP.live.check_market_message,s)
+    end
     -- Check for item drop messages (now with source + ench propagation)
     local drop
-    if DSP.rewards then
-        local row, err = DSP.rewards.ingest(text)
-        if err then DSP.add_log('История наград: ' .. tostring(err), 'error') end
-    else drop = DSP.logs.parse_chat_drop(s) end
+    if DSP.settings.log_chat_drops ~= false then
+        if DSP.rewards then
+            local row, err = DSP.rewards.ingest(text)
+            if err then DSP.add_log('История наград: ' .. tostring(err), 'error') end
+        else drop = DSP.logs.parse_chat_drop(s) end
+    end
     if drop and drop.name and drop.name ~= '' then
         DSP.logs.crate_opened(drop.name, 0, drop.qty, drop.source, drop.ench)
     end

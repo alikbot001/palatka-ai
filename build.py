@@ -16,6 +16,7 @@ OUT = ROOT / "palatka_ai.lua"
 MODULES = [
     "00_core.lua",
     "05_items.lua",
+    "08_icons.lua",
     "10_market.lua",
     "11_arbitrage.lua",
     "15_prices.lua",
@@ -41,7 +42,7 @@ MODULES = [
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v1.3.3, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v1.4.0, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
 script_version('1.3.3')

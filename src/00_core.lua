@@ -1,7 +1,7 @@
 -- DsPic Helper standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '1.3.3'
+DSP.version = '1.4.0'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -81,6 +81,7 @@ DSP.ui_state_path = DSP.dir .. '/ui_state.json'
 DSP.notes_path = DSP.dir .. '/notes.txt'
 DSP.trades_log_path = DSP.dir .. '/logs/all_trades.log'
 DSP.crates_log_path = DSP.dir .. '/logs/crates.log'
+DSP.events_log_path = DSP.dir .. '/logs/events.jsonl'
 DSP.legacy_items_path = DSP.dir .. '/arz_items.json'
 DSP.market_path = function(sid)
     return DSP.dir .. '/market_' .. tostring(sid) .. '.json'
@@ -127,7 +128,7 @@ DSP.settings = {
     buy_preset = { name = 'Скупка', items = {} },
     sell_preset = { name = 'Продажа', items = {} },
     -- v1.2 additions
-    theme = 'dark_amber',
+    theme = 'ocean_blue',
     opacity = 0.97,
     screen = 'palatka',
     crag_pinned = false,
@@ -187,7 +188,7 @@ function DSP.load_settings()
     end
     DSP.settings.buy_preset.items = DSP.settings.buy_preset.items or {}
     DSP.settings.sell_preset.items = DSP.settings.sell_preset.items or {}
-    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'dark_amber' end
+    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'ocean_blue' end
     if type(DSP.settings.opacity) ~= 'number' then DSP.settings.opacity = 0.97 end
     if type(DSP.settings.screen) ~= 'string' then DSP.settings.screen = 'palatka' end
     if type(DSP.settings.tax_bp) ~= 'number' then DSP.settings.tax_bp = 200 end
@@ -208,7 +209,7 @@ function DSP.load_settings()
         DSP.settings.craglog.minimized = DSP.settings.craglog.minimized and true or false
         DSP.settings.craglog.pinned = DSP.settings.craglog.pinned and true or false
         local f = DSP.settings.craglog.filter
-        if f ~= 'all' and f ~= 'sales' and f ~= 'buys' and f ~= 'loot' then f = 'all' end
+        if f ~= 'all' and f ~= 'sales' and f ~= 'buys' and f ~= 'loot' and f ~= 'income' and f ~= 'payday' then f = 'all' end
         DSP.settings.craglog.filter = f
     end
     if type(DSP.settings.tg_payday_last) ~= 'number' then DSP.settings.tg_payday_last = 0 end
@@ -279,6 +280,12 @@ end
 DSP.theme = DSP.theme or {}
 
 DSP.theme.list = {
+    ocean_blue = {
+        name = 'Palatka Blue',
+        bg={0.032,0.059,0.095},panel={0.060,0.103,0.160},accent={0.055,0.53,1.0},
+        text={0.94,0.965,1.0},muted={0.62,0.74,0.86},good={0.13,0.88,0.54},
+        bad={0.98,0.31,0.44},warn={1.0,0.72,0.22},
+    },
     dark_amber = {
         name = 'Dark Amber',
         bg     = { 0.047, 0.055, 0.071 },
@@ -336,7 +343,7 @@ DSP.theme.list = {
     },
 }
 
-DSP.theme.current = 'dark_amber'
+DSP.theme.current = 'ocean_blue'
 DSP.theme.opacity = 0.97
 
 function DSP.theme.get()
@@ -477,7 +484,14 @@ end
 
 DSP.load_settings()
 DSP.load_ui_state()
-DSP.theme.current = DSP.settings.theme or 'dark_amber'
+-- Migrate the stock 1.3.x amber look on first v1.4 launch. Respect custom themes.
+if not DSP.settings.ui_v14_migrated then
+    if DSP.settings.theme=='dark_amber' then DSP.settings.theme='ocean_blue' end
+    DSP.settings.ui_v14_migrated=true
+    DSP.save_settings()
+end
+DSP.theme.current = DSP.settings.theme or 'ocean_blue'
+DSP.save_ui_state()
 DSP.theme.opacity = DSP.clamp(DSP.settings.opacity or 0.97, 0.65, 1.00)
 DSP.flog('--- load v' .. DSP.version .. ' theme=' .. DSP.theme.current .. ' opacity=' .. tostring(DSP.theme.opacity) .. ' ---')
 DSP.enc_selftest()

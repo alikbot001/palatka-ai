@@ -28,17 +28,18 @@ local function header(g)
 end
 local function filters(g)
     local s=state()
-    for i,pair in ipairs({{'all','Все'},{'sales','Продажи'},{'buys','Скупка'},{'loot','Награды'}}) do
-        if button(pair[2],'filter_'..pair[1],(g.w-52)/4,s.filter==pair[1]) then
+    for i,pair in ipairs({{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
+                           {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}) do
+        if button(pair[2],'filter_'..pair[1],(g.w-42)/3,s.filter==pair[1]) then
             s.filter=pair[1]; C.scroll=0; DSP.save_settings()
         end
-        if i<4 then inline() end
+        if i%3~=0 then inline() end
     end
 end
 local function row_card(entry)
     local kind=entry.kind or entry.type
     local tag=kind=='item' and 'НАГРАДА' or kind=='cash' and 'ДЕНЬГИ' or kind=='opening' and 'ТАЙНИК'
-        or entry.type=='payday' and 'PAYDAY' or 'СДЕЛКА'
+        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'ДОХОД' or 'СДЕЛКА'
     imgui.TextColored(DSP.theme.col('accent',1),cp(os.date('%H:%M:%S',entry.ts or 0)..'  '..tag))
     text(C.describe(entry))
     if entry.source then
