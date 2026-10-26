@@ -34,7 +34,23 @@ end)
 safe('live.install',  function() DSP.live.install() end)
 safe('overlay.install', function() DSP.overlay.install() end)
 safe('logs.install',  function() DSP.logs.install() end)
-safe('notify',       function() DSP.notify('palatka ai v' .. DSP.version .. ': /crr') end)
+
+-- Startup broadcast: visible notification in SAMP chat and MonetLoader log
+local function broadcast_version()
+    local msg = '[palatka ai v' .. tostring(DSP.version) .. '] loaded'
+    msg = msg .. ' | lua:' .. (jit and jit.version or 'unknown')
+    if imgui then msg = msg .. ' | imgui:OK' else msg = msg .. ' | imgui:MISSING' end
+    if DSP and DSP.notify then
+        pcall(DSP.notify, msg .. ': /crr')
+    end
+    if DSP and DSP.flog then
+        pcall(DSP.flog, '--- BROADCAST ' .. msg .. ' ---')
+    end
+    if sampAddChatMessage then
+        pcall(sampAddChatMessage, '{FFAA00}[palatka ai] {FFFFFF}v' .. tostring(DSP.version) .. ' {00FF00}активирован{FFFFFF}. Открыть: {FFAA00}/crr', 0xFFAA00)
+    end
+end
+safe('broadcast_version', broadcast_version)
 
 -- Background market refresh thread. Wrapped in pcall so the coroutine
 -- never throws into the scheduler (which would crash the game on some

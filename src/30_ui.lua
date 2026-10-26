@@ -1747,8 +1747,8 @@ function DSP.ui.install()
                     DSP.ui.set_open(true)
                 end
                 if p2 > 0 then pcall(imgui.PopStyleColor, p2) end
-                imgui.End()
             end
+            imgui.End()
             if ncol and ncol > 0 then pcall(imgui.PopStyleColor, ncol) end
             -- Persist drag-moved position every 5s (avoids writing on every frame).
             if DSP.ui._cr_pos_dirty and (os.time() - (DSP.ui._cr_last_save or 0)) > 5 then
