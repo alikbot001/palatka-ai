@@ -19,6 +19,7 @@ MODULES = [
     "08_icons.lua",
     "10_market.lua",
     "11_arbitrage.lua",
+    "12_arbitrage_groups.lua",
     "15_prices.lua",
     "05_trades.lua",
     "06_rewards.lua",
@@ -42,10 +43,10 @@ MODULES = [
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v1.4.0, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v1.5.0, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.3.3')
+script_version('1.5.0')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}

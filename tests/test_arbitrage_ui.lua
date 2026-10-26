@@ -1,16 +1,23 @@
 dofile('tests/test_ui.lua')
+assert(loadfile('src/11_arbitrage.lua'))()
+assert(loadfile('src/12_arbitrage_groups.lua'))()
 assert(loadfile('src/36_mobile.lua'))()
 assert(loadfile('src/38_mobile_market.lua'))()
 local captured={}
 imgui.TextWrapped=function(s) captured[#captured+1]=s end
 imgui.TextColored=function(_,s) captured[#captured+1]=s end
-DSP.market.arbitrage_filtered=function() return {{name='Test stock',
-    sell_offer={owner='Seller',shop=1,qty=100},buy_offer={owner='Buyer',shop=2,qty=200},
-    p_buy=100,p_sell=200,tradable_qty=3,available_qty=100,partial=true,
-    total_cost=300,net_profit=288,net_revenue=588,roi=96}} end
+local clock=os.time()
+DSP.market.rebuild({shops={
+    {shop_num=1,owner='Seller 1',server_id=102,updated_at=clock,sell_slots={{name='Case Frame',qty=1,price=100}}},
+    {shop_num=2,owner='Seller 2',server_id=102,updated_at=clock,sell_slots={{name='Case Frame',qty=2,price=110}}},
+    {shop_num=3,owner='Buyer',server_id=102,updated_at=clock,buy_slots={{name='Case Frame',qty=700,price=200}}}
+}},102)
+DSP.settings.arb_filters={budget=0,max_age=0}
+DSP.ui.arb_expanded={[DSP.item_key('Case Frame',0)]=true}
 DSP.ui.arbitrage_tab()
-local text=table.concat(captured,'\n')
-assert(text:find('Продаёт: 100 шт.',1,true),'seller original stock quantity must appear')
-assert(text:find('Скупает: 200 шт.',1,true),'buyer original demand quantity must appear')
-assert(text:find('Купить 3 шт.',1,true),'budget limited deal quantity remains separate')
-print('arbitrage UI stock and demand: ok')
+local words=table.concat(captured,'\n')
+assert(words:find('ПРОДАЮТ  3 шт.',1,true),'all sellers in group')
+assert(words:find('СКУПАЮТ  700 шт.',1,true),'all buyers in group')
+assert(words:find('План: 3 шт.',1,true),'planned quantity distinct from snapshot demand')
+assert(words:find('Скупщик: 700 шт.',1,true),'buyer raw volume visible per route')
+print('v1.5 arbitrage grouped UI: ok')

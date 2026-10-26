@@ -15,36 +15,39 @@ end
 local function item_card(kind,it,index)
     local id=kind..'_'..index
     local valid=(tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0
-    if not valid then it.enabled=false end
+    if not valid and it.enabled then it.enabled=false end
     imgui.Separator()
-    imgui.Columns(4,'##itemrow'..id,false)
-    M.thumbnail(it,64)
-    imgui.NextColumn()
+    -- Two clean rows instead of four crowded editable columns.
+    imgui.Columns(2,'##trade_head_'..id,false)
+    M.thumbnail(it,46)
     M.text(tostring(it.name or '?')..((tonumber(it.ench) or 0)>0 and (' (+'..it.ench..')') or ''))
-    M.toggle('Вкл.##'..id,it,'enabled',valid)
     imgui.NextColumn()
-    imgui.TextDisabled(DSP.utf8('Цена за 1 шт.'))
-    if M.compact_number(it,'price','price_'..id,150,1) then it.needs_price=nil end
+    M.toggle('Выставлять##'..id,it,'enabled',valid)
+    imgui.Columns(1)
+    imgui.Columns(2,'##trade_fields_'..id,false)
+    imgui.TextDisabled(DSP.utf8('ЦЕНА ЗА 1 ШТ. ($)'))
+    if M.compact_number(it,'price','price_'..id,205,1) then it.needs_price=nil end
     imgui.NextColumn()
-    imgui.TextDisabled(DSP.utf8('Штук'))
-    M.compact_number(it,'qty','qty_'..id,120,1)
-    if M.button('-','qty_sub_'..id,60) then
+    imgui.TextDisabled(DSP.utf8('КОЛИЧЕСТВО (ШТ.)'))
+    M.compact_number(it,'qty','qty_'..id,205,1)
+    imgui.Columns(1)
+    if M.button('- 1','qty_sub_'..id,94) then
         it.qty=math.max(1,(tonumber(it.qty) or 1)-1)
         M.refresh_buffer(it,'qty'); DSP.save_settings()
     end
     M.inline()
-    if M.button('+','qty_add_'..id,60) then
+    if M.button('+ 1','qty_add_'..id,94) then
         it.qty=math.min(1000000,(tonumber(it.qty) or 1)+1)
         M.refresh_buffer(it,'qty'); DSP.save_settings()
     end
     M.inline()
-    if M.button('X','delete_'..id,60) then
-        imgui.Columns(1)
+    if M.button('Удалить','delete_'..id,145) then
         DSP.presets.remove(kind,index)
         return true
     end
-    imgui.Columns(1)
-    if not valid then M.text('Укажите цену и количество; позиция пока отключена.') end
+    if not valid then
+        imgui.TextColored(DSP.theme.col('warn',1),DSP.utf8('Укажите цену и количество. Предмет пока выключен.'))
+    end
     return false
 end
 local function preset_library(kind,p)
@@ -173,71 +176,84 @@ end
 function U.trade_tab()
     U.preset_kind=U.preset_kind or 'buy'
     local kind=U.preset_kind
-    M.title('ТОРГОВЛЯ')
-    if M.button('СКУПКА','kind_buy',260,kind=='buy','segment') then U.preset_kind='buy'; kind='buy' end
+    M.title('МОЯ ЛАВКА')
+    if M.button('СКУПКА','kind_buy',230,kind=='buy','segment') then
+        U.preset_kind='buy'; U.trade_section='items'; kind='buy'
+    end
     M.inline()
-    if M.button('ПРОДАЖА','kind_sell',260,kind=='sell','segment') then U.preset_kind='sell'; kind='sell' end
-    local p=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
+    if M.button('ПРОДАЖА','kind_sell',230,kind=='sell','segment') then
+        U.preset_kind='sell'; U.trade_section='items'; kind='sell'
+    end
     local running=DSP.auto.buy_running or DSP.auto.sell_running
-    imgui.Separator()
+    local p=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
     local list=DSP.presets.list and DSP.presets.list(kind) or {{name=p.name}}
     local selected=DSP.presets.selected and DSP.presets.selected(kind) or 1
-    M.text('Набор: '..tostring(p.name or 'Мой набор'))
-    if M.button('<','preset_prev',62) and not running then
+    imgui.Separator()
+    M.title('НАБОР  '..tostring(p.name or 'Основной'))
+    if M.button('<','preset_prev',78) and not running then
         DSP.presets.select(kind,selected>1 and selected-1 or #list)
     end
     M.inline()
-    if M.button('>','preset_next',62) and not running then
+    if M.button('>','preset_next',78) and not running then
         DSP.presets.select(kind,selected<#list and selected+1 or 1)
     end
     M.inline()
-    if M.button('+ Добавить','trade_add',220,(U.trade_section=='catalog' or U.trade_section=='inventory' or U.trade_section=='manual')) and not running then
-        U.trade_section=U.trade_section=='catalog' and 'items' or 'catalog'
-    end
-    M.inline()
-    if M.button('Наборы','trade_library',170,U.trade_section=='library') then
+    if M.button('Управление наборами','trade_library',310,U.trade_section=='library') then
         U.trade_section=U.trade_section=='library' and 'items' or 'library'
     end
     local section=U.trade_section or 'items'
     if section=='library' then
+        if M.button('< К товарам','close_library',220) then U.trade_section='items' end
         preset_library(kind,p)
-    elseif section=='catalog' or section=='inventory' or section=='manual' then
-        if M.button('Поиск','source_catalog',170,section=='catalog') then U.trade_section='catalog'; section='catalog' end
+        return
+    end
+    if section=='catalog' or section=='inventory' or section=='manual' then
+        M.title('ДОБАВИТЬ ПРЕДМЕТ')
+        if M.button('Поиск','source_catalog',180,section=='catalog') then U.trade_section='catalog'; section='catalog' end
         M.inline()
-        if M.button('Инвентарь','source_inventory',230,section=='inventory') then U.trade_section='inventory'; section='inventory' end
+        if M.button('Инвентарь','source_inventory',220,section=='inventory') then U.trade_section='inventory'; section='inventory' end
         M.inline()
-        if M.button('По названию','source_manual',240,section=='manual') then U.trade_section='manual'; section='manual' end
-        M.inline()
-        if M.button('Вернуться к списку','source_close',300) then U.trade_section='items'; section='items' end
+        if M.button('Вручную','source_manual',195,section=='manual') then U.trade_section='manual'; section='manual' end
+        if M.button('< К моему набору','source_close',285) then U.trade_section='items'; return end
         imgui.Separator()
         if section=='catalog' then catalog_picker(kind)
         elseif section=='inventory' then inventory(kind)
-        elseif section=='manual' then manual_entry(kind) end
+        else manual_entry(kind) end
+        return
+    end
+    -- Main workflow: edit item quantities and prices and publish. Advanced
+    -- inventory/manual/list-management actions stay one tap away.
+    local positions,subtotal=0,0
+    for _,it in ipairs(p.items) do
+        if it.enabled~=false and (tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0 then
+            positions=positions+1
+            subtotal=subtotal+(tonumber(it.price) or 0)*(tonumber(it.qty) or 0)
+        end
+    end
+    M.text('Активных: '..positions..'  |  Всего товаров: '..#p.items..'  |  Сумма: '..DSP.money(subtotal))
+    if M.button('+ ДОБАВИТЬ ПРЕДМЕТ','trade_add',365,false,'primary') and not running then
+        U.trade_section='catalog'
+        return
+    end
+    if #p.items==0 then M.text('Набор пуст. Добавьте предмет из поиска, инвентаря или вручную.') end
+    for i,it in ipairs(p.items) do
+        if item_card(kind,it,i) then break end
+    end
+    imgui.Separator()
+    if running then
+        M.text(DSP.auto.status_text())
+        local progress=DSP.auto.progress
+        if progress then M.text('Выставлено позиций: '..tostring(progress.done or 0)..' из '..tostring(progress.total or 0)) end
     else
-        M.text('ПРЕДМЕТЫ   |   Активно: '..tostring(DSP.presets.active_count(kind)))
-        if #p.items==0 then M.text('Пока пусто. Нажмите «+ Добавить», выберите предмет и задайте цену.') end
-        for i,it in ipairs(p.items) do if item_card(kind,it,i) then break end end
-        imgui.Separator()
-        local positions,subtotal=0,0
-        for _,it in ipairs(p.items) do
-            if it.enabled~=false and (tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0 then
-                positions=positions+1
-                subtotal=subtotal+(tonumber(it.price) or 0)*(tonumber(it.qty) or 0)
-            end
-        end
-        M.text('Активных позиций: '..positions..'   |   Сумма: '..DSP.money(subtotal))
-        if not running then M.toggle('Проверить без выставления',DSP.settings,'dry_run',true) end
-        if running then
-            M.text(DSP.auto.status_text())
-            if DSP.auto.progress then M.text(tostring(DSP.auto.progress.done or 0)..' из '..tostring(DSP.auto.progress.total or 0)) end
-        end
-        local label=running and 'ОСТАНОВИТЬ' or (DSP.settings.dry_run and 'ПРОВЕРИТЬ НАБОР' or 'ВЫСТАВИТЬ '..(kind=='buy' and 'СКУПКУ' or 'ПРОДАЖУ'))
-        if M.button(label,'run_'..kind,550,true,'primary') then
-            if DSP.auto.buy_running then DSP.auto.stop_buy()
-            elseif DSP.auto.sell_running then DSP.auto.stop_sell()
-            elseif positions==0 then DSP.notify('Нет включённых товаров с ценой и количеством')
-            elseif kind=='buy' then DSP.auto.start_buy() else DSP.auto.start_sell() end
-        end
+        -- Safety option is deliberately near the publishing action, not lost in settings.
+        M.toggle('Проверить без выставления (тест)',DSP.settings,'dry_run',true)
+    end
+    local label=running and 'ОСТАНОВИТЬ' or (DSP.settings.dry_run and 'ПРОВЕРИТЬ НАБОР' or 'ВЫСТАВИТЬ '..(kind=='buy' and 'СКУПКУ' or 'ПРОДАЖУ'))
+    if M.button(label,'run_'..kind,550,true,'primary') then
+        if DSP.auto.buy_running then DSP.auto.stop_buy()
+        elseif DSP.auto.sell_running then DSP.auto.stop_sell()
+        elseif positions==0 then DSP.notify('Нет включённых товаров с ценой и количеством')
+        elseif kind=='buy' then DSP.auto.start_buy() else DSP.auto.start_sell() end
     end
 end
 U.palatka_tab=U.trade_tab

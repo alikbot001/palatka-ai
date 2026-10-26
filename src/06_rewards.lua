@@ -125,7 +125,7 @@ function R.parse(raw)
 end
 function R.ingest(raw, ts)
     local row = R.parse(raw)
-    if not row then return nil end
+    if not row then R.pending = {}; return nil end
     row.raw, row.ts = raw, ts or os.time()
     local pending = row.pending; row.pending = nil
     snapshot(row)

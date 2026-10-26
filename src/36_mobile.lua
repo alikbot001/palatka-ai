@@ -7,7 +7,7 @@ function M.geometry(sw, sh)
     local saved=DSP.settings.mobile_window or {}
     local s=math.min(sw/2340,sh/1080)
     return {x=sw*.03,y=sh*.03,w=DSP.clamp(tonumber(saved.w) or sw*.80,math.min(1100,sw),sw),
-        h=DSP.clamp(tonumber(saved.h) or sh*.70,math.min(550,sh),sh),nav=math.max(210,250*s),touch=math.max(48,60*s)}
+        h=DSP.clamp(tonumber(saved.h) or sh*.70,math.min(550,sh),sh),nav=math.max(176,214*s),touch=math.max(56,60*s)}
 end
 function M.window_position(sw,sh)
     local g=M.geometry(sw,sh)
@@ -80,7 +80,7 @@ function M.item_icon_kind(it)
 end
 function M.thumbnail(it, size)
     size=size or 66
-    local id=tonumber(it.id or it.item_id)
+    local id=tonumber(it.id or it.item_id) or (DSP.items and DSP.items.id_for_name and DSP.items.id_for_name(it.name))
     local category=M.item_icon_kind(it)
     local paths={}
     if id and id>0 then paths[1]=DSP.dir..'/icons/items/'..math.floor(id)..'.png' end
@@ -202,11 +202,33 @@ DSP.screens.list[1].label='ПАЛАТКА'
 DSP.screens.list[2].label='ЛАВКИ'
 DSP.screens.list[6].label='СТАТИСТИКА'
 DSP.screens.list[5].label='ИСТОРИЯ'
+-- Four primary actions; less-used utilities remain under "More".
+-- The original screen ids and routing remain unchanged for compatibility.
 function DSP.screens.topbar()
-    M.title('РАЗДЕЛЫ')
+    M.title('PALATKA  /  v'..tostring(DSP.version))
     imgui.Separator()
-    for i,e in ipairs(DSP.screens.list) do
-        if M.button(e.label,'nav'..i,-1,DSP.ui.screen==e.id,'nav') then DSP.screens.set(e.id) end
+    local primary={
+        {'palatka','Моя лавка'},
+        {'arbitrage','Арбитраж'},
+        {'logs','Журнал'},
+        {'search','Поиск товара'},
+    }
+    for i,e in ipairs(primary) do
+        if M.button(e[2],'nav_main_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
+    end
+    imgui.Separator()
+    if M.button(M.more_open and 'Скрыть остальное' or 'Ещё', 'nav_more',-1,M.more_open,'nav') then
+        M.more_open=not M.more_open
+    end
+    if M.more_open then
+        for i,e in ipairs({
+            {'lavki','Все лавки'},
+            {'stats','Статистика'},
+            {'notes','Заметки'},
+            {'settings','Настройки'},
+        }) do
+            if M.button(e[2],'nav_extra_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
+        end
     end
 end
 function M.draw_pager(total,per,id)
@@ -241,16 +263,13 @@ end
 local function workspace()
     local screen=DSP.ui.screen
     local entry=DSP.screens.list[DSP.screens.index_by_id(screen)]
-    imgui.TextColored(DSP.theme.col('text',1),DSP.utf8(entry.label..' / '..tostring(DSP.market.state.sid)))
+    -- One compact header; the previous UI spent 150 px on a redundant scroll rail.
+    imgui.TextColored(DSP.theme.col('text',1),DSP.utf8(entry.label))
     M.inline()
-    if M.button('Наверх','header_top',220) then M.reset_scroll=true end
-    M.inline()
-    if M.button('Свернуть','header_close',240) then DSP.ui.set_open(false) end
-    imgui.Separator()
+    if M.button('Закрыть','header_close',165) then DSP.ui.set_open(false) end
     M.footers={}
-    local height=math.max(120,imgui.GetContentRegionAvail().y-96)
-    local body_width=math.max(300,imgui.GetContentRegionAvail().x-150)
-    M.child('body_'..screen,body_width,height,function()
+    local height=math.max(120,imgui.GetContentRegionAvail().y-66)
+    M.child('body_'..screen,0,height,function()
         if M.reset_scroll then
             if imgui.SetScrollY then imgui.SetScrollY(0) end
             M.reset_scroll=false
@@ -265,15 +284,13 @@ local function workspace()
         DSP.screens.draw(screen)
         M.sticky=false
     end)
-    M.inline()
-    M.child('scroll_rail',138,height,function() M.scroll_rail(height) end)
     if #M.footers>0 then
         for i,entry in ipairs(M.footers) do
             if i>1 then M.inline() end
             M.draw_pager(entry.total,entry.per,entry.id)
         end
     else
-        if M.button('Наверх','content_top',240) then M.reset_scroll=true end
+        if M.button('Наверх','content_top',165) then M.reset_scroll=true end
     end
 end
 function DSP.ui.header()
@@ -310,7 +327,7 @@ function DSP.ui.draw()
     if imgui.Begin('##palatka_mobile',DSP.ui.open_ref,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.05 * M.scale() / 1.25) end
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('PALATKA AI     ::'),imgui.ImVec2(-1,50))
+        imgui.Button(DSP.utf8('PALATKA AI   /   ДВИГАТЬ ОКНО'),imgui.ImVec2(-1,42))
         imgui.PopStyleColor(4)
         local handle_active=false
         if imgui.IsItemActive and imgui.IsItemActive() then
@@ -329,12 +346,12 @@ function DSP.ui.draw()
                 M.window_dirty=true
             end
         end
-        local content_height=math.max(200,imgui.GetContentRegionAvail().y-74)
+        local content_height=math.max(200,imgui.GetContentRegionAvail().y-50)
         M.child('navigation',g.nav,content_height,DSP.screens.topbar)
         M.inline()
         M.child('content_'..DSP.ui.screen,0,content_height,workspace)
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('/  Размер'),imgui.ImVec2(190,60))
+        imgui.Button(DSP.utf8('/  Размер окна'),imgui.ImVec2(220,40))
         imgui.PopStyleColor(4)
         if imgui.IsItemActive and imgui.IsItemActive() then
             handle_active=true

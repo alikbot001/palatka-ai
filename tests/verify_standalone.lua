@@ -4,23 +4,13 @@
 --
 -- Все 5 тестов обязаны пройти. Кадр арбитража < 1 мс — критерий кэширования.
 package.path = './?.lua;./src/?.lua;' .. package.path
-package.preload['encoding'] = function()
-  return {
-    default = 'CP1251',
-    CP1251 = { encode = function(self, s) return s end },
-    UTF8 = { decode = function(self, s) return s end, encode = function(self, s) return s end },
-  }
-end
 
 -- 1. Мокирование окружения MoonLoader / MonetLoader
-_G.script_name = function() end
-_G.script_author = function() end
-_G.script_version = function() end
 _G.getWorkingDirectory = function() return '.' end
 _G.thisScript = function() return { name = 'palatka ai' } end
 _G.sampRegisterChatCommand = function(cmd, fn) end
 _G.sampGetCurrentServerName = function() return 'Arizona Mobile II' end
-_G.lua_thread = { create = function(fn) return {_fn = fn} end }
+_G.lua_thread = { create = function(fn) fn() end }
 _G.wait = function() end
 
 -- 2. Мокирование mimgui

@@ -1,7 +1,7 @@
--- Palatka AI v1.4.0, built from src/*.lua (independent of Market Helper)
+-- Palatka AI v1.5.0, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.3.3')
+script_version('1.5.0')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -10,7 +10,7 @@ local function __mod_00_core()
 -- DsPic Helper standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '1.4.0'
+DSP.version = '1.5.0'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -570,6 +570,22 @@ function DSP.parse_item_id(raw, ench)
     return base, math.floor(e)
 end
 
+-- Resolve a market item's name back to a unique catalog ID so user-provided
+-- images (<id>.png) also work when the market API only sends item names.
+DSP.items.by_name = DSP.items.by_name or {}
+function DSP.items.index_names()
+    local names={}
+    for id,name in pairs(DSP.items.by_id or {}) do
+        local key=DSP.item_key(DSP.clean_text(name),0)
+        if names[key] and names[key]~=id then names[key]=false
+        elseif names[key]==nil then names[key]=id end
+    end
+    DSP.items.by_name=names
+end
+function DSP.items.id_for_name(name)
+    return DSP.items.by_name[DSP.item_key(DSP.clean_text(name),0)] or nil
+end
+
 function DSP.items.name(id)
     id = tonumber(id) or 0
     local nm = DSP.items.by_id[id]
@@ -630,6 +646,7 @@ function DSP.items.load()
             end
             if n > 0 then
                 DSP.items.loaded = true
+                DSP.items.index_names()
                 DSP.flog('ITEMS loaded=' .. tostring(n) .. ' path=' .. path)
                 return true
             end
@@ -2542,6 +2559,91 @@ end
 end
 __mod_11_arbitrage()
 
+local function __mod_12_arbitrage_groups()
+-- Item-centric market view. This module NEVER substitutes a planned trade
+-- quantity for the observed stock/demand in the source market snapshot.
+local M = DSP.market
+local function qty(v)
+    local n=tonumber(v)
+    if not n or n~=n or n<0 or n==math.huge then return 0 end
+    return math.floor(n)
+end
+
+-- Group all matched routes for the same exact item + enchantment.
+-- Source offers are listed once regardless of how many routes use them.
+function M.arbitrage_grouped()
+    local deals=M.arbitrage_filtered()
+    local groups,by_key={},{}
+    for _,deal in ipairs(deals) do
+        local row=deal.row
+        local key=row.key
+        local g=by_key[key]
+        if not g then
+            g={key=key,name=row.display,row=row,routes={},
+                supply=qty(row.sell.qty),demand=qty(row.buy.qty),
+                sellers=row.sell.offers or {},buyers=row.buy.offers or {},
+                seller_count=#(row.sell.offers or {}),buyer_count=#(row.buy.offers or {}),
+                planned=0,cost=0,revenue=0,profit=0,
+                min_sell=row.sell.min or 0,max_buy=row.buy.max or 0}
+            groups[#groups+1]=g
+            by_key[key]=g
+        end
+        g.routes[#g.routes+1]=deal
+        g.planned=g.planned+qty(deal.tradable_qty)
+        g.cost=g.cost+(tonumber(deal.total_cost) or 0)
+        g.revenue=g.revenue+(tonumber(deal.net_revenue) or 0)
+        g.profit=g.profit+(tonumber(deal.net_profit) or 0)
+    end
+    table.sort(groups,function(a,b)
+        if a.profit~=b.profit then return a.profit>b.profit end
+        return a.name<b.name
+    end)
+    return groups
+end
+
+-- Raw snapshot demand is independent of a route's allocated quantity.
+-- Individual routes can each mention the same buyer: NEVER sum qty_buyer
+-- across routes. Use the raw buy-offer list instead.
+function M.arbitrage_group_totals(groups)
+    local result={items=0,routes=0,planned=0,cost=0,profit=0}
+    for _,g in ipairs(groups or {}) do
+        result.items=result.items+1
+        result.routes=result.routes+#g.routes
+        result.planned=result.planned+g.planned
+        result.cost=result.cost+g.cost
+        result.profit=result.profit+g.profit
+    end
+    return result
+end
+
+-- Optional manual correction after the player visits a stall. Keep the
+-- original API number visible, and discard this correction on the next pull.
+function M.confirm_offer_quantity(row,kind,offer,value)
+    if not row or (kind~='buy' and kind~='sell') or not offer then
+        return false,'неверное предложение'
+    end
+    local n=tonumber(value)
+    if not n or n~=n or n<0 or n>1000000000 or n~=math.floor(n) then
+        return false,'введите количество от 0 до 1 000 000 000'
+    end
+    local side=row[kind]
+    local found=false
+    for _,o in ipairs(side.offers or {}) do
+        if o==offer then found=true; break end
+    end
+    if not found then return false,'предложение устарело' end
+    if offer.snapshot_qty==nil then offer.snapshot_qty=qty(offer.qty) end
+    side.qty=math.max(0,qty(side.qty)-qty(offer.qty)+n)
+    offer.qty=n
+    offer.verified_at=os.time()
+    M.state.version=(M.state.version or 0)+1
+    M.invalidate_arbitrage()
+    return true
+end
+
+end
+__mod_12_arbitrage_groups()
+
 local function __mod_15_prices()
 -- Persistent price base: API stats + learned shop observations.
 DSP.db = DSP.db or {}
@@ -3258,7 +3360,7 @@ function R.parse(raw)
 end
 function R.ingest(raw, ts)
     local row = R.parse(raw)
-    if not row then return nil end
+    if not row then R.pending = {}; return nil end
     row.raw, row.ts = raw, ts or os.time()
     local pending = row.pending; row.pending = nil
     snapshot(row)
@@ -5740,7 +5842,7 @@ function M.geometry(sw, sh)
     local saved=DSP.settings.mobile_window or {}
     local s=math.min(sw/2340,sh/1080)
     return {x=sw*.03,y=sh*.03,w=DSP.clamp(tonumber(saved.w) or sw*.80,math.min(1100,sw),sw),
-        h=DSP.clamp(tonumber(saved.h) or sh*.70,math.min(550,sh),sh),nav=math.max(210,250*s),touch=math.max(48,60*s)}
+        h=DSP.clamp(tonumber(saved.h) or sh*.70,math.min(550,sh),sh),nav=math.max(176,214*s),touch=math.max(56,60*s)}
 end
 function M.window_position(sw,sh)
     local g=M.geometry(sw,sh)
@@ -5813,7 +5915,7 @@ function M.item_icon_kind(it)
 end
 function M.thumbnail(it, size)
     size=size or 66
-    local id=tonumber(it.id or it.item_id)
+    local id=tonumber(it.id or it.item_id) or (DSP.items and DSP.items.id_for_name and DSP.items.id_for_name(it.name))
     local category=M.item_icon_kind(it)
     local paths={}
     if id and id>0 then paths[1]=DSP.dir..'/icons/items/'..math.floor(id)..'.png' end
@@ -5935,11 +6037,33 @@ DSP.screens.list[1].label='ПАЛАТКА'
 DSP.screens.list[2].label='ЛАВКИ'
 DSP.screens.list[6].label='СТАТИСТИКА'
 DSP.screens.list[5].label='ИСТОРИЯ'
+-- Four primary actions; less-used utilities remain under "More".
+-- The original screen ids and routing remain unchanged for compatibility.
 function DSP.screens.topbar()
-    M.title('РАЗДЕЛЫ')
+    M.title('PALATKA  /  v'..tostring(DSP.version))
     imgui.Separator()
-    for i,e in ipairs(DSP.screens.list) do
-        if M.button(e.label,'nav'..i,-1,DSP.ui.screen==e.id,'nav') then DSP.screens.set(e.id) end
+    local primary={
+        {'palatka','Моя лавка'},
+        {'arbitrage','Арбитраж'},
+        {'logs','Журнал'},
+        {'search','Поиск товара'},
+    }
+    for i,e in ipairs(primary) do
+        if M.button(e[2],'nav_main_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
+    end
+    imgui.Separator()
+    if M.button(M.more_open and 'Скрыть остальное' or 'Ещё', 'nav_more',-1,M.more_open,'nav') then
+        M.more_open=not M.more_open
+    end
+    if M.more_open then
+        for i,e in ipairs({
+            {'lavki','Все лавки'},
+            {'stats','Статистика'},
+            {'notes','Заметки'},
+            {'settings','Настройки'},
+        }) do
+            if M.button(e[2],'nav_extra_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
+        end
     end
 end
 function M.draw_pager(total,per,id)
@@ -5974,16 +6098,13 @@ end
 local function workspace()
     local screen=DSP.ui.screen
     local entry=DSP.screens.list[DSP.screens.index_by_id(screen)]
-    imgui.TextColored(DSP.theme.col('text',1),DSP.utf8(entry.label..' / '..tostring(DSP.market.state.sid)))
+    -- One compact header; the previous UI spent 150 px on a redundant scroll rail.
+    imgui.TextColored(DSP.theme.col('text',1),DSP.utf8(entry.label))
     M.inline()
-    if M.button('Наверх','header_top',220) then M.reset_scroll=true end
-    M.inline()
-    if M.button('Свернуть','header_close',240) then DSP.ui.set_open(false) end
-    imgui.Separator()
+    if M.button('Закрыть','header_close',165) then DSP.ui.set_open(false) end
     M.footers={}
-    local height=math.max(120,imgui.GetContentRegionAvail().y-96)
-    local body_width=math.max(300,imgui.GetContentRegionAvail().x-150)
-    M.child('body_'..screen,body_width,height,function()
+    local height=math.max(120,imgui.GetContentRegionAvail().y-66)
+    M.child('body_'..screen,0,height,function()
         if M.reset_scroll then
             if imgui.SetScrollY then imgui.SetScrollY(0) end
             M.reset_scroll=false
@@ -5998,15 +6119,13 @@ local function workspace()
         DSP.screens.draw(screen)
         M.sticky=false
     end)
-    M.inline()
-    M.child('scroll_rail',138,height,function() M.scroll_rail(height) end)
     if #M.footers>0 then
         for i,entry in ipairs(M.footers) do
             if i>1 then M.inline() end
             M.draw_pager(entry.total,entry.per,entry.id)
         end
     else
-        if M.button('Наверх','content_top',240) then M.reset_scroll=true end
+        if M.button('Наверх','content_top',165) then M.reset_scroll=true end
     end
 end
 function DSP.ui.header()
@@ -6043,7 +6162,7 @@ function DSP.ui.draw()
     if imgui.Begin('##palatka_mobile',DSP.ui.open_ref,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.05 * M.scale() / 1.25) end
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('PALATKA AI     ::'),imgui.ImVec2(-1,50))
+        imgui.Button(DSP.utf8('PALATKA AI   /   ДВИГАТЬ ОКНО'),imgui.ImVec2(-1,42))
         imgui.PopStyleColor(4)
         local handle_active=false
         if imgui.IsItemActive and imgui.IsItemActive() then
@@ -6062,12 +6181,12 @@ function DSP.ui.draw()
                 M.window_dirty=true
             end
         end
-        local content_height=math.max(200,imgui.GetContentRegionAvail().y-74)
+        local content_height=math.max(200,imgui.GetContentRegionAvail().y-50)
         M.child('navigation',g.nav,content_height,DSP.screens.topbar)
         M.inline()
         M.child('content_'..DSP.ui.screen,0,content_height,workspace)
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('/  Размер'),imgui.ImVec2(190,60))
+        imgui.Button(DSP.utf8('/  Размер окна'),imgui.ImVec2(220,40))
         imgui.PopStyleColor(4)
         if imgui.IsItemActive and imgui.IsItemActive() then
             handle_active=true
@@ -6105,36 +6224,39 @@ end
 local function item_card(kind,it,index)
     local id=kind..'_'..index
     local valid=(tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0
-    if not valid then it.enabled=false end
+    if not valid and it.enabled then it.enabled=false end
     imgui.Separator()
-    imgui.Columns(4,'##itemrow'..id,false)
-    M.thumbnail(it,64)
-    imgui.NextColumn()
+    -- Two clean rows instead of four crowded editable columns.
+    imgui.Columns(2,'##trade_head_'..id,false)
+    M.thumbnail(it,46)
     M.text(tostring(it.name or '?')..((tonumber(it.ench) or 0)>0 and (' (+'..it.ench..')') or ''))
-    M.toggle('Вкл.##'..id,it,'enabled',valid)
     imgui.NextColumn()
-    imgui.TextDisabled(DSP.utf8('Цена за 1 шт.'))
-    if M.compact_number(it,'price','price_'..id,150,1) then it.needs_price=nil end
+    M.toggle('Выставлять##'..id,it,'enabled',valid)
+    imgui.Columns(1)
+    imgui.Columns(2,'##trade_fields_'..id,false)
+    imgui.TextDisabled(DSP.utf8('ЦЕНА ЗА 1 ШТ. ($)'))
+    if M.compact_number(it,'price','price_'..id,205,1) then it.needs_price=nil end
     imgui.NextColumn()
-    imgui.TextDisabled(DSP.utf8('Штук'))
-    M.compact_number(it,'qty','qty_'..id,120,1)
-    if M.button('-','qty_sub_'..id,60) then
+    imgui.TextDisabled(DSP.utf8('КОЛИЧЕСТВО (ШТ.)'))
+    M.compact_number(it,'qty','qty_'..id,205,1)
+    imgui.Columns(1)
+    if M.button('- 1','qty_sub_'..id,94) then
         it.qty=math.max(1,(tonumber(it.qty) or 1)-1)
         M.refresh_buffer(it,'qty'); DSP.save_settings()
     end
     M.inline()
-    if M.button('+','qty_add_'..id,60) then
+    if M.button('+ 1','qty_add_'..id,94) then
         it.qty=math.min(1000000,(tonumber(it.qty) or 1)+1)
         M.refresh_buffer(it,'qty'); DSP.save_settings()
     end
     M.inline()
-    if M.button('X','delete_'..id,60) then
-        imgui.Columns(1)
+    if M.button('Удалить','delete_'..id,145) then
         DSP.presets.remove(kind,index)
         return true
     end
-    imgui.Columns(1)
-    if not valid then M.text('Укажите цену и количество; позиция пока отключена.') end
+    if not valid then
+        imgui.TextColored(DSP.theme.col('warn',1),DSP.utf8('Укажите цену и количество. Предмет пока выключен.'))
+    end
     return false
 end
 local function preset_library(kind,p)
@@ -6263,71 +6385,84 @@ end
 function U.trade_tab()
     U.preset_kind=U.preset_kind or 'buy'
     local kind=U.preset_kind
-    M.title('ТОРГОВЛЯ')
-    if M.button('СКУПКА','kind_buy',260,kind=='buy','segment') then U.preset_kind='buy'; kind='buy' end
+    M.title('МОЯ ЛАВКА')
+    if M.button('СКУПКА','kind_buy',230,kind=='buy','segment') then
+        U.preset_kind='buy'; U.trade_section='items'; kind='buy'
+    end
     M.inline()
-    if M.button('ПРОДАЖА','kind_sell',260,kind=='sell','segment') then U.preset_kind='sell'; kind='sell' end
-    local p=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
+    if M.button('ПРОДАЖА','kind_sell',230,kind=='sell','segment') then
+        U.preset_kind='sell'; U.trade_section='items'; kind='sell'
+    end
     local running=DSP.auto.buy_running or DSP.auto.sell_running
-    imgui.Separator()
+    local p=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
     local list=DSP.presets.list and DSP.presets.list(kind) or {{name=p.name}}
     local selected=DSP.presets.selected and DSP.presets.selected(kind) or 1
-    M.text('Набор: '..tostring(p.name or 'Мой набор'))
-    if M.button('<','preset_prev',62) and not running then
+    imgui.Separator()
+    M.title('НАБОР  '..tostring(p.name or 'Основной'))
+    if M.button('<','preset_prev',78) and not running then
         DSP.presets.select(kind,selected>1 and selected-1 or #list)
     end
     M.inline()
-    if M.button('>','preset_next',62) and not running then
+    if M.button('>','preset_next',78) and not running then
         DSP.presets.select(kind,selected<#list and selected+1 or 1)
     end
     M.inline()
-    if M.button('+ Добавить','trade_add',220,(U.trade_section=='catalog' or U.trade_section=='inventory' or U.trade_section=='manual')) and not running then
-        U.trade_section=U.trade_section=='catalog' and 'items' or 'catalog'
-    end
-    M.inline()
-    if M.button('Наборы','trade_library',170,U.trade_section=='library') then
+    if M.button('Управление наборами','trade_library',310,U.trade_section=='library') then
         U.trade_section=U.trade_section=='library' and 'items' or 'library'
     end
     local section=U.trade_section or 'items'
     if section=='library' then
+        if M.button('< К товарам','close_library',220) then U.trade_section='items' end
         preset_library(kind,p)
-    elseif section=='catalog' or section=='inventory' or section=='manual' then
-        if M.button('Поиск','source_catalog',170,section=='catalog') then U.trade_section='catalog'; section='catalog' end
+        return
+    end
+    if section=='catalog' or section=='inventory' or section=='manual' then
+        M.title('ДОБАВИТЬ ПРЕДМЕТ')
+        if M.button('Поиск','source_catalog',180,section=='catalog') then U.trade_section='catalog'; section='catalog' end
         M.inline()
-        if M.button('Инвентарь','source_inventory',230,section=='inventory') then U.trade_section='inventory'; section='inventory' end
+        if M.button('Инвентарь','source_inventory',220,section=='inventory') then U.trade_section='inventory'; section='inventory' end
         M.inline()
-        if M.button('По названию','source_manual',240,section=='manual') then U.trade_section='manual'; section='manual' end
-        M.inline()
-        if M.button('Вернуться к списку','source_close',300) then U.trade_section='items'; section='items' end
+        if M.button('Вручную','source_manual',195,section=='manual') then U.trade_section='manual'; section='manual' end
+        if M.button('< К моему набору','source_close',285) then U.trade_section='items'; return end
         imgui.Separator()
         if section=='catalog' then catalog_picker(kind)
         elseif section=='inventory' then inventory(kind)
-        elseif section=='manual' then manual_entry(kind) end
+        else manual_entry(kind) end
+        return
+    end
+    -- Main workflow: edit item quantities and prices and publish. Advanced
+    -- inventory/manual/list-management actions stay one tap away.
+    local positions,subtotal=0,0
+    for _,it in ipairs(p.items) do
+        if it.enabled~=false and (tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0 then
+            positions=positions+1
+            subtotal=subtotal+(tonumber(it.price) or 0)*(tonumber(it.qty) or 0)
+        end
+    end
+    M.text('Активных: '..positions..'  |  Всего товаров: '..#p.items..'  |  Сумма: '..DSP.money(subtotal))
+    if M.button('+ ДОБАВИТЬ ПРЕДМЕТ','trade_add',365,false,'primary') and not running then
+        U.trade_section='catalog'
+        return
+    end
+    if #p.items==0 then M.text('Набор пуст. Добавьте предмет из поиска, инвентаря или вручную.') end
+    for i,it in ipairs(p.items) do
+        if item_card(kind,it,i) then break end
+    end
+    imgui.Separator()
+    if running then
+        M.text(DSP.auto.status_text())
+        local progress=DSP.auto.progress
+        if progress then M.text('Выставлено позиций: '..tostring(progress.done or 0)..' из '..tostring(progress.total or 0)) end
     else
-        M.text('ПРЕДМЕТЫ   |   Активно: '..tostring(DSP.presets.active_count(kind)))
-        if #p.items==0 then M.text('Пока пусто. Нажмите «+ Добавить», выберите предмет и задайте цену.') end
-        for i,it in ipairs(p.items) do if item_card(kind,it,i) then break end end
-        imgui.Separator()
-        local positions,subtotal=0,0
-        for _,it in ipairs(p.items) do
-            if it.enabled~=false and (tonumber(it.price) or 0)>0 and (tonumber(it.qty) or 0)>0 then
-                positions=positions+1
-                subtotal=subtotal+(tonumber(it.price) or 0)*(tonumber(it.qty) or 0)
-            end
-        end
-        M.text('Активных позиций: '..positions..'   |   Сумма: '..DSP.money(subtotal))
-        if not running then M.toggle('Проверить без выставления',DSP.settings,'dry_run',true) end
-        if running then
-            M.text(DSP.auto.status_text())
-            if DSP.auto.progress then M.text(tostring(DSP.auto.progress.done or 0)..' из '..tostring(DSP.auto.progress.total or 0)) end
-        end
-        local label=running and 'ОСТАНОВИТЬ' or (DSP.settings.dry_run and 'ПРОВЕРИТЬ НАБОР' or 'ВЫСТАВИТЬ '..(kind=='buy' and 'СКУПКУ' or 'ПРОДАЖУ'))
-        if M.button(label,'run_'..kind,550,true,'primary') then
-            if DSP.auto.buy_running then DSP.auto.stop_buy()
-            elseif DSP.auto.sell_running then DSP.auto.stop_sell()
-            elseif positions==0 then DSP.notify('Нет включённых товаров с ценой и количеством')
-            elseif kind=='buy' then DSP.auto.start_buy() else DSP.auto.start_sell() end
-        end
+        -- Safety option is deliberately near the publishing action, not lost in settings.
+        M.toggle('Проверить без выставления (тест)',DSP.settings,'dry_run',true)
+    end
+    local label=running and 'ОСТАНОВИТЬ' or (DSP.settings.dry_run and 'ПРОВЕРИТЬ НАБОР' or 'ВЫСТАВИТЬ '..(kind=='buy' and 'СКУПКУ' or 'ПРОДАЖУ'))
+    if M.button(label,'run_'..kind,550,true,'primary') then
+        if DSP.auto.buy_running then DSP.auto.stop_buy()
+        elseif DSP.auto.sell_running then DSP.auto.stop_sell()
+        elseif positions==0 then DSP.notify('Нет включённых товаров с ценой и количеством')
+        elseif kind=='buy' then DSP.auto.start_buy() else DSP.auto.start_sell() end
     end
 end
 U.palatka_tab=U.trade_tab
@@ -6361,7 +6496,7 @@ end
 __mod_37_mobile_trade()
 
 local function __mod_38_mobile_market()
--- Market cards preserve buy/sell meaning and never truncate the item name.
+-- Market search and item-centric arbitrage; labels are from the player's point of view.
 local ffi=require('ffi')
 local M=DSP.mobile
 local U=DSP.ui
@@ -6369,185 +6504,259 @@ local function add(row,kind)
     local ok,err=DSP.presets.add(row,kind)
     DSP.notify(ok and 'Добавлено в набор' or tostring(err))
 end
-local function mark(o,id,label)
-    if M.button(label..' #'..tostring(o.shop),id,330) then DSP.market.mark_shop(o.shop) end
+local function mark(offer,id)
+    if M.button('Отметить #'..tostring(offer.shop),'mark_'..id,210) then
+        DSP.market.mark_shop(offer.shop)
+    end
 end
-local function offers(row,kind)
-    local side=kind=='buy' and row.sell or row.buy
-    M.title(kind=='buy' and 'КУПИТЬ СЕБЕ (лавка продаёт)' or 'ПРОДАТЬ СВОЁ (лавка скупает)')
+local function offer_list(row,kind)
+    local side=kind=='sell' and row.sell or row.buy
+    M.title(kind=='sell' and 'ПРОДАЮТ ВАМ' or 'СКУПАЮТ У ВАС')
+    if #(side.offers or {})==0 then M.text('Нет предложений') end
     for i,o in ipairs(side.offers or {}) do
-        M.text(DSP.money(o.price)..' x'..tostring(o.qty)..' | '..tostring(o.owner or '?'))
-        local fresh=DSP.market.offer_freshness(o.ts)
-        M.text('Свежесть: '..tostring(fresh))
-        mark(o,'offer'..row.key..kind..i,'Найти лавку')
+        M.text('#'..tostring(o.shop)..'  '..tostring(o.owner or '?')..'    '..DSP.money(o.price)..' / шт.')
+        local status=DSP.market.offer_freshness(o.ts)
+        M.text('Количество по снимку: '..tostring(o.qty)..' шт.  |  '..tostring(status))
+        mark(o,row.key..kind..i)
         imgui.Separator()
     end
-    if #(side.offers or {})==0 then M.text('Предложений нет') end
 end
 function U.detail(row)
-    M.title('КАРТОЧКА ТОВАРА')
+    M.title('ПРЕДМЕТ')
+    M.thumbnail({name=row.display,id=row.id},48)
     M.text(row.display)
     M.text(DSP.market.market_label_for(row) or '')
-    if M.button('Добавить в мою скупку','detail_add_buy',400) then add(row,'buy') end
+    if M.button('+ В скупку','detail_add_buy',200) then add(row,'buy') end
     M.inline()
-    if M.button('Добавить в мою продажу','detail_add_sell',420) then add(row,'sell') end
-    offers(row,'buy')
-    offers(row,'sell')
+    if M.button('+ В продажу','detail_add_sell',230) then add(row,'sell') end
+    offer_list(row,'sell')
+    offer_list(row,'buy')
 end
 function U.finder_tab()
     U.header()
-    imgui.SetNextItemWidth(math.min(800,imgui.GetContentRegionAvail().x))
-    if imgui.InputTextWithHint('##mobile_search',DSP.utf8('Название товара...'),U.finder_search_buf,128) then
-        U.finder_query=DSP.to_cp(ffi.string(U.finder_search_buf)); DSP.screens.set_page('search',1)
+    imgui.SetNextItemWidth(math.min(740,imgui.GetContentRegionAvail().x))
+    if imgui.InputTextWithHint('##mobile_search',DSP.utf8('Найти предмет...'),U.finder_search_buf,128) then
+        U.finder_query=DSP.to_cp(ffi.string(U.finder_search_buf))
+        DSP.screens.set_page('search',1)
     end
-    if M.button('Очистить поиск','clear_search',300) then
-        ffi.fill(U.finder_search_buf,128); U.finder_query=''; DSP.screens.set_page('search',1)
-    end
-    local matches=DSP.market.find_item(U.finder_query)
-    M.text('Найдено товаров: '..#matches)
     if U.selected then
+        if M.button('< К списку','back_search',210) then U.selected=nil end
         local row=DSP.market.state.by_key[U.selected]
-        if M.button('< К результатам','back_search',340) then U.selected=nil end
         if row then U.detail(row) end
         return
     end
-    local first,last=DSP.screens.pager(#matches,6,'search')
-    if #matches==0 then M.text('Введите название или обновите рынок. Источники могут временно не отвечать.') end
+    local matches=DSP.market.find_item(U.finder_query)
+    M.text('Предметов: '..#matches)
+    local first,last=DSP.screens.pager(#matches,7,'search')
+    if #matches==0 then M.text('Нет предложений. Проверьте название или обновите рынок.') end
     for i=first,last do
         local row=matches[i]
-        M.text(row.display)
-        M.text('Купить себе: '..(row.sell.count>0 and DSP.money(row.sell.best) or 'нет продавцов')
-            ..' | Продать своё: '..(row.buy.count>0 and DSP.money(row.buy.best) or 'нет скупщиков'))
-        if M.button('Все предложения','open_item'..i,350) then U.selected=row.key end
-        M.inline()
-        if M.button('+ В скупку','search_buy'..i,260) then add(row,'buy') end
-        M.inline()
-        if M.button('+ В продажу','search_sell'..i,280) then add(row,'sell') end
         imgui.Separator()
+        M.thumbnail({name=row.display,id=row.id},44)
+        M.text(row.display)
+        M.text('Купить: '..(row.sell.count>0 and DSP.money(row.sell.best) or 'нет')..
+            '   |   Продать: '..(row.buy.count>0 and DSP.money(row.buy.best) or 'нет'))
+        if M.button('Смотреть лавки','open_item'..i,215) then U.selected=row.key end
+        M.inline()
+        if M.button('+ В скупку','search_buy'..i,180) then add(row,'buy') end
+        M.inline()
+        if M.button('+ В продажу','search_sell'..i,210) then add(row,'sell') end
     end
 end
--- A touch-first arbitrage plan: stock, demand and allocated quantity stay distinct.
+
+local function route_key(group,e)
+    -- Same-price slots in the same shop are merged in the market model.
+    return tostring(DSP.market.state.sid)..'|'..tostring(group.key)..'|'
+        ..tostring(e.sell_offer.shop)..':'..tostring(e.p_buy)..'>'
+        ..tostring(e.buy_offer.shop)..':'..tostring(e.p_sell)
+end
+local function summarize_selection(groups)
+    local s={qty=0,cost=0,profit=0,count=0}
+    for _,g in ipairs(groups) do
+        for _,e in ipairs(g.routes) do
+            if U.arb_selected[route_key(g,e)] then
+                s.qty=s.qty+(e.tradable_qty or 0)
+                s.cost=s.cost+(e.total_cost or 0)
+                s.profit=s.profit+(e.net_profit or 0)
+                s.count=s.count+1
+            end
+        end
+    end
+    return s
+end
+local function offer_card(g,o,kind,i)
+    local shop=tostring(o.shop or '?')
+    local age=DSP.market.offer_freshness(o.ts)
+    M.text('#'..shop..'  '..tostring(o.owner or '?')..'    '..DSP.money(o.price)..' / шт.')
+    if o.snapshot_qty~=nil then
+        M.text('Снимок API: '..tostring(o.snapshot_qty)..' шт. | Проверено вами: '..tostring(o.qty)..' шт.')
+    else
+        M.text('По снимку: '..tostring(o.qty or 0)..' шт. | '..tostring(age))
+    end
+    mark(o,'group'..g.key..kind..i)
+    if kind=='buy' then
+        local id='verify_'..tostring(g.key)..'_'..tostring(o.shop)..'_'..i
+        if M.button('Проверил в игре: исправить число','verify_open_'..id,365) then
+            U.arb_qty_editor_key=id
+            U.arb_qty_buf=imgui.new.char[32]()
+            local value=tostring(o.qty or 0)
+            ffi.copy(U.arb_qty_buf,value,math.min(#value,31))
+        end
+        if U.arb_qty_editor_key==id and U.arb_qty_buf then
+            imgui.SetNextItemWidth(math.min(250,imgui.GetContentRegionAvail().x))
+            imgui.InputTextWithHint('##verify_qty_'..id,DSP.utf8('Сколько скупает в игре?'),U.arb_qty_buf,32)
+            if M.button('Подтвердить шт.','verify_save_'..id,230) then
+                local raw=ffi.string(U.arb_qty_buf)
+                local ok,err=DSP.market.confirm_offer_quantity(g.row,'buy',o,raw:match('^%d+$') and tonumber(raw) or -1)
+                if ok then U.arb_qty_editor_key=nil; DSP.notify('Количество уточнено. План пересчитан.')
+                else DSP.notify(tostring(err)) end
+            end
+            M.inline()
+            if M.button('Отмена','verify_cancel_'..id,150) then U.arb_qty_editor_key=nil end
+        end
+    end
+end
+local function route_card(g,e,i)
+    local key=route_key(g,e)
+    local v=imgui.new.bool(U.arb_selected[key] and true or false)
+    if imgui.Checkbox(DSP.utf8('В мой план##route_'..key),v) then
+        U.arb_selected[key]=v[0] or nil
+    end
+    M.text('КУПИТЬ   #'..tostring(e.sell_offer.shop)..'  ->  ПРОДАТЬ   #'..tostring(e.buy_offer.shop))
+    M.text('Эта связка: '..tostring(e.tradable_qty)..' шт. | Цена: '..DSP.money(e.p_buy)..' -> '..DSP.money(e.p_sell))
+    local gross=(e.tradable_qty or 0)*(e.p_sell or 0)
+    M.text('Расход: '..DSP.money(e.total_cost or 0)..' | Выручка после комиссии: '..DSP.money(e.net_revenue or 0))
+    M.text('Комиссия: '..DSP.money(gross-(e.net_revenue or 0)))
+    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('Прибыль: +'..DSP.money(e.net_profit)))
+    M.text('Продавец: '..tostring(e.qty_seller)..' шт. | Скупщик: '..tostring(e.qty_buyer)..' шт.')
+    if (e.tradable_qty or 0)<(e.available_qty or 0) then
+        M.text('Меньше максимума: бюджет или объём уже распределён в другие сделки.')
+    end
+    if M.button('К продавцу #'..tostring(e.sell_offer.shop),'route_sell'..key,220) then
+        DSP.market.mark_shop(e.sell_offer.shop)
+    end
+    M.inline()
+    if M.button('К скупщику #'..tostring(e.buy_offer.shop),'route_buy'..key,220) then
+        DSP.market.mark_shop(e.buy_offer.shop)
+    end
+end
+local function render_group(g,idx)
+    imgui.Separator()
+    M.thumbnail({name=g.name,id=g.row.id},46)
+    M.title(tostring(idx)..'. '..g.name)
+    M.text('ПРОДАЮТ  '..g.supply..' шт. / '..g.seller_count..' предлож.   |   СКУПАЮТ  '..g.demand..' шт. / '..g.buyer_count..' предлож.')
+    imgui.TextColored(DSP.theme.col('good',1),
+        DSP.utf8('План: '..g.planned..' шт.     Прибыль: +'..DSP.money(g.profit)))
+    local expanded=U.arb_expanded[g.key]
+    if M.button(expanded and 'Скрыть подробности' or 'Все продавцы, скупщики и маршруты',
+        'expand_group'..g.key,440,expanded) then
+        U.arb_expanded[g.key]=not expanded
+        expanded=not expanded
+    end
+    if not expanded then return end
+    M.text('Источник: снимок рынка. Объёмы в игре могли измениться.')
+    M.title('КТО ПРОДАЁТ — '..g.supply..' ШТ. ВСЕГО')
+    for i,o in ipairs(g.sellers) do offer_card(g,o,'sell',i); imgui.Separator() end
+    M.title('КТО СКУПАЕТ — '..g.demand..' ШТ. ВСЕГО')
+    for i,o in ipairs(g.buyers) do offer_card(g,o,'buy',i); imgui.Separator() end
+    M.title('РЕАЛЬНЫЙ ПЛАН / '..#g.routes..' СВЯЗОК')
+    M.text('Только выгодные пары, без повторного расходования остатков.')
+    for i,e in ipairs(g.routes) do route_card(g,e,i); imgui.Separator() end
+    if M.button('Выбрать все связки предмета','select_item'..g.key,310) then
+        for _,e in ipairs(g.routes) do U.arb_selected[route_key(g,e)]=true end
+    end
+    M.inline()
+    if M.button('Снять выбор','unselect_item'..g.key,175) then
+        for _,e in ipairs(g.routes) do U.arb_selected[route_key(g,e)]=nil end
+    end
+end
 function U.arbitrage_tab()
     U.header()
     local f=DSP.settings.arb_filters or {}
     DSP.settings.arb_filters=f
-    M.title('АРБИТРАЖ / ПЛАН СДЕЛОК')
-    local state=DSP.market.state
-    local tax=(tonumber(DSP.settings.tax_bp) or 200)/100
-    M.text(string.format('Комиссия %.2f%% | Mobile %s | данные: %s',
-        tax,tostring(state.sid),DSP.market.freshness()))
-    if state.status=='cache' or state.status=='error' then
-        imgui.TextColored(DSP.theme.col('warn',1),
-            DSP.utf8('ВНИМАНИЕ: офлайн-база. Перед сделкой обновите рынок.'))
-    else
-        M.text('Остатки берутся из последнего снимка рынка. Перед сделкой проверьте лавку.')
+    U.arb_selected=U.arb_selected or {}
+    U.arb_expanded=U.arb_expanded or {}
+    local st=DSP.market.state
+    local signature=tostring(st.sid)..'/'..tostring(st.version)..'/'..tostring(f.budget)..'/'..tostring(f.max_qty)..'/'..tostring(f.min_profit)..'/'..tostring(f.min_roi)
+    if signature~=U.arb_selection_signature then
+        U.arb_selected={}; U.arb_selection_signature=signature
     end
-    local changed=false
-    if M.button(U.arb_controls and 'Скрыть настройки' or 'Настроить бюджет и фильтры',
-            'arb_controls',470,false,'primary') then U.arb_controls=not U.arb_controls end
+    M.title('АРБИТРАЖ')
+    M.text('По предметам — несколько продавцов объединены в одну карточку.')
+    if st.status~='live' then
+        imgui.TextColored(DSP.theme.col('warn',1),DSP.utf8(
+            'Внимание: источник не подтверждён как LIVE. Проверьте актуальность лавок.'))
+    end
+    imgui.SetNextItemWidth(math.min(610,imgui.GetContentRegionAvail().x))
+    U.arb_search_buf=U.arb_search_buf or imgui.new.char[128]()
+    if imgui.InputTextWithHint('##arb_search',DSP.utf8('Поиск предмета...'),U.arb_search_buf,128) then
+        DSP.screens.set_page('arbitrage',1)
+    end
+    if M.button(U.arb_controls and 'Скрыть фильтры' or 'Фильтры',
+        'arb_controls',180,U.arb_controls) then U.arb_controls=not U.arb_controls end
     if U.arb_controls then
-        M.title('ЛИМИТЫ')
-        changed=M.number('Общий бюджет ($), 0 = без лимита','arb_budget',f,'budget',0,380) or changed
-        changed=M.number('Макс. шт. на одну связку, 0 = всё','arb_maxqty',f,'max_qty',0,380) or changed
-        changed=M.number('Минимальная прибыль на связку ($)','arb_profit',f,'min_profit',0,380) or changed
-        changed=M.number('Минимальная доходность (%)','arb_roi',f,'min_roi',0,380) or changed
-        changed=M.number('Возраст предложения (сек), 0 = любой','arb_age',f,'max_age',0,380) or changed
-        changed=M.toggle('Покупать доступную часть партии',f,'allow_partial',true) or changed
-        changed=M.toggle('Показывать предложения без времени',f,'include_unknown',true) or changed
-        M.title('СОРТИРОВКА')
-        for i,label in ipairs({'Общая прибыль','Прибыль / шт.','Доходность (%)'}) do
-            if M.button(label,'arb_sort'..i,300,(tonumber(f.sort) or 1)==i) then
-                f.sort=i; changed=true
-            end
-            if i<3 then M.inline() end
-        end
+        local changed=false
+        changed=M.number('Бюджет на ВСЕ сделки ($). 0 = без лимита','arb_budget',f,'budget',0,290) or changed
+        changed=M.number('Лимит на маршрут (шт.). 0 = без лимита','arb_maxqty',f,'max_qty',0,290) or changed
+        changed=M.number('Мин. прибыль за маршрут ($)','arb_profit',f,'min_profit',0,290) or changed
+        changed=M.number('Мин. ROI (%)','arb_roi',f,'min_roi',0,290) or changed
+        changed=M.number('Макс. возраст снимка (сек.)','arb_age',f,'max_age',0,290) or changed
+        changed=M.toggle('Разрешить частичные сделки',f,'allow_partial',true) or changed
+        changed=M.toggle('Включать записи без времени',f,'include_unknown',true) or changed
         if changed then DSP.market.invalidate_arbitrage(); DSP.save_settings(); DSP.screens.set_page('arbitrage',1) end
     end
-    local rows=DSP.market.arbitrage_filtered()
-    local total_cost,total_profit,total_qty=0,0,0
-    for _,e in ipairs(rows) do
-        total_cost=total_cost+(e.total_cost or 0)
-        total_profit=total_profit+(e.net_profit or 0)
-        total_qty=total_qty+(e.tradable_qty or 0)
+    local groups=DSP.market.arbitrage_grouped()
+    local totals=DSP.market.arbitrage_group_totals(groups)
+    M.text(tostring(totals.items)..' предметов | '..tostring(totals.routes)..' маршрутов | '..tostring(totals.planned)..' шт. в плане')
+    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('Ожидаемая прибыль: +'..DSP.money(totals.profit)))
+    M.text('Важно: «Скупают» = спрос по снимку, «План» = сколько рассчитано для сделок.')
+    M.text('Фактическое количество проверяйте в игре: рынок может устареть.')
+    local query=DSP.lower(DSP.trim(DSP.to_cp(ffi.string(U.arb_search_buf))))
+    local visible={}
+    for _,g in ipairs(groups) do
+        if query=='' or DSP.lower(g.name):find(query,1,true) then visible[#visible+1]=g end
     end
+    if #visible==0 then M.text('Совпадений нет. Обновите рынок или ослабьте фильтры.') end
+    local first,last=DSP.screens.pager(#visible,4,'arbitrage')
+    for i=first,last do render_group(visible[i],i) end
     imgui.Separator()
-    M.title('НАЙДЕНО: '..#rows..'  |  ОБЪЁМ: '..total_qty..' ШТ.')
-    M.text('Общие затраты: '..DSP.money(total_cost))
-    imgui.TextColored(DSP.theme.col('good',1),
-        DSP.utf8('Чистая прибыль плана: +'..DSP.money(total_profit)))
-    M.text('Объём каждого продавца и скупщика учитывается только один раз.')
-    if (tonumber(f.budget) or 0)>0 then
-        M.text('Лимит: '..DSP.money(f.budget)..' | Остаток: '..DSP.money(math.max(0,f.budget-total_cost)))
-    end
-    local first,last=DSP.screens.pager(#rows,6,'arbitrage')
-    if #rows==0 then M.text('Сделок нет. Обновите рынок или ослабьте фильтры.') end
-    for i=first,last do
-        local e=rows[i]
-        imgui.Separator()
-        M.title(tostring(i)..'. '..tostring(e.name))
-        imgui.TextColored(DSP.theme.col('good',1),
-            DSP.utf8('ПРИБЫЛЬ  +'..DSP.money(e.net_profit or 0)..
-                '     ROI  '..string.format('%.1f%%',e.roi or 0)))
-        M.text('Купить '..tostring(e.tradable_qty or 0)..' шт. за '..DSP.money(e.total_cost or 0))
-        M.text('Продаёт: '..tostring(e.qty_seller or e.sell_offer.qty or 0)..
-            ' шт. / '..DSP.money(e.p_buy)..' за шт. | лавка #'..tostring(e.sell_offer.shop))
-        M.text('Скупает: '..tostring(e.qty_buyer or e.buy_offer.qty or 0)..
-            ' шт. / '..DSP.money(e.p_sell)..' за шт. | лавка #'..tostring(e.buy_offer.shop))
-        M.text('Продавец: '..tostring(e.sell_offer.owner or '?')..
-            ' | Скупщик: '..tostring(e.buy_offer.owner or '?'))
-        if e.partial or e.shared_stock then
-            imgui.TextColored(DSP.theme.col('warn',1),DSP.utf8(
-                'Выделено '..tostring(e.tradable_qty)..' из '..tostring(e.available_qty or 0)..
-                ' возможных шт. (лимит / другие сделки)'))
-        end
-        local gross=(e.tradable_qty or 0)*(e.p_sell or 0)
-        M.text('Выручка: '..DSP.money(gross)..' | Комиссия: '..DSP.money(gross-(e.net_revenue or 0)))
-        local a=DSP.market.offer_freshness(e.sell_age or e.sell_offer.ts)
-        local b=DSP.market.offer_freshness(e.buy_age or e.buy_offer.ts)
-        M.text('Обновление: продавец — '..tostring(a)..', скупщик — '..tostring(b))
-        if M.button('1. Отметить лавку продавца #'..tostring(e.sell_offer.shop),
-                'arb_sell'..i,540,false,'secondary') then
-            DSP.market.mark_shop(e.sell_offer.shop)
-        end
-        if M.button('2. Отметить лавку скупщика #'..tostring(e.buy_offer.shop),
-                'arb_buy'..i,540,false,'secondary') then
-            DSP.market.mark_shop(e.buy_offer.shop)
-        end
-    end
+    local chosen=summarize_selection(groups)
+    M.title('МОЙ ПЛАН  /  '..chosen.count..' СВЯЗОК')
+    M.text('Выбрано: '..chosen.qty..' шт. | Нужно денег: '..DSP.money(chosen.cost))
+    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('Прибыль: +'..DSP.money(chosen.profit)))
+    M.text('Выбор — чеклист для похода по лавкам; покупки не выполняются автоматически.')
 end
 U.market_tab=U.arbitrage_tab
--- Shop list uses a vertical card for each stall, then opens the full item search.
 function U.lavki_tab()
     U.header()
     local shops=DSP.market.shops_list()
-    local first,last=DSP.screens.pager(#shops,6,'lavki')
+    local first,last=DSP.screens.pager(#shops,7,'lavki')
     if #shops==0 then M.text('Лавки не загружены. Обновите рынок.') end
     for i=first,last do
         local shop=shops[i]
         local number=shop.num or '?'
-        M.title('ЛАВКА #'..tostring(number))
-        M.text(shop.owner or '?')
+        imgui.Separator()
+        M.title('ЛАВКА #'..tostring(number)..'  |  '..tostring(shop.owner or '?'))
         local fresh=DSP.market.offer_freshness(shop.ts or shop.updated_at)
-        M.text('Свежесть: '..tostring(fresh))
-        if M.button('Найти лавку #'..tostring(number),'shop_mark'..i,400) then DSP.market.mark_shop(number) end
-        if (shop.buy_count or 0)>0 and M.button('Скопировать скупку +1$','copy_shop'..i,460) then
+        M.text('Данные: '..tostring(fresh)..'  |  Продаёт: '..tostring(shop.sell_count or 0)..'  |  Скупает: '..tostring(shop.buy_count or 0))
+        if M.button('Отметить на карте','shop_mark'..i,225) then DSP.market.mark_shop(number) end
+        M.inline()
+        if M.button(U.lavki_expanded[number] and 'Свернуть' or 'Товары','expand_shop'..i,195) then
+            U.lavki_expanded[number]=not U.lavki_expanded[number]
+        end
+        if (shop.buy_count or 0)>0 and M.button('Копировать скупку +1$','copy_shop'..i,320) then
             local n,err=DSP.market.copy_shop_skupka(number,nil,1)
             DSP.notify(n and ('Скопировано позиций: '..n) or tostring(err))
         end
-        local expanded=U.lavki_expanded[number]
-        if M.button(expanded and 'Скрыть товары' or 'Показать товары','expand_shop'..i,400) then
-            U.lavki_expanded[number]=not expanded
-        end
-        if expanded then
+        if U.lavki_expanded[number] then
             for _,side in ipairs({'sell','buy'}) do
                 M.title(side=='sell' and 'Продаёт вам:' or 'Скупает у вас:')
                 for _,entry in ipairs(shop[side..'_offers'] or {}) do
                     local it=entry.offer
-                    M.text(entry.row.display..' | '..DSP.money(it.price or 0)..' x'..tostring(it.qty or 0))
+                    M.text(entry.row.display..'  |  '..DSP.money(it.price or 0)..' за шт. | '..tostring(it.qty or 0)..' шт.')
                 end
             end
         end
-        imgui.Separator()
     end
 end
 
@@ -6641,15 +6850,13 @@ function U.crate_log()
     end
 end
 function U.log_tab()
-    M.title('ИСТОРИЯ И ЖУРНАЛ')
-    U.tab_detail = U.tab_detail or 'journal'
-    for _,v in ipairs({{'journal','Журнал событий'},{'trades','Сделки'},{'crates','Тайники'},{'chat','Чат'}}) do
-        if M.button(v[2],'history_'..v[1],240,U.tab_detail==v[1]) then U.tab_detail=v[1] end
+    M.title('ИСТОРИЯ')
+    for _,v in ipairs({{'crates','Награды / тайники'},{'trades','Сделки'},{'chat','Чат'}}) do
+        if M.button(v[2],'history_'..v[1],330,U.tab_detail==v[1]) then U.tab_detail=v[1] end
         if v[1]~='chat' then M.inline() end
     end
     imgui.Separator()
-    if U.tab_detail=='crates' then
-        U.crate_log()
+    if U.tab_detail=='crates' then U.crate_log()
     elseif U.tab_detail=='chat' then
         local chat=DSP.settings.chat_logs or {}
         local first,last=DSP.screens.pager(#chat,12,'chat_history')
@@ -6657,7 +6864,7 @@ function U.log_tab()
             local e=chat[#chat-i+1]
             M.text(date(e.ts)..' | '..tostring(e.text or '')); imgui.Separator()
         end
-    elseif U.tab_detail=='trades' then
+    else
         local trades=M.history_rows('trades')
         M.title('СДЕЛКИ / '..#trades)
         local first,last=DSP.screens.pager(#trades,8,'trade_history')
@@ -6675,66 +6882,97 @@ function U.log_tab()
             local e=stalls[i]
             M.text(date(e.ts)..' | Лавка #'..tostring(e.shop_num or '?')..' '..tostring(e.owner or '')..' '..tostring(e.action or ''))
         end
-    else
-        local C=DSP.craglog
-        M.text('Сделки, деньги, открытия и PayDay в одном месте.')
-        U.journal_filter=U.journal_filter or 'all'
-        local tabs={{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
-                    {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}
-        for i,pair in ipairs(tabs) do
-            if M.button(pair[2],'journal_'..pair[1],190,U.journal_filter==pair[1]) then
-                U.journal_filter=pair[1]
-                DSP.screens.set_page('journal_events',1)
-            end
-            if i%3~=0 then M.inline() end
-        end
-        imgui.Separator()
-        if not C then M.text('Журнал ещё не загружен'); return end
-        local all=C.filtered('all')
-        local since=os.time()-86400
-        local sales,buys,paydays,crates,income,profit=0,0,0,0,0,0
-        for _,e in ipairs(all) do
-            if (tonumber(e.ts) or 0)>=since then
-                if e.type=='payday' then paydays=paydays+1
-                elseif e.type=='income' then income=income+(tonumber(e.amount) or 0)
-                elseif e.kind=='cash' then income=income+(tonumber(e.cash) or 0)
-                elseif e.kind=='opening' then crates=crates+1
-                elseif e.type=='market' then
-                    if e.direction=='sell' then sales=sales+1 else buys=buys+1 end
-                elseif e.type=='trade' then
-                    profit=profit+(tonumber(e.profit) or 0)
-                    if (tonumber(e.money_get) or 0)>0 then sales=sales+1 end
-                    if (tonumber(e.money_give) or 0)>0 then buys=buys+1 end
-                end
-            end
-        end
-        M.text('За 24 ч | Продажи: '..sales..' | Скупки: '..buys..' | Тайники: '..crates..' | PayDay: '..paydays)
-        M.text('Торговый итог (оценка): '..DSP.money(profit)..' | Полученные деньги: '..DSP.money(income))
-        M.text('Торговый итог может включать рыночную стоимость вещей, а не наличные.')
-        imgui.Separator()
-        local events=C.filtered(U.journal_filter)
-        table.sort(events,function(a,b) return (tonumber(a.ts) or 0)>(tonumber(b.ts) or 0) end)
-        local first,last=DSP.screens.pager(#events,7,'journal_events')
-        if #events==0 then M.text('Пока нет записей этого типа. Новые события появятся после сообщений сервера.') end
-        for i=first,last do
-            local e=events[i]
-            if e then
-                local kind=e.kind or e.type
-                local heading=e.type=='payday' and 'PAYDAY' or e.type=='income' and 'ДОХОД'
-                    or kind=='opening' and 'ТАЙНИК' or kind=='item' and 'ПРЕДМЕТ'
-                    or kind=='cash' and 'ДЕНЬГИ' or e.type=='market' and (e.direction=='sell' and 'ПРОДАЖА' or 'СКУПКА') or 'СДЕЛКА'
-                M.title(date(e.ts)..'    '..heading)
-                M.text(C.describe(e))
-                if e.source and e.source~='' then M.text('Источник: '..tostring(e.source)) end
-                imgui.Separator()
-            end
-        end
-        if M.button('Подробно: тайники и награды','journal_details',430) then
-            U.journal_details=not U.journal_details
-        end
-        if U.journal_details then U.crate_log() end
-        if C.last_error then M.text('Ошибка файла журнала: '..tostring(C.last_error)) end
     end
+end
+-- v1.4 unified event timeline, with independent event/payday/income filters.
+function U.log_tab()
+    local C=DSP.craglog
+    M.title('ЖУРНАЛ СОБЫТИЙ')
+    M.text('Сделки, деньги, открытия и PayDay в одном месте.')
+    U.journal_filter=U.journal_filter or 'all'
+    local tabs={{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
+                {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}
+    for i,pair in ipairs(tabs) do
+        if M.button(pair[2],'journal_'..pair[1],190,U.journal_filter==pair[1]) then
+            U.journal_filter=pair[1]
+            DSP.screens.set_page('journal_events',1)
+        end
+        if i%3~=0 then M.inline() end
+    end
+    imgui.Separator()
+    if not C then M.text('Журнал ещё не загружен'); return end
+    local all=C.filtered('all')
+    local since=os.time()-86400
+    local sales,buys,paydays,crates,income,profit=0,0,0,0,0,0
+    for _,e in ipairs(all) do
+        if (tonumber(e.ts) or 0)>=since then
+            if e.type=='payday' then paydays=paydays+1
+            elseif e.type=='income' then income=income+(tonumber(e.amount) or 0)
+            elseif e.kind=='cash' then income=income+(tonumber(e.cash) or 0)
+            elseif e.kind=='opening' then crates=crates+1
+            elseif e.type=='market' then
+                if e.direction=='sell' then sales=sales+1 else buys=buys+1 end
+            elseif e.type=='trade' then
+                profit=profit+(tonumber(e.profit) or 0)
+                if (tonumber(e.money_get) or 0)>0 then sales=sales+1 end
+                if (tonumber(e.money_give) or 0)>0 then buys=buys+1 end
+            end
+        end
+    end
+    M.text('За 24 ч | Продажи: '..sales..' | Скупки: '..buys..' | Тайники: '..crates..' | PayDay: '..paydays)
+    M.text('Торговый итог (оценка): '..DSP.money(profit)..' | Полученные деньги: '..DSP.money(income))
+    M.text('Торговый итог может включать рыночную стоимость вещей, а не наличные.')
+    imgui.Separator()
+    local events=C.filtered(U.journal_filter)
+    table.sort(events,function(a,b) return (tonumber(a.ts) or 0)>(tonumber(b.ts) or 0) end)
+    local first,last=DSP.screens.pager(#events,7,'journal_events')
+    if #events==0 then M.text('Пока нет записей этого типа. Новые события появятся после сообщений сервера.') end
+    for i=first,last do
+        local e=events[i]
+        if e then
+            local kind=e.kind or e.type
+            local heading=e.type=='payday' and 'PAYDAY' or e.type=='income' and 'ДОХОД'
+                or kind=='opening' and 'ТАЙНИК' or kind=='item' and 'ПРЕДМЕТ'
+                or kind=='cash' and 'ДЕНЬГИ' or e.type=='market' and (e.direction=='sell' and 'ПРОДАЖА' or 'СКУПКА') or 'СДЕЛКА'
+            M.title(date(e.ts)..'    '..heading)
+            M.text(C.describe(e))
+            if e.source and e.source~='' then M.text('Источник: '..tostring(e.source)) end
+            imgui.Separator()
+        end
+    end
+    if M.button('Подробно: тайники и награды','journal_details',430) then
+        U.journal_details=not U.journal_details
+    end
+    if U.journal_details then U.crate_log() end
+    if M.button(U.legacy_trade_open and 'Скрыть старые сделки' or 'История старых сделок',
+            'journal_legacy',340,U.legacy_trade_open) then
+        U.legacy_trade_open=not U.legacy_trade_open
+    end
+    if M.button(U.journal_chat_open and 'Скрыть сообщения чата' or 'Сообщения чата (диагностика)',
+            'journal_raw_chat',400,U.journal_chat_open) then
+        U.journal_chat_open=not U.journal_chat_open
+    end
+    if U.journal_chat_open then
+        local chat=DSP.settings.chat_logs or {}
+        local first,last=DSP.screens.pager(#chat,12,'chat_history')
+        for i=first,last do
+            local e=chat[#chat-i+1]
+            if e then M.text(date(e.ts)..' | '..tostring(e.text or '')) end
+        end
+    end
+    if U.legacy_trade_open then
+        local trades=M.history_rows('trades')
+        M.title('СТАРЫЕ СДЕЛКИ / '..#trades)
+        local left,right=DSP.screens.pager(#trades,7,'legacy_trade_history')
+        for i=left,right do
+            local trade=trades[i]
+            M.text(date(trade.ts)..' | '..tostring(trade.partner or '?'))
+            M.text(trade.item_summary or '')
+            M.text('Получено: '..DSP.money(trade.total_get or 0)..'  |  Отдано: '..DSP.money(trade.total_give or 0))
+            imgui.Separator()
+        end
+    end
+    if C.last_error then M.text('Ошибка файла журнала: '..tostring(C.last_error)) end
 end
 local function save_notes()
     local f,err=io.open(DSP.notes_path,'w')

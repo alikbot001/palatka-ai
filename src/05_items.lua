@@ -59,6 +59,22 @@ function DSP.parse_item_id(raw, ench)
     return base, math.floor(e)
 end
 
+-- Resolve a market item's name back to a unique catalog ID so user-provided
+-- images (<id>.png) also work when the market API only sends item names.
+DSP.items.by_name = DSP.items.by_name or {}
+function DSP.items.index_names()
+    local names={}
+    for id,name in pairs(DSP.items.by_id or {}) do
+        local key=DSP.item_key(DSP.clean_text(name),0)
+        if names[key] and names[key]~=id then names[key]=false
+        elseif names[key]==nil then names[key]=id end
+    end
+    DSP.items.by_name=names
+end
+function DSP.items.id_for_name(name)
+    return DSP.items.by_name[DSP.item_key(DSP.clean_text(name),0)] or nil
+end
+
 function DSP.items.name(id)
     id = tonumber(id) or 0
     local nm = DSP.items.by_id[id]
@@ -119,6 +135,7 @@ function DSP.items.load()
             end
             if n > 0 then
                 DSP.items.loaded = true
+                DSP.items.index_names()
                 DSP.flog('ITEMS loaded=' .. tostring(n) .. ' path=' .. path)
                 return true
             end

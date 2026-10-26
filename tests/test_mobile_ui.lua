@@ -1,5 +1,7 @@
 -- Behavioral touch UI checks using the same LuaJIT/FFI fixture as the runtime UI.
 dofile('tests/test_ui.lua')
+dofile('src/11_arbitrage.lua')
+dofile('src/12_arbitrage_groups.lua')
 local ffi = require('ffi')
 -- The legacy fixture allocated char[128] regardless of requested capacity.
 imgui.new.char=setmetatable({}, {__index=function(_,size)
@@ -85,7 +87,7 @@ DSP.presets.add=real_add
 imgui.Button=function() return false end
 -- Timestamp-keyed trade history must remain visible.
 DSP.settings.trades={['event:1']={ts=1,partner='Visible partner',item_summary='Visible trade'}}
-DSP.ui.tab_detail='trades'; wrapped={}
+DSP.ui.tab_detail='trades'; DSP.ui.legacy_trade_open=true; wrapped={}
 DSP.ui.log_tab()
 assert(table.concat(wrapped,'\n'):find('Visible trade',1,true),'keyed history must render')
 -- Touch paging must apply immediately, without showing a stale page on the click frame.
@@ -125,7 +127,7 @@ local b=DSP.mobile.history_rows('trades')
 assert(a~=b and b[1].item_summary=='New revision trade','new revision rebuilds sort')
 DSP.settings.chat_logs={}
 for i=1,30 do DSP.settings.chat_logs[i]={ts=i,text='Chat row '..i} end
-DSP.ui.tab_detail='chat'; DSP.screens.set_page('chat_history',1); wrapped={}
+DSP.ui.tab_detail='chat'; DSP.ui.journal_chat_open=true; DSP.screens.set_page('chat_history',1); wrapped={}
 DSP.ui.log_tab()
 local rendered=table.concat(wrapped,'\n')
 assert(rendered:find('Chat row 30',1,true) and not rendered:find('Chat row 1\n',1,true),'chat renders one page newest first')
@@ -182,7 +184,7 @@ local bw
 imgui.Button=function(_,size) bw=size.x; return false end
 DSP.mobile.button('Wide action with shop #123','measure_action',330)
 assert(bw>=452,'action button must fit measured label plus padding')
-assert(DSP.mobile.geometry(2340,1080).nav>=240,'phone navigation must fit full labels')
+assert(DSP.mobile.geometry(2340,1080).nav>=200,'compact navigation must still fit labels')
 DSP.screens.set('arbitrage')
 assert(DSP.mobile.reset_scroll,'screen navigation must reset content scroll')
 imgui.CalcTextSize=measured;imgui.Button=button
@@ -216,17 +218,22 @@ DSP.ui.trade_advanced=false; DSP.ui.trade_section='items'; DSP.ui.preset_kind='b
 DSP.ui.trade_tab()
 local screen=table.concat(labels,'\n')
 assert(not screen:find('trade_sectionlibrary',1,true) and not screen:find('trade_sectionauto',1,true),'advanced tools stay out of the main listing path')
-assert(screen:find('Наборы',1,true) or screen:find('Дополнительно',1,true),'advanced tools remain reachable')
+assert(screen:find('+ ДОБАВИТЬ ПРЕДМЕТ',1,true),'add item flow is visible without advanced submenu')
 imgui.Button=function() return false end
 print('mobile simple listing tests: ok')
-local offers=DSP.market.arbitrage_filtered
-DSP.market.arbitrage_filtered=function() return {{name='Route item',p_buy=100,p_sell=200,tradable_qty=2,total_cost=200,
- net_revenue=388,net_profit=188,roi=94,sell_offer={shop='10',owner='Player_A',ts=os.time()},buy_offer={shop='20',owner='Player_B',ts=os.time()}}} end
+-- Item-centric arbitrage retains both owners, prices, quantities and commission.
+local clock=os.time()
+DSP.market.rebuild({shops={
+    {shop_num='10',owner='Player_A',server_id=102,updated_at=clock,sell_slots={{name='Wood',qty=2,price=100}}},
+    {shop_num='20',owner='Player_B',server_id=102,updated_at=clock,buy_slots={{name='Wood',qty=700,price=200}}},
+}},102)
+DSP.settings.arb_filters={budget=0,max_age=0}
+DSP.ui.arb_expanded={[DSP.item_key('Wood',0)]=true}
 wrapped={}; DSP.ui.arbitrage_tab()
 local route=table.concat(wrapped,'\n')
 assert(route:find('Player_A',1,true) and route:find('Player_B',1,true),'arbitrage explains both players')
 assert(route:find('Комиссия',1,true),'route explains commission and net result')
-DSP.market.arbitrage_filtered=offers
+assert(route:find('СКУПАЮТ  700',1,true),'demand remains independent of seller stock')
 print('mobile clear arbitrage tests: ok')
 DSP.mobile.scroll_delta=0
 DSP.mobile.queue_scroll(1)
@@ -238,11 +245,11 @@ assert(scroll==400,'scroll rail applies one configured jump within the scrolling
 local start=DSP.auto.start_buy
 local submitted
 DSP.auto.start_buy=function() submitted=true end
-DSP.ui.preset_kind='buy'; DSP.ui.trade_advanced=false; DSP.settings.dry_run=false
-DSP.settings.buy_preset={name='Test', items={{name='Item', price=100, qty=1, enabled=true}}}
+DSP.ui.preset_kind='buy'; DSP.ui.trade_section='items'; DSP.ui.trade_advanced=false; DSP.settings.dry_run=false
+DSP.settings.buy_preset.items={{name='Wood',price=100,qty=1,enabled=true}}
 imgui.Button=function(label) return label:find('##mobile_run_buy',1,true)~=nil end
 DSP.ui.trade_tab()
-assert(submitted,'normal listing action sends actual listing when dry_run is off')
+assert(submitted and DSP.settings.dry_run==false,'normal listing action sends actual listing, not hidden dry-run')
 DSP.auto.start_buy=start; imgui.Button=function() return false end
 print('mobile scroll and listing execution tests: ok')
 local check=imgui.Checkbox
