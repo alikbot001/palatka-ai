@@ -10555,7 +10555,9 @@ function V.shops_result(rows,mode,query,version)
     end
     local asc=(mode=='sell')
     table.sort(out,function(a,b)
-        if a.best~=b.best then return asc and a.best<b.best or a.best>b.best end
+        if a.best~=b.best then
+            if asc then return a.best < b.best else return a.best > b.best end
+        end
         return tostring(a.row.display)<tostring(b.row.display)
     end)
     V.shops_stamp=stamp
@@ -10603,7 +10605,9 @@ local function item_detail()
     V.text(V.shops_mode=='sell' and 'Купить у игроков' or 'Продать игрокам')
     local offers=g.offers
     table.sort(offers,function(a,b)
-        if a.price~=b.price then return V.shops_mode=='sell' and a.price<b.price or a.price>b.price end
+        if a.price~=b.price then
+            if V.shops_mode=='sell' then return a.price < b.price else return a.price > b.price end
+        end
         return tostring(a.shop)<tostring(b.shop)
     end)
     local from,to=V.selected_page('shop_offers',#offers,14)
