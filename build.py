@@ -44,13 +44,18 @@ MODULES = [
     "55_craglog.lua",
     "56_mini_journal.lua",
     "57_journal_v16.lua",
+    "60_ui21_shell.lua",
+    "61_ui21_trade.lua",
+    "62_ui21_shops.lua",
+    "63_ui21_arbitrage.lua",
+    "64_ui21_journal_calc.lua",
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v1.6.0, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v2.1.0, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.6.0')
+script_version('2.1.0')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
