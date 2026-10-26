@@ -108,11 +108,9 @@ function DSP.db.get(name, ench)
     local e = DSP.db.by_key[key]
     if e then return e, true, 'api' end
     local base = DSP.db.by_base[DSP.lower(name)]
-    if base then return base, false, 'api_base' end
+    if base and (tonumber(base.ench) or 0) == ench then return base, false, 'api_base' end
     e = DSP.db.learned[key]
     if e then return e, true, 'shop' end
-    e = DSP.db.learned[DSP.item_key(name, 0)]
-    if e then return e, false, 'shop_base' end
     return nil, false, 'none'
 end
 

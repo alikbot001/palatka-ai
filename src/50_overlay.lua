@@ -106,7 +106,7 @@ end
 
 local function close_btn(id)
     imgui.SameLine(0, 8 * d())
-    if imgui.SmallButton('X##' .. id) then return true end
+    if imgui.Button('X##' .. id, imgui.ImVec2(64, 56)) then return true end
     return false
 end
 
@@ -114,15 +114,14 @@ local function trade_item_row(it, kind)
     local e = DSP.db.get(it.name, it.ench)
     local qty = it.qty or 1
     local disp = DSP.item_name(it.name, it.ench)
-    imgui.Text(u(disp .. '  x' .. tostring(qty)))
+    if imgui.TextWrapped then imgui.TextWrapped(u(disp .. '  x' .. tostring(qty)))
+    else imgui.Text(u(disp .. '  x' .. tostring(qty))) end
     if not e or not e.sell or not e.sell.min or e.sell.min <= 0 then
-        imgui.SameLine(0, 6 * d())
         imgui.TextColored(GRAY, u('нет базы'))
         return
     end
     local unit = e.sell.min
     local sum = unit * qty
-    imgui.SameLine(0, 6 * d())
     imgui.TextColored(BLUE, u(DSP.money(unit)))
     imgui.SameLine(0, 6 * d())
     imgui.TextColored(GRAY, u('=' .. DSP.money(sum)))
@@ -136,7 +135,7 @@ function DSP.overlay.draw_trade()
     refresh_palette()
     local t = DSP.live.trade
     local sw, sh = imgui.GetIO().DisplaySize.x, imgui.GetIO().DisplaySize.y
-    local w = math.min(sw * 0.40, 480 * d())
+    local w = math.min(sw * 0.34, 640 * d())
     imgui.SetNextWindowPos(imgui.ImVec2(sw - 8 * d(), 76 * d()), imgui.Cond.FirstUseEver, imgui.ImVec2(1, 0))
     imgui.SetNextWindowSize(imgui.ImVec2(w, 0), imgui.Cond.FirstUseEver)
     if DSP.settings.overlay_top ~= false then imgui.SetNextWindowFocus() end
@@ -237,7 +236,7 @@ function DSP.overlay.draw_shop()
     refresh_palette()
     local s = DSP.live.shop
     local sw, sh = imgui.GetIO().DisplaySize.x, imgui.GetIO().DisplaySize.y
-    local w = math.min(sw * 0.46, 560 * d())
+    local w = math.min(sw * 0.34, 640 * d())
     imgui.SetNextWindowPos(imgui.ImVec2(sw - 8 * d(), 76 * d()), imgui.Cond.FirstUseEver, imgui.ImVec2(1, 0))
     imgui.SetNextWindowSize(imgui.ImVec2(w, 0), imgui.Cond.FirstUseEver)
     if DSP.settings.overlay_top ~= false then imgui.SetNextWindowFocus() end
@@ -255,9 +254,9 @@ function DSP.overlay.draw_shop()
         imgui.Separator()
 
         local sell_n, buy_n = #(s.sell or {}), #(s.buy or {})
-        if imgui.Button(u('ПРОДАЖА (' .. sell_n .. ')##dsp_shop_sell')) then DSP.overlay.shop_tab = 1 end
+        if imgui.Button(u('КУПИТЬ СЕБЕ (' .. sell_n .. ')##dsp_shop_sell'), imgui.ImVec2(290, 64)) then DSP.overlay.shop_tab = 1 end
         imgui.SameLine(0, 6 * d())
-        if imgui.Button(u('СКУПКА (' .. buy_n .. ')##dsp_shop_buy')) then DSP.overlay.shop_tab = 2 end
+        if imgui.Button(u('ПРОДАТЬ СВОЁ (' .. buy_n .. ')##dsp_shop_buy'), imgui.ImVec2(290, 64)) then DSP.overlay.shop_tab = 2 end
         imgui.Separator()
 
         local rows = {}
@@ -292,9 +291,8 @@ function DSP.overlay.draw_shop()
             for _, r in ipairs(rows) do
                 local it = r.it
                 imgui.TextColored(r.c, u(r.label))
-                imgui.SameLine(0, 6 * d())
-                imgui.Text(u(DSP.item_name(it.name, it.ench) .. '  x' .. tostring(it.qty or 1)))
-                imgui.SameLine(0, 6 * d())
+                local label = u(DSP.item_name(it.name, it.ench) .. '  x' .. tostring(it.qty or 1))
+                if imgui.TextWrapped then imgui.TextWrapped(label) else imgui.Text(label) end
                 imgui.TextColored(BLUE, u(DSP.money(it.price)))
                 if r.e and r.e.sell and r.e.sell.min and r.e.sell.min > 0 then
                     imgui.SameLine(0, 6 * d())
@@ -306,6 +304,7 @@ function DSP.overlay.draw_shop()
                             u((r.profit > 0 and 'профит ' or 'минус ') .. DSP.money(math.abs(r.profit))))
                     end
                 end
+                imgui.Separator()
             end
         end
         imgui.EndChild()

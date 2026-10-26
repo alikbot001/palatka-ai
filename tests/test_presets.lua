@@ -1,0 +1,46 @@
+DSP={settings={buy_preset={name='Old buy',items={{name='Apple',key='apple|0',price=5,qty=1}}},sell_preset={name='Old sell',items={}}},save_settings=function()end,add_log=function()end,item_key=function(n,e)return n:lower()..'|'..e end,item_name=function(n)return n end,text_cp=function(n)return n end,market={}}
+getWorkingDirectory=function()return '/tmp' end
+assert(loadfile('src/20_presets.lua'))()
+assert(loadfile('src/21_preset_library.lua'))()
+assert(DSP.presets.list('buy')[1].name=='Old buy')
+assert(DSP.presets.create('buy','Second'))
+assert(#DSP.presets.items('buy')==0)
+assert(DSP.presets.select('buy',1))
+assert(DSP.presets.items('buy')[1].price==5)
+assert(DSP.presets.rename('buy',2,'Renamed'))
+assert(DSP.presets.update('buy',1,{price='5000000000',qty='2'}))
+assert(DSP.presets.items('buy')[1].price==5000000000)
+assert(not DSP.presets.update('buy',1,{price=-1}))
+local ok,n=DSP.presets.import_data({buy_presets={{name='MH buy',items={{name='Apple',max_price=900,qty=2,target_qty=4,ench=2}}}},presets={{name='MH sell',items={{name='Pear',price=200,qty=3}}}}})
+assert(ok and n==2)
+assert(DSP.settings.buy_preset.name=='MH buy' and DSP.settings.sell_preset.name=='MH sell',
+    'imported presets must become usable immediately without another selection screen')
+local p=DSP.presets.list('buy')[3]
+assert(p.items[1].price==900 and p.items[1].qty==4 and p.items[1].ench==2)
+assert(DSP.presets.select('buy',3))
+local exported=DSP.presets.export_data('buy')
+assert(exported.kind=='buy' and exported.items[1].max_price==900 and exported.items[1].target_qty==4)
+assert(DSP.presets.delete('buy',3))
+assert(DSP.presets.selected('buy')<=#DSP.presets.list('buy'))
+assert(not DSP.presets.import_data({kind='buy',name='broken',items={{name='Bad',price=-1}}}))
+DSP.settings.tax_bp=200
+DSP.market.row_for=function()return {sell={min=1000},buy={max=700}} end
+assert(DSP.presets.estimate({name='Apple',price=800,qty=2},'buy')==360)
+assert(DSP.presets.estimate({name='Apple',price=1000,qty=2},'sell')==560)
+DSP.market.row_for=function()return {sell={min=0},buy={max=0}} end
+assert(DSP.presets.estimate({name='Apple',price=1000,qty=1},'sell')==nil)
+local imported, count=DSP.presets.import_data({kind='buy',name='Unpriced',items={{name='Pending',max_price=0,qty=2,target_qty=0}}})
+assert(imported and count==1)
+local pending=DSP.presets.list('buy')[#DSP.presets.list('buy')].items[1]
+assert(pending.qty==2 and pending.price==0 and pending.enabled==false)
+assert(not DSP.presets.add_manual('sell',{name='Manual',price=0,qty=2}))
+local added, idx=DSP.presets.add_manual('sell',{name='Manual',price=5000000000,qty=2,ench=0})
+assert(added and DSP.presets.items('sell')[idx].enabled)
+assert(not DSP.presets.add_manual('sell',{name='Manual',price=1,qty=1}))
+local pending_added, pending_idx=DSP.presets.add_manual('sell',{name='Inventory only',price=0,qty=3,ench=0,enabled=false,needs_price=true})
+assert(pending_added and DSP.presets.items('sell')[pending_idx].needs_price)
+assert(DSP.presets.update('sell',pending_idx,{price='900',enabled=true}))
+assert(not DSP.presets.items('sell')[pending_idx].needs_price)
+assert(not DSP.presets.add_manual('sell',{name='Invalid',price=1,qty=0}))
+assert(not DSP.presets.add_manual('sell',{name=' ',price=1,qty=1}))
+print('preset tests: ok')

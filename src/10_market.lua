@@ -121,6 +121,14 @@ local function sanitize_ench(v)
     return math.floor(e)
 end
 
+local function item_units(value)
+    local n = tonumber(value)
+    if not n or n ~= n or n < 0 or n == math.huge or n > 9007199254740991 then
+        return 0
+    end
+    return math.floor(n)
+end
+
 local function add_offer(map, name, ench, offer)
     if name == '' or offer.price <= 0 then return end
     local key = DSP.item_key(name, ench)
@@ -141,7 +149,19 @@ local function add_offer(map, name, ench, offer)
     side.qty = side.qty + offer.qty
     side.prices[#side.prices + 1] = offer.price
     side.shops[offer.shop] = true
-    side.offers[#side.offers + 1] = offer
+    -- One stall may expose multiple slots of the same item at the same price.
+    -- They are one actionable stock pool; different prices stay separate.
+    side.offer_index = side.offer_index or {}
+    local slot_key = tostring(offer.shop) .. '\0' .. tostring(offer.price)
+    local existing = side.offer_index[slot_key]
+    if existing then
+        existing.qty = existing.qty + offer.qty
+        existing.slots = (existing.slots or 1) + 1
+    else
+        offer.slots = 1
+        side.offer_index[slot_key] = offer
+        side.offers[#side.offers + 1] = offer
+    end
 end
 
 local function finish_side(side, asc)
@@ -172,7 +192,6 @@ local function finish_side(side, asc)
     local shop_n = 0
     for _ in pairs(side.shops) do shop_n = shop_n + 1 end
     side.shop_n = shop_n
-    while #side.offers > 25 do table.remove(side.offers) end
 end
 
 function DSP.market.rebuild(payload, sid)
@@ -203,8 +222,8 @@ function DSP.market.rebuild(payload, sid)
             for _, slot in ipairs(shop.sell_slots or {}) do
                 local name = DSP.to_cp(slot.name or '')
                 local price = tonumber(slot.price) or 0
-                local qty = tonumber(slot.qty) or 0
-                if name ~= '' and price > 0 then
+                local qty = item_units(slot.qty)
+                if name ~= '' and price > 0 and qty > 0 then
                     has_slot = true
                     offers_n = offers_n + 1
                     -- v1.2 Stage 2 fix: shop.sell_slots = лавка ПРОДАЁТ игроку -> player BUYS.
@@ -222,8 +241,8 @@ function DSP.market.rebuild(payload, sid)
             for _, slot in ipairs(shop.buy_slots or {}) do
                 local name = DSP.to_cp(slot.name or '')
                 local price = tonumber(slot.price) or 0
-                local qty = tonumber(slot.qty) or 0
-                if name ~= '' and price > 0 then
+                local qty = item_units(slot.qty)
+                if name ~= '' and price > 0 and qty > 0 then
                     has_slot = true
                     offers_n = offers_n + 1
                     -- v1.2 Stage 2 fix: shop.buy_slots = лавка СКУПАЕТ у игрока -> player SELLS.
@@ -307,11 +326,24 @@ function DSP.market.url(sid)
         .. '&ver=' .. tostring(DSP.version)
 end
 
+function DSP.market.clear_for_server(sid)
+    local st = DSP.market.state
+    if tonumber(st.sid) == tonumber(sid) then return end
+    st.rows, st.by_key = {}, {}
+    st.shops, st.offers, st.updated, st.oldest, st.saved_at = 0, 0, 0, 0, 0
+    st.filter_cache, st.filter_version = nil, -1
+    st.version = (st.version or 0) + 1
+    st.sid = sid
+    DSP.market.invalidate_arbitrage()
+end
+
 function DSP.market.pull(sid, done)
     sid = tonumber(sid) or DSP.market.state.sid
     if DSP.market.state.status == 'loading' then return end
+    DSP.market.clear_for_server(sid)
     DSP.market.state.sid = sid
     DSP.market.state.status = 'loading'
+    DSP.market.state.last_request = os.time()
     DSP.market.state.error = nil
     DSP.market.state.nick = DSP.player_nick()
     DSP.add_log('Запрос рынка Mobile ' .. tostring(sid) .. '...')
@@ -333,6 +365,12 @@ function DSP.market.pull(sid, done)
             DSP.market.state.error = 'JSON: ' .. tostring(payload)
             DSP.add_log('Рынок: JSON ' .. tostring(payload), 'error')
             if done then done(false, payload) end
+            return
+        end
+        if type(payload.shops) ~= 'table' then
+            DSP.market.state.status = 'error'
+            DSP.market.state.error = 'API: нет списка лавок'
+            if done then done(false, DSP.market.state.error) end
             return
         end
         pcall(function() DSP.market.save_cache(sid, body) end)
@@ -483,13 +521,14 @@ function DSP.market.buy_target(row, margin)
     margin = tonumber(margin) or tonumber(DSP.settings.margin) or 10
     local resale = row and row.buy and row.buy.max or 0
     if resale <= 0 then return 0 end
-    return math.max(0, math.floor(resale * (1 - margin / 100)))
+    local tax = DSP.clamp(tonumber(DSP.settings.tax_bp) or 200, 0, 10000)
+    return math.max(0, math.floor(resale * (10000 - tax) / 10000 * (1 - margin / 100)))
 end
 
 function DSP.market.sell_target(row, undercut)
     undercut = tonumber(undercut) or tonumber(DSP.settings.undercut) or 2
-    -- List slightly below best buy offer (max what shops pay)
-    local comp = row and row.buy and row.buy.max or 0
+    -- Compete with other sellers, not the shops buying from the player.
+    local comp = row and row.sell and row.sell.min or 0
     if comp <= 0 then return 0 end
     return math.max(1, math.floor(comp * (1 - undercut / 100)))
 end
@@ -505,9 +544,11 @@ end
 
 function DSP.market.load()
     local sid = DSP.detect_server() or DSP.settings.server or 102
-    DSP.market.state.sid = sid
+    DSP.market.clear_for_server(sid)
+    -- Never substitute Mobile II data for a missing cache on another server.
     if not DSP.market.load_cache(sid) then
-        DSP.market.load_cache(102)
+        DSP.market.state.status = 'idle'
+        DSP.market.state.rows, DSP.market.state.by_key = {}, {}
     end
     DSP.market.pull(sid)
 end

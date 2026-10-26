@@ -1356,90 +1356,78 @@ function DSP.ui.arbitrage_tab()
     imgui.Separator()
 
     local rows = DSP.market.arbitrage_filtered()
-    imgui.TextDisabled(DSP.utf8(string.format('Связок найдено: %d', #rows)))
+    local total_cost, total_profit, total_qty = 0, 0, 0
+    for _, e in ipairs(rows) do
+        total_cost = total_cost + (e.total_cost or 0)
+        total_profit = total_profit + (e.net_profit or 0)
+        total_qty = total_qty + (e.tradable_qty or 0)
+    end
+    imgui.TextDisabled(DSP.utf8(string.format(
+        'План: %d связок | %d шт. | затраты %s | прибыль +%s',
+        #rows, total_qty, DSP.money(total_cost), DSP.money(total_profit))))
+    if (tonumber(f.budget) or 0) > 0 then
+        imgui.TextDisabled(DSP.utf8('Общий остаток бюджета: '..
+            DSP.money(math.max(0, f.budget - total_cost))))
+    end
+    imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8(
+        'Остатки не дублируются между связками. Перед покупкой обновите рынок и проверьте лавки.'))
+    if DSP.market.state.status == 'cache' or DSP.market.state.status == 'error' then
+        imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8(
+            'Внимание: расчёт выполнен по локальному снимку рынка.'))
+    end
     imgui.Separator()
 
     local avail = imgui.GetContentRegionAvail()
-    local table_h = math.max(200 * dpi, avail.y - 100 * dpi)
-
+    local table_h = math.max(200 * dpi, avail.y - 20 * dpi)
     if imgui.BeginChild('##dsp_arb_table', imgui.ImVec2(-1, table_h), true) then
-        -- Columns: Товар | Купить@ | Сдать@ | Партия | Стоимость | Прибыль | ROI | Свежесть | Метки
-        imgui.Columns(9, '##dsp_arb_hdr', false)
+        -- Six readable columns, with quantity and age under each price.
+        imgui.Columns(6, '##dsp_arb_hdr', false)
         local cw = avail.x
-        local widths = {
-            math.floor(cw * 0.22), math.floor(cw * 0.10), math.floor(cw * 0.10),
-            math.floor(cw * 0.08), math.floor(cw * 0.10), math.floor(cw * 0.10),
-            math.floor(cw * 0.06), math.floor(cw * 0.10), math.floor(cw * 0.14),
-        }
-        for i = 0, 8 do imgui.SetColumnWidth(i, widths[i + 1]) end
-        imgui.TextDisabled(DSP.utf8('ТОВАР'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('КУПИТЬ @'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('СДАТЬ @'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('ПАРТИЯ'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('СТОИМОСТЬ'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('ПРИБЫЛЬ'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('ROI'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('СВЕЖЕСТЬ'))
-        imgui.NextColumn()
-        imgui.TextDisabled(DSP.utf8('МЕТКИ'))
-        imgui.NextColumn()
+        local widths = {cw*.24,cw*.17,cw*.17,cw*.12,cw*.17,cw*.13}
+        for i = 0, 5 do imgui.SetColumnWidth(i, widths[i+1]) end
+        for _, title in ipairs({'ТОВАР', 'КУПИТЬ У', 'ПРОДАТЬ В', 'СДЕЛКА', 'ЧИСТАЯ ПРИБЫЛЬ', 'МЕТКИ'}) do
+            imgui.TextDisabled(DSP.utf8(title)); imgui.NextColumn()
+        end
         imgui.Separator()
         imgui.Columns(1)
-
         local per = math.max(5, tonumber(DSP.settings.per_page) or 20)
-        local from, to = DSP.screens.pager(#rows, per, 'arbitrage')
-        imgui.Columns(9, '##dsp_arb_rows', false)
-        for i = 0, 8 do imgui.SetColumnWidth(i, widths[i + 1]) end
-        for i = from, to do
+        local first, last = DSP.screens.pager(#rows, per, 'arbitrage')
+        imgui.Columns(6, '##dsp_arb_rows', false)
+        for i = 0, 5 do imgui.SetColumnWidth(i, widths[i+1]) end
+        for i = first, last do
             local e = rows[i]
             if e then
                 imgui.Text(DSP.utf8(trunc(e.name, 30)))
+                imgui.TextDisabled(DSP.utf8('Сервер '..tostring(DSP.market.state.sid)))
                 imgui.NextColumn()
                 imgui.TextColored(DSP.theme.col('warn', 1), DSP.money(e.p_buy))
-                imgui.SameLine(0, 4 * dpi)
-                imgui.TextDisabled(DSP.utf8('#' .. tostring(e.sell_offer.shop)))
+                imgui.TextDisabled(DSP.utf8('Лавка #'..tostring(e.sell_offer.shop)..
+                    ' | '..tostring(e.qty_seller or e.sell_offer.qty)..' шт.'))
                 imgui.NextColumn()
                 imgui.TextColored(DSP.theme.col('good', 1), DSP.money(e.p_sell))
-                imgui.SameLine(0, 4 * dpi)
-                imgui.TextDisabled(DSP.utf8('#' .. tostring(e.buy_offer.shop)))
+                imgui.TextDisabled(DSP.utf8('Лавка #'..tostring(e.buy_offer.shop)..
+                    ' | '..tostring(e.qty_buyer or e.buy_offer.qty)..' шт.'))
                 imgui.NextColumn()
-                imgui.Text(DSP.utf8(tostring(e.tradable_qty)))
+                imgui.Text(DSP.utf8(tostring(e.tradable_qty)..' шт.'))
+                imgui.TextDisabled(DSP.money(e.total_cost))
                 imgui.NextColumn()
-                imgui.Text(DSP.money(e.total_cost))
+                imgui.TextColored(DSP.theme.col('good', 1), DSP.utf8('+'..DSP.money(e.net_profit)))
+                imgui.TextDisabled(DSP.utf8(string.format('ROI %.1f%%', e.roi)))
                 imgui.NextColumn()
-                imgui.TextColored(DSP.theme.col('good', 1),
-                    DSP.utf8('+' .. DSP.money(e.net_profit)))
-                imgui.NextColumn()
-                imgui.TextColored(DSP.theme.col('good', 1),
-                    string.format('%.0f%%', e.roi))
-                imgui.NextColumn()
-                local s_text, s_key = DSP.market.offer_freshness(e.sell_age)
-                local b_text, b_key = DSP.market.offer_freshness(e.buy_age)
-                imgui.TextColored(DSP.theme.col(s_key, 1), DSP.utf8(s_text))
-                imgui.SameLine(0, 4 * dpi)
-                imgui.TextColored(DSP.theme.col(b_key, 1), DSP.utf8(b_text))
-                imgui.NextColumn()
-                if imgui.SmallButton(DSP.utf8('[A]##arb_a' .. tostring(i))) then
+                if imgui.SmallButton(DSP.utf8('Купить##arb_a'..i)) then
                     DSP.market.mark_shop(e.sell_offer.shop)
                 end
-                imgui.SameLine(0, 4 * dpi)
-                if imgui.SmallButton(DSP.utf8('[B]##arb_b' .. tostring(i))) then
+                if imgui.SmallButton(DSP.utf8('Сдать##arb_b'..i)) then
                     DSP.market.mark_shop(e.buy_offer.shop)
                 end
                 imgui.NextColumn()
+                imgui.Separator()
             end
         end
         imgui.Columns(1)
         if #rows == 0 then
             imgui.Spacing()
-            imgui.TextDisabled(DSP.utf8('Нет выгодных связок. Попробуйте сбросить фильтры или обновить базу.'))
+            imgui.TextDisabled(DSP.utf8('Нет подходящих сделок. Измените фильтры или обновите рынок.'))
         end
         imgui.EndChild()
     end
@@ -1771,10 +1759,18 @@ function DSP.ui.install()
             DSP.ui.draw()
             -- v1.2 Stage 3: debounced notes auto-save (1.5s after last edit)
             if DSP.ui._notes_dirty and (os.clock() - (DSP.ui._notes_last_edit or 0)) > 1.5 then
-                local txt = ffi.string(DSP.ui.notes_buf)
-                local f = io.open(DSP.notes_path, 'w')
-                if f then f:write(txt); f:close() end
-                DSP.ui._notes_dirty = false
+                if DSP.mobile and DSP.mobile.save_notes then
+                    DSP.mobile.save_notes()
+                else
+                    local txt = ffi.string(DSP.ui.notes_buf)
+                    local f, err = io.open(DSP.notes_path, 'w')
+                    if f then
+                        local written, write_err = f:write(txt)
+                        local closed, close_err = f:close()
+                        if written and closed then DSP.ui._notes_dirty = false
+                        else DSP.notify('Ошибка заметок: ' .. tostring(write_err or close_err)) end
+                    else DSP.notify('Ошибка заметок: ' .. tostring(err)) end
+                end
             end
         end)
         if not ok then

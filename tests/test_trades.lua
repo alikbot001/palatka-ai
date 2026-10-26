@@ -93,6 +93,13 @@ assert(stats.profit == 7000, 'stats profit=' .. tostring(stats.profit))
 assert(stats.total_get == 10000, 'stats total_get')
 assert(stats.total_give == 3000, 'stats total_give')
 
+-- Two accepted trades at the same timestamp remain separate.
+local real_time=os.time
+os.time=function() return last_trade.ts end
+DSP.logs.record_trade('Partner2', {}, {}, 0, 1, 'accepted')
+os.time=real_time
+assert(DSP.logs.profit_summary('all').count==2, 'same-second trade retained')
+
 -- Test 4: stall drop logging
 DSP.logs.stall_dropped('StallOwner', '42', 'ItemA', 1000)
 assert(next(DSP.settings.stalls) ~= nil, 'stall logged')

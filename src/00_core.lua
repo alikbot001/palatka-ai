@@ -1,7 +1,7 @@
 -- DsPic Helper standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '1.2.0'
+DSP.version = '1.3.3'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -108,6 +108,7 @@ DSP.settings = {
     only_profit = false,
     liquid = false,
     dry_run = true,
+    refresh_seconds = 60,
     per_page = 20,
     auto_buy_qty = 1,
     dpi = 1.25,
@@ -140,6 +141,10 @@ DSP.settings = {
         min_profit = 0,     -- 0 = show all
         min_roi = 0,        -- 0 = show all (percent)
         sort = 1,           -- 1=profit party, 2=profit per unit, 3=ROI
+        max_age = 1800,
+        max_qty = 0,
+        allow_partial = true,
+        include_unknown = true,
     },
     -- v1.2 Stage 3 additions: craglog + telegram payday
     craglog = {
@@ -154,11 +159,15 @@ DSP.settings = {
 
 function DSP.save_settings()
     local ok, json = pcall(encodeJson, DSP.settings)
-    if not ok or not json then return false end
-    local f = io.open(DSP.settings_path, 'w')
-    if not f then return false end
-    f:write(json)
-    f:close()
+    if not ok or type(json) ~= 'string' then return false, 'settings encode failed' end
+    local temporary = DSP.settings_path .. '.tmp'
+    local f, err = io.open(temporary, 'w')
+    if not f then return false, err end
+    local written, write_error = f:write(json)
+    local closed, close_error = f:close()
+    if not written or not closed then return false, write_error or close_error end
+    local renamed, rename_error = os.rename(temporary, DSP.settings_path)
+    if not renamed then return false, rename_error end
     return true
 end
 
@@ -199,7 +208,7 @@ function DSP.load_settings()
         DSP.settings.craglog.minimized = DSP.settings.craglog.minimized and true or false
         DSP.settings.craglog.pinned = DSP.settings.craglog.pinned and true or false
         local f = DSP.settings.craglog.filter
-        if f ~= 'all' and f ~= 'sales' and f ~= 'buys' then f = 'all' end
+        if f ~= 'all' and f ~= 'sales' and f ~= 'buys' and f ~= 'loot' then f = 'all' end
         DSP.settings.craglog.filter = f
     end
     if type(DSP.settings.tg_payday_last) ~= 'number' then DSP.settings.tg_payday_last = 0 end
@@ -257,6 +266,7 @@ end
 
 function DSP.item_key(name, ench)
     -- v1.2: strict key includes enchant level so +0 stock is never matched against +12 buyback.
+    name = DSP.trim(tostring(name or ''):gsub('{%x+}', ''))
     return DSP.lower(name) .. '@' .. tostring(tonumber(ench) or 0)
 end
 
@@ -271,11 +281,11 @@ DSP.theme = DSP.theme or {}
 DSP.theme.list = {
     dark_amber = {
         name = 'Dark Amber',
-        bg     = { 0.055, 0.055, 0.075 },
-        panel  = { 0.095, 0.090, 0.115 },
-        accent = { 0.85, 0.65, 0.20 },
-        text   = { 0.95, 0.92, 0.86 },
-        muted  = { 0.55, 0.50, 0.42 },
+        bg     = { 0.047, 0.055, 0.071 },
+        panel  = { 0.078, 0.090, 0.110 },
+        accent = { 0.95, 0.73, 0.34 },
+        text   = { 0.94, 0.95, 0.97 },
+        muted  = { 0.60, 0.65, 0.73 },
         good   = { 0.45, 0.95, 0.45 },
         bad    = { 1.00, 0.42, 0.38 },
         warn   = { 1.00, 0.82, 0.30 },
@@ -386,18 +396,18 @@ function DSP.theme.push_window()
     push(imgui.Col.WindowBg,        c('bg',     a))
     push(imgui.Col.TitleBg,         c('panel',  1))
     push(imgui.Col.TitleBgActive,   imgui.ImVec4(t.accent[1]*0.35, t.accent[2]*0.35, t.accent[3]*0.35, 1))
-    push(imgui.Col.Border,          imgui.ImVec4(t.accent[1]*0.75, t.accent[2]*0.75, t.accent[3]*0.75, 1))
-    push(imgui.Col.Button,          c('panel',  1))
-    push(imgui.Col.ButtonHovered,   imgui.ImVec4(t.accent[1]*0.70, t.accent[2]*0.70, t.accent[3]*0.70, 1))
-    push(imgui.Col.ButtonActive,    imgui.ImVec4(t.accent[1]*0.95, t.accent[2]*0.95, t.accent[3]*0.95, 1))
+    push(imgui.Col.Border,          imgui.ImVec4(t.text[1]*0.19, t.text[2]*0.19, t.text[3]*0.19, 1))
+    push(imgui.Col.Button,          imgui.ImVec4(t.panel[1]+.055, t.panel[2]+.055, t.panel[3]+.055, 1))
+    push(imgui.Col.ButtonHovered,   imgui.ImVec4(t.panel[1]+.10, t.panel[2]+.10, t.panel[3]+.10, 1))
+    push(imgui.Col.ButtonActive,    imgui.ImVec4(t.panel[1]+.15, t.panel[2]+.15, t.panel[3]+.15, 1))
     push(imgui.Col.Header,          imgui.ImVec4(t.accent[1]*0.45, t.accent[2]*0.45, t.accent[3]*0.45, 1))
     push(imgui.Col.HeaderHovered,   imgui.ImVec4(t.accent[1]*0.65, t.accent[2]*0.65, t.accent[3]*0.65, 1))
-    push(imgui.Col.ChildBg,         c('panel',  a))
-    push(imgui.Col.FrameBg,         imgui.ImVec4(t.panel[1]*1.4, t.panel[2]*1.4, t.panel[3]*1.4, 0.85))
+    push(imgui.Col.ChildBg,         c('panel',  1))
+    push(imgui.Col.FrameBg,         imgui.ImVec4(t.panel[1]+.04, t.panel[2]+.04, t.panel[3]+.04, 1))
     push(imgui.Col.FrameBgHovered,  imgui.ImVec4(t.accent[1]*0.50, t.accent[2]*0.50, t.accent[3]*0.50, 0.95))
     push(imgui.Col.Text,            c('text',   1))
     push(imgui.Col.TextDisabled,    c('muted',  1))
-    push(imgui.Col.Separator,       imgui.ImVec4(t.accent[1]*0.30, t.accent[2]*0.30, t.accent[3]*0.30, 0.60))
+    push(imgui.Col.Separator,       imgui.ImVec4(t.text[1]*.18, t.text[2]*.18, t.text[3]*.18, 1))
     push(imgui.Col.ScrollbarBg,     c('bg',     0.50))
     push(imgui.Col.ScrollbarGrab,   imgui.ImVec4(t.accent[1]*0.60, t.accent[2]*0.60, t.accent[3]*0.60, 1))
     push(imgui.Col.ScrollbarGrabHovered, imgui.ImVec4(t.accent[1]*0.80, t.accent[2]*0.80, t.accent[3]*0.80, 1))

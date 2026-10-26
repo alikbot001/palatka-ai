@@ -65,7 +65,8 @@ if lua_thread and wait and DSP.detect_server then
                     local nick = DSP.player_nick()
                     local nick_changed = nick ~= 'DsPic' and nick ~= (DSP.market.state.nick or '')
                     if DSP.market.state.status ~= 'loading'
-                        and ((sid and sid ~= (DSP.market.state.sid or 0)) or nick_changed) then
+                        and ((sid and sid ~= (DSP.market.state.sid or 0)) or nick_changed
+                            or (DSP.market.should_refresh and DSP.market.should_refresh(os.time()))) then
                         sid = sid or DSP.market.state.sid
                         DSP.flog('MARKET refresh sid=' .. tostring(sid) .. ' nick=' .. tostring(nick))
                         DSP.market.pull(sid)

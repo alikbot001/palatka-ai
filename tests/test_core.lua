@@ -65,26 +65,26 @@ assert(#DSP.market.state.rows == 2, 'rows ' .. #DSP.market.state.rows)
 
 local r0 = DSP.market.row_for('Item', 0)
 assert(r0, 'row +0')
-assert(r0.sell.best == 300, 'sell min ' .. tostring(r0.sell.best))
-assert(r0.buy.best == 200, 'buy max ' .. tostring(r0.buy.best))
-assert(r0.profit == -100, 'profit ' .. tostring(r0.profit))
-assert(r0.profit_med < 0, 'profit med sign')
+assert(r0.sell.best == 180, 'sell min ' .. tostring(r0.sell.best))
+assert(r0.buy.best == 390, 'buy max ' .. tostring(r0.buy.best))
+assert(r0.profit == 210, 'profit ' .. tostring(r0.profit))
+assert(r0.profit_med > 0, 'profit med sign')
 assert(r0.sell.count == 2 and r0.buy.count == 2, 'counts')
 
 local r13 = DSP.market.row_for('Item', 13)
 assert(r13, 'row +13')
-assert(r13.sell.best == 500 and r13.buy.best == 100, 'ench prices')
-assert(r13.profit == -400, 'ench profit')
+assert(r13.sell.best == 100 and r13.buy.best == 500, 'ench prices')
+assert(r13.profit == 400, 'ench profit')
 
-assert(DSP.market.buy_target(r0, 10) == 180, 'buy target ' .. DSP.market.buy_target(r0, 10))
-assert(DSP.market.sell_target(r0, 2) == 196, 'sell target ' .. DSP.market.sell_target(r0, 2))
+assert(DSP.market.buy_target(r0, 10) == 343, 'buy target ' .. DSP.market.buy_target(r0, 10))
+assert(DSP.market.sell_target(r0, 2) == 176, 'sell target ' .. DSP.market.sell_target(r0, 2))
 
 DSP.auto = {}
 local row = r0
 assert(DSP.presets.add(row, 'buy'))
 assert(#DSP.settings.buy_preset.items == 1)
 local it = DSP.settings.buy_preset.items[1]
-assert(it.price == 180 and it.key == row.key)
+assert(it.price == 343 and it.key == row.key)
 assert(DSP.presets.add(row, 'buy'))
 assert(#DSP.settings.buy_preset.items == 1, 'dedup')
 

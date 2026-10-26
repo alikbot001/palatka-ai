@@ -17,22 +17,34 @@ MODULES = [
     "00_core.lua",
     "05_items.lua",
     "10_market.lua",
+    "11_arbitrage.lua",
     "15_prices.lua",
     "05_trades.lua",
+    "06_rewards.lua",
     "20_presets.lua",
+    "21_preset_library.lua",
     "30_ui.lua",
     "35_screens.lua",
+    "36_mobile.lua",
+    "37_mobile_trade.lua",
+    "38_mobile_market.lua",
+    "39_mobile_history.lua",
+    "40_mobile_notes.lua",
+    "39_trade_runtime.lua",
     "40_auto.lua",
+    "41_trade_listing.lua",
+    "42_trade_buy.lua",
     "45_live.lua",
     "50_overlay.lua",
     "55_craglog.lua",
+    "56_mini_journal.lua",
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v1.2, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v1.3.3, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.2.0')
+script_version('1.3.3')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -59,11 +71,18 @@ except UnicodeEncodeError as e:
 OUT.write_bytes(raw)
 print(f"built {OUT} ({len(raw)} bytes)")
 
-check = subprocess.run(
-    ["luajit", "-bl", str(OUT), "/dev/null"],
-    capture_output=True,
-    text=True,
-)
+import shutil
+if shutil.which('luajit'):
+    args = ['luajit', '-bl', str(OUT), '/dev/null']
+    label = 'luajit'
+else:
+    # Syntax-only fallback: texlua can compile source without MoonLoader.
+    checker = ROOT / 'tests' / '_check_build.lua'
+    checker.write_text("assert(loadfile(arg[1]))\nprint('Lua syntax: ok')\n")
+    args = ['texlua', str(checker), str(OUT)]
+    label = 'texlua'
+check = subprocess.run(args, capture_output=True, text=True)
 if check.returncode != 0:
-    sys.exit("luajit syntax check failed:\n" + check.stderr)
-print("luajit syntax: ok")
+    sys.exit(label + ' syntax check failed:\n' + check.stdout + check.stderr)
+print(label + ' syntax: ok')
+if label == 'texlua': checker.unlink(missing_ok=True)
