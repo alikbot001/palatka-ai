@@ -253,10 +253,6 @@ function U.trade_tab()
         if M.button('< Назад к торговле','mh_back_manual',250) then U.trade_section='items' end
         manual_entry(kind)
         return
-    elseif U.trade_section=='inventory' then
-        if M.button('< Назад к торговле','mh_back_inv',250) then U.trade_section='items' end
-        inventory(kind)
-        return
     end
     if M.button('СКУПКА','kind_buy',210,kind=='buy','segment') then
         U.preset_kind='buy';kind='buy';U.trade_preset_page=1
@@ -266,8 +262,8 @@ function U.trade_tab()
         U.preset_kind='sell';kind='sell';U.trade_preset_page=1
     end
     local p=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
-    local list=(DSP.presets.list and DSP.presets.list(kind)) or {{name=p.name}}
-    local selected=(DSP.presets.selected and DSP.presets.selected(kind)) or 1
+    local list=DSP.presets.list(kind)
+    local selected=DSP.presets.selected(kind)
     M.text('Набор: '..tostring(p.name or 'Основной'))
     if M.button('<','preset_prev',68) and not running then
         DSP.presets.select(kind,selected>1 and selected-1 or #list)

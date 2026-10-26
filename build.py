@@ -29,24 +29,28 @@ MODULES = [
     "35_screens.lua",
     "36_mobile.lua",
     "37_mobile_trade.lua",
+    "37_trade_v16.lua",
     "38_mobile_market.lua",
+    "38_arbitrage_v16.lua",
     "39_mobile_history.lua",
     "40_mobile_notes.lua",
     "39_trade_runtime.lua",
     "40_auto.lua",
     "41_trade_listing.lua",
     "42_trade_buy.lua",
+    "43_calculator_nav.lua",
     "45_live.lua",
     "50_overlay.lua",
     "55_craglog.lua",
     "56_mini_journal.lua",
+    "57_journal_v16.lua",
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v1.5.1, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v1.6.0, built from src/*.lua (independent of Market Helper)
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('1.5.1')
+script_version('1.6.0')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}

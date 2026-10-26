@@ -12,7 +12,7 @@ package.preload['samp.events']=function()return {} end
 addEventHandler=function()end
 DSP=nil
 assert(loadfile('palatka_ai.lua'))()
-assert(DSP.version=='1.5.0')
+assert(DSP.version=='1.6.0')
 assert(DSP.mobile and DSP.notes and DSP.rewards and DSP.trade_runtime)
 assert(DSP.craglog.installed and #frames>=3, 'mini journal and main window registered')
 assert(commands.crr and commands.crlog,'both commands are wired')

@@ -74,7 +74,7 @@ local function snapshot(row)
 end
 function R.load()
     invalidate()
-    R.sequence, R.pending, R.corrupt_lines = 0, {}, 0
+    R.sequence, R.pending, R.last_opening, R.corrupt_lines = 0, {}, nil, 0
     local migrated = {}
     scan(function(row)
         R.sequence = math.max(R.sequence, tonumber(row.seq) or 0)
@@ -85,7 +85,7 @@ function R.load()
         if not migrated[id] then
             local known = tonumber(entry.price) and entry.price > 0
             R.record({legacy_id=id, ts=entry.ts, kind='item', item_name=entry.item_name or entry.item,
-                qty=entry.qty or entry.count or 1, ench=entry.ench or 0, source=entry.source or entry.crate_type or 'тайник',
+                qty=entry.qty or entry.count or 1, ench=entry.ench or 0, source=entry.source or entry.crate_type or 'неизвестный источник',
                 association='legacy', price_known=not not known, unit_price=known and entry.price or nil,
                 estimated_value=known and entry.price * (entry.qty or entry.count or 1) or nil,
                 price_source=known and 'legacy' or nil, raw=entry.raw, legacy=true})
@@ -103,7 +103,7 @@ function R.parse(raw)
     local name, tail = s:match("^Вам был добавлен предмет '([^']+)'(.*)$")
     if name then
         local base, ench = item_parts(name)
-        return {kind='item',item_name=base,ench=ench,qty=tonumber(tail:match('^%s*%((%d+)%s*шт')) or 1,source='неизвестно',association='unknown',pending=true}
+        return {kind='item',item_name=base,ench=ench,qty=tonumber(tail:match('^%s*%((%d+)%s*шт')) or 1,source='неизвестный источник',association='unknown',pending=true}
     end
     local source = s:match('^Вы открыли (.+)!$')
     if source and not s:find(' и получили ',1,true) then return {kind='opening',source=source,association='explicit'} end
@@ -118,20 +118,30 @@ function R.parse(raw)
     local generic = s:match('^Вы получили (.+%(%d+%s*шт%.?%))%.?$')
     if generic then
         local base, ench, qty = item_parts(generic)
-        return {kind='item',item_name=base,ench=ench,qty=qty,source='неизвестно',association='unknown'}
+        return {kind='item',item_name=base,ench=ench,qty=qty,source='неизвестный источник',association='unknown'}
     end
     local drop = DSP.logs.parse_chat_drop((s:gsub('!$', '')))
     if drop then return {kind='item',item_name=drop.name,ench=drop.ench,qty=drop.qty,source=drop.source,association='explicit'} end
 end
 function R.ingest(raw, ts)
     local row = R.parse(raw)
-    if not row then R.pending = {}; return nil end
+    if not row then R.pending = {}; R.last_opening = nil; return nil end
     row.raw, row.ts = raw, ts or os.time()
     local pending = row.pending; row.pending = nil
+    -- Servers can emit "opened case" BEFORE the actual item notification.
+    -- Only a directly adjacent opening can associate an otherwise unknown item.
+    if row.kind=='item' and row.association=='unknown' and R.last_opening
+        and row.ts>=R.last_opening.ts and row.ts-R.last_opening.ts<=1 then
+        row.source=R.last_opening.source
+        row.association='inferred'
+        row.opening_id=R.last_opening.id
+        pending=false
+    end
     snapshot(row)
     local saved, err = R.record(row)
     if not saved then return nil, err end
     if row.kind == 'opening' then
+        R.last_opening={ts=row.ts,id=row.id,source=row.source}
         local ids = {}
         for _, entry in ipairs(R.pending) do
             if row.ts >= entry.ts and row.ts - entry.ts <= 3 then ids[#ids+1] = entry.id end

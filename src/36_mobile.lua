@@ -7,7 +7,7 @@ function M.geometry(sw, sh)
     local saved=DSP.settings.mobile_window or {}
     local s=math.min(sw/2340,sh/1080)
     return {x=sw*.03,y=sh*.03,w=DSP.clamp(tonumber(saved.w) or sw*.80,math.min(1100,sw),sw),
-        h=DSP.clamp(tonumber(saved.h) or sh*.70,math.min(550,sh),sh),nav=math.max(176,214*s),touch=math.max(56,60*s)}
+        h=DSP.clamp(tonumber(saved.h) or sh*.70,math.min(550,sh),sh),nav=math.max(150,185*s),touch=math.max(44,48*s)}
 end
 function M.window_position(sw,sh)
     local g=M.geometry(sw,sh)
@@ -58,15 +58,25 @@ function M.touch_scroll(io,screen)
         local ok,value=pcall(function() return io.MouseDown[0] end)
         held=ok and value and true or false
     end
-    if not held then M._touch_active=false; M._touch_screen=nil;return end
-    if not hovered then return end
+    M._touch_distance=M._touch_distance or {}
+    if not held then
+        M._touch_distance={}
+        M._touch_screen=nil
+        return
+    end
+    if not hovered or (io and io.WantTextInput) then return end
+    local delta=io.MouseDelta and (io.MouseDelta.y or 0) or 0
+    local dx=io.MouseDelta and (io.MouseDelta.x or 0) or 0
+    local travel=(M._touch_distance[screen] or 0)+math.abs(delta)
+    M._touch_distance[screen]=travel
     local active=imgui.IsAnyItemActive and imgui.IsAnyItemActive() or false
-    if active then return end
-    local delta=io.MouseDelta and io.MouseDelta.y or 0
-    if M._touch_screen~=screen then M._touch_screen=screen;M._touch_active=true end
-    if M._touch_active and math.abs(delta)>.01 then
+    if active and (travel<6 or math.abs(delta)<math.abs(dx)*1.25) then return end
+    local frame=imgui.GetFrameCount and imgui.GetFrameCount()
+    if frame and M._touch_scroll_frame==frame then return end
+    if math.abs(delta)>.01 then
         local max=imgui.GetScrollMaxY and imgui.GetScrollMaxY() or 100000
         imgui.SetScrollY(DSP.clamp((imgui.GetScrollY() or 0)-delta*1.15,0,max))
+        M._touch_scroll_frame=frame
     end
 end
 -- UI edits are saved after a short idle period instead of writing JSON once
@@ -303,9 +313,11 @@ local function workspace()
     local screen=DSP.ui.screen
     local entry=DSP.screens.list[DSP.screens.index_by_id(screen)]
     -- One compact header; the previous UI spent 150 px on a redundant scroll rail.
+    if M.button(M.nav_open and 'Скрыть меню' or 'Меню','nav_toggle',158) then M.nav_open=not M.nav_open end
+    M.inline()
     imgui.TextColored(DSP.theme.col('text',1),DSP.utf8(entry.label))
     M.inline()
-    if M.button('Закрыть','header_close',165) then DSP.ui.set_open(false) end
+    if M.button('X','header_close',68) then DSP.ui.set_open(false) end
     M.footers={}
     local height=math.max(120,imgui.GetContentRegionAvail().y-66)
     M.content_height=height
@@ -331,9 +343,9 @@ local function workspace()
             M.draw_pager(entry.total,entry.per,entry.id)
         end
     else
-        if M.button('Листать вверх','content_page_up',225) then M.queue_scroll(-1) end
+        if M.button('ВВЕРХ','content_page_up',160) then M.queue_scroll(-1) end
         M.inline()
-        if M.button('Листать вниз','content_page_down',225) then M.queue_scroll(1) end
+        if M.button('ВНИЗ','content_page_down',160) then M.queue_scroll(1) end
     end
 end
 function DSP.ui.header()
@@ -359,8 +371,8 @@ function DSP.ui.draw()
     M.position_pending=false; M.last_viewport=tostring(sz.x)..':'..tostring(sz.y)
     imgui.SetNextWindowBgAlpha(DSP.theme.opacity)
     local colors=DSP.theme.push_window()
-    imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(14,11))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(10,8))
+    imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(9,6))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(6,5))
     if DSP.ui.tab~=DSP.screens.index_by_id(DSP.ui.screen) then DSP.screens.set_index(DSP.ui.tab) end
     imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,14)
     imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,10)
@@ -371,7 +383,7 @@ function DSP.ui.draw()
     if imgui.Begin('##palatka_mobile',DSP.ui.open_ref,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.05 * M.scale() / 1.25) end
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('PALATKA AI   /   ДВИГАТЬ ОКНО'),imgui.ImVec2(-1,42))
+        imgui.Button(DSP.utf8('PALATKA AI   /   ДВИГАТЬ ОКНО'),imgui.ImVec2(-1,32))
         imgui.PopStyleColor(4)
         local handle_active=false
         if imgui.IsItemActive and imgui.IsItemActive() then
@@ -391,11 +403,13 @@ function DSP.ui.draw()
             end
         end
         local content_height=math.max(200,imgui.GetContentRegionAvail().y-50)
-        M.child('navigation',g.nav,content_height,DSP.screens.topbar)
-        M.inline()
+        if M.nav_open then
+            M.child('navigation',g.nav,content_height,DSP.screens.topbar)
+            M.inline()
+        end
         M.child('content_'..DSP.ui.screen,0,content_height,workspace)
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('/  Размер окна'),imgui.ImVec2(220,40))
+        imgui.Button(DSP.utf8('/  Размер окна'),imgui.ImVec2(160,30))
         imgui.PopStyleColor(4)
         if imgui.IsItemActive and imgui.IsItemActive() then
             handle_active=true

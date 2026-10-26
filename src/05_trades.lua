@@ -205,8 +205,8 @@ function DSP.logs.crate_opened(item_name, price, count, source, ench)
         price = tonumber(price) or 0,
         count = tonumber(count) or 1,
         qty = tonumber(count) or 1,
-        crate_type = tostring(source or 'тайник'),
-        source = tostring(source or 'тайник'),
+        crate_type = tostring(source or 'неизвестный источник'),
+        source = tostring(source or 'неизвестный источник'),
         ench = tonumber(ench) or 0,
         server = DSP.settings.server or 102,
     }
@@ -347,7 +347,7 @@ function DSP.logs.parse_chat_drop(text)
         if base then item, qty = base, count end
     end
     local base, ench = name_ench(item)
-    return {name=base, ench=ench, qty=tonumber(qty) or 1, source=DSP.clean_text(source or 'тайник')}
+    return {name=base, ench=ench, qty=tonumber(qty) or 1, source=DSP.clean_text(source or 'неизвестный источник')}
 end
 
 function DSP.logs.log_chat(text)

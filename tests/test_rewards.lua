@@ -20,7 +20,7 @@ assert(inline and inline.kind=='item' and inline.item_name=='Item' and inline.qt
 local generic=DSP.rewards.parse('Вы получили Item (+2) (3 шт.)')
 assert(generic and generic.item_name=='Item' and generic.qty==3 and generic.ench==2, 'generic item quantity reward')
 local parsed=DSP.logs.parse_chat_drop('Вам выпало: Item (+3) (5 шт.)')
-assert(parsed.name=='Item' and parsed.ench==3 and parsed.qty==5 and parsed.source=='тайник', 'quantity pattern preserves item/source')
+assert(parsed.name=='Item' and parsed.ench==3 and parsed.qty==5 and parsed.source=='неизвестный источник', 'quantity pattern preserves item/source')
 local a="{FF00FF}Вам был добавлен предмет 'Ларец Fortnite'. Откройте инвентарь, используйте МЕНЮ"
 local b="Вам был добавлен предмет 'Ностальгический ящик' (2шт). Откройте инвентарь, используйте МЕНЮ"
 for i=1,2 do
@@ -38,7 +38,7 @@ assert(sum.cash==50000 and sum.estimated_value==240 and sum.unknown_items==2 and
 assert(DSP.rewards.query({search='Fortnite',page_size=1,page=2}).total==2, 'search and pagination')
 assert(DSP.rewards.query({kind='opening',from_ts=1001}).total==0, 'time filter')
 DSP.rewards.ingest(a,1002); DSP.rewards.ingest('unrelated chat',1002); DSP.rewards.ingest('Вы открыли Тайник Лича!',1002)
-assert(DSP.rewards.query({kind='item'}).entries[1].source=='неизвестно', 'unrelated chat breaks uncertain association')
+assert(DSP.rewards.query({kind='item'}).entries[1].source=='неизвестный источник', 'unrelated chat breaks uncertain association')
 DSP.db.get=function() return {buy={max=999}} end
 DSP.rewards.load()
 assert(DSP.rewards.query({search='Fortnite',page_size=50}).entries[2].unit_price==120, 'reload retains original valuation')
