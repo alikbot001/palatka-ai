@@ -1,0 +1,257 @@
+[
+  {
+    "check": "build",
+    "exit_code": 0,
+    "output": "built /home/cent127/Documents/Codex/2026-10-26/x20-2/work/palatka/palatka_ai.lua (71604661 bytes)\nluajit syntax: ok\n"
+  },
+  {
+    "check": "test_arbitrage.lua",
+    "exit_code": 0,
+    "output": "arbitrage tests: ok\narbitrage allocation, slot merging, server isolation: ok\n"
+  },
+  {
+    "check": "test_arbitrage_ui.lua",
+    "exit_code": 0,
+    "output": "ui tests: ok\nv1.5 arbitrage grouped UI: ok\n"
+  },
+  {
+    "check": "test_auto.lua",
+    "exit_code": 0,
+    "output": "auto tests: ok\n"
+  },
+  {
+    "check": "test_core.lua",
+    "exit_code": 0,
+    "output": "core tests: ok\n"
+  },
+  {
+    "check": "test_encoding.lua",
+    "exit_code": 0,
+    "output": "encoding tests: ok\n"
+  },
+  {
+    "check": "test_http.lua",
+    "exit_code": 0,
+    "output": "http tests: ok\n"
+  },
+  {
+    "check": "test_live.lua",
+    "exit_code": 0,
+    "output": "live tests: ok\n"
+  },
+  {
+    "check": "test_mini_journal.lua",
+    "exit_code": 0,
+    "output": "mini journal tests: ok\nui tests: ok\nmini journal rendering fixture: ok\n"
+  },
+  {
+    "check": "test_mobile_ui.lua",
+    "exit_code": 0,
+    "output": "ui tests: ok\nv1.6 compact mobile UI: ok\n"
+  },
+  {
+    "check": "test_presets.lua",
+    "exit_code": 0,
+    "output": "preset tests: ok\n"
+  },
+  {
+    "check": "test_rewards.lua",
+    "exit_code": 0,
+    "output": "rewards tests: ok\n"
+  },
+  {
+    "check": "test_settings.lua",
+    "exit_code": 0,
+    "output": "settings tests: ok\n"
+  },
+  {
+    "check": "test_standalone.lua",
+    "exit_code": 0,
+    "output": "ui tests: ok\nstandalone startup tests: ok\nstandalone indexed real PNG bank: ok\n"
+  },
+  {
+    "check": "test_trades.lua",
+    "exit_code": 0,
+    "output": "trades tests: ok\n"
+  },
+  {
+    "check": "test_ui.lua",
+    "exit_code": 0,
+    "output": "ui tests: ok\n"
+  },
+  {
+    "check": "test_ui21_pure.lua",
+    "exit_code": 0,
+    "output": "UI 2.1: 3 sellers vs 700 demand, owner/shop search, grouped deals: OK\n"
+  },
+  {
+    "check": "test_ui21_render.lua",
+    "exit_code": 0,
+    "output": "UI22 strict runtime: nine screens, navigation, scroll, inline edits, allocator, modal cancel/delete, calculator: ok\nUI21 screen compatibility through strict UI22 harness: ok\n"
+  },
+  {
+    "check": "test_v14_events.lua",
+    "exit_code": 0,
+    "output": "v1.4 server + payday + income tests: OK\n"
+  },
+  {
+    "check": "test_v14_icons.lua",
+    "exit_code": 0,
+    "output": "v1.4 icons extracted\n"
+  },
+  {
+    "check": "test_v14_trade_ui.lua",
+    "exit_code": 0,
+    "output": "v1.4 trade UI tests: OK\n"
+  },
+  {
+    "check": "test_v151_mobile_workflow.lua",
+    "exit_code": 0,
+    "output": "1.5.1 popup and swipe: OK\n1.5.1 Market Helper layout: OK\n"
+  },
+  {
+    "check": "test_v15_groups.lua",
+    "exit_code": 0,
+    "output": "v1.5 item grouping and 1-vs-700 source tests: ok\n"
+  },
+  {
+    "check": "test_v16_workflow.lua",
+    "exit_code": 0,
+    "output": "ui tests: ok\nv1.6 trading and calculator tests: ok\n"
+  },
+  {
+    "check": "test_v22_arbitrage.lua",
+    "exit_code": 0,
+    "output": "v2.2 arbitrage selection, no double counting, batch commission: ok\nv2.2 manual pair validation and large-price arithmetic: ok\n"
+  },
+  {
+    "check": "test_v22_async.lua",
+    "exit_code": 0,
+    "output": "v2.2 async arbitrage: deferred cold work, stable cache, yields, stale cancellation, expiry, errors: ok\n"
+  },
+  {
+    "check": "test_v22_calculator.lua",
+    "exit_code": 0,
+    "output": "v22 calculator chaining, percent, decimals, history, division zero: OK\n"
+  },
+  {
+    "check": "test_v22_cash_once.lua",
+    "exit_code": 0,
+    "output": "v2.2 event regressions: OK\nv22 cash receipt appears once across PayDay/reward channels: OK\n"
+  },
+  {
+    "check": "test_v22_catalog.lua",
+    "exit_code": 0,
+    "output": "UI22 strict runtime: nine screens, navigation, scroll, inline edits, allocator, modal cancel/delete, calculator: ok\nv22 native catalog findings: OK\n"
+  },
+  {
+    "check": "test_v22_events.lua",
+    "exit_code": 0,
+    "output": "v2.2 event regressions: OK\n"
+  },
+  {
+    "check": "test_v22_finance_layout.lua",
+    "exit_code": 0,
+    "output": "UI22 strict runtime: nine screens, navigation, scroll, inline edits, allocator, modal cancel/delete, calculator: ok\nv22 native finance field placement: OK\n"
+  },
+  {
+    "check": "test_v22_group_cache.lua",
+    "exit_code": 0,
+    "output": "v22 stable grouped cache / refresh / empty snapshot / no repeated sorts: OK\n"
+  },
+  {
+    "check": "test_v22_history.lua",
+    "exit_code": 0,
+    "output": "v2.2 full durable history regressions: OK\n"
+  },
+  {
+    "check": "test_v22_loot.lua",
+    "exit_code": 0,
+    "output": "v22 loot: individual quantities, estimates, unknown prices, sources, inspection, cache: OK\n"
+  },
+  {
+    "check": "test_v22_native_api.lua",
+    "exit_code": 0,
+    "output": "v22 target MonetLoader mimgui exports: OK\n"
+  },
+  {
+    "check": "test_v22_native_style.lua",
+    "exit_code": 0,
+    "output": "v22 native palette / inherited atlas normalization: OK\n"
+  },
+  {
+    "check": "test_v22_payday.lua",
+    "exit_code": 0,
+    "output": "v22 PayDay deposit income: live, summary, history, restart, legacy evidence, counts: OK\n"
+  },
+  {
+    "check": "test_v22_persistence.lua",
+    "exit_code": 0,
+    "output": "PASS select rolls back failed save\nPASS create rolls back failed save\nPASS rename rolls back failed save\nPASS delete rolls back failed save\nPASS update rolls back failed save\nPASS add manual rolls back failed save\nPASS import both kinds rolls back failed save\nPASS add market new rolls back failed save\nPASS add market existing rolls back failed save\nPASS remove item rolls back failed save\nPASS clear rolls back failed save\nPASS recalculate rolls back failed save\nPASS save exception rolls back and reports its cause\nPASS missing library migration is rolled back with the failed transaction\nPASS success commits once and keeps legacy alias identity\nPASS failed export preserves the previous file\nv2.2 transactional preset persistence: OK\n"
+  },
+  {
+    "check": "test_v22_real_icons.lua",
+    "exit_code": 0,
+    "output": "v22 real item icons: identity, lazy decode, texture reuse, no stock fallback: OK\nv22 indexed autonomous image bank: bounded reads, no eager image strings: OK\n"
+  },
+  {
+    "check": "test_v22_resources.lua",
+    "exit_code": 0,
+    "output": "v22 icon cache / texture cleanup / invalid edit tracking: OK\nv22 MonetLoader texture ownership: OK\nv22 tagged ARM64 raster release: OK\n"
+  },
+  {
+    "check": "test_v22_scan_ui.lua",
+    "exit_code": 0,
+    "output": "UI22 strict runtime: nine screens, navigation, scroll, inline edits, allocator, modal cancel/delete, calculator: ok\nv22 shop scan UI: API switch, observed rows, modal copy/update, stable selection, geometry: OK\n"
+  },
+  {
+    "check": "test_v22_shop_marker.lua",
+    "exit_code": 0,
+    "output": "v22 shop 3D marker: exact target, RPC chaining, toggle, projection and server isolation: OK\n"
+  },
+  {
+    "check": "test_v22_shop_scan.lua",
+    "exit_code": 0,
+    "output": "v22 current stall scan: slots, quantity evidence, learn, named copy, price-only correction, rollback: OK\n"
+  },
+  {
+    "check": "test_v22_shops.lua",
+    "exit_code": 0,
+    "output": "v22 shops strict sorting + cache invalidation: OK\n"
+  },
+  {
+    "check": "test_v22_snapshot.lua",
+    "exit_code": 0,
+    "output": "UI22 strict runtime: nine screens, navigation, scroll, inline edits, allocator, modal cancel/delete, calculator: ok\nv22 stable inspected arbitrage snapshot: OK\n"
+  },
+  {
+    "check": "test_v22_tools.lua",
+    "exit_code": 0,
+    "output": "v2.2 tools: stats, settings/Telegram, note debounce, modal delete rollback: ok\n"
+  },
+  {
+    "check": "test_v22_touch.lua",
+    "exit_code": 0,
+    "output": "v22 isolated scrolling / virtualization / viewport: OK\n"
+  },
+  {
+    "check": "test_v22_trade.lua",
+    "exit_code": 0,
+    "output": "PASS zero and invalid inventory counts never become one\nPASS all owned stacks aggregate when adding the item\nPASS invalid edit buffers block listing until corrected\nPASS nonfinite oversized and unsafe totals are rejected\nPASS buy queue preserves launch price quantity and test mode\nPASS sell queue preserves launch values and aggregates disjoint stacks\nPASS sell queue cannot spend one inventory slot twice\nv2.2 trade validation and snapshots: OK\n"
+  },
+  {
+    "check": "test_v22_trade_totals.lua",
+    "exit_code": 0,
+    "output": "UI22 strict runtime: nine screens, navigation, scroll, inline edits, allocator, modal cancel/delete, calculator: ok\nv22 trade totals: exact planning arithmetic, optional costs, fixed footer viewports: OK\n"
+  },
+  {
+    "check": "test_v22_ui.lua",
+    "exit_code": 0,
+    "output": "UI22 strict runtime: nine screens, navigation, scroll, inline edits, allocator, modal cancel/delete, calculator: ok\n"
+  },
+  {
+    "check": "verify_standalone.lua",
+    "exit_code": 0,
+    "output": "ui tests: ok\nstandalone startup tests: ok\nstandalone indexed real PNG bank: ok\n[TEST 1/2] Built CP1251 artifact startup fixture: OK\n[TEST 3] Генерация тестового рынка на 90 лавок (синтетическая фикстура)...\n  OK: Рынок собран, уникальных товаров: 20\n[TEST 4] Стресс-тест арбитража на 60 FPS (проверка кэширования)...\n  Холодная подготовка вне UI: 367.72 мс\n  Время на 1 кадр арбитража: 0.0010 мс (суммарно 300 кадров: 0.000 сек)\n  OK: Повторные выборки используют кэш в этой фикстуре.\n[TEST 5] Проверка Item Finder...\n  OK: Item Finder находит товары мгновенно (11 совпадений)\n════════════════════════════════════════════════════════════════\n DESKTOP STARTUP / MARKET / CACHE CHECKS PASSED. ANDROID IS A SEPARATE CHECK. \n════════════════════════════════════════════════════════════════\n"
+  }
+]

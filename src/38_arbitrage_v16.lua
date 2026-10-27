@@ -5,17 +5,27 @@ local function title(g) return tostring(g.name or '?') end
 local function offer_id(o) return tostring(o.shop)..':'..tostring(o.price)..':'..tostring(o.owner) end
 local function route_id(g,r) return tostring(g.key)..'|'..offer_id(r.sell_offer)..'>'..offer_id(r.buy_offer) end
 DSP.arb_v16=DSP.arb_v16 or {}
+local function safe_integer(value)
+    local n=tonumber(value)
+    if not n or n~=n or n<0 or n>9007199254740991 then return nil end
+    return math.floor(n)
+end
 function DSP.arb_v16.manual_pair(seller,buyer,budget,tax_bp)
     if not seller or not buyer then return nil end
-    local p1,p2=tonumber(seller.price) or 0,tonumber(buyer.price) or 0
-    if p1<=0 or p2<=0 then return nil end
-    local count=math.min(math.max(0,math.floor(tonumber(seller.qty) or 0)),
-        math.max(0,math.floor(tonumber(buyer.qty) or 0)))
-    budget=tonumber(budget) or 0
+    if seller.shop~=nil and buyer.shop~=nil and tostring(seller.shop)==tostring(buyer.shop) then return nil end
+    if (seller.ench or 0)~=(buyer.ench or 0) then return nil end
+    local p1,p2=safe_integer(seller.price),safe_integer(buyer.price)
+    local q1,q2=safe_integer(seller.qty),safe_integer(buyer.qty)
+    if not p1 or not p2 or p1<=0 or p2<=0 or not q1 or not q2 then return nil end
+    local count=math.min(q1,q2,math.floor(9007199254740991/math.max(p1,p2)))
+    budget=safe_integer(budget) or 0
     if budget>0 then count=math.min(count,math.floor(budget/p1)) end
     local cost=p1*count
-    local tax=math.max(0,math.min(10000,tonumber(tax_bp) or 200))
-    local revenue=math.floor((p2*count)*(10000-tax)/10000)
+    local tax=tonumber(tax_bp) or 200
+    if tax~=tax or tax==math.huge or tax==-math.huge then tax=200 end
+    local factor=10000-math.max(0,math.min(10000,math.floor(tax)))
+    local gross=p2*count
+    local revenue=math.floor(gross/10000)*factor+math.floor((gross%10000)*factor/10000)
     return {qty=count,cost=cost,revenue=revenue,profit=revenue-cost}
 end
 local function selected_plan(g)

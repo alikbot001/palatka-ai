@@ -142,6 +142,13 @@ function DSP.items.load()
             DSP.flog('ITEMS parse failed path=' .. path)
         end
     end
+    if DSP.bundled_items and next(DSP.bundled_items) then
+        DSP.items.by_id=DSP.bundled_items
+        DSP.items.loaded=true
+        DSP.items.index_names()
+        DSP.flog('ITEMS bundled catalog loaded')
+        return true
+    end
     DSP.flog('ITEMS missing catalog')
     return false
 end

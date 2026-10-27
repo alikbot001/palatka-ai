@@ -11,6 +11,7 @@ local function save()
         return false
     end
     U._notes_dirty=false
+    if DSP.notes then DSP.notes.revision=(DSP.notes.revision or 0)+1 end
     return true
 end
 function N.all()
@@ -42,7 +43,7 @@ function N.create(title)
     local notes=N.all()
     local note={id=tostring(os.time())..'_'..tostring(#notes+1),title=title or 'Новая заметка',text='',updated_at=os.time()}
     notes[#notes+1]=note
-    save()
+    if not save() then table.remove(notes,#notes);return nil end
     return note
 end
 local function buffer(value,size)
@@ -74,7 +75,7 @@ function M.save_notes()
     return save()
 end
 local function changed()
-    U._notes_dirty=true; U._notes_last_edit=os.clock()
+    U._notes_dirty=true; U._notes_last_edit=os.time()
 end
 function U.notes_tab()
     M.title('ЗАМЕТКИ')

@@ -1,6 +1,36 @@
 -- Own buy/sell presets, independent from Market Helper.
 DSP.presets = {}
 
+-- Restore existing objects in place: edit buffers and legacy aliases retain identity.
+function DSP.presets._transaction(change)
+    local keys={'buy_preset','sell_preset','buy_presets','sell_presets',
+        'active_buy_preset','active_sell_preset'}
+    local roots,snapshots={},{}
+    local function capture(t)
+        if type(t)~='table' or snapshots[t] then return end
+        local copy={};snapshots[t]=copy
+        for k,v in pairs(t) do copy[k]=v;capture(v) end
+    end
+    for _,key in ipairs(keys) do roots[key]=DSP.settings[key];capture(roots[key]) end
+    local function rollback()
+        for t,copy in pairs(snapshots) do
+            for k in pairs(t) do t[k]=nil end
+            for k,v in pairs(copy) do t[k]=v end
+        end
+        for _,key in ipairs(keys) do DSP.settings[key]=roots[key] end
+    end
+    local changed,result,detail=pcall(change)
+    if not changed or result==false then
+        rollback();return false,changed and detail or tostring(result)
+    end
+    local called,saved,err=pcall(DSP.save_settings)
+    if not called or saved==false or (saved==nil and err~=nil) then
+        rollback();return false,called and (err or 'не удалось сохранить настройки') or tostring(saved)
+    end
+    -- Older embedders expose a void saver; the bundled saver returns true/false.
+    return result,detail
+end
+
 local function preset(kind)
     if kind == 'sell' then return DSP.settings.sell_preset end
     return DSP.settings.buy_preset
@@ -31,23 +61,29 @@ function DSP.presets.add(row, kind)
     if price <= 0 then return false, 'нет цены для расчёта' end
     local idx, it = DSP.presets.find(kind, row.key)
     if it then
-        it.price = price
-        it.name = row.display
-        it.ench = row.ench
-        it.enabled = true
-        DSP.save_settings()
+        local ok,err=DSP.presets._transaction(function()
+            it.price = price
+            it.name = row.display
+            it.ench = row.ench
+            it.enabled = true
+            return true
+        end)
+        if not ok then return false,err end
         DSP.add_log('Обновлено в ' .. p.name .. ': ' .. row.display)
         return true
     end
-    table.insert(p.items, {
-        key = row.key,
-        name = row.display,
-        ench = row.ench or 0,
-        price = price,
-        qty = 1,
-        enabled = true,
-    })
-    DSP.save_settings()
+    local ok,err=DSP.presets._transaction(function()
+        table.insert(p.items, {
+            key = row.key,
+            name = row.display,
+            ench = row.ench or 0,
+            price = price,
+            qty = 1,
+            enabled = true,
+        })
+        return true
+    end)
+    if not ok then return false,err end
     DSP.add_log('Добавлено в ' .. p.name .. ': ' .. row.display .. ' по ' .. DSP.money(price))
     return true
 end
@@ -55,26 +91,31 @@ end
 function DSP.presets.remove(kind, idx)
     if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'остановите автоматизацию' end
     local p = preset(kind)
-    local it = table.remove(p.items, idx)
-    if it then
-        DSP.save_settings()
-        DSP.add_log('Удалено из ' .. p.name .. ': ' .. it.name)
-    end
+    local it=p.items[idx]
+    if not it then return false,'нет позиции' end
+    local ok,err=DSP.presets._transaction(function()
+        table.remove(p.items,idx);return true
+    end)
+    if not ok then return false,err end
+    DSP.add_log('Удалено из ' .. p.name .. ': ' .. it.name)
+    return true
 end
 
 function DSP.presets.clear(kind)
     if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'остановите автоматизацию' end
     local p = preset(kind)
-    p.items = {}
-    DSP.save_settings()
+    local ok,err=DSP.presets._transaction(function() p.items={};return true end)
+    if not ok then return false,err end
     DSP.add_log(p.name .. ': список очищен')
+    return true
 end
 
 function DSP.presets.recalc(kind)
     if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'остановите автоматизацию' end
     local p = preset(kind)
     local changed, missing = 0, 0
-    for _, it in ipairs(p.items) do
+    local ok,err=DSP.presets._transaction(function()
+      for _, it in ipairs(p.items) do
         local row = DSP.market.row_for(it.name, it.ench)
         if not row then
             local base = it.name:gsub('%s+%(%+%d+%)$', '')
@@ -97,8 +138,10 @@ function DSP.presets.recalc(kind)
         else
             missing = missing + 1
         end
-    end
-    DSP.save_settings()
+      end
+      return true
+    end)
+    if not ok then return false,err end
     DSP.add_log(string.format('%s: пересчитано %d, без данных %d', p.name, changed, missing))
     return changed, missing
 end

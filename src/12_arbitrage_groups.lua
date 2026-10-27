@@ -1,6 +1,7 @@
 -- Item-centric market view. This module NEVER substitutes a planned trade
 -- quantity for the observed stock/demand in the source market snapshot.
 local M = DSP.market
+local cached_deals,cached_groups
 local function qty(v)
     local n=tonumber(v)
     if not n or n~=n or n<0 or n==math.huge then return 0 end
@@ -11,6 +12,9 @@ end
 -- Source offers are listed once regardless of how many routes use them.
 function M.arbitrage_grouped()
     local deals=M.arbitrage_filtered()
+    -- The allocator replaces its array on market/filter/expiry invalidation.
+    -- Preserve group identities between replacements so UI/plan caches can hit.
+    if deals==cached_deals and cached_groups then return cached_groups end
     local groups,by_key={},{}
     for _,deal in ipairs(deals) do
         local row=deal.row
@@ -36,6 +40,7 @@ function M.arbitrage_grouped()
         if a.profit~=b.profit then return a.profit>b.profit end
         return a.name<b.name
     end)
+    cached_deals,cached_groups=deals,groups
     return groups
 end
 

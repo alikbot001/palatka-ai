@@ -11,17 +11,93 @@ U.v16_page=U.v16_page or 1
 
 local function busy() return DSP.auto.buy_running or DSP.auto.sell_running end
 local function current(kind) return kind=='sell' and DSP.settings.sell_preset or DSP.settings.buy_preset end
-local function quantity(v) return math.max(1,math.floor(tonumber(v) or 1)) end
+local max_integer=9007199254740991
+local function quantity(v)
+    local n=tonumber(v)
+    if n and n==n and n>0 and n<=max_integer and n%1==0 then return n end
+end
+-- Planning arithmetic is independent of inventory availability and execution.
+function T.calculate_totals(kind,items,tax_bp,edits)
+    local out={positions=0,qty=0,enabled=0,invalid=0,unknown_cost=0,overflow=false,
+        gross=0,commission=0,net=0,cost=0,complete=true}
+    local tax=tonumber(tax_bp)
+    if tax==nil then tax=200 end
+    if kind=='sell' and (tax~=tax or tax<0 or tax>10000 or tax%1~=0) then
+        out.invalid_tax=true;tax=0
+    end
+    for _,it in ipairs(items or {}) do
+        if it.enabled~=false then
+            out.enabled=out.enabled+1
+            local price,qty=quantity(it.price),quantity(it.qty)
+            local bad=edits and edits[it]
+            if not price or not qty or (bad and (bad.price or bad.qty)) then out.invalid=out.invalid+1
+            elseif price>max_integer/qty or out.gross>max_integer-price*qty then
+                out.overflow=true
+            else
+                local amount=price*qty
+                out.positions,out.qty=out.positions+1,out.qty+qty
+                out.gross=out.gross+amount
+                if kind=='sell' then
+                    local factor=10000-tax
+                    local net=math.floor(amount/10000)*factor+math.floor((amount%10000)*factor/10000)
+                    out.net=out.net+net;out.commission=out.commission+amount-net
+                    local cost=tonumber(it.cost_price)
+                    if not cost or cost~=cost or cost<0 or cost>max_integer or cost%1~=0 or (bad and bad.cost_price) then
+                        out.unknown_cost=out.unknown_cost+1
+                    elseif cost>max_integer/qty or out.cost>max_integer-cost*qty then
+                        out.cost_overflow=true
+                    else out.cost=out.cost+cost*qty end
+                end
+            end
+        end
+    end
+    out.complete=out.invalid==0 and not out.overflow and not out.invalid_tax
+    if not out.complete then
+        out.gross,out.net,out.commission,out.cost=nil,nil,nil,nil
+    elseif kind=='buy' then
+        out.required_funds=out.gross;out.net,out.cost=nil,nil
+    elseif out.unknown_cost>0 or out.cost_overflow then out.cost=nil
+    else out.profit=out.net-out.cost end
+    return out
+end
+function T.totals(kind)
+    return T.calculate_totals(kind,current(kind).items,DSP.settings.tax_bp,M.invalid_edits)
+end
 local function safe_key(it)
     local name=tostring(it.name or it.display or '')
     local ench=tonumber(it.ench) or tonumber(name:match('%(%+(%d+)%)%s*$')) or 0
     local base=name:gsub('%s+%(%+%d+%)%s*$','')
     return base,ench,DSP.item_key(base,ench)
 end
+local function inventory_counts()
+    local counts,slots={},{}
+    for _,it in ipairs(DSP.auto.inv or {}) do
+        local _,_,key=safe_key(it)
+        local count=0
+        if type(it.stacks)=='table' and #it.stacks>0 then
+            for _,st in ipairs(it.stacks) do
+                local n=quantity(st.count)
+                if n and st.slot~=nil and not slots[st.slot] then
+                    count=count+n;slots[st.slot]=true
+                end
+            end
+        else count=quantity(it.count or it.qty) or 0 end
+        counts[key]=(counts[key] or 0)+count
+    end
+    return counts
+end
 function T.add_from_inventory(kind,it)
     if busy() then return false,'остановите выставление' end
+    if type(it)~='table' then return false,'нет предмета' end
     local base,ench,key=safe_key(it)
     local count=quantity(it.count or it.qty)
+    if not count then return false,'нет доступного количества' end
+    if kind=='sell' then
+        for _,owned in ipairs(DSP.auto.inv or {}) do
+            if owned==it then count=inventory_counts()[key] or count;break end
+        end
+    end
+    if not quantity(count) then return false,'некорректное количество' end
     local index,exists=DSP.presets.find(kind,key)
     if exists then
         -- Re-tapping updates quantity; it MUST NOT overwrite the user's price.
@@ -43,18 +119,15 @@ function T.add_from_catalog(kind,it)
 end
 function T.validate(kind)
     local problems,items,total={},current(kind).items or {},0
-    local inventory={}
-    if kind=='sell' then
-        for _,item in ipairs(DSP.auto.inv or {}) do
-            local _,_,key=safe_key(item)
-            inventory[key]=(inventory[key] or 0)+math.max(0,tonumber(item.count or item.qty) or 0)
-        end
-    end
+    local inventory=kind=='sell' and inventory_counts() or {}
     for _,it in ipairs(items) do
         if it.enabled~=false then
-            local price,qty=tonumber(it.price) or 0,tonumber(it.qty) or 0
-            if price<1 or price~=math.floor(price) or qty<1 or qty~=math.floor(qty) then
+            local price,qty=quantity(it.price),quantity(it.qty)
+            local edits=M.invalid_edits and M.invalid_edits[it]
+            if not price or not qty or (edits and (edits.price or edits.qty)) then
                 problems[#problems+1]=it.name..': проверьте цену и количество'
+            elseif price>max_integer/qty or total>max_integer-price*qty then
+                problems[#problems+1]=it.name..': сумма превышает точный числовой диапазон'
             else
                 if kind=='sell' then
                     local _,_,key=safe_key(it)

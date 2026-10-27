@@ -3,8 +3,10 @@ DSP.rewards = {pending = {}, sequence = 0, corrupt_lines = 0}
 local R = DSP.rewards
 local path = DSP.dir .. '/rewards.jsonl'
 local cache, cache_keys = {}, {}
+local matching_key, matching_rows
 local function invalidate()
     cache, cache_keys = {}, {}
+    matching_key, matching_rows = nil, nil
 end
 local function cache_key(prefix, options)
     local out = {prefix}
@@ -78,17 +80,20 @@ function R.load()
     local migrated = {}
     scan(function(row)
         R.sequence = math.max(R.sequence, tonumber(row.seq) or 0)
-        if row.legacy_id then migrated[row.legacy_id] = true end
+        if row.legacy_id then migrated[row.legacy_id] = row.id end
     end)
     for key, entry in pairs(DSP.settings.crates or {}) do
         local id = 'crate:' .. tostring(key)
-        if not migrated[id] then
-            local known = tonumber(entry.price) and entry.price > 0
-            R.record({legacy_id=id, ts=entry.ts, kind='item', item_name=entry.item_name or entry.item,
+        if migrated[id] then entry.id=migrated[id]
+        else
+            local price = tonumber(entry.price)
+            local known = price and price > 0
+            local saved=R.record({legacy_id=id, ts=entry.ts, kind='item', item_name=entry.item_name or entry.item,
                 qty=entry.qty or entry.count or 1, ench=entry.ench or 0, source=entry.source or entry.crate_type or 'неизвестный источник',
-                association='legacy', price_known=not not known, unit_price=known and entry.price or nil,
-                estimated_value=known and entry.price * (entry.qty or entry.count or 1) or nil,
+                association='legacy', price_known=not not known, unit_price=known and price or nil,
+                estimated_value=known and price * (tonumber(entry.qty or entry.count) or 1) or nil,
                 price_source=known and 'legacy' or nil, raw=entry.raw, legacy=true})
+            if saved then entry.id=saved.id end
         end
     end
 end
@@ -121,7 +126,14 @@ function R.parse(raw)
         return {kind='item',item_name=base,ench=ench,qty=qty,source='неизвестный источник',association='unknown'}
     end
     local drop = DSP.logs.parse_chat_drop((s:gsub('!$', '')))
-    if drop then return {kind='item',item_name=drop.name,ench=drop.ench,qty=drop.qty,source=drop.source,association='explicit'} end
+    if drop then return {kind='item',item_name=drop.name,ench=drop.ench,qty=drop.qty,source=drop.source,
+        association=drop.source=='неизвестный источник' and 'unknown' or 'explicit'} end
+    -- Preserve evidence for reward messages whose concrete payload is not recognised.
+    local lower=DSP.lower or string.lower
+    local salary=lower(s):find(lower('зарплат'),1,true) or lower(s):find(lower('заработная плата'),1,true)
+    if not salary and (s:match('^Вы получили ') or s:match('^Вам выдана награда') or s:match('^Вам начислена награда')) then
+        return {kind='unknown',source='неизвестный источник',association='unknown'}
+    end
 end
 function R.ingest(raw, ts)
     local row = R.parse(raw)
@@ -155,17 +167,23 @@ function R.ingest(raw, ts)
     elseif pending then
         R.pending[#R.pending+1] = row
         if #R.pending > 32 then table.remove(R.pending,1) end
-    else R.pending = {} end
+    else
+        R.pending = {}
+        if row.kind~='item' then R.last_opening=nil end
+    end
     return row
 end
+R.invalidate=invalidate
 local function matches(row, o)
+    if DSP.craglog and DSP.craglog.event_visible and not DSP.craglog.event_visible(row) then return false end
     local lower = DSP.lower or string.lower
     if o.kind and o.kind ~= '' and row.kind ~= o.kind then return false end
     if o.source and o.source ~= '' and row.source ~= o.source then return false end
     if o.source_contains and o.source_contains ~= '' and
         not lower(row.source or ''):find(lower(o.source_contains),1,true) then return false end
-    if o.from_ts and row.ts < o.from_ts then return false end
-    if o.to_ts and row.ts > o.to_ts then return false end
+    local ts = tonumber(row.ts) or 0
+    if o.from_ts and ts < o.from_ts then return false end
+    if o.to_ts and ts > o.to_ts then return false end
     if o.search and o.search ~= '' then
         local hay = (row.item_name or '') .. ' ' .. (row.source or '') .. ' ' .. (row.raw or '')
         if not lower(hay):find(lower(o.search),1,true) then return false end
@@ -173,6 +191,10 @@ local function matches(row, o)
     return true
 end
 local function read_rows(o)
+    local filters = {}
+    for key,value in pairs(o) do if key~='page' and key~='page_size' then filters[key]=value end end
+    local signature = cache_key('rows',filters)
+    if matching_key == signature then return matching_rows end
     R.corrupt_lines = 0
     local rows, links = {}, {}
     scan(function(row)
@@ -186,7 +208,11 @@ local function read_rows(o)
         if link then row.source, row.opening_id, row.association = link.source, link.opening_id, 'inferred'; row.source_raw = link.raw end
         if matches(row,o) then filtered[#filtered+1] = row end
     end
-    table.sort(filtered,function(a,b) if a.ts ~= b.ts then return a.ts > b.ts end return (a.seq or 0) > (b.seq or 0) end)
+    table.sort(filtered,function(a,b)
+        local at,bt=tonumber(a.ts) or 0,tonumber(b.ts) or 0
+        if at ~= bt then return at > bt end return (a.seq or 0) > (b.seq or 0)
+    end)
+    matching_key,matching_rows=signature,filtered
     return filtered
 end
 function R.query(options)
@@ -204,8 +230,9 @@ end
 function R.summary(options)
     local key = cache_key('summary',options or {})
     if cache[key] then return cache[key] end
-    local out = {cash=0,estimated_value=0,unknown_items=0,items=0,openings=0}
+    local out = {cash=0,estimated_value=0,unknown_items=0,items=0,openings=0,events=0}
     for _, row in ipairs(read_rows(options or {})) do
+        out.events=out.events+1
         if row.kind=='cash' then out.cash=out.cash+(row.cash or 0)
         elseif row.kind=='opening' then out.openings=out.openings+1
         elseif row.kind=='item' then

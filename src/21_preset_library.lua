@@ -18,7 +18,6 @@ end
 local function busy()
     return DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running)
 end
-local function save() DSP.save_settings() end
 local function positive(v)
     local n = tonumber(v)
     if n and n == n and n > 0 and n <= 9007199254740991 and n % 1 == 0 then return n end
@@ -27,35 +26,47 @@ function P.list(kind) return (library(kind)) end
 function P.selected(kind) local _, idx = library(kind); return idx end
 function P.select(kind, idx)
     if busy() then return false, 'остановите автоматизацию' end
-    local list = library(kind)
-    if not list[idx] then return false, 'нет пресета' end
-    local _, active, legacy = keys(kind)
-    DSP.settings[active], DSP.settings[legacy] = idx, list[idx]
-    save(); return true
+    return P._transaction(function()
+        local list = library(kind)
+        if not list[idx] then return false, 'нет пресета' end
+        local _, active, legacy = keys(kind)
+        DSP.settings[active], DSP.settings[legacy] = idx, list[idx]
+        return true
+    end)
 end
 function P.create(kind, name)
     if busy() then return false, 'остановите автоматизацию' end
     name = tostring(name or ''):match('^%s*(.-)%s*$')
     if name == '' then return false, 'введите название' end
-    local list = library(kind)
-    list[#list + 1] = {name = name, items = {}}
-    P.select(kind, #list)
-    return true, #list
+    return P._transaction(function()
+        local list = library(kind)
+        list[#list + 1] = {name = name, items = {}}
+        local _,active,legacy=keys(kind)
+        DSP.settings[active],DSP.settings[legacy]=#list,list[#list]
+        return true, #list
+    end)
 end
 function P.rename(kind, idx, name)
     if busy() then return false, 'остановите автоматизацию' end
-    local list = library(kind)
     name = tostring(name or ''):match('^%s*(.-)%s*$')
-    if not list[idx] or name == '' then return false, 'некорректное название' end
-    list[idx].name = name; save(); return true
+    return P._transaction(function()
+        local list = library(kind)
+        if not list[idx] or name == '' then return false, 'некорректное название' end
+        list[idx].name = name; return true
+    end)
 end
 function P.delete(kind, idx)
     if busy() then return false, 'остановите автоматизацию' end
-    local list, active = library(kind)
-    if #list <= 1 or not list[idx] then return false, 'нужен хотя бы один пресет' end
-    table.remove(list, idx)
-    if idx < active then active = active - 1 end
-    return P.select(kind, math.min(active, #list))
+    return P._transaction(function()
+        local list, active = library(kind)
+        if #list <= 1 or not list[idx] then return false, 'нужен хотя бы один пресет' end
+        table.remove(list, idx)
+        if idx < active then active = active - 1 end
+        local _,active_key,legacy=keys(kind)
+        active=math.min(active,#list)
+        DSP.settings[active_key],DSP.settings[legacy]=active,list[active]
+        return true
+    end)
 end
 function P.update(kind, idx, changes)
     if busy() then return false, 'остановите автоматизацию' end
@@ -65,10 +76,12 @@ function P.update(kind, idx, changes)
     local qty = changes.qty ~= nil and positive(changes.qty) or it.qty
     if (changes.price ~= nil and not positive(changes.price)) or
         (changes.qty ~= nil and not positive(changes.qty)) then return false, 'нужно положительное целое число' end
-    it.price, it.qty = price, qty
-    if positive(price) then it.needs_price = nil end
-    if changes.enabled ~= nil then it.enabled = changes.enabled == true end
-    save(); return true
+    return P._transaction(function()
+        it.price, it.qty = price, qty
+        if positive(price) then it.needs_price = nil end
+        if changes.enabled ~= nil then it.enabled = changes.enabled == true end
+        return true
+    end)
 end
 local function normalize(items, kind)
     local result = {}
@@ -83,10 +96,12 @@ local function normalize(items, kind)
         local suffix = name:match('%(%+(%d+)%)%s*$')
         local ench = math.max(0, math.floor(tonumber(it.ench or it.enchant or suffix) or 0))
         local base = name:gsub('%s*%(%+%d+%)%s*$', '')
+        local cost = tonumber(it.cost_price)
+        if cost and (cost~=cost or cost<0 or cost>9007199254740991 or cost%1~=0) then cost=nil end
         result[#result + 1] = {name = DSP.item_name(base, ench), key = DSP.item_key(base, ench), ench = ench,
             price = price, qty = qty, enabled = it.enabled ~= false and price > 0,
             needs_price = price == 0 or nil,
-            item_id = it.item_id, qty_limit_1 = it.qty_limit_1}
+            item_id = it.item_id, qty_limit_1 = it.qty_limit_1, cost_price = cost}
     end
     return result
 end
@@ -101,12 +116,14 @@ function P.add_manual(kind, item)
     local ench = tonumber(item.ench or name:match('%(%+(%d+)%)%s*$')) or 0
     if ench < 0 or ench % 1 ~= 0 then return false, 'некорректное улучшение' end
     local rows = normalize({{name = name, ench = ench, price = tonumber(item.price),
-        max_price = tonumber(item.price), qty = item.qty or 1, enabled = item.enabled}}, kind)
+        max_price = tonumber(item.price), qty = item.qty or 1, enabled = item.enabled, cost_price = item.cost_price}}, kind)
     if not rows then return false, 'некорректная позиция' end
     if P.find(kind, rows[1].key) then return false, 'позиция уже есть в пресете' end
     local items = P.items(kind)
-    items[#items + 1] = rows[1]
-    save(); return true, #items
+    return P._transaction(function()
+        items[#items + 1] = rows[1]
+        return true, #items
+    end)
 end
 function P.import_data(data, kind)
     if busy() then return false, 'остановите автоматизацию' end
@@ -138,22 +155,24 @@ function P.import_data(data, kind)
         end
     end
     if #pending == 0 then return false, 'нет пресетов' end
-    local count, imported = 0, {}
-    for _, entry in ipairs(pending) do
-        local list = library(entry.kind)
-        list[#list + 1] = entry.preset
-        imported[entry.kind] = imported[entry.kind] or {}
-        imported[entry.kind][#imported[entry.kind]+1] = #list
-        count = count + #entry.preset.items
-    end
-    for k, indices in pairs(imported) do
-        local wanted = tonumber(k == 'buy' and data.active_buy_preset or data.active_preset) or 1
-        wanted = math.max(1, math.min(#indices, math.floor(wanted)))
-        local list_key, active_key, legacy = keys(k)
-        DSP.settings[active_key] = indices[wanted]
-        DSP.settings[legacy] = DSP.settings[list_key][indices[wanted]]
-    end
-    save(); return true, count
+    return P._transaction(function()
+        local count, imported = 0, {}
+        for _, entry in ipairs(pending) do
+            local list = library(entry.kind)
+            list[#list + 1] = entry.preset
+            imported[entry.kind] = imported[entry.kind] or {}
+            imported[entry.kind][#imported[entry.kind]+1] = #list
+            count = count + #entry.preset.items
+        end
+        for k, indices in pairs(imported) do
+            local wanted = tonumber(k == 'buy' and data.active_buy_preset or data.active_preset) or 1
+            wanted = math.max(1, math.min(#indices, math.floor(wanted)))
+            local list_key, active_key, legacy = keys(k)
+            DSP.settings[active_key] = indices[wanted]
+            DSP.settings[legacy] = DSP.settings[list_key][indices[wanted]]
+        end
+        return true, count
+    end)
 end
 function P.export_data(kind)
     local list, idx = library(kind)
@@ -169,7 +188,9 @@ end
 function P.import_file(path, kind)
     local f, err = io.open(path, 'rb')
     if not f then return false, err end
-    local raw = f:read('*a'); f:close()
+    local raw,read_err = f:read('*a')
+    local closed,close_err=f:close()
+    if not raw or not closed then return false,read_err or close_err end
     local ok, data = pcall(decodeJson, raw)
     if not ok then return false, 'ошибка JSON' end
     return P.import_data(data, kind)
@@ -181,11 +202,17 @@ function P.export_file(kind, path)
     end
     local ok, raw = pcall(encodeJson, P.export_data(kind))
     if not ok or type(raw) ~= 'string' then return false, 'ошибка JSON' end
-    local f, err = io.open(path, 'wb')
+    local temporary=path..'.tmp'
+    local f, err = io.open(temporary, 'wb')
     if not f then return false, err end
     local written, write_err = f:write(raw)
     local closed, close_err = f:close()
-    if not written or not closed then return false, write_err or close_err end
+    if not written or not closed then
+        os.remove(temporary)
+        return false, write_err or close_err
+    end
+    local renamed,rename_err=os.rename(temporary,path)
+    if not renamed then os.remove(temporary);return false,rename_err end
     return true, path
 end
 function P.import_mh()

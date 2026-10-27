@@ -2,6 +2,16 @@
 local M = DSP.market
 local cache, signature, expires
 
+local function checkpoint()
+    local hook=M.arb_yield
+    if hook and hook.owner==coroutine.running() then hook.checkpoint() end
+end
+local function sort_rows(rows,less)
+    local hook=M.arb_yield
+    if hook and hook.owner==coroutine.running() then return hook.sort(rows,less) end
+    return table.sort(rows,less)
+end
+
 function M.should_refresh(now)
     if M.state.status == 'loading' then return false end
     local interval = math.max(30, tonumber(DSP.settings.refresh_seconds) or 60)
@@ -14,8 +24,12 @@ local function integer(value, default)
     return math.max(0, math.floor(n))
 end
 
-local function after_tax(gross)
-    local factor = 10000 - math.min(10000, integer(DSP.settings.tax_bp, 200))
+local function tax_factor(tax_bp)
+    return 10000 - math.min(10000, integer(tax_bp, 200))
+end
+
+local function after_tax(gross, tax_bp)
+    local factor = tax_factor(tax_bp)
     -- Avoid multiplying a large gross amount by 10000 before dividing.
     return math.floor(gross / 10000) * factor + math.floor((gross % 10000) * factor / 10000)
 end
@@ -31,27 +45,32 @@ end
 -- Build a non-overlapping purchase/resale plan. A shop's stock or demand
 -- cannot be committed twice just because it matches several other stalls.
 -- Greedy allocation prioritizes unit profit (or ROI under a cash budget).
-local function opportunities(filters, now)
+local function opportunities(filters, now, rows, selections)
     local candidates, out = {}, {}
+    local tax_bp = filters.tax_bp or DSP.settings.tax_bp
     local budget = integer(filters.budget)
     local remaining_budget = budget > 0 and budget or math.huge
     local max_qty = integer(filters.max_qty)
     local sellers_left, buyers_left = {}, {}
     local min_profit = integer(filters.min_profit)
     local min_roi = tonumber(filters.min_roi) or 0
-    for _, row in ipairs(M.state.rows or {}) do
+    for _, row in ipairs(rows or M.state.rows or {}) do
         for _, seller in ipairs(row.sell.offers or {}) do
-            if fresh(seller, now, filters) then
+            if (not selections or selections.sell[seller]) and fresh(seller, now, filters) then
                 sellers_left[seller] = integer(seller.qty)
                 for _, buyer in ipairs(row.buy.offers or {}) do
+                    checkpoint()
                     local p_buy, p_sell = integer(seller.price), integer(buyer.price)
-                    if tostring(seller.shop) ~= tostring(buyer.shop)
+                    if (not selections or selections.buy[buyer])
+                        and tostring(seller.shop) ~= tostring(buyer.shop)
                         and (seller.ench or 0) == (buyer.ench or 0)
                         and fresh(buyer, now, filters)
                         and p_buy > 0 and p_sell > p_buy
                         and integer(seller.qty) > 0 and integer(buyer.qty) > 0 then
                         buyers_left[buyer] = integer(buyer.qty)
-                        local unit_profit = after_tax(p_sell) - p_buy
+                        -- Tax is rounded on the batch, not on each individual item.
+                        local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
+                        local unit_profit = after_tax(p_sell, tax_bp) - p_buy + fraction
                         if unit_profit > 0 then
                             candidates[#candidates+1] = {
                                 row=row, seller=seller, buyer=buyer,
@@ -64,7 +83,7 @@ local function opportunities(filters, now)
             end
         end
     end
-    table.sort(candidates, function(a, b)
+    sort_rows(candidates, function(a, b)
         local av = budget > 0 and a.unit_roi or a.unit_profit
         local bv = budget > 0 and b.unit_roi or b.unit_profit
         if av ~= bv then return av > bv end
@@ -77,6 +96,7 @@ local function opportunities(filters, now)
         return tostring(a.buyer.shop) < tostring(b.buyer.shop)
     end)
     for _, c in ipairs(candidates) do
+        checkpoint()
         local seller, buyer = c.seller, c.buyer
         local available = math.min(sellers_left[seller] or 0, buyers_left[buyer] or 0)
         if available > 0 and remaining_budget >= c.p_buy then
@@ -93,7 +113,7 @@ local function opportunities(filters, now)
             end
             if qty > 0 then
                 local cost = qty * c.p_buy
-                local revenue = after_tax(qty * c.p_sell)
+                local revenue = after_tax(qty * c.p_sell, tax_bp)
                 local profit = revenue - cost
                 local roi = profit / cost * 100
                 if profit > 0 and profit >= min_profit and roi >= min_roi then
@@ -116,7 +136,7 @@ local function opportunities(filters, now)
         end
     end
     local sort = tonumber(filters.sort) or 1
-    table.sort(out, function(a,b)
+    sort_rows(out, function(a,b)
         local av, bv = a.net_profit, b.net_profit
         if sort == 2 then av,bv = a.unit_profit,b.unit_profit end
         if sort == 3 then av,bv = a.roi,b.roi end
@@ -129,6 +149,58 @@ local function opportunities(filters, now)
     end)
     return out
 end
+
+-- Selection keys are scoped to an item group; distinct price bands stay separate.
+function M.offer_key(offer)
+    return table.concat({tostring(offer.shop), tostring(offer.price), tostring(offer.owner)}, '\0')
+end
+
+local function selected_offers(offers, selection)
+    local chosen, total = {}, 0
+    local listed = {}
+    for _, offer in ipairs(selection or {}) do listed[offer] = true end
+    for _, offer in ipairs(offers or {}) do
+        if selection == nil or selection[offer] or selection[M.offer_key(offer)] or listed[offer] then
+            chosen[offer] = true
+            total = total + integer(offer.qty)
+        end
+    end
+    return chosen, total
+end
+
+-- Recalculate an alternative plan from selected source offers, never from already
+-- allocated routes. nil selects all; {} selects none. Source quantities stay intact.
+-- Options override the saved filters; extra is charged once for a nonempty plan.
+function M.plan_offers(group, sellers, buyers, options)
+    local plan = {qty=0, planned=0, cost=0, gross=0, revenue=0, fee=0, extra=0, profit=0, routes={}, supply=0, demand=0}
+    if not group or not group.row then return plan end
+    local row = group.row
+    local selections = {}
+    selections.sell, plan.supply = selected_offers(row.sell.offers, sellers)
+    selections.buy, plan.demand = selected_offers(row.buy.offers, buyers)
+    local filters = {}
+    for key, value in pairs(DSP.settings.arb_filters or {}) do filters[key] = value end
+    for key, value in pairs(options or {}) do filters[key] = value end
+    plan.routes = opportunities(filters, os.time(), {row}, selections)
+    for _, route in ipairs(plan.routes) do
+        plan.qty = plan.qty + route.tradable_qty
+        plan.cost = plan.cost + route.total_cost
+        plan.gross = plan.gross + route.p_sell * route.tradable_qty
+        plan.revenue = plan.revenue + route.net_revenue
+        plan.profit = plan.profit + route.net_profit
+    end
+    plan.planned = plan.qty
+    plan.fee = plan.gross - plan.revenue
+    if plan.qty > 0 then
+        plan.extra = integer(filters.extra)
+        plan.profit = plan.profit - plan.extra
+    end
+    return plan
+end
+
+DSP.arbitrage = DSP.arbitrage or {}
+DSP.arbitrage.plan_offers = M.plan_offers
+DSP.arbitrage.offer_key = M.offer_key
 
 function M.arbitrage()
     return opportunities({max_age=1800, include_unknown=true}, os.time())

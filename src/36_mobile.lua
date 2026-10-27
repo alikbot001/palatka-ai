@@ -107,15 +107,15 @@ function M.scroll_rail(height)
 end
 function M.text(s) imgui.TextWrapped(DSP.utf8(tostring(s or ''))) end
 function M.title(s) imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8(s)) end
--- Images are optional; official item icons can be installed as
--- PalatkaAI/icons/items/<id>.png. Bundled category pictures are fallbacks.
+-- Exact item PNGs are bundled lazily; local icons/items/<id>.png can override them.
+-- Missing/ambiguous artwork gets a neutral placeholder, never another item image.
 M.icon_textures={}
 M.icon_attempted={}
-function M.item_icon_kind(it)
-    local raw=tostring(it.name or '')
-    if it._icon_raw==raw and it._icon_kind then return it._icon_kind end
-    local n=DSP.lower(DSP.clean_text(raw))
-    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then it._icon_raw=raw;it._icon_kind='medical';return 'medical' end
+M.icon_usage={}
+M.icon_clock=0
+local function icon_kind(it)
+    local n=DSP.lower(DSP.clean_text(tostring(it.name or '')))
+    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then return 'medical' end
     if n:find('патрон',1,true) or n:find('пистолет',1,true) or n:find('deagle',1,true) then return 'ammo' end
     if n:find('рюкзак',1,true) or n:find('сумка',1,true) then return 'bag' end
     if n:find('металл',1,true) or n:find('слиток',1,true) then return 'metal' end
@@ -124,50 +124,142 @@ function M.item_icon_kind(it)
     if n:find('ключ',1,true) or n:find('отмычк',1,true) then return 'tool' end
     return 'other'
 end
+M.icon_descriptors={};M.icon_descriptor_count=0
+function M.item_icon_kind(it)
+    local raw=tostring(it.name or '')
+    local descriptor=M.icon_descriptors[raw]
+    if descriptor then return descriptor.kind end
+    if M.icon_descriptor_count>2048 then M.icon_descriptors={};M.icon_descriptor_count=0 end
+    descriptor={kind=icon_kind(it)};M.icon_descriptors[raw]=descriptor
+    M.icon_descriptor_count=M.icon_descriptor_count+1
+    return descriptor.kind
+end
+function M.own_texture(texture)
+    -- Monet 3.8 converts tagged ARM64 pointers through double in its finalizer.
+    -- Own the exact cdata address and free once through the adapter below.
+    if MONET_VERSION and type(texture)=='cdata' then ffi.gc(texture,nil)end
+    return texture
+end
+local raster_library
+local destroy_raster
+function M.prepare_texture_release()
+    if MONET_VERSION and ffi.abi('64bit') and not destroy_raster then
+        ffi.cdef[[int32_t _Z15RwRasterDestroyP8RwRaster(void* raster);]]
+        raster_library=ffi.load('GTASA')
+        destroy_raster=raster_library._Z15RwRasterDestroyP8RwRaster
+    end
+end
+function M.release_texture(texture)
+    if MONET_VERSION and type(texture)=='cdata' then
+        local pointer=ffi.cast('void*',texture)
+        local address=ffi.cast('uintptr_t',pointer)
+        if address~=ffi.cast('uintptr_t',tonumber(address)) then
+            M.prepare_texture_release()
+            -- Resolve the game's exported function; never hardcode a game offset
+            -- or strip Android's allocation tag. Same RwRasterDestroy as mimgui.
+            local result=destroy_raster(pointer)
+            if result==0 then error('RwRasterDestroy rejected texture')end
+            return
+        end
+    end
+    assert(imgui.ReleaseTexture,'Texture release API unavailable')(texture)
+end
+function M.release_icons()
+    if DSP.flog then DSP.flog('UI22 textures: cleanup begin')end
+    if MONET_VERSION and imgui.SwitchContext then imgui.SwitchContext()end
+    for path,texture in pairs(M.icon_textures) do
+        if imgui.ReleaseTexture then
+            if type(texture)=='cdata' then ffi.gc(texture,nil) end
+            if DSP.flog then DSP.flog('UI22 texture: release '..tostring(path))end
+            local ok,err=pcall(M.release_texture,texture)
+            if not ok and DSP.flog then DSP.flog('Texture release: '..tostring(err)) end
+        end
+    end
+    M.icon_textures={};M.icon_attempted={};M.icon_usage={};M.icon_clock=0;M.icon_descriptors={};M.icon_descriptor_count=0
+    if DSP.flog then DSP.flog('UI22 textures: cleanup end')end
+end
+
+function M.trim_icons()
+    local count,oldest,oldtime=0,nil,math.huge
+    for path in pairs(M.icon_textures) do
+        count=count+1
+        local used=M.icon_usage[path] or 0
+        if used<oldtime then oldest=path;oldtime=used end
+    end
+    if count>=96 and oldest then
+        if imgui.ReleaseTexture then
+            local texture=M.icon_textures[oldest]
+            if type(texture)=='cdata' then ffi.gc(texture,nil) end
+            local ok,err=pcall(M.release_texture,texture)
+            if not ok and DSP.flog then DSP.flog('Texture eviction: '..tostring(err)) end
+        end
+        M.icon_textures[oldest]=nil;M.icon_attempted[oldest]=nil;M.icon_usage[oldest]=nil
+    end
+end
+
 function M.thumbnail(it, size)
     size=size or 66
-    local id=tonumber(it.id or it.item_id) or (DSP.items and DSP.items.id_for_name and DSP.items.id_for_name(it.name))
-    local category=M.item_icon_kind(it)
-    local paths={}
-    if id and id>0 then paths[1]=DSP.dir..'/icons/items/'..math.floor(id)..'.png' end
-    paths[#paths+1]=DSP.dir..'/icons/categories/'..category..'.png'
+    local name=tostring(it.name or it.item_name or it.display or '')
+    local descriptor=M.icon_descriptors[name]
+    if not descriptor then M.item_icon_kind({name=name});descriptor=M.icon_descriptors[name] end
+    local raw_id=tonumber(it.item_id) or tonumber(it.id)
+    if not descriptor.paths or descriptor.raw_id~=raw_id then
+        descriptor.raw_id=raw_id
+        local id=DSP.item_icons and DSP.item_icons.resolve(it)
+            or (not DSP.item_icons and (raw_id or (DSP.items and DSP.items.id_for_name and DSP.items.id_for_name(name))))
+        descriptor.image_id=id
+        descriptor.paths={}
+        if id then
+            if type(id)=='number' and id>0 then descriptor.paths[1]=DSP.dir..'/icons/items/'..math.floor(id)..'.png' end
+            descriptor.paths[#descriptor.paths+1]='@item/'..tostring(id)
+        end
+    end
     if (imgui.CreateTextureFromFile or imgui.CreateTextureFromFileInMemory) and imgui.Image then
-        for _,path in ipairs(paths) do
+        for _,path in ipairs(descriptor.paths) do
             local texture=M.icon_textures[path]
-            if not texture and not M.icon_attempted[path] then
+            local frame=imgui.GetFrameCount and imgui.GetFrameCount()
+            if not texture and not M.icon_attempted[path] and (not frame or M.icon_load_frame~=frame) then
                 M.icon_attempted[path]=true
-                local f=io.open(path,'rb')
-                if f then f:close()
+                local embedded=path:sub(1,6)=='@item/'
+                local raw
+                if embedded then raw=DSP.item_icons and DSP.item_icons.get(descriptor.image_id)
+                else
+                    local file=io.open(path,'rb')
+                    if file then raw=file:read('*a');file:close() end
+                end
+                if raw then
+                    M.icon_load_frame=frame
+                    local release_ready,release_error=pcall(M.prepare_texture_release)
+                    if not release_ready and DSP.flog then DSP.flog('Texture backend: '..tostring(release_error)) end
                     local ok,result=false,nil
-                    if imgui.CreateTextureFromFile then
+                    if release_ready and imgui.CreateTextureFromFileInMemory then
+                        local data=ffi.new('uint8_t[?]',#raw);ffi.copy(data,raw,#raw)
+                        ok,result=pcall(imgui.CreateTextureFromFileInMemory,data,#raw)
+                    elseif release_ready and not embedded and imgui.CreateTextureFromFile then
                         ok,result=pcall(imgui.CreateTextureFromFile,path)
                     end
-                    if (not ok or not result) and imgui.CreateTextureFromFileInMemory then
-                        local src=io.open(path,'rb')
-                        if src then
-                            local raw=src:read('*a');src:close()
-                            local data=ffi.new('uint8_t[?]',#raw)
-                            ffi.copy(data,raw,#raw)
-                            ok,result=pcall(imgui.CreateTextureFromFileInMemory,data,#raw)
-                        end
+                    if ok and result then
+                        M.trim_icons();result=M.own_texture(result);M.icon_textures[path]=result;texture=result
                     end
-                    if ok and result then M.icon_textures[path]=result; texture=result end
                 end
             end
             if texture then
-                local ok=pcall(imgui.Image,texture,imgui.ImVec2(size,size))
-                if ok then return true end
+                M.icon_clock=M.icon_clock+1;M.icon_usage[path]=M.icon_clock
+                if pcall(imgui.Image,texture,imgui.ImVec2(size,size)) then return true end
             end
         end
     end
-    -- Don't display the wrong item's artwork when no matching icon is available.
-    imgui.TextColored(DSP.theme.col('muted',1),DSP.utf8('[ '..string.upper(category:sub(1,2))..' ]'))
+    imgui.TextColored(DSP.theme.col('muted',1),'?')
     return false
 end
 function M.compact_number(it,key,id,width,minimum)
     local buf=M.edit_buffer(it,key)
     imgui.SetNextItemWidth(width or 140)
-    if imgui.InputText('##compact_'..id,buf,64) then
+    local invalid=M.invalid_edits and M.invalid_edits[it] and M.invalid_edits[it][key]
+    if invalid then imgui.PushStyleColor(imgui.Col.FrameBg,DSP.theme.col('bad',.28)) end
+    local edited=imgui.InputText('##compact_'..id,buf,64)
+    if invalid then imgui.PopStyleColor(1) end
+    if edited then
         if M.apply_number(it,key,buf,minimum or 1) then M.defer_save(); return true end
     end
     return false
@@ -207,6 +299,7 @@ function M.toggle(label, parent, key, default)
     return false
 end
 M.buffers = setmetatable({}, {__mode='k'})
+M.invalid_edits = setmetatable({}, {__mode='k'})
 function M.edit_buffer(item, key)
     local cache=M.buffers[item]
     if not cache then cache={}; M.buffers[item]=cache end
@@ -219,10 +312,13 @@ function M.edit_buffer(item, key)
 end
 function M.apply_number(item,key,buf,minimum)
     local raw=ffi.string(buf)
+    M.invalid_edits[item]=M.invalid_edits[item] or {}
+    M.invalid_edits[item][key]=true
     if not raw:match('^%d+$') then return false end
     local n=tonumber(raw)
     if not n or n < (minimum or 0) or n > 9007199254740991 then return false end
     item[key]=math.floor(n)
+    M.invalid_edits[item][key]=nil
     return true
 end
 function M.number(label,id,item,key,minimum,width)
@@ -230,7 +326,7 @@ function M.number(label,id,item,key,minimum,width)
     local buf=M.edit_buffer(item,key)
     imgui.SetNextItemWidth(width or 250)
     if imgui.InputText('##mobile_num_'..id,buf,64) then
-        if M.apply_number(item,key,buf,minimum) then DSP.save_settings(); return true end
+        if M.apply_number(item,key,buf,minimum) then M.defer_save(); return true end
     end
     if not ffi.string(buf):match('^%d+$') then
         imgui.TextColored(DSP.theme.col('bad',1), DSP.utf8('Введите целое положительное число'))
@@ -239,6 +335,7 @@ function M.number(label,id,item,key,minimum,width)
 end
 function M.refresh_buffer(item,key)
     if M.buffers[item] then M.buffers[item][key]=nil end
+    if M.invalid_edits[item] then M.invalid_edits[item][key]=nil end
 end
 local set_screen = DSP.screens.set
 function DSP.screens.set(id)
@@ -425,3 +522,14 @@ function DSP.ui.draw()
 end
 -- The old settings screen remains complete and scrolls vertically in the content child.
 -- Wrap rows on wider settings selectors instead of forcing them beyond the edge.
+
+-- Release native resources only for this script; other scripts keep their textures.
+if addEventHandler then
+    addEventHandler('onScriptTerminate',function(scr)
+        local own=thisScript and thisScript() or (script and script.this)
+        if own and scr==own then
+            M.flush_save(true)
+            M.release_icons()
+        end
+    end)
+end

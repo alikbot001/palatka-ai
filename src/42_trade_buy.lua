@@ -23,7 +23,7 @@ local function open_shop_menu()
     return wait_dialog({ 3040, 15072 }, 2500)
 end
 
-local function buy_one(it, pi, total)
+local function buy_one(it, pi, total, dry_run)
     DSP.auto.status = 'скупка: ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
     if not sampIsDialogActive() or sampGetCurrentDialogId() ~= 3040 then
         if not open_shop_menu() then
@@ -83,7 +83,7 @@ local function buy_one(it, pi, total)
     if not has_qty(txt) then qty = 1 end
     local resp = has_qty(txt) and (tostring(qty) .. ',' .. tostring(it.price))
         or tostring(it.price)
-    if DSP.settings.dry_run then
+    if dry_run then
         log('dry-run: купил бы ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price))
         close_dialog()
         return 'dry', tonumber(it.qty) or 1
@@ -106,12 +106,15 @@ function DSP.auto.start_buy()
     if DSP.auto.sell_running or DSP.auto.scanning then return false end
     local list = {}
     for _, it in ipairs(DSP.settings.buy_preset.items) do
-        if it.enabled ~= false and runtime.positive(it.price) and runtime.positive(it.qty or 1) then table.insert(list, it) end
+        if it.enabled ~= false and runtime.positive(it.price) and runtime.positive(it.qty or 1) then
+            list[#list+1] = {name=it.name,price=tonumber(it.price),qty=tonumber(it.qty) or 1}
+        end
     end
     if #list == 0 then DSP.notify('Скупка: пресет пуст или цены 0'); return end
+    local dry_run = DSP.settings.dry_run
     DSP.auto.buy_running = true
     DSP.auto.status = 'скупка...'
-    log('Скупка: ' .. #list .. ' позиций' .. (DSP.settings.dry_run and ' (dry-run)' or ''))
+    log('Скупка: ' .. #list .. ' позиций' .. (dry_run and ' (dry-run)' or ''))
     runtime.spawn('buy', function()
         DSP.auto.progress.total = #list
         if not open_shop_menu() then
@@ -130,7 +133,7 @@ function DSP.auto.start_buy()
                 for key, value in pairs(it) do entry[key] = value end
                 entry.qty = remaining
                 local units
-                result, units = buy_one(entry, pi, #list)
+                result, units = buy_one(entry, pi, #list, dry_run)
                 if not result then break end
                 remaining = remaining - (units or 1)
                 DSP.auto.progress.units = (DSP.auto.progress.units or 0) + (units or 1)

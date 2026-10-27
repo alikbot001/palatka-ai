@@ -6,7 +6,7 @@ local h = DSP.auto.helpers
 local close_dialog, wait_dialog, wait_text = h.close_dialog, h.wait_dialog, h.wait_text
 local clean, base_name, has_qty = h.clean, h.base_name, h.has_qty
 local function queue_sell()
-    local queue = {}
+    local queue, available = {}, {}
     for _, p in ipairs(DSP.settings.sell_preset.items) do
         if p.enabled ~= false and runtime.positive(p.price) and runtime.positive(p.qty or 1) then
             local target = base_name(p.name)
@@ -15,18 +15,22 @@ local function queue_sell()
                 if inv.name == p.name or ((tonumber(p.ench) or 0) == 0 and inv.name == target) then
                     for _, st in ipairs(inv.stacks) do
                         if left <= 0 then break end
-                        local take = math.min(st.count, left)
+                        if available[st.slot] == nil then
+                            available[st.slot] = runtime.positive(st.count) and tonumber(st.count) or 0
+                        end
+                        local take = math.min(available[st.slot], left)
                         if take > 0 then
                             table.insert(queue, {
                                 name = p.name, base = target, price = p.price,
                                 qty = take, slot = st.slot,
                             })
                             left = left - take
+                            available[st.slot] = available[st.slot] - take
                         end
                     end
-                    break
                 end
             end
+            if left > 0 then return nil, p.name .. ': недостаточно в инвентаре' end
         end
     end
     return queue
@@ -43,8 +47,10 @@ function DSP.auto.start_sell()
         DSP.notify('Продажа: сначала просканируйте инвентарь')
         return
     end
-    local queue = queue_sell()
+    local queue, err = queue_sell()
+    if not queue then DSP.notify('Продажа: ' .. err); return false end
     if #queue == 0 then DSP.notify('Продажа: в инвентаре нет позиций из пресета'); return end
+    local dry_run = DSP.settings.dry_run
     DSP.auto.sell_running = true
     DSP.auto.sell_confirmed = false
     DSP.auto.sell_forbidden = false
@@ -85,7 +91,7 @@ function DSP.auto.start_sell()
                 if not has_qty(txt) and it.qty > 1 then
                     error('Диалог не поддерживает количество: ' .. it.name)
                 end
-                if DSP.settings.dry_run then
+                if dry_run then
                     DSP.auto.progress.dry = DSP.auto.progress.dry + 1
                     log('dry-run: продал бы ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price))
                     close_dialog()

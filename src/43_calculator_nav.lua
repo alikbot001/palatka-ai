@@ -40,32 +40,48 @@ local function evaluate(a,op,b)
     elseif op=='/' then if b==0 then return nil end; return a/b end
     return b
 end
+local function record(a,op,b,n)
+    C.history[#C.history+1]={text=fmt(a)..' '..op..' '..fmt(b)..' = '..(n and fmt(n) or 'Ошибка'),result=n}
+    if #C.history>50 then table.remove(C.history,1) end
+end
 function C.press(k)
     if k:match('^%d$') then
-        if C.fresh or C.display=='0' or C.display=='Ошибка' then C.display=k else C.display=C.display..k end
+        if C.fresh or C.display=='0' or C.display=='Ошибка' then C.display=k
+        elseif #C.display<18 then C.display=C.display..k end
         C.fresh=false
     elseif k=='.' then
-        if C.fresh then C.display='0';C.fresh=false end
+        if C.fresh or C.display=='Ошибка' then C.display='0';C.fresh=false end
         if not C.display:find('.',1,true) then C.display=C.display..'.' end
-    elseif k=='AC' then C.display='0';C.stored=nil;C.op=nil;C.fresh=true
+    elseif k=='AC' then
+        C.display='0';C.stored=nil;C.op=nil;C.fresh=true;C.last_op=nil;C.last_rhs=nil
     elseif k=='C' then C.display='0';C.fresh=true
     elseif k=='+/-' then C.display=fmt(-value())
-    elseif k=='%' then C.display=fmt(value()/100)
+    elseif k=='%' then
+        local n=value()/100
+        if C.stored and (C.op=='+' or C.op=='-') then n=C.stored*n end
+        C.display=fmt(n)
     elseif k=='=' then
-        if C.op and C.stored then
-            local b=value()
-            local n=evaluate(C.stored,C.op,b)
-            local label=fmt(C.stored)..' '..C.op..' '..fmt(b)..' = '..(n and fmt(n) or 'Ошибка')
-            C.history[#C.history+1]={text=label,result=n}
-            if #C.history>50 then table.remove(C.history,1) end
+        local op=C.op or C.last_op
+        local a=C.stored or value()
+        local b=C.op and value() or C.last_rhs
+        if op and b then
+            local n=evaluate(a,op,b)
+            record(a,op,b,n)
             C.display=n and fmt(n) or 'Ошибка'
+            C.last_op=n and op or nil;C.last_rhs=n and b or nil
             C.stored=nil;C.op=nil;C.fresh=true
         end
     elseif k=='+' or k=='-' or k=='*' or k=='/' then
-        C.stored=value();C.op=k;C.fresh=true
+        if C.op and C.stored and not C.fresh then
+            local n=evaluate(C.stored,C.op,value())
+            C.display=n and fmt(n) or 'Ошибка'
+            if not n then C.stored=nil;C.op=nil;C.fresh=true;return C.display end
+        end
+        C.stored=value();C.op=k;C.fresh=true;C.last_op=nil
     end
     return C.display
 end
+
 function C.finance(buy,sell,qty,commission,extra)
     buy,sell,qty=tonumber(buy) or 0,tonumber(sell) or 0,tonumber(qty) or 0
     commission=math.max(0,math.min(100,tonumber(commission) or 0))

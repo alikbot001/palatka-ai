@@ -1,179 +1,173 @@
--- UI 2.1 grouped arbitrage: raw snapshot vs planned volume are separate.
--- No write-back or manual overriding of API quantities.
-local ffi=require('ffi')
+-- One item per row. Details are a real modal, allocations use raw offer IDs.
 local V,M=DSP.ui21,DSP.mobile
-V.arb_tab='sell'
-V.arb_chosen={}
-local function b(s,id,w,on) return V.button(s,'arb_'..id,w,on) end
-local function key(o) return tostring(o.shop)..'/'..tostring(o.price)..'/'..tostring(o.owner) end
-local function routekey(g,r)
-    return tostring(g.key)..'/'..key(r.sell_offer)..'>'..key(r.buy_offer)
-end
+V.arb_tab='sell';V.arb_revision=0
+local function b(s,id,w,on)return V.button(s,'arb_'..id,w,on)end
+local function offerkey(o)return DSP.market.offer_key(o)end
 function V.arb_group(groups)
-    for _,g in ipairs(groups or {}) do if g.key==V.arb_item then return g end end
+    for _,g in ipairs(groups or{})do if g.key==V.arb_item then return g end end
 end
-local function plan(g)
-    local out={qty=0,cost=0,revenue=0,profit=0,routes={}}
-    for _,r in ipairs(g.routes or {}) do
-        if V.arb_chosen[routekey(g,r)] then
-            out.qty=out.qty+(tonumber(r.tradable_qty) or 0)
-            out.cost=out.cost+(tonumber(r.total_cost) or 0)
-            out.revenue=out.revenue+(tonumber(r.net_revenue) or 0)
-            out.profit=out.profit+(tonumber(r.net_profit) or 0)
-            out.routes[#out.routes+1]=r
-        end
-    end
-    if V.arb_extra_enabled and #out.routes>0 then
-        out.profit=out.profit-math.max(0,tonumber(V.arb_extra and V.arb_extra.value) or 0)
-    end
-    return out
+local function choose_all(g)
+    V.arb_sellers={};V.arb_buyers={}
+    for _,o in ipairs(g.sellers)do V.arb_sellers[offerkey(o)]=true end
+    for _,o in ipairs(g.buyers)do V.arb_buyers[offerkey(o)]=true end
+    V.arb_revision=V.arb_revision+1
 end
-local function selected(g)
-    local from,to=V.selected_page('arb_offers',#(V.arb_tab=='sell' and g.sellers or g.buyers),12)
-    local offers=V.arb_tab=='sell' and g.sellers or g.buyers
-    for i=from,to do
-        local o=offers[i]
-        local itemkey=key(o)
-        local checked=(V.arb_tab=='sell' and V.arb_seller or V.arb_buyer)==itemkey
-        local label='#'..tostring(o.shop)..'  '..tostring(o.owner or '?')..
-            '  x'..tostring(o.qty or 0)..' · '..DSP.money(o.price)..'/шт.'
-        if b(label,'offer_'..i,-1,checked) then
-            if V.arb_tab=='sell' then V.arb_seller=(checked and nil or itemkey)
-            else V.arb_buyer=(checked and nil or itemkey) end
-        end
-        if b('Метка','pin_'..i,91) then DSP.market.mark_shop(o.shop) end
-        V.inline();V.muted('API · '..DSP.market.offer_freshness(o.ts))
-        imgui.Separator()
+-- Unlike "select all", the auto-plan is an action: it selects offers actually
+-- used by the allocator and immediately opens its route and financial result.
+local function best_plan(g)
+    local p=DSP.market.plan_offers(g,nil,nil,{
+        extra=V.arb_extra_enabled and V.arb_extra and V.arb_extra.value or 0})
+    if p.qty<=0 then
+        V.arb_best_error='Нет выгодного маршрута при текущих фильтрах'
+        return
     end
-    V.pager('arb_offers',#offers,12)
+    V.arb_sellers={};V.arb_buyers={}
+    for _,r in ipairs(p.routes)do
+        V.arb_sellers[offerkey(r.sell_offer)]=true
+        V.arb_buyers[offerkey(r.buy_offer)]=true
+    end
+    V.arb_best_error=nil
+    V.arb_revision=V.arb_revision+1
+    V.arb_route=true
 end
-local function route_view(g)
-    local p=plan(g)
-    if b('‹ Назад','route_back',130) then V.arb_route=false;return end
-    V.text('Маршрут · '..p.qty..' шт. / '..DSP.money(p.profit))
-    if #p.routes==0 then V.muted('Отметьте подходящие связки или нажмите «Лучший план».') end
-    for i,r in ipairs(p.routes) do
-        V.text(i..'. Купить x'..tostring(r.tradable_qty)..' · #'..tostring(r.sell_offer.shop))
-        V.inline();if b('Метка','route_sell_'..i,97) then DSP.market.mark_shop(r.sell_offer.shop) end
-        V.text('     Продать x'..tostring(r.tradable_qty)..' · #'..tostring(r.buy_offer.shop))
-        V.inline();if b('Метка','route_buy_'..i,97) then DSP.market.mark_shop(r.buy_offer.shop) end
-        imgui.Separator()
+function V.arb_plan(g)
+    local f=DSP.settings.arb_filters or{}
+    local sig=table.concat({tostring(g),V.arb_revision,DSP.settings.tax_bp or 200,
+        f.budget or 0,f.min_profit or 0,f.min_roi or 0,f.max_age or 1800,
+        V.arb_extra_enabled and(V.arb_extra and V.arb_extra.value or 0)or 0},'|')
+    if os.time()>=(V.arb_plan_expiry or 0)then V.cache.arb_plan=nil end
+    return V.memo('arb_plan',sig,function()
+        local now,until_ts=os.time(),math.huge
+        local age=tonumber(f.max_age)or 1800
+        for _,offers in ipairs({g.sellers,g.buyers})do for _,o in ipairs(offers)do
+            local ts=tonumber(o.ts)or 0
+            if age>0 and ts>0 and ts+age+1>now then until_ts=math.min(until_ts,ts+age+1)end
+        end end
+        V.arb_plan_expiry=until_ts
+        local p=DSP.market.plan_offers(g,V.arb_sellers or{},V.arb_buyers or{},
+            {extra=V.arb_extra_enabled and V.arb_extra.value or 0})
+        return p
+    end)
+end
+local function offer_row(o,i)
+    local selected=V.arb_tab=='sell'and V.arb_sellers or V.arb_buyers
+    local key=offerkey(o);local checked=selected and selected[key]
+    V.row('arb_offer_'..V.arb_tab..i,58,function(w,x,y)
+        if b(checked and 'x'or' ','select_'..i,42,checked)then
+            selected[key]=not checked or nil;V.arb_revision=V.arb_revision+1
+        end
+        V.at(x+50,y+2);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),w-230))
+        V.at(x+50,y+24);V.muted(V.fit(tostring(o.qty)..' шт. · '..DSP.market.offer_freshness(o.ts),w-220))
+        V.at(x+w-232,y+8);V.text(DSP.money(o.price)..'/шт.')
+        V.at(x+w-72,y+5)
+        if b('Метка','pin_'..i,72,false)then DSP.market.mark_shop(o.shop)end
+    end)
+end
+local function route_rows(p)
+    return function(r,i)
+        V.row('route_'..i,100,function(w,x,y)
+            V.text(V.fit('КУПИТЬ '..r.tradable_qty..' шт. у лавки #'..tostring(r.sell_offer.shop)..' · '..DSP.money(r.p_buy)..'/шт.',w))
+            V.at(x,y+26);V.text(V.fit('ПРОДАТЬ скупщику #'..tostring(r.buy_offer.shop)..' · '..DSP.money(r.p_sell)..'/шт.',w))
+            V.at(x,y+52)
+            if b('К продавцу','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
+            V.inline();if b('К скупщику','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
+            V.inline();V.green('+'..DSP.money(r.net_profit))
+        end)
     end
 end
-local function detail(g)
-    if V.arb_route then return route_view(g) end
-    if b('‹ Назад','back',140) then V.arb_item=nil;return end
-    V.inline();V.text(tostring(g.name))
-    V.muted('Продают '..g.supply..' шт.  ·  Скупают '..g.demand..' шт.  (снимок API)')
-    V.muted('План: '..g.planned..' шт.  ·  +'..DSP.money(g.profit)..'  ·  '..DSP.market.freshness())
-    if b('Продают','tab_sell',math.max(130,imgui.GetContentRegionAvail().x*.30),V.arb_tab=='sell') then
-        V.arb_tab='sell';V.pages.arb_offers=1
+local function finance(p)
+    local available=imgui.GetContentRegionAvail().x
+    V.muted(V.fit('Закупка (затраты): '..DSP.money(p.cost)..' · Валовая выручка: '..DSP.money(p.gross),available))
+    V.muted(V.fit('Комиссия: '..DSP.money(p.fee)..' · Чистая выручка: '..DSP.money(p.revenue),available))
+    local profit_label=V.fit('ПРИБЫЛЬ после закупки, комиссии и расходов: '..DSP.money(p.profit),available)
+    if p.profit>=0 then V.green(profit_label)else V.red(profit_label)end
+    if p.extra>0 then V.muted(V.fit('Дополнительные расходы: '..DSP.money(p.extra)..' (учтены один раз)',available))end
+end
+local function details(g)
+    local p=V.arb_plan(g)
+    V.text(V.fit(g.name,imgui.GetContentRegionAvail().x))
+    V.muted('Доступно '..g.supply..' · Спрос '..g.demand..' · Сделка '..p.qty..' шт.')
+    local changed=V.arb_snapshot~=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
+    V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
+        (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))
+    finance(p)
+    if V.arb_route then
+        if b('< Предложения','back_offers',170)then V.arb_route=false end
+        V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
+            if p.profit>=0 then V.green(DSP.money(p.profit)..' чистой прибыли')
+            else V.red(DSP.money(p.profit)..' итогового убытка')end
+        end})
+        return
     end
-    V.inline()
-    if b('Скупают','tab_buy',math.max(130,imgui.GetContentRegionAvail().x*.30),V.arb_tab=='buy') then
-        V.arb_tab='buy';V.pages.arb_offers=1
-    end
-    selected(g)
-    -- Explicit pair is an alternative estimate, not part of the allocated plan.
-    if V.arb_seller and V.arb_buyer then
-        local s,k
-        for _,o in ipairs(g.sellers) do if key(o)==V.arb_seller then s=o end end
-        for _,o in ipairs(g.buyers) do if key(o)==V.arb_buyer then k=o end end
-        local f=DSP.settings.arb_filters or {}
-        local pair=DSP.arb_v16.manual_pair(s,k,f.budget,DSP.settings.tax_bp)
-        if pair then
-            V.text('Выбранная пара: '..pair.qty..' шт.')
-            V.muted('Купить '..DSP.money(pair.cost)..' · Выручка '..DSP.money(pair.revenue))
-            V.green('Прибыль пары: '..DSP.money(pair.profit))
-        end
-    end
-    if b('Лучший план','auto',153) then
-        V.arb_chosen={}
-        for _,r in ipairs(g.routes or {}) do V.arb_chosen[routekey(g,r)]=true end
-        V.arb_seller=nil;V.arb_buyer=nil
-    end
-    V.inline()
-    if b('Очистить','clear',112) then V.arb_chosen={};V.arb_seller=nil;V.arb_buyer=nil end
-    V.inline()
-    if b('Связки','show_routes',106) then V.arb_routes_expand=not V.arb_routes_expand end
-    if V.arb_routes_expand then
-        local routes=g.routes or {}
-        local from,to=V.selected_page('arb_routes',#routes,12)
-        for i=from,to do
-            local r=routes[i]
-            local id=routekey(g,r)
-            local checked=V.arb_chosen[id] and true or false
-            if b((checked and '[x]' or '+')..'  #'..r.sell_offer.shop..' -> #'..r.buy_offer.shop..
-                '  x'..r.tradable_qty..'  +'..DSP.money(r.net_profit),'route_'..i,-1,checked) then
-                V.arb_chosen[id]=not checked or nil
-            end
-        end
-        V.pager('arb_routes',#routes,12)
-    end
-    V.arb_extra=V.arb_extra or {value=0}
-    if b(V.arb_extra_enabled and '[x] Доп. расходы' or 'Доп. расходы','expenses',171,V.arb_extra_enabled) then
-        V.arb_extra_enabled=not V.arb_extra_enabled
-    end
-    if V.arb_extra_enabled then M.number('Расход ($)','arb_extra',V.arb_extra,'value',0,130) end
-    local p=plan(g)
-    V.text('Выбрано: x'..p.qty..'   Затраты: '..DSP.money(p.cost)..'   Выручка: '..DSP.money(p.revenue))
-    V.green('Чистая прибыль: '..DSP.money(p.profit))
+    local tw=imgui.GetContentRegionAvail().x
+    if b('Продают · купить '..#g.sellers,'sell',tw*.23,V.arb_tab=='sell')then V.arb_tab='sell'end
+    V.inline();if b('Скупают · продать '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
+    V.inline();if b('Лучший план >','best',tw*.27)then best_plan(g)end
+    V.inline();if b('Сброс','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
+    V.arb_extra=V.arb_extra or{value=0}
+    if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
+    if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
+    if V.arb_best_error then V.red(V.arb_best_error)end
+    local offers=V.arb_tab=='sell'and g.sellers or g.buyers
+    local height=math.max(48,imgui.GetContentRegionAvail().y-110)
+    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,58,offer_row,{height=height,footer=function()
+        if b('Маршрут >','route',142,true)then V.arb_route=true end
+        V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
+    end})
 end
 function V.arbitrage()
     local st=DSP.market.state
-    local sig=tostring(st.sid)..':'..tostring(st.version or 0)
-    if sig~=V.arb_signature then
-        V.arb_signature=sig
-        V.arb_item=nil
-        V.arb_chosen={}
-        V.arb_seller=nil;V.arb_buyer=nil
-        V.arb_route=false
-    end
-    local groups=DSP.market.arbitrage_grouped()
-    if V.arb_item then
-        local g=V.arb_group(groups)
-        if g then return detail(g) end
-        V.arb_item=nil
-    end
-    V.text('Арбитраж')
-    V.inline();V.muted(DSP.market.freshness())
-    V.inline();if b('Обн.','refresh',55) then DSP.market.pull(st.sid) end
-    local query=V.search('arb','Поиск предмета...',-1)
-    if b('Фильтры','filters',115,V.arb_filters) then V.arb_filters=not V.arb_filters end
+    V.text('Арбитраж');V.inline();V.muted(DSP.market.freshness())
+    V.inline();if b('Обновить','refresh',120)then DSP.market.pull(st.sid)end
+    local query,edited=V.search('arb','Поиск предмета',-1)
+    if edited then V.reset_list('arb_main')end
+    if b('Фильтры','filters',120,V.arb_filters)then V.arb_filters=not V.arb_filters end
     if V.arb_filters then
-        local f=DSP.settings.arb_filters or {};DSP.settings.arb_filters=f
-        local changed=M.number('Бюджет','budget',f,'budget',0,145)
-        changed=M.number('Мин. прибыль','minprofit',f,'min_profit',0,145) or changed
-        if changed then DSP.market.invalidate_arbitrage();M.defer_save() end
+        local f=DSP.settings.arb_filters or{};DSP.settings.arb_filters=f
+        V.inline();V.muted('Бюджет');V.inline()
+        local changed=M.compact_number(f,'budget','arb_budget',122,0)
+        V.inline();V.muted('Мин. прибыль');V.inline()
+        changed=M.compact_number(f,'min_profit','arb_minprofit',122,0)or changed
+        if changed then DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1 end
     end
-    local q=DSP.lower(query or '')
-    local filtered={}
-    for _,g in ipairs(groups) do
-        if q=='' or DSP.lower(g.name):find(q,1,true) then filtered[#filtered+1]=g end
-    end
-    V.muted(#filtered..' предметов · план, не фактическая сделка')
-    local from,to=V.selected_page('arb',#filtered,16)
-    for i=from,to do
-        local g=filtered[i]
-        M.thumbnail({name=g.name,id=g.row and g.row.id},23);V.inline()
-        if b(tostring(g.name)..'  x'..g.planned..'  +'..DSP.money(g.profit)..'  ›','group_'..i,-1) then
-            V.arb_item=g.key;V.arb_tab='sell';V.pages.arb_offers=1
-            V.arb_routes_expand=false;V.arb_route=false
-            V.arb_chosen={};V.arb_seller=nil;V.arb_buyer=nil
-        end
-        imgui.Separator()
-    end
-    if #filtered==0 then V.muted('Связок нет или данные рынка устарели.') end
-    V.pager('arb',#filtered,16)
+    local groups,status
+    if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
+    if status=='loading'then V.muted('Расчёт рынка...')elseif status=='error'then V.red('Ошибка расчёта. См. журнал')end
+    local sig=tostring(groups)..'|'..DSP.lower(query)
+    local filtered=V.memo('arb_rows',sig,function()
+        local out={};local q=DSP.lower(query)
+        for _,g in ipairs(groups)do if q==''or DSP.lower(g.name):find(q,1,true)then out[#out+1]=g end end
+        return out
+    end)
+    V.list_rows('arb_main',filtered,60,function(g,i)
+        V.row('arb_group_'..i,60,function(w,x,y)
+            M.thumbnail({name=g.name,id=g.row and g.row.id},32)
+            V.at(x+42,y-3)
+            if V.text_button(V.fit(g.name,w-242),'arb_group_'..i,w-230,false,30)then
+                V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
+                V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
+                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
+            end
+            V.at(x+42,y+28);V.muted(V.fit('Доступно '..g.supply..' · Спрос '..g.demand..' · План '..g.planned..' шт.',w-244))
+            V.at(x+w-172,y+4);V.muted('Чистая прибыль')
+            V.at(x+w-172,y+27);V.green(V.fit(DSP.money(g.profit),169))
+        end)
+    end,{footer=function()V.muted('По данным API · наличие не гарантировано')end})
 end
-function V.arb_footer(w)
-    if V.arb_item and not V.arb_route then
-        if b('^','up',48) then M.queue_scroll(-1) end
-        V.inline();if b('v','down',48) then M.queue_scroll(1) end
-        V.inline();if b('Маршрут ›','route',170,true) then V.arb_route=true end
-    else
-        if b('^','up',57) then M.queue_scroll(-1) end
-        V.inline();if b('v','down',57) then M.queue_scroll(1) end
-        V.inline();V.muted('По данным API, не гарантия наличия')
-    end
+local previous=V.popups
+function V.popups()
+    if previous then previous()end
+    V.popup('Арбитраж','arb_details',function()
+        local st=DSP.market.state
+        if V.arb_server~=st.sid then
+            V.text('Выбран другой сервер');V.muted('Откройте предмет повторно для нового расчёта')
+            if b('Закрыть','stale_close',150)then imgui.CloseCurrentPopup()end
+            return
+        end
+        local g=V.arb_detail_group
+        if g then details(g)else
+            V.muted('Связка больше не проходит фильтры')
+            if b('Закрыть','empty_close',140)then imgui.CloseCurrentPopup()end
+        end
+    end,{w=850,h=560})
 end

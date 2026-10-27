@@ -13,6 +13,8 @@ DSP.settings.trades = DSP.settings.trades or {}
 DSP.settings.stalls = DSP.settings.stalls or {}
 DSP.settings.crates = DSP.settings.crates or {}
 DSP.settings.stats_tab = DSP.settings.stats_tab or 'day'
+DSP.logs.session_started = DSP.logs.session_started or os.time()
+DSP.settings.chat_logs = DSP.settings.chat_logs or {}
 
 local LOG_DIR = DSP.dir .. '/logs'
 local send_telegram
@@ -35,7 +37,7 @@ local function mkdir_p(p)
     if not ok_lfs or not lfs then return end
     if type(lfs.attributes) == 'function' then
         local ok, attr = pcall(lfs.attributes, p)
-        if not ok then
+        if not ok or not attr then
             pcall(lfs.mkdir, p)
         end
     end
@@ -79,6 +81,7 @@ function DSP.db.load_trades()
     if not raw then return false end
     local ok, pack = pcall(decodeJson, raw)
     if not ok or type(pack) ~= 'table' then return false end
+    DSP.logs.revision = (DSP.logs.revision or 0) + 1
     DSP.settings.trades = pack.trades or {}
     DSP.settings.stalls = pack.stalls or {}
     DSP.settings.crates = pack.crates or {}
@@ -118,8 +121,8 @@ function DSP.logs.save_daily_log()
 end
 
 function DSP.logs.record_trade(partner, items_give, items_get, money_give, money_get, result)
-    local total_give = tonumber(money_give or 0)
-    local total_get = tonumber(money_get or 0)
+    local total_give = tonumber(money_give) or 0
+    local total_get = tonumber(money_get) or 0
     for _, it in ipairs(items_give or {}) do
         local e = DSP.db.get(it.name, it.ench)
         if e and e.buy and e.buy.max and e.buy.max > 0 then
@@ -153,7 +156,9 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
     }
     local entry_id = tostring(entry.ts)
     while DSP.settings.trades[entry_id] do entry_id = entry_id .. '_' end
+    entry.id='trade:'..entry_id
     DSP.settings.trades[entry_id] = entry
+    DSP.logs.revision = (DSP.logs.revision or 0) + 1
     DSP.logs.trade_logs[#DSP.logs.trade_logs + 1] = entry
     DSP.db.save_trades()
     DSP.logs.save_daily_log()
@@ -215,10 +220,11 @@ function DSP.logs.crate_opened(item_name, price, count, source, ench)
     DSP.settings.crates[key] = entry
     if DSP.rewards then
         local known = tonumber(price) and tonumber(price) > 0
-        DSP.rewards.record({kind='item', ts=entry.ts, item_name=entry.item_name, qty=entry.qty, ench=entry.ench,
+        local reward,err=DSP.rewards.record({kind='item', ts=entry.ts, item_name=entry.item_name, qty=entry.qty, ench=entry.ench,
             source=entry.source, association='explicit', price_known=not not known,
             unit_price=known and tonumber(price) or nil, estimated_value=known and tonumber(price)*entry.qty or nil,
             price_source=known and 'caller' or nil, legacy_id='crate:' .. key})
+        if reward then entry.id=reward.id else DSP.add_log('История наград: '..tostring(err),'error') end
     end
     DSP.db.save_trades()
     DSP.logs.save_daily_log()
@@ -243,7 +249,7 @@ local function day_key(ts, mode)
         local w = math.floor((d.yday - 1) / 7) + 1
         return string.format('%04d-W%02d', d.year, w)
     end
-    if mode == 'month' then return string.format('%04d-%02d', d.year, d.month) end
+    if mode == 'month' then return os.date('%Y-%m', ts) end
     return 'all'
 end
 
@@ -265,8 +271,33 @@ function DSP.logs.stats(mode)
 end
 
 function DSP.logs.profit_summary(mode)
+    mode = mode or 'day'
     local buckets = DSP.logs.stats(mode)
+    if mode == 'day' then
+        local key = os.date('%Y-%m-%d', os.time())
+        buckets = buckets[key] and {[key] = buckets[key]} or {}
+    elseif mode == 'session' then
+        local bucket = {count=0,profit=0,total_get=0,total_give=0}
+        for _, e in pairs(DSP.settings.trades or {}) do
+            if e.type == 'trade' and (tonumber(e.ts) or 0) >= DSP.logs.session_started then
+                bucket.count = bucket.count + 1
+                for _, key in ipairs({'profit','total_get','total_give'}) do
+                    bucket[key] = bucket[key] + (tonumber(e[key]) or 0)
+                end
+            end
+        end
+        buckets = {session=bucket}
+    end
     local total_count, total_profit, total_get, total_give = 0, 0, 0, 0
+    local cash_get,cash_give=0,0
+    for _,e in pairs(DSP.settings.trades or {}) do
+        local included=mode~='day' or os.date('%Y-%m-%d',e.ts or 0)==os.date('%Y-%m-%d',os.time())
+        if mode=='session' then included=(tonumber(e.ts) or 0)>=DSP.logs.session_started end
+        if e.type=='trade' and included then
+            cash_get=cash_get+(tonumber(e.money_get) or 0)
+            cash_give=cash_give+(tonumber(e.money_give) or 0)
+        end
+    end
     local sorted_keys = {}
     for k, _ in pairs(buckets) do table.insert(sorted_keys, k) end
     table.sort(sorted_keys, function(a, b) return a > b end)
@@ -280,6 +311,7 @@ function DSP.logs.profit_summary(mode)
     return {
         count = total_count,
         profit = total_profit,
+        cash_get=cash_get, cash_give=cash_give,
         avg_profit = total_count > 0 and math.floor(total_profit / total_count) or 0,
         total_get = total_get,
         total_give = total_give,
@@ -299,6 +331,7 @@ function DSP.logs.trade_detail(idx)
 end
 
 function DSP.logs.clear_trades()
+    DSP.logs.revision = (DSP.logs.revision or 0) + 1
     DSP.settings.trades = {}
     DSP.settings.stalls = {}
     DSP.settings.crates = {}
@@ -359,7 +392,8 @@ function DSP.logs.log_chat(text)
     if DSP.live and DSP.live.check_payday_message then
         pcall(DSP.live.check_payday_message, s)
     end
-    if DSP.live and DSP.live.check_income_message then
+    local payday_detail = DSP.craglog and DSP.craglog.observe_payday and DSP.craglog.observe_payday(s)
+    if not payday_detail and DSP.live and DSP.live.check_income_message then
         pcall(DSP.live.check_income_message,s)
     end
     if DSP.live and DSP.live.check_market_message then
@@ -369,8 +403,14 @@ function DSP.logs.log_chat(text)
     local drop
     if DSP.settings.log_chat_drops ~= false then
         if DSP.rewards then
-            local row, err = DSP.rewards.ingest(text)
-            if err then DSP.add_log('История наград: ' .. tostring(err), 'error') end
+            local parsed=payday_detail and DSP.rewards.parse(text)
+            if parsed and parsed.kind=='cash'then
+                -- This receipt is already persisted as a PayDay component.
+                DSP.rewards.pending={};DSP.rewards.last_opening=nil
+            else
+                local row,err=DSP.rewards.ingest(text)
+                if err then DSP.add_log('История наград: '..tostring(err),'error')end
+            end
         else drop = DSP.logs.parse_chat_drop(s) end
     end
     if drop and drop.name and drop.name ~= '' then

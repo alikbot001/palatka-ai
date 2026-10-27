@@ -70,12 +70,20 @@ function L.reset_trade(partner)
     DSP.flog('TRADE reset partner=' .. tostring(partner or ''))
 end
 
+local function shop_server()
+    return tonumber(DSP.settings and DSP.settings.server) or tonumber(DSP.market and DSP.market.state and DSP.market.state.sid) or 0
+end
+local function shop_changed(s)
+    L.shop_revision=(L.shop_revision or 0)+1;s.revision=L.shop_revision
+end
 function L.reset_shop(owner, num)
+    L.shop_generation=(L.shop_generation or 0)+1
     L.shop = {
         owner = owner or '', num = tostring(num or ''),
         sell = {}, buy = {}, seen = {},
-        opened = now(), updated = now(), items_updated = 0, menu_closed = 0,
+        opened = now(), updated = now(), items_updated = 0, menu_closed = 0,generation=L.shop_generation,server=shop_server(),
     }
+    shop_changed(L.shop)
     DSP.flog('SHOP reset owner=' .. tostring(owner or '') .. ' num=' .. tostring(num or ''))
 end
 
@@ -169,41 +177,62 @@ function L.handle_trade(sub, raw)
     end
 end
 
+local function shop_number(obj,key)
+    local raw=obj:match('"'..key..'"%s*:%s*"([^" ]+)"') or obj:match('"'..key..'"%s*:%s*([%+%-%.%deE]+)')
+    local n=tonumber(raw)
+    if n and n==n and n>=0 and n<=9007199254740991 and n%1==0 then return n end
+end
 function L.parse_shop_item(obj, side)
-    local s = L.ensure_shop()
-    local item_raw = obj:match('"item"%s*:%s*"([^"]+)"') or obj:match('"item"%s*:%s*(%d+)')
+    local s=L.ensure_shop()
+    local item_raw=obj:match('"item"%s*:%s*"([^"]+)"') or obj:match('"item"%s*:%s*(%d+)')
     if not item_raw then return end
-    local ench = tonumber(obj:match('"enchant"%s*:%s*(%d+)')) or 0
-    local amount = tonumber(obj:match('"amount"%s*:%s*(%d+)')) or 0
-    local text = obj:match('"text"%s*:%s*"([^"]*)"')
-    local text_price = text and DSP.money_val(text) or 0
-    local price = text_price > amount and text_price or amount
-    if price <= 0 then return end
-    local it = L.item_from_id(item_raw, ench, 1)
-    if not it then return end
-    local key = tostring(it.id) .. '|' .. tostring(price) .. '|' .. tostring(it.ench or 0)
-    local list = side == 'sell' and s.sell or s.buy
-    local ex = s.seen[key]
-    if ex then
-        ex.qty = ex.qty + 1
-    else
-        local e = { name = it.name, ench = it.ench, id = it.id, price = price, qty = 1 }
-        s.seen[key] = e
-        list[#list + 1] = e
+    local slot,ench=shop_number(obj,'slot'),shop_number(obj,'enchant') or 0
+    local it=L.item_from_id(item_raw,ench,1)
+    local key=side..':'..(slot and tostring(slot) or ('item:'..tostring(it and it.id or item_raw)..':'..tostring(it and it.ench or ench)))
+    local list=side=='sell' and s.sell or s.buy
+    local previous=s.seen[key]
+    local text=obj:match('"text"%s*:%s*"([^"]*)"') or ''
+    local raw_price=text:match('%$%s*([%d%., ]+)') or text:match('([%d][%d%., ]*)%s*%$')
+    local text_price=raw_price and tonumber((raw_price:gsub('[^%d]','')))
+    local price=shop_number(obj,'price') or math.max(text_price or 0,shop_number(obj,'amount') or 0)
+    local qty=shop_number(obj,'count') or shop_number(obj,'qty')
+    if qty==nil then qty=tonumber(text:match('%((%d+)%s*шт%.?%)')) end
+    if tonumber(item_raw)==0 or price==0 or qty==0 then
+        if previous then
+            for i,e in ipairs(list) do if e==previous then table.remove(list,i);break end end
+            s.seen[key]=nil;shop_changed(s)
+        end
+        return
     end
-    DSP.db.learn(it.id, it.ench, price, side)
+    if not it or not price or price<=0 or price>9007199254740991 or price%1~=0 then return end
+    if qty and (qty>9007199254740991 or qty<0 or qty%1~=0) then qty=nil end
+    if previous and previous.id==it.id and previous.ench==it.ench and previous.price==price and previous.qty==qty then return end
+    local row={key=key,slot=slot,name=it.name,ench=it.ench,id=it.id,item_id=it.id,price=price,
+        qty=qty,qty_known=qty~=nil,slot_count=1}
+    if previous then
+        for i,e in ipairs(list) do if e==previous then list[i]=row;break end end
+    else list[#list+1]=row end
+    s.seen[key]=row;shop_changed(s)
+    if DSP.shop_scan then
+        local result=DSP.shop_scan.learn()
+        if not result.ok then DSP.flog('SHOP learn: '..tostring(result.error)) end
+    else DSP.db.learn(it.id,it.ench,price,side) end
 end
 
 function L.handle_shop_items(raw)
     local tp = tonumber(raw:match('"type"%s*:%s*(%d+)')) or 0
     if tp ~= 13 and tp ~= 28 then return end
     local s = L.ensure_shop()
+    if s.server~=shop_server() then L.reset_shop('','');s=L.shop end
     local first_slot = tonumber(raw:match('"slot"%s*:%s*(%d+)'))
     local stale = now() - (s.items_updated or 0) > 10
-    if first_slot == 0 and ((s.menu_closed or 0) > 0 or stale) then
-        local keep_owner = now() - (s.updated or 0) <= 2 and s.owner or ''
-        local keep_num = keep_owner ~= '' and s.num or ''
-        L.reset_shop(keep_owner, keep_num)
+    -- A slot-0 packet can start a different stall before its owner metadata.
+    -- Never carry the previous stall identity into this new generation. If the
+    -- owner packet arrived first, reset_shop() already cleared items_updated;
+    -- it belongs to the new generation and must *not* be discarded here.
+    if first_slot == 0 and ((s.menu_closed or 0) > 0 or
+        ((s.items_updated or 0) > 0 and stale)) then
+        L.reset_shop('', '')
         s = L.shop
     end
     s.updated = now()
@@ -236,9 +265,11 @@ function L.handle_shop_owner(raw)
         or raw:match('"shopId"%s*:%s*"(%d+)"')
         or raw:match('"lavkaId"%s*:%s*"(%d+)"')
     local s = L.shop
-    if not s or s.updated == 0 or (s.owner ~= '' and s.owner ~= owner) then
-        L.reset_shop(owner, num)
+    if not s or s.updated == 0 or s.server~=shop_server() or (s.menu_closed or 0)>0 or (s.owner ~= '' and s.owner ~= owner)
+        or (num and s.num~='' and s.num~=tostring(num)) then
+        L.reset_shop(owner, num);s=L.shop
     else
+        if s.owner~=owner or (num and s.num~=tostring(num)) then shop_changed(s) end
         s.owner = owner
         s.num = tostring(num or s.num or '')
         s.updated = now()
@@ -267,12 +298,13 @@ function L.handle(iface, sub, raw)
         local title = strip(raw:match('"title"%s*:%s*"([^"]*)"') or '')
         if tp == 3 and title:find('Мен', 1, true) then
             local s = L.ensure_shop()
+            if (s.menu_closed or 0)>0 then L.reset_shop('','');s=L.shop end
             s.updated = now()
             if s.opened == 0 then s.opened = s.updated end
             s.menu_closed = 0
         end
     elseif iface == 255 then
-        if L.shop then L.shop.menu_closed = now() end
+        if L.shop and (L.shop.menu_closed or 0)==0 then L.shop.menu_closed=now();shop_changed(L.shop) end
     end
 end
 
@@ -453,7 +485,7 @@ function L.check_income_message(text)
     }
     local label
     for _,word in ipairs(words) do
-        if s:find(DSP.lower(word),1,true) then label=word; break end
+        if s:find(DSP.lower(word),1,true)==1 then label=word; break end
     end
     if not label then return false end
     local sum=s:match('%$%s*([%d%., ]+)')
@@ -498,27 +530,26 @@ local PAYDAY_PATTERNS = {
 
 function L.check_payday_message(text)
     if not text or text == '' then return false end
-    local s = DSP.lower(text)
-    local hit = false
-    for _, pat in ipairs(PAYDAY_PATTERNS) do
-        if s:find(DSP.lower(pat), 1, true) then
-            hit = true
-            break
-        end
+    local s=DSP.lower(DSP.clean_text(text)):gsub('^[%s|]+','')
+    if s:find('%[%d+%]:')or s:match('^%[')then return false end
+    local hit=s:match('^payday%s*[!:%.]*$')or s:match('^payday%s*[:%-]')
+    for _,header in ipairs({'БАНКОВСКИЙ ЧЕК','вы получили зарплату','вам начислена заработная плата','ПэйДэй','ПейДей'})do
+        if s:find(DSP.lower(header),1,true)==1 then hit=true;break end
     end
     if not hit then return false end
     -- Throttle: don't fire twice within the same real-world hour.
     local ts = os.time()
-    if ts - (tonumber(DSP.settings.tg_payday_last) or 0) < 1800 then
+    if L.last_payday_recorded and ts - L.last_payday_recorded < 1800 then
         return false
     end
+    L.last_payday_recorded = ts
     DSP.settings.tg_payday_last = ts
     DSP.save_settings()
     -- Build daily summary
     local summary = DSP.logs.profit_summary('day')
     -- Push marker to craglog ring buffer + file
     if DSP.craglog and DSP.craglog.log_payday then
-        pcall(DSP.craglog.log_payday, summary)
+        pcall(DSP.craglog.log_payday, summary, text)
     end
     DSP.add_log(string.format('PayDay: %d сделок, %s%s',
         summary.count,

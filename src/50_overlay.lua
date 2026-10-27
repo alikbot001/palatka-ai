@@ -291,7 +291,9 @@ function DSP.overlay.draw_shop()
             for _, r in ipairs(rows) do
                 local it = r.it
                 imgui.TextColored(r.c, u(r.label))
-                local label = u(DSP.item_name(it.name, it.ench) .. '  x' .. tostring(it.qty or 1))
+                local quantity = (it.qty_known == false or it.qty == nil)
+                    and '  · кол-во неизвестно' or '  x' .. tostring(it.qty)
+                local label = u(DSP.item_name(it.name, it.ench) .. quantity)
                 if imgui.TextWrapped then imgui.TextWrapped(label) else imgui.Text(label) end
                 imgui.TextColored(BLUE, u(DSP.money(it.price)))
                 if r.e and r.e.sell and r.e.sell.min and r.e.sell.min > 0 then

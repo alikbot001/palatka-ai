@@ -1,0 +1,27 @@
+[
+  {
+    "check": "python3 run_tests.py",
+    "exit_code": 1,
+    "detail": "LuaJIT binary unavailable; runner did not start its test suite"
+  },
+  {
+    "check": "python3 build.py",
+    "exit_code": 0,
+    "detail": "texlua CP1251 standalone syntax check"
+  },
+  {
+    "check": "python3 tools/verify_embedded_icon_bank.py",
+    "exit_code": 0,
+    "detail": "8028/8028 embedded PNG bytes, byte offsets, lengths and SHA-256 verified"
+  },
+  {
+    "check": "texlua tests/test_*.lua",
+    "exit_code": null,
+    "detail": "42/51 passed; 9 not runnable without LuaJIT-specific functionality; full output in texlua-test-results.json"
+  },
+  {
+    "check": "Android MonetLoader",
+    "exit_code": null,
+    "detail": "not available; never executed on this hotfix"
+  }
+]

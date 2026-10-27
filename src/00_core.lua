@@ -1,7 +1,7 @@
 -- DsPic Helper standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.1.0'
+DSP.version = '2.2.1'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -282,7 +282,7 @@ DSP.theme = DSP.theme or {}
 DSP.theme.list = {
     ocean_blue = {
         name = 'Palatka Blue',
-        bg={0.032,0.059,0.095},panel={0.060,0.103,0.160},accent={0.055,0.53,1.0},
+        bg={0.045,0.075,0.120},panel={0.075,0.110,0.165},accent={0.290,0.612,0.965},
         text={0.94,0.965,1.0},muted={0.62,0.74,0.86},good={0.13,0.88,0.54},
         bad={0.98,0.31,0.44},warn={1.0,0.72,0.22},
     },
@@ -350,6 +350,7 @@ function DSP.theme.get()
     return DSP.theme.list[DSP.theme.current] or DSP.theme.list.dark_amber
 end
 
+
 -- Return ImVec4 for a palette key with optional alpha override.
 -- Safe to call even before imgui is loaded (returns a plain table).
 -- v1.2 hotfix: wrap in pcall so a malformed ImVec4 call (e.g. nil c[1])
@@ -396,8 +397,8 @@ function DSP.theme.push_window()
     local count = 0
     local function push(col_enum, vec)
         if col_enum and vec then
-            local ok = pcall(imgui.PushStyleColor, col_enum, vec)
-            if ok then count = count + 1 end
+            local ok, err = pcall(imgui.PushStyleColor, col_enum, vec)
+            if ok then count = count + 1 elseif DSP.theme._push_error~=tostring(err) then DSP.theme._push_error=tostring(err);DSP.flog('STYLE ERROR: '..tostring(err)) end
         end
     end
     push(imgui.Col.WindowBg,        c('bg',     a))
@@ -437,7 +438,7 @@ function DSP.theme.push_overlay(accent_alpha)
     local count = 0
     local function push(col_enum, vec)
         if col_enum and vec then
-            local ok = pcall(imgui.PushStyleColor, col_enum, vec)
+            local ok, err = pcall(imgui.PushStyleColor, col_enum, vec)
             if ok then count = count + 1 end
         end
     end
