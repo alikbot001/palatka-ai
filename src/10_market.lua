@@ -903,6 +903,8 @@ end
 
 -- Live scan state. Set by scan_cr_marker(), read by on_cr_marker_dialog()
 -- in 40_auto.lua when dialog 15073 fires.
+DSP.market._cr_cache = DSP.market._cr_cache or {}
+DSP.market.cr_marker_seen_at = DSP.market.cr_marker_seen_at or 0
 DSP.market.cr_scan_state = {
     active = false,
     page = 0,
@@ -922,9 +924,11 @@ function DSP.market.scan_cr_marker()
         return false
     end
     DSP.market.cr_scan_state.active = true
+    DSP.market.cr_scan_state.sid = tonumber(DSP.market.state.sid)
     DSP.market.cr_scan_state.page = 0
     DSP.market.cr_scan_state.total = 0
     DSP.market.cr_scan_state.items = {}
+    DSP.market.cr_scan_state.last_page_text = nil
     DSP.market.cr_scan_state.started_at = os.time()
     DSP.market.cr_scan_state.status = 'ожидание диалога 15073 (встаньте на метку ЦР)'
     DSP.add_log('Скан ЦР: запущен, встаньте на метку средних цен ЦР')
@@ -935,10 +939,10 @@ function DSP.market.scan_cr_marker()
             while DSP.market.cr_scan_state.active and os.time() < deadline do
                 wait(500)
             end
-            if DSP.market.cr_scan_state.active and DSP.market.cr_scan_state.page == 0 then
+            if DSP.market.cr_scan_state.active then
                 DSP.market.cr_scan_state.active = false
-                DSP.market.cr_scan_state.status = 'таймаут: диалог 15073 не открыт'
-                DSP.add_log('Скан ЦР: таймаут', 'error')
+                DSP.market.cr_scan_state.status = 'таймаут ЦР (стр. '..DSP.market.cr_scan_state.page..'), старые данные сохранены'
+                DSP.add_log('Скан ЦР: таймаут, снимок не заменён', 'error')
             end
         end)
     end
@@ -947,38 +951,123 @@ end
 
 -- Save the CR marker snapshot. Format mirrors the in-memory rows map so
 -- that load_cr_marker can rehydrate rows without API calls.
-function DSP.market.save_cr_marker(sid)
-    sid = tonumber(sid) or DSP.market.state.sid or 102
-    local pack = {
-        saved_at = os.time(),
-        sid = sid,
-        items = DSP.market.cr_scan_state.items,
-        page = DSP.market.cr_scan_state.page,
-        total = DSP.market.cr_scan_state.total,
-    }
-    local ok, json = pcall(encodeJson, pack)
-    if not ok or not json then
-        DSP.flog('CR MARKER save failed: ' .. tostring(json))
-        return false
-    end
-    local f = io.open(DSP.market.cr_marker_path(sid), 'w')
-    if not f then return false end
-    f:write(json)
-    f:close()
-    DSP.flog(string.format('CR MARKER saved sid=%d items=%d page=%d',
-        sid, #pack.items, pack.page))
-    return true
-end
-
 function DSP.market.load_cr_marker(sid)
     sid = tonumber(sid) or DSP.market.state.sid or 102
+    local cached = DSP.market._cr_cache[sid]
+    if cached ~= nil then return cached or nil end
     local f = io.open(DSP.market.cr_marker_path(sid), 'rb')
-    if not f then return nil end
+    if not f then DSP.market._cr_cache[sid]=false;return nil end
     local raw = f:read('*a')
     f:close()
     local ok, pack = pcall(decodeJson, raw)
-    if not ok or type(pack) ~= 'table' then return nil end
+    if not ok or type(pack) ~= 'table' or (tonumber(pack.sid) and tonumber(pack.sid) ~= sid) then
+        DSP.market._cr_cache[sid]=false;return nil
+    end
+    DSP.market._cr_cache[sid]=pack
     return pack
+end
+
+function DSP.market.save_cr_marker(sid)
+    sid = tonumber(sid) or DSP.market.state.sid or 102
+    local old = DSP.market.load_cr_marker(sid)
+    local s = DSP.market.cr_scan_state
+    local pack = {
+        saved_at = os.time(), sid = sid,
+        items = s.sid == sid and #s.items>0 and s.items or (old and old.items or {}),
+        page = s.page, total = s.total,
+        histories = (old and old.histories) or {},
+    }
+    local ok, json = pcall(encodeJson, pack)
+    if not ok or not json then DSP.flog('CR MARKER save failed: '..tostring(json));return false end
+    local f = io.open(DSP.market.cr_marker_path(sid), 'wb')
+    if not f then return false end
+    local wrote = f:write(json)
+    local closed = f:close()
+    if not wrote or not closed then return false end
+    DSP.market._cr_cache[sid] = pack
+    DSP.flog(string.format('CR MARKER saved sid=%d items=%d page=%d',sid,#pack.items,pack.page))
+    return true
+end
+
+-- Incoming 15073 list and its history detail are trusted only as server
+-- observations, not proof that an offered item is still available now.
+function DSP.market.mark_cr_dialog()
+    DSP.market.cr_marker_seen_at = os.time()
+    DSP.market.cr_marker_seen_sid = tonumber(DSP.market.state.sid)
+end
+
+-- CP price formats observed in the Market Helper 15073 scanner:
+-- $61.300, :CASH:61300, K61.3, KK1.25, M2.5.
+function DSP.market.parse_cr_price(raw)
+    local v = DSP.clean_text(raw or ''):gsub('^:CASH:', '')
+    v = v:gsub('^%$%s*',''):gsub('%s*%$$',''):gsub('%s+','')
+    local unit, number = v:match('^([ККМKkMm]+)([%d%.,]+)$')
+    local multiplier
+    if unit then
+        if unit=='КК' or unit=='KK' or unit=='kk' or unit=='Kk' or unit=='kK' then multiplier=1000000
+        elseif unit=='М' or unit=='M' or unit=='m' then multiplier=1000000000
+        elseif unit=='К' or unit=='K' or unit=='k' then multiplier=1000
+        else return nil end
+        local n=tonumber((number:gsub(',','.')))
+        if not n then return nil end
+        v=n*multiplier
+    else
+        if not v:match('^[%d%.,]+$') then return nil end
+        -- Each 3-digit group in 12.345.678 is a thousands separator.
+        if v:match('^%d%d?%d?[%.,]%d%d%d') then v=v:gsub('[%.,]','')
+        elseif v:find('[%.,]') then return nil end
+        v=tonumber(v)
+    end
+    if type(v)~='number' or v~=v or v<1 or v>9007199254740991 then return nil end
+    return math.floor(v+0.000001)
+end
+
+function DSP.market.parse_cr_list_line(line)
+    local s = DSP.clean_text(line or '')
+    local name, raw = s:match('^(.-)%s*	+%s*(.+)$')
+    if not name then name,raw = s:match('^(.-)%s%s+([^%s].-)%s*$') end
+    if not name or not raw then return nil end
+    name = DSP.trim(name:gsub('^%d+[%.%)]%s*',''))
+    if name=='' or name=='Поиск по названию' or name:find('Следующая',1,true)
+        or name:find('Предыдущая',1,true) then return nil end
+    local p = DSP.market.parse_cr_price(raw)
+    if not p then return nil end
+    return name,p
+end
+
+-- Passively observes the history detail opened by the player at CR.
+-- No automatic purchases, server responses or UI actions are sent here.
+function DSP.market.observe_cr_detail(title, text)
+    local seen = tonumber(DSP.market.cr_marker_seen_at) or 0
+    if seen<=0 or os.time()-seen>120 then return false end
+    local sid = tonumber(DSP.market.state.sid)
+    if not sid or sid ~= tonumber(DSP.market.cr_marker_seen_sid) then return false end
+    local t = DSP.clean_text(title or '')
+    if not t:find('Продажа товара',1,true) then return false end
+    local name = t:match("'([^']+)'") or t:match('"([^"]+)"')
+    if not name or name=='' then return false end
+    local nowday = os.date('%Y-%m-%d')
+    local total_value,total_qty=0,0
+    for line in tostring(text or ''):gmatch('[^\r\n]+') do
+        local dt,qty_s,price_s=line:match('(%d%d%d%d%-%d%d%-%d%d)%s+([%d]+)%s+([^|]+)')
+        if dt == nowday and qty_s and price_s then
+            local qty=tonumber(qty_s)
+            local price=DSP.market.parse_cr_price(price_s)
+            if qty and qty%1==0 and qty>0 and qty<=100000000 and price
+                and total_value <= 9007199254740991 - qty*price then
+                total_value=total_value+qty*price
+                total_qty=total_qty+qty
+            end
+        end
+    end
+    if total_qty<=0 then return false end
+    local old=DSP.market.load_cr_marker(sid) or {sid=sid,items={},histories={}}
+    old.histories=old.histories or {}
+    old.histories[DSP.lower(DSP.clean_text(name))]={day=nowday,qty=total_qty,
+        avg=math.floor(total_value/total_qty),ts=os.time()}
+    -- Preserve the full current scan on save; do not replace with an empty one.
+    DSP.market._cr_cache[sid]=old
+    return DSP.market.save_cr_marker(sid)
 end
 
 -- Called from 40_auto.lua's on_dialog when sampev.onShowDialog fires with
@@ -992,77 +1081,68 @@ end
 -- Anything we can't parse, we log + skip (no crash).
 function DSP.market.on_cr_marker_dialog(text)
     if not DSP.market.cr_scan_state.active then return false end
-    DSP.market.cr_scan_state.page = DSP.market.cr_scan_state.page + 1
-    local s = DSP.market.cr_scan_state
-    local parsed = 0
+    local s=DSP.market.cr_scan_state
+    if s.sid and s.sid ~= tonumber(DSP.market.state.sid) then
+        s.active=false;s.status='сервер изменился, скан остановлен'
+        return false
+    end
+    if s.last_page_text==text then
+        s.status='Повтор той же страницы; ожидается обновление сервера'
+        return true
+    end
+    s.last_page_text=text
+    s.page=s.page+1
+    local found={}
+    for i,it in ipairs(s.items) do found[DSP.lower(it.name)]=i end
+    local parsed=0
+    local line_no=0
     for line in tostring(text or ''):gmatch('[^\r\n]+') do
-        local clean = DSP.clean_text(line)
-        if clean ~= '' and not clean:find('^%s*$') then
-            -- Try: "Name ... sell: X$ / buy: Y$"
-            local name, sell_s, buy_s = clean:match('^(.-)%s*[%s%.%-:]+продаж[а-я]*%s*:?%s*%$?([%d%.]+).-скупк[а-я]*%s*:?%s*%$?([%d%.]+)')
-            if not name then
-                -- Try: "Name ... $X / $Y"
-                name, sell_s, buy_s = clean:match('^(.-)%s*[%s%.%-]+%$?([%d%.]+).-/?%s*%$?([%d%.]+)')
-            end
-            if not name then
-                -- Try: "N. Name - sell: X / buy: Y"
-                name, sell_s, buy_s = clean:match('^%d+[%.%)]%s*(.-)%s*-?%s*продаж[а-я]*%s*:?%s*%$?([%d%.]+).-скупк[а-я]*%s*:?%s*%$?([%d%.]+)')
-            end
-            if name and sell_s and buy_s then
-                name = DSP.trim(name)
-                if name ~= '' and name ~= 'Следующая' and name ~= 'Предыдущая'
-                    and name ~= 'Назад' and name ~= 'Далее' then
-                    local sell = tonumber(sell_s:gsub('%.', ''):gsub(',', ''))
-                    local buy = tonumber(buy_s:gsub('%.', ''):gsub(',', ''))
-                    if sell and buy and (sell > 0 or buy > 0) then
-                        s.items[#s.items + 1] = {
-                            name = name,
-                            sell_med = sell,
-                            buy_med = buy,
-                            ts = os.time(),
-                        }
-                        parsed = parsed + 1
-                    end
-                end
+        line_no=line_no+1
+        if line_no>3 then
+            local name,price=DSP.market.parse_cr_list_line(line)
+            if name and price then
+                local key=DSP.lower(name)
+                local row={name=name,sell_med=price,buy_med=nil,ts=os.time(),source='cr_average'}
+                if found[key] then s.items[found[key]]=row
+                else s.items[#s.items+1]=row;found[key]=#s.items end
+                parsed=parsed+1
             end
         end
     end
-    s.status = string.format('Сканирование: стр. %d, считано %d товаров', s.page, #s.items)
-    DSP.flog('CR MARKER page=' .. s.page .. ' parsed=' .. parsed .. ' total_items=' .. #s.items)
-    -- Send "Next page" response. Arizona Mobile uses listrow index 1 = "Назад"
-    -- and the last row = "Следующая страница" (or vice versa). We try both.
-    -- Look for the "Следующая" line number in the dialog text.
-    local next_idx = nil
-    local line_no = 0
+    s.status=string.format('Сканирование: стр. %d, %d товаров',s.page,#s.items)
+    DSP.flog('CR MARKER page='..s.page..' parsed='..parsed..' total='..#s.items)
+    local next_idx=nil
+    local n=0
     for line in tostring(text or ''):gmatch('[^\r\n]+') do
-        line_no = line_no + 1
-        local c = DSP.clean_text(line)
-        if c:find('Следующая', 1, true) or c:find('Далее', 1, true) then
-            next_idx = line_no - 1  -- listrow index is 0-based, line includes header
+        n=n+1
+        local c=DSP.clean_text(line)
+        if n>1 and (c:find('Следующая страница',1,true) or c=='Далее') then
+            next_idx=n-2 -- 15073's first row is the header, per Market Helper.
             break
         end
     end
     if next_idx and sampSendDialogResponse and sampGetCurrentDialogId then
-        local did = sampGetCurrentDialogId()
+        local did=sampGetCurrentDialogId()
         if lua_thread and wait then
             lua_thread.create(function()
                 wait(150)
-                pcall(sampSendDialogResponse, did, 1, next_idx, '')
+                if not s.active then return end
+                pcall(sampSendDialogResponse,did,1,next_idx,'')
             end)
-        else
-            pcall(sampSendDialogResponse, did, 1, next_idx, '')
-        end
+        else pcall(sampSendDialogResponse,did,1,next_idx,'') end
         return true
     end
-    -- No more pages -- finalize.
-    DSP.market.cr_scan_state.active = false
-    DSP.market.cr_scan_state.status = string.format('Готово: %d товаров на %d стр.', #s.items, s.page)
-    DSP.market.save_cr_marker(DSP.market.state.sid)
-    DSP.add_log(string.format('Скан ЦР: готово, %d товаров сохранено', #s.items), 'ok')
-    -- Close dialog
+    s.active=false
+    if parsed<=0 and #s.items==0 then
+        s.status='Не распознан список ЦР: нужны реальные строки 15073'
+        DSP.add_log('Скан ЦР: формат не распознан; старые данные сохранены','error')
+    else
+        s.status=string.format('Готово: %d товаров на %d стр.',#s.items,s.page)
+        DSP.market.save_cr_marker(DSP.market.state.sid)
+        DSP.add_log('Скан ЦР: готово, '..#s.items..' товаров','ok')
+    end
     if sampSendDialogResponse and sampGetCurrentDialogId then
-        local did = sampGetCurrentDialogId()
-        pcall(sampSendDialogResponse, did, 0, 0, '')
+        pcall(sampSendDialogResponse,sampGetCurrentDialogId(),0,0,'')
     end
     return true
 end

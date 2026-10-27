@@ -29,8 +29,19 @@ DSP.calc_v16=C
 local function fmt(n)
     if n==math.huge or n==-math.huge or n~=n then return 'Ошибка' end
     if math.abs(n)<0.000000001 then n=0 end
-    local s=string.format('%.9g',n)
-    return s
+    -- Avoid scientific notation for ordinary integer money amounts.
+    if n == math.floor(n) and math.abs(n) < 1e15 then
+        return string.format('%.0f',n)
+    end
+    return string.format('%.12g',n)
+end
+-- Only display gets separators: input and stored operands stay numeric.
+function C.pretty_display()
+    local raw=tostring(C.display or '0')
+    local sign, integer, frac=raw:match('^([%-]?)(%d+)(%.?%d*)$')
+    if not integer then return raw end
+    integer=integer:reverse():gsub('(%d%d%d)','%1.'):reverse():gsub('^%.','')
+    return sign..integer..(frac~='' and frac:gsub('^%.',',') or '')
 end
 local function value() return tonumber(C.display) or 0 end
 local function evaluate(a,op,b)
@@ -110,7 +121,7 @@ function U.calculator_v16()
         M.text('ROI: '..fmt(r.roi)..'% | Наценка: '..fmt(r.markup)..'%')
         return
     end
-    imgui.TextColored(DSP.theme.col('accent',1),DSP.utf8(C.display))
+    imgui.TextColored(DSP.theme.col('accent',1),DSP.utf8(C.pretty_display()))
     local rows={{'AC','+/-','%','/'},{'7','8','9','*'},{'4','5','6','-'},{'1','2','3','+'},{'C','0','.','='}}
     local button_width=math.max(65,math.min(130,math.floor((w-42)/4)))
     for _,row in ipairs(rows) do

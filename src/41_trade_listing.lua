@@ -138,6 +138,7 @@ function DSP.auto.start_sell()
         DSP.auto.inv = {}
         DSP.auto.inv_status = 'нужно обновить'
     end)
+    return true
 end
 
 function DSP.auto.stop_sell()

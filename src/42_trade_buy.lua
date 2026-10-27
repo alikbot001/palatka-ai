@@ -152,6 +152,7 @@ function DSP.auto.start_buy()
         DSP.auto.status = 'скупка: ' .. bought .. '/' .. #list .. (dry > 0 and (' (dry ' .. dry .. ')') or '')
         log('Скупка завершена: ' .. bought .. '/' .. #list, 'ok')
     end)
+    return true
 end
 
 function DSP.auto.stop_buy()

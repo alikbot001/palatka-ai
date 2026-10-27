@@ -71,7 +71,7 @@ local function keypad(width,height)
     local top=imgui.GetCursorPosY();local x=imgui.GetCursorPosX()
     imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,12)
     V.apply_font((V.font_pixels or 18)*1.4)
-    V.text(V.fit(calc.display,width-12))
+    V.text(V.fit(calc.pretty_display(),width-12))
     V.apply_font()
     local rows={{'AC','+/-','%','/'},{'7','8','9','*'},{'4','5','6','-'},{'1','2','3','+'},{'C','0','.','='}}
     local h=math.max(42,(height-(imgui.GetCursorPosY()-top)-24)/5)

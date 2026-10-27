@@ -12,7 +12,7 @@ local function signature()
     local f=DSP.settings.arb_filters or{}
     return table.concat({M.state.sid or 0,M.state.version or 0,epoch,DSP.settings.tax_bp or 200,
         f.budget or 0,f.min_profit or 0,f.min_roi or 0,f.sort or 1,f.max_age or 1800,
-        tostring(f.include_unknown~=false),tostring(f.allow_partial~=false),f.max_qty or 0},'|')
+        tostring(f.include_unknown~=false),tostring(f.allow_partial~=false),f.max_qty or 0,f.safety_pct or 0},'|')
 end
 local function expiry()
     local age=math.max(0,tonumber((DSP.settings.arb_filters or{}).max_age)or 1800)

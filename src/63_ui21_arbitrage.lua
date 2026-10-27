@@ -52,7 +52,7 @@ end
 local function offer_row(o,i)
     local selected=V.arb_tab=='sell'and V.arb_sellers or V.arb_buyers
     local key=offerkey(o);local checked=selected and selected[key]
-    V.row('arb_offer_'..V.arb_tab..i,58,function(w,x,y)
+    V.row('arb_offer_'..V.arb_tab..i,80,function(w,x,y)
         if b(checked and 'x'or' ','select_'..i,42,checked)then
             selected[key]=not checked or nil;V.arb_revision=V.arb_revision+1
         end
@@ -61,6 +61,11 @@ local function offer_row(o,i)
         V.at(x+w-232,y+8);V.text(DSP.money(o.price)..'/шт.')
         V.at(x+w-72,y+5)
         if b('Метка','pin_'..i,72,false)then DSP.market.mark_shop(o.shop)end
+        V.at(x+w-150,y+40)
+        if b('Уточнить шт.','verify_'..V.arb_tab..i,146,false)then
+            V.arb_verify={offer=o,side=V.arb_tab}
+            V.arb_verify_value={qty=tonumber(o.qty) or 0}
+        end
     end)
 end
 local function route_rows(p)
@@ -71,7 +76,10 @@ local function route_rows(p)
             V.at(x,y+52)
             if b('К продавцу','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
             V.inline();if b('К скупщику','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
-            V.inline();V.green('+'..DSP.money(r.net_profit))
+            V.inline();V.green('~ +'..DSP.money(r.net_profit))
+            if r.same_shop then
+                V.at(x,y+78);V.red('Одна лавка: возможность обратной сделки проверьте в игре')
+            end
         end)
     end
 end
@@ -86,11 +94,14 @@ end
 local function details(g)
     local p=V.arb_plan(g)
     V.text(V.fit(g.name,imgui.GetContentRegionAvail().x))
-    V.muted('Доступно '..g.supply..' · Спрос '..g.demand..' · Сделка '..p.qty..' шт.')
+    V.muted('Продают '..(g.row.sell.qty or g.supply)..' · Скупают '..(g.row.buy.qty or g.demand)..' · План '..p.qty..' шт.')
     local changed=V.arb_snapshot~=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
     V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
         (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))
     finance(p)
+    local f=DSP.settings.arb_filters or {}
+    V.muted('План условный: доступность не забронирована. Запас спроса: '
+        ..tostring(f.safety_pct or 0)..'%; обновите и проверьте скупку перед закупкой.')
     if V.arb_route then
         if b('< Предложения','back_offers',170)then V.arb_route=false end
         V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
@@ -108,16 +119,30 @@ local function details(g)
     if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
     if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
     if V.arb_best_error then V.red(V.arb_best_error)end
+    if V.arb_verify and V.arb_verify_value then
+        local vr=V.arb_verify
+        V.muted('Проверили в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'))
+        V.inline();M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',104,0)
+        V.inline();if b('Применить','verify_save',112)then
+            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty)
+            if ok then
+                V.arb_verify=nil;V.arb_verify_value=nil
+                V.arb_revision=V.arb_revision+1;V.arb_route=false
+                V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
+            else V.arb_best_error=tostring(err)end
+        end
+        V.inline();if b('Отмена','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
+    end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
     local height=math.max(48,imgui.GetContentRegionAvail().y-110)
-    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,58,offer_row,{height=height,footer=function()
+    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,80,offer_row,{height=height,footer=function()
         if b('Маршрут >','route',142,true)then V.arb_route=true end
         V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
     end})
 end
 function V.arbitrage()
     local st=DSP.market.state
-    V.text('Арбитраж');V.inline();V.muted(DSP.market.freshness())
+    V.text('Арбитраж');V.inline();V.muted('Снимок: '..DSP.market.freshness())
     V.inline();if b('Обновить','refresh',120)then DSP.market.pull(st.sid)end
     local query,edited=V.search('arb','Поиск предмета',-1)
     if edited then V.reset_list('arb_main')end
@@ -128,7 +153,16 @@ function V.arbitrage()
         local changed=M.compact_number(f,'budget','arb_budget',122,0)
         V.inline();V.muted('Мин. прибыль');V.inline()
         changed=M.compact_number(f,'min_profit','arb_minprofit',122,0)or changed
-        if changed then DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1 end
+        V.inline();V.muted('Резерв спроса %');V.inline()
+        if b(tostring(f.safety_pct or 0)..'%','reserve',64)then
+            f.safety_pct=({[0]=10,[10]=20,[20]=0})[f.safety_pct or 0] or 10
+            changed=true
+        end
+        V.inline();if b('Свежесть '..tostring(math.floor((f.max_age or 600)/60))..'м','age',142)then
+            f.max_age=({[300]=600,[600]=1800,[1800]=300})[f.max_age or 600] or 300
+            changed=true
+        end
+        if changed then DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1;DSP.save_settings()end
     end
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
@@ -146,13 +180,13 @@ function V.arbitrage()
             if V.text_button(V.fit(g.name,w-242),'arb_group_'..i,w-230,false,30)then
                 V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                 V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
-                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
+                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
             end
             V.at(x+42,y+28);V.muted(V.fit('Доступно '..g.supply..' · Спрос '..g.demand..' · План '..g.planned..' шт.',w-244))
-            V.at(x+w-172,y+4);V.muted('Чистая прибыль')
+            V.at(x+w-172,y+4);V.muted('Оценка прибыли')
             V.at(x+w-172,y+27);V.green(V.fit(DSP.money(g.profit),169))
         end)
-    end,{footer=function()V.muted('По данным API · наличие не гарантировано')end})
+    end,{footer=function()V.muted('Оценка по API, не гарантированная прибыль. Количество у скупщика может уменьшиться.')end})
 end
 local previous=V.popups
 function V.popups()
@@ -162,6 +196,28 @@ function V.popups()
         if V.arb_server~=st.sid then
             V.text('Выбран другой сервер');V.muted('Откройте предмет повторно для нового расчёта')
             if b('Закрыть','stale_close',150)then imgui.CloseCurrentPopup()end
+            return
+        end
+        -- Never keep showing the old route after a market refresh: source
+        -- offer tables are replaced, not updated in place.
+        if V.arb_snapshot~=tostring(st.sid)..'/'..tostring(st.version)
+            or st.status=='loading' then
+            V.red('Данные изменились или обновляются. Старый маршрут заблокирован.')
+            if b('Пересчитать','refresh_selected',164)then
+                local groups,status
+                if DSP.market.arbitrage_grouped_ui then
+                    groups,status=DSP.market.arbitrage_grouped_ui()
+                else groups=DSP.market.arbitrage_grouped()end
+                if status~='loading' then
+                    local g=V.arb_group(groups)
+                    if g then
+                        V.arb_detail_group=g;choose_all(g);V.arb_route=false
+                        V.arb_verify=nil;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
+                        V.arb_snapshot_time=os.time()
+                    else V.arb_best_error='После обновления подходящий маршрут отсутствует'end
+                end
+            end
+            V.inline();if b('Закрыть','stale_close_version',140)then imgui.CloseCurrentPopup()end
             return
         end
         local g=V.arb_detail_group

@@ -38,7 +38,9 @@ local function has_qty(text)
     local t = DSP.lower and DSP.lower(text) or tostring(text):lower()
     return t:find('Количество', 1, true) ~= nil or t:find('количество', 1, true) ~= nil
         or t:find('кол-во', 1, true) ~= nil or t:find('кол во', 1, true) ~= nil
-        or t:find('quantity', 1, true) ~= nil or t:find('%d+%s*,%s*%d+') ~= nil
+        or t:find('quantity', 1, true) ~= nil or t:find('запятую', 1, true) ~= nil
+        or t:find('Пример:', 1, true) ~= nil or t:find('пример:', 1, true) ~= nil
+        or t:find('%d+%s*,%s*%d+') ~= nil
 end
 
 local function close_dialog()
@@ -163,6 +165,13 @@ local function inventory_dialog(id, text)
 end
 
 function DSP.auto.on_dialog(id, style, title, b1, b2, text)
+    if DSP.market then
+        if id == 15073 and DSP.market.mark_cr_dialog then DSP.market.mark_cr_dialog() end
+        if DSP.market.observe_cr_detail then
+            local ok,err=pcall(DSP.market.observe_cr_detail,title,text)
+            if not ok then log('ЦР: ошибка разбора истории: '..tostring(err),'error') end
+        end
+    end
     -- v1.2 Stage 3 hotfix: CR marker scan (dialog 15073).
     -- When scan_cr_marker() has armed the scan state, intercept dialog 15073
     -- and let the market module parse + flip pages.
@@ -235,21 +244,30 @@ function DSP.auto.on_dialog(id, style, title, b1, b2, text)
             return true
         end
     end
-    if DSP.auto.sell_running then
-        local t = clean(text)
-        if t:find('Успешно выставлено на продажу', 1, true) then
-            DSP.auto.sell_confirmed = true
-        end
-        if t:find('нельзя выставлять', 1, true) or t:find('Запрещено', 1, true) then
-            DSP.auto.sell_forbidden = true
-            DSP.auto.sell_confirmed = true
-        end
-        if t:find('нет свободных мест', 1, true) or t:find('Нет свободных мест', 1, true) then
-            DSP.auto.sell_no_slots = true
-            DSP.auto.sell_confirmed = true
-        end
-    end
+    DSP.auto.on_trade_feedback(text)
     return false
+end
+
+-- Arizona confirms shop listings through a SERVER CHAT message, not always
+-- another dialog. A dialog-only acknowledgement made every real sale time out.
+-- Never treat a generic chat message as a sale confirmation.
+function DSP.auto.on_trade_feedback(text)
+    if not DSP.auto.sell_running then return end
+    local t=clean(text)
+    if t:find('успешно выставлен на продажу',1,true)
+        or t:find('Успешно выставлено на продажу',1,true)
+        or t:find('Успешно выставлен на продажу',1,true) then
+        DSP.auto.sell_confirmed=true
+    elseif t:find('Данные товары запрещено продавать',1,true)
+        or t:find('нельзя выставлять',1,true)
+        or t:find('Запрещено',1,true) then
+        DSP.auto.sell_forbidden=true;DSP.auto.sell_confirmed=true
+    elseif t:find('нет доступных ячеек',1,true)
+        or t:find('Нет доступных ячеек',1,true)
+        or t:find('нет свободных мест',1,true)
+        or t:find('Нет свободных мест',1,true) then
+        DSP.auto.sell_no_slots=true;DSP.auto.sell_confirmed=true
+    end
 end
 
 function DSP.auto.install()
@@ -257,6 +275,14 @@ function DSP.auto.install()
     if not ok or not sampev then
         log('Авто: samp.events недоступен', 'error')
         return
+    end
+    local prev_server=sampev.onServerMessage
+    sampev.onServerMessage=function(color,text)
+        if DSP.auto.on_trade_feedback then
+            local safe,err=pcall(DSP.auto.on_trade_feedback,text)
+            if not safe then log('Торговля: ошибка обработки ответа: '..tostring(err),'error') end
+        end
+        if prev_server then return prev_server(color,text) end
     end
     DSP.auto._prev_dialog = sampev.onShowDialog
     sampev.onShowDialog = function(id, style, title, b1, b2, text)

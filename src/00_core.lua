@@ -1,7 +1,7 @@
 -- DsPic Helper standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.1'
+DSP.version = '2.2.2'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -142,10 +142,11 @@ DSP.settings = {
         min_profit = 0,     -- 0 = show all
         min_roi = 0,        -- 0 = show all (percent)
         sort = 1,           -- 1=profit party, 2=profit per unit, 3=ROI
-        max_age = 1800,
+        max_age = 600,
         max_qty = 0,
+        safety_pct = 10, -- leave 10% of unverified buy demand uncommitted
         allow_partial = true,
-        include_unknown = true,
+        include_unknown = false,
     },
     -- v1.2 Stage 3 additions: craglog + telegram payday
     craglog = {
@@ -201,6 +202,11 @@ function DSP.load_settings()
         DSP.settings.arb_filters.min_roi = tonumber(DSP.settings.arb_filters.min_roi) or 0
         DSP.settings.arb_filters.sort = tonumber(DSP.settings.arb_filters.sort) or 1
     end
+    -- Migrate old presets without changing them; conservative defaults for legacy filters.
+    local af = DSP.settings.arb_filters
+    af.safety_pct = math.max(0, math.min(90, tonumber(af.safety_pct) or 10))
+    if af.max_age == nil then af.max_age = 600 end
+    if af.include_unknown == nil then af.include_unknown = false end
     -- v1.2 Stage 3: craglog state
     if type(DSP.settings.craglog) ~= 'table' then
         DSP.settings.craglog = { open = false, minimized = false, pinned = false, filter = 'all' }

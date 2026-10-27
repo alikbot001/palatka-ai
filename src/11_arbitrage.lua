@@ -54,6 +54,7 @@ local function opportunities(filters, now, rows, selections)
     local sellers_left, buyers_left = {}, {}
     local min_profit = integer(filters.min_profit)
     local min_roi = tonumber(filters.min_roi) or 0
+    local reserve_pct = math.floor(math.max(0, math.min(90, tonumber(filters.safety_pct) or 0)))
     for _, row in ipairs(rows or M.state.rows or {}) do
         for _, seller in ipairs(row.sell.offers or {}) do
             if (not selections or selections.sell[seller]) and fresh(seller, now, filters) then
@@ -62,12 +63,19 @@ local function opportunities(filters, now, rows, selections)
                     checkpoint()
                     local p_buy, p_sell = integer(seller.price), integer(buyer.price)
                     if (not selections or selections.buy[buyer])
-                        and tostring(seller.shop) ~= tostring(buyer.shop)
                         and (seller.ench or 0) == (buyer.ench or 0)
                         and fresh(buyer, now, filters)
                         and p_buy > 0 and p_sell > p_buy
                         and integer(seller.qty) > 0 and integer(buyer.qty) > 0 then
-                        buyers_left[buyer] = integer(buyer.qty)
+                        local demand_qty = integer(buyer.qty)
+                        if not buyer.verified_at then
+                            local factor=100-reserve_pct
+                            -- Exact up to 2^53: do not overflow precision by multiplying
+                            -- the full inventory count before dividing by 100.
+                            demand_qty=math.floor(demand_qty/100)*factor
+                                + math.floor((demand_qty%100)*factor/100)
+                        end
+                        buyers_left[buyer] = demand_qty
                         -- Tax is rounded on the batch, not on each individual item.
                         local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
                         local unit_profit = after_tax(p_sell, tax_bp) - p_buy + fraction
@@ -98,6 +106,9 @@ local function opportunities(filters, now, rows, selections)
     for _, c in ipairs(candidates) do
         checkpoint()
         local seller, buyer = c.seller, c.buyer
+        -- Unverified buy demand is a dated quote, not a reservation. Leave a
+        -- percentage uncommitted across all routes using this exact offer.
+        -- A player-confirmed quantity can be used without this reserve.
         local available = math.min(sellers_left[seller] or 0, buyers_left[buyer] or 0)
         if available > 0 and remaining_budget >= c.p_buy then
             local qty = available
@@ -127,6 +138,9 @@ local function opportunities(filters, now, rows, selections)
                         roi=roi, unit_profit=c.unit_profit,
                         sell_age=seller.ts or 0, buy_age=buyer.ts or 0,
                         shared_stock=available<math.min(integer(seller.qty),integer(buyer.qty)),
+                        same_shop=tostring(seller.shop)==tostring(buyer.shop),
+                        demand_verified=(tonumber(buyer.verified_at) or 0)>0,
+                        reserve_pct=(tonumber(buyer.verified_at) or 0)>0 and 0 or reserve_pct,
                     }
                     sellers_left[seller] = sellers_left[seller] - qty
                     buyers_left[buyer] = buyers_left[buyer] - qty
@@ -203,7 +217,7 @@ DSP.arbitrage.plan_offers = M.plan_offers
 DSP.arbitrage.offer_key = M.offer_key
 
 function M.arbitrage()
-    return opportunities({max_age=1800, include_unknown=true}, os.time())
+    return opportunities({max_age=600, include_unknown=false, safety_pct=10}, os.time())
 end
 
 function M.arbitrage_filtered()
@@ -212,7 +226,7 @@ function M.arbitrage_filtered()
     local sig = table.concat({M.state.sid or 0, M.state.version or 0, DSP.settings.tax_bp or 200,
         f.budget or 0, f.min_profit or 0, f.min_roi or 0, f.sort or 1,
         f.max_age or 1800, tostring(f.include_unknown ~= false),
-        tostring(f.allow_partial ~= false), f.max_qty or 0}, '|')
+        tostring(f.allow_partial ~= false), f.max_qty or 0, f.safety_pct or 0}, '|')
     if cache and sig == signature and not M.arb_dirty and now < expires then return cache end
     cache, signature = opportunities(f, now), sig
     expires = math.huge

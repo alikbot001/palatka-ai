@@ -159,3 +159,77 @@ function DSP.db.freshness()
     if age < 86400 then return math.floor(age / 3600) .. ' ч' end
     return math.floor(age / 86400) .. ' дн'
 end
+
+
+-- Display-only price references. They are prices from observed shop offers,
+-- never an average of completed sales. No IO, network calls or sorting in UI.
+local function valid_quote(side)
+    if type(side) ~= 'table' then return nil end
+    local price = tonumber(side.med)
+    local count = tonumber(side.count) or 0
+    if price and price == price and price >= 1 and price <= 9007199254740991
+        and count > 0 then return math.floor(price) end
+    return nil
+end
+
+function DSP.db.reference_prices(name, ench)
+    local out = {market=nil, buy=nil, today=nil,
+        today_reason='Нет подтверждённых данных о завершённых продажах за сегодня',
+        source='Нет данных рынка', updated=0}
+    local st = DSP.market and DSP.market.state or {}
+    local sid = tonumber(DSP.settings and DSP.settings.server)
+    if sid and tonumber(st.sid) and sid ~= tonumber(st.sid) then
+        out.source = 'Снимок рынка относится к другому серверу'
+        return out
+    end
+    local row = DSP.market and DSP.market.row_for and DSP.market.row_for(name, ench)
+    if not row and DSP.db.get then
+        local old = DSP.db.get(name, ench)
+        if old and (not sid or tonumber(old.sid) == sid) then row = old end
+    end
+    if row then
+        out.market = valid_quote(row.sell)
+        out.buy = valid_quote(row.buy)
+        out.updated = tonumber(row.updated) or tonumber(st.updated) or 0
+    end
+    if out.market or out.buy then
+        out.source = 'Наблюдаемые объявления, не завершённые сделки'..(out.updated>0 and (' · '..os.date('%d.%m %H:%M',out.updated)) or '')
+    end
+    local marker = DSP.market and DSP.market.load_cr_marker and DSP.market.load_cr_marker(tonumber(st.sid))
+    if (tonumber(ench) or 0) == 0 and marker and tonumber(marker.sid)==tonumber(st.sid) then
+        local key=DSP.lower(DSP.clean_text(name or ''))
+        for _,item in ipairs(marker.items or {}) do
+            if DSP.lower(DSP.clean_text(item.name or ''))==key then
+                local cp_price=tonumber(item.sell_med)
+                if cp_price and cp_price>0 then
+                    out.market=math.floor(cp_price)
+                    out.source='Средняя цена ЦР, снимок от '..os.date('%d.%m %H:%M',marker.saved_at or 0)
+                end
+                break
+            end
+        end
+        local history=marker.histories and marker.histories[key]
+        if history and history.day==os.date('%Y-%m-%d') then
+            local avg=tonumber(history.avg)
+            if avg and avg>0 and (tonumber(history.qty) or 0)>0 then
+                out.today=math.floor(avg)
+                out.today_reason='По истории продаж ЦР за сегодня ('..history.qty..' шт.)'
+            end
+        end
+    end
+    return out
+end
+
+function DSP.db.apply_reference(item, side)
+    if type(item) ~= 'table' then return false, 'не выбран предмет' end
+    local q = DSP.db.reference_prices(item.name or '', item.ench)
+    local n = q[side]
+    if not n then
+        return false, side == 'today' and q.today_reason
+            or 'Нет наблюдаемой цены для этой кнопки на текущем сервере'
+    end
+    item.price = n
+    item.needs_price = nil
+    item.enabled = true
+    return true, 'Цена подставлена из снимка рынка, проверьте актуальность'
+end
