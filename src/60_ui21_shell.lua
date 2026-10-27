@@ -183,6 +183,7 @@ function V.geometry(sw,sh)
         y=DSP.clamp(tonumber(p.y)or (sh-h)*.35,0,math.max(0,sh-h))}
 end
 local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'arbitrage','Арбитраж'},
+ {'resale','Перепродажа'},{'promo','Авто-пиар'},
  {'search','Поиск товара'},{'calculator','Калькулятор'},{'logs','Журнал'},
  {'stats','Статистика'},{'notes','Заметки'},{'settings','Настройки'}}
 function V.set_screen(id)
@@ -273,6 +274,8 @@ function U.draw()
                 if V.screen=='palatka'then V.trade()
                 elseif V.screen=='lavki'then V.shops()
                 elseif V.screen=='arbitrage'then V.arbitrage()
+                elseif V.screen=='resale'then V.flip_screen()
+                elseif V.screen=='promo'then V.promo_screen()
                 elseif V.screen=='logs'then V.journal()
                 elseif V.screen=='calculator'then V.calculator()
                 elseif V.tools then V.tools(V.screen)

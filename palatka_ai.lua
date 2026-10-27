@@ -1,7 +1,7 @@
--- Palatka AI v2.2.2, built from src/*.lua (independent of Market Helper)
+-- Palatka AI v2.2.4 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.2.2')
+script_version('2.2.4')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1368235
+DSP.item_icon_blob_offset = 1413823
 local function __mod_00_core()
 -- DsPic Helper standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.2'
+DSP.version = '2.2.4'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -27073,6 +27073,52 @@ function DSP.market.market_label_for(row)
         sid, DSP.money(sell.med), DSP.money(buy.med), shops)
 end
 
+
+-- Quantity is not a single trustworthy number. Older mobile clients can send
+-- one *slot* as qty=1 to /shops/push even when the game contains a large stack.
+-- Keep API snapshots immutable until the player explicitly confirms a live
+-- observation. No network requests, parsing of unrelated packets or IO here.
+local function quantity_integer(v)
+    local n=tonumber(v)
+    if n and n==n and n>=0 and n<=9007199254740991 and n%1==0 then return n end
+end
+function DSP.market.format_units(n)
+    local v=quantity_integer(n)
+    if not v then return '?' end
+    return tostring(v):reverse():gsub('(%d%d%d)','%1 '):reverse():gsub('^ ','')
+end
+function DSP.market.live_offer_quantity(row, side, offer)
+    if not row or (side~='sell' and side~='buy') or not offer then return nil end
+    local s=DSP.live and DSP.live.shop
+    if not s or not s.num or tostring(s.num)=='' or tostring(s.num)~=tostring(offer.shop) then return nil end
+    local sid=tonumber(DSP.market.state.sid)
+    if not sid or tonumber(s.server)~=sid or (s.menu_closed or 0)>0 then return nil end
+    if not s.owner or s.owner=='' then return nil end
+    local owner=DSP.lower(DSP.trim(tostring(offer.owner or '')))
+    if owner~='' and owner~='?' and DSP.lower(DSP.trim(s.owner))~=owner then return nil end
+    local stamp=tonumber(s.items_updated) or 0
+    if stamp<=0 or stamp>os.time()+60 or os.time()-stamp>120 then return nil end
+    local wanted=row.key or DSP.item_key(row.name or row.display or '',row.ench or 0)
+    local total,matched,unknown=0,0,false
+    for _,it in ipairs(s[side] or {}) do
+        if DSP.item_key(it.name or '',it.ench or 0)==wanted and tonumber(it.price)==tonumber(offer.price) then
+            matched=matched+1
+            local n=it.qty_known==true and quantity_integer(it.qty) or nil
+            if not n then unknown=true else total=total+n end
+        end
+    end
+    if matched==0 or unknown then return nil end
+    return total,{source='game',shop=s.num,seen_at=stamp,slots=matched}
+end
+function DSP.market.quantity_info(row,side,offer)
+    local api=quantity_integer(offer and (offer.snapshot_qty or offer.qty))
+    local live,meta=DSP.market.live_offer_quantity(row,side,offer)
+    return {api=api,shown=quantity_integer(offer and offer.qty),
+        verified=offer and offer.verified_at~=nil or false,
+        live=live,live_meta=meta,
+        disagreement=live~=nil and api~=nil and live~=api}
+end
+
 end
 __mod_10_market()
 
@@ -27401,7 +27447,7 @@ end
 
 -- Optional manual correction after the player visits a stall. Keep the
 -- original API number visible, and discard this correction on the next pull.
-function M.confirm_offer_quantity(row,kind,offer,value)
+function M.confirm_offer_quantity(row,kind,offer,value,source)
     if not row or (kind~='buy' and kind~='sell') or not offer then
         return false,'неверное предложение'
     end
@@ -27415,10 +27461,20 @@ function M.confirm_offer_quantity(row,kind,offer,value)
         if o==offer then found=true; break end
     end
     if not found then return false,'предложение устарело' end
+    -- A UI button may be clicked while a new game packet replaces the opened
+    -- shop. Do not promote a previously displayed quantity to "game-verified"
+    -- unless it is STILL visible for this exact shop/server/item/price now.
+    if source=='game' then
+        local observed=M.live_offer_quantity and M.live_offer_quantity(row,kind,offer)
+        if observed~=n then
+            return false,'игровое количество изменилось или лавка закрыта; проверьте заново'
+        end
+    end
     if offer.snapshot_qty==nil then offer.snapshot_qty=qty(offer.qty) end
     side.qty=math.max(0,qty(side.qty)-qty(offer.qty)+n)
     offer.qty=n
     offer.verified_at=os.time()
+    offer.qty_source=source=='game' and 'game' or 'manual'
     M.state.version=(M.state.version or 0)+1
     M.invalidate_arbitrage()
     return true
@@ -34267,8 +34323,23 @@ function L.parse_shop_item(obj, side)
     local raw_price=text:match('%$%s*([%d%., ]+)') or text:match('([%d][%d%., ]*)%s*%$')
     local text_price=raw_price and tonumber((raw_price:gsub('[^%d]','')))
     local price=shop_number(obj,'price') or math.max(text_price or 0,shop_number(obj,'amount') or 0)
-    local qty=shop_number(obj,'count') or shop_number(obj,'qty')
-    if qty==nil then qty=tonumber(text:match('%((%d+)%s*шт%.?%)')) end
+    local qty=shop_number(obj,'count') or shop_number(obj,'qty') or shop_number(obj,'quantity')
+    if qty==nil then
+        -- Read only explicitly labelled units, never infer stack size from
+        -- a price or an inventory slot. Accept 45000 and 45.000/45 000 шт.
+        local label=text:match('%(([%d%., ]+)%s*шт%.?%)')
+            or text:match('([%d][%d%., ]*)%s*шт%.?')
+        if label then
+            label=label:match('^%s*(.-)%s*$')
+            local parts={};for digits in label:gmatch('%d+')do parts[#parts+1]=digits end
+            local valid=#parts>0
+            if #parts>1 then
+                if #parts[1]>3 then valid=false end
+                for i=2,#parts do if #parts[i]~=3 then valid=false end end
+            end
+            if valid then qty=tonumber(table.concat(parts)) end
+        end
+    end
     if tonumber(item_raw)==0 or price==0 or qty==0 then
         if previous then
             for i,e in ipairs(list) do if e==previous then table.remove(list,i);break end end
@@ -34936,6 +35007,403 @@ end
 
 end
 __mod_47_shop_marker()
+
+local function __mod_48_flip_intel()
+-- v2.2.4: independent resale workstation. All values are estimates from market
+-- offers, never evidence of completed transactions or reserved stock.
+DSP.flip = DSP.flip or {}
+local F = DSP.flip
+local MAX_SAFE = 9007199254740991
+local function num(x, fallback)
+    local n=tonumber(x)
+    if not n or n~=n or n==math.huge or n==-math.huge then return fallback or 0 end
+    return n
+end
+local function integer(x, fallback)
+    return math.max(0,math.floor(num(x,fallback)))
+end
+function F.settings()
+    if type(DSP.settings.flip)~='table' then DSP.settings.flip={} end
+    local s=DSP.settings.flip
+    s.capital=math.min(MAX_SAFE,integer(s.capital))
+    s.reserve_pct=math.min(90,integer(s.reserve_pct,20))
+    s.max_position_pct=math.min(100,math.max(5,integer(s.max_position_pct,35)))
+    s.min_roi=math.min(10000,integer(s.min_roi,5))
+    s.max_risk=math.min(3,integer(s.max_risk,2))
+    if s.sort~='roi' and s.sort~='unit' then s.sort='profit' end
+    if type(s.watch)~='table' then s.watch={} end
+    if type(s.alerts)~='boolean' then s.alerts=false end
+    return s
+end
+local function risk_of(r,now,max_age)
+    local a,b=r.sell_offer or {},r.buy_offer or {}
+    local risk=0;local reasons={}
+    local function flag(msg,level)
+        if level>risk then risk=level end
+        reasons[#reasons+1]=msg
+    end
+    for _,o in ipairs({a,b}) do
+        if integer(o.qty)==1 and not o.verified_at then flag('объём API=1 может быть одним слотом',3) end
+        local ts=integer(o.ts)
+        if ts<=0 then flag('нет времени снимка',2)
+        elseif ts>now+60 or now-ts>max_age then flag('старые данные',3) end
+        if o.qty_source~='game' and o.qty_source~='manual' then flag('остаток не проверен в игре',1) end
+    end
+    if tostring(a.shop)==tostring(b.shop) then flag('одна лавка с обеих сторон',3) end
+    if r.demand_verified==false then flag('скупка не гарантирована',2) end
+    return risk,table.concat(reasons,'; ')
+end
+function F.score_route(route,opts,now)
+    opts=opts or{};now=now or os.time()
+    local q=integer(route and route.tradable_qty)
+    local buy=integer(route and route.p_buy)
+    local sell=integer(route and route.p_sell)
+    if q==0 or buy==0 or sell<=buy then return nil end
+    local tax=math.min(10000,integer(opts.tax_bp,integer(DSP.settings.tax_bp,200)))
+    local max_age=integer(opts.max_age,1800)
+    local risk,reason=risk_of(route,now,max_age)
+    local cap=integer(opts.budget)
+    if cap>0 then q=math.min(q,math.floor(cap/buy)) end
+    if q<=0 then return nil end
+    q=math.min(q,math.floor(MAX_SAFE/math.max(sell,buy)))
+    if q<=0 then return nil end
+    local cost=q*buy
+    local gross=q*sell
+    local fee=math.floor(gross*tax/10000)
+    local revenue=gross-fee
+    local profit=revenue-cost-integer(opts.extra)
+    local roi=cost>0 and profit/cost*100 or 0
+    if profit<=0 or roi<num(opts.min_roi) then return nil end
+    return {route=route,key=route.row and route.row.key or '?',name=route.name or (route.row and route.row.display) or '?',
+        qty=q,buy_price=buy,sell_price=sell,cost=cost,gross=gross,fee=fee,
+        revenue=revenue,profit=profit,roi=roi,risk=risk,reason=reason,
+        seller=route.sell_offer,buyer=route.buy_offer,
+        seller_shop=route.sell_offer and route.sell_offer.shop,
+        buyer_shop=route.buy_offer and route.buy_offer.shop}
+end
+local cache_key,cache
+local function signature(groups,s,now)
+    local st=DSP.market.state or{}
+    return table.concat({tostring(groups),st.sid or 0,st.version or 0,
+        s.capital,s.reserve_pct,s.max_position_pct,s.min_roi,s.max_risk,s.sort,
+        DSP.settings.tax_bp or 200,math.floor(now/30)},'|')
+end
+-- Input routes are disjoint allocations produced by the existing allocator.
+-- Do not sum each candidate's profit blindly; budget is reserved once globally.
+function F.rank(groups, now)
+    now=now or os.time()
+    local s=F.settings()
+    local sig=signature(groups,s,now)
+    if sig==cache_key and cache then return cache end
+    local options={tax_bp=DSP.settings.tax_bp,max_age=(DSP.settings.arb_filters or{}).max_age or 600,min_roi=s.min_roi}
+    local candidates={}
+    for _,group in ipairs(groups or{}) do
+        for _,r in ipairs(group.routes or{}) do
+            local c=F.score_route(r,options,now)
+            if c and c.risk<=s.max_risk then
+                c.group=group
+                candidates[#candidates+1]=c
+            end
+        end
+    end
+    local mode=s.sort
+    table.sort(candidates,function(a,b)
+        local ax=mode=='roi' and a.roi or mode=='unit' and a.profit/a.qty or a.profit
+        local bx=mode=='roi' and b.roi or mode=='unit' and b.profit/b.qty or b.profit
+        if ax~=bx then return ax>bx end
+        if a.risk~=b.risk then return a.risk<b.risk end
+        return tostring(a.key)<tostring(b.key)
+    end)
+    local budget=s.capital>0 and math.floor(s.capital*(100-s.reserve_pct)/100) or 0
+    local rest=budget
+    local per_item={}
+    local selected={}
+    local total={cost=0,gross=0,fee=0,revenue=0,profit=0,qty=0,count=0,
+        capital=s.capital,budget=budget,reserve=s.capital-budget,limited=s.capital>0}
+    for _,c in ipairs(candidates) do
+        local available=rest
+        if s.capital>0 then
+            local item_limit=math.floor(budget*s.max_position_pct/100)
+            available=math.min(rest,math.max(0,item_limit-(per_item[c.key]or 0)))
+        end
+        local choice=F.score_route(c.route,{budget=available,tax_bp=DSP.settings.tax_bp,
+            max_age=options.max_age,min_roi=s.min_roi},now)
+        -- If a capital is set and no more budget remains, never interpret 0
+        -- as "unlimited" (the score_route API uses 0 for no limit).
+        if s.capital==0 or available>=c.buy_price then
+            if choice and total.cost+choice.cost<=MAX_SAFE
+                and total.gross+choice.gross<=MAX_SAFE and total.revenue+choice.revenue<=MAX_SAFE then
+                choice.group=c.group;selected[#selected+1]=choice
+                rest=rest-choice.cost
+                per_item[c.key]=(per_item[c.key]or 0)+choice.cost
+                total.cost=total.cost+choice.cost;total.gross=total.gross+choice.gross
+                total.fee=total.fee+choice.fee;total.revenue=total.revenue+choice.revenue
+                total.profit=total.profit+choice.profit;total.qty=total.qty+choice.qty
+            end
+        end
+    end
+    total.count=#selected;total.unallocated=rest
+    cache={rows=selected,candidates=#candidates,summary=total,version=sig,source='market snapshot'}
+    cache_key=sig
+    return cache
+end
+function F.invalidate() cache_key=nil;cache=nil end
+
+-- Independent observations never overwrite the API quote automatically.
+-- CR "today" is only shown when the stored sale history explicitly has
+-- a day and a positive sold quantity. Open-stall quotes are local sightings.
+function F.price_evidence(row)
+    local out={api=nil,cr=nil,today=nil,opened=nil,buy=nil,age=nil,interest=0}
+    if type(row)~='table' then return out end
+    local st=DSP.market.state or{}
+    if tonumber(st.sid)~=tonumber(DSP.settings.server) then return out end
+    out.api=integer(row.sell and row.sell.med)>0 and integer(row.sell.med) or nil
+    out.buy=integer(row.buy and row.buy.med)>0 and integer(row.buy.med) or nil
+    out.interest=integer(row.buy and row.buy.shop_n)
+    out.age=integer(st.updated)>0 and math.max(0,os.time()-integer(st.updated)) or nil
+    local marker=DSP.market.load_cr_marker and DSP.market.load_cr_marker(st.sid)
+    if marker and tonumber(marker.sid)==tonumber(st.sid) and (tonumber(row.ench)or 0)==0 then
+        local key=DSP.lower(row.name or '')
+        for _,it in ipairs(marker.items or{})do
+            if DSP.lower(tostring(it.name or ''))==key then
+                local val=integer(it.sell_med)
+                if val>0 then out.cr=val;out.cr_age=integer(marker.saved_at)>0 and math.max(0,os.time()-integer(marker.saved_at))or nil end
+                break
+            end
+        end
+        local history=marker.histories and marker.histories[key]
+        if history and history.day==os.date('%Y-%m-%d') and integer(history.qty)>0 and integer(history.avg)>0 then
+            out.today=integer(history.avg);out.today_qty=integer(history.qty)
+        end
+    end
+    local shop=DSP.live and DSP.live.shop or nil
+    local updated=shop and integer(shop.items_updated or shop.updated)
+    if shop and tonumber(shop.server)==tonumber(st.sid) and integer(shop.menu_closed)==0
+        and updated>0 and os.time()-updated<=120 then
+        local key=row.key or DSP.item_key(row.name,row.ench or 0)
+        for _,it in ipairs(shop.sell or{})do
+            local k=DSP.item_key(it.name or '',it.ench or 0)
+            if k==key and integer(it.price)>0 then
+                out.opened=out.opened and math.min(out.opened,integer(it.price)) or integer(it.price)
+            end
+        end
+    end
+    return out
+end
+function F.market_interest(row)
+    local n=integer(row and row.buy and row.buy.shop_n)
+    if n>=5 then return 'много скупщиков ('..n..')'
+    elseif n>=2 then return 'несколько скупщиков ('..n..')'
+    elseif n==1 then return 'один скупщик'
+    end
+    return 'нет наблюдаемой скупки'
+end
+
+-- SELL recommendations from asking prices only. They are not completed sales.
+function F.suggest_price(row,mode,cost,tax)
+    if not row or not row.sell then return nil,'нет рынка' end
+    local sell=row.sell
+    if integer(sell.count)==0 then return nil,'нет цен предложений' end
+    local reference=mode=='fast' and (sell.p25>0 and sell.p25 or sell.min)
+        or mode=='premium' and (sell.p75>0 and sell.p75 or sell.med)
+        or sell.med
+    local rate=mode=='fast' and 0.99 or mode=='premium' and 1.02 or 1
+    local price=math.max(1,math.floor(reference*rate))
+    if cost~=nil then
+        local paid=num(cost,-1)
+        if paid<0 then return nil,'неверная себестоимость' end
+        local fee=math.min(10000,integer(tax,integer(DSP.settings.tax_bp,200)))
+        if fee>=10000 then return nil,'комиссия 100%' end
+        local floor_price=math.ceil(paid*10000/(10000-fee))
+        price=math.max(price,floor_price)
+    end
+    return price,'по объявлениям; не подтверждённая цена сделки'
+end
+function F.watch_set(key,name,limit)
+    local s=F.settings();key=tostring(key or '')
+    local p=integer(limit)
+    if key=='' or p==0 or p>MAX_SAFE then return false,'нужен предмет и цена выше нуля' end
+    if not s.watch[key] then
+        local n=0;for _ in pairs(s.watch)do n=n+1 end
+        if n>=30 then return false,'максимум 30 наблюдений' end
+    end
+    local previous=s.watch[key]
+    s.watch[key]={name=tostring(name or key),max_price=p,server=tonumber((DSP.market.state or{}).sid)or DSP.settings.server}
+    if not DSP.save_settings() then s.watch[key]=previous;return false,'не удалось записать настройки' end
+    return true
+end
+function F.watch_remove(key)
+    local s=F.settings();local previous=s.watch[key];s.watch[key]=nil
+    if not DSP.save_settings() then s.watch[key]=previous;return false,'не удалось записать настройки' end
+    return true
+end
+F.last_alert=0;F.alerted={}
+function F.check_alerts(now,notify)
+    now=now or os.time();local s=F.settings();local st=DSP.market.state or{}
+    if not s.alerts or not st.version or now-F.last_alert<300 then return 0 end
+    local count=0
+    for key,rule in pairs(s.watch)do
+        local r=(st.by_key or{})[key]
+        if tonumber(rule.server)==tonumber(st.sid) and r and r.sell and r.sell.min and r.sell.min>0
+            and r.sell.min<=integer(rule.max_price) then
+            local signature=tostring(st.sid)..':'..tostring(st.version)..':'..key
+            if not F.alerted[signature] then
+                F.alerted[signature]=true;F.last_alert=now
+                if type(notify)=='function' then notify('Наблюдение: '..tostring(rule.name)..' по '..DSP.money(r.sell.min)..' (API, проверьте лавку)')end
+                count=count+1;break
+            end
+        end
+    end
+    if count>0 then
+        local n=0;for _ in pairs(F.alerted)do n=n+1 end
+        if n>100 then F.alerted={} end
+    end
+    return count
+end
+-- Actual cash movements from saved trades only. Item valuations are excluded.
+function F.cash_summary(trades,day)
+    local out={trades=0,cash_in=0,cash_out=0,cash_net=0,valued_trades=0}
+    local now=os.time();local today=os.date('%Y-%m-%d',now)
+    for _,e in pairs(trades or{})do
+        if type(e)=='table' and e.type=='trade' and (not day or os.date('%Y-%m-%d',integer(e.ts))==today) then
+            out.trades=out.trades+1
+            out.cash_in=out.cash_in+integer(e.money_get)
+            out.cash_out=out.cash_out+integer(e.money_give)
+            if # (e.items_get or{})>0 or #(e.items_give or{})>0 then out.valued_trades=out.valued_trades+1 end
+        end
+    end
+    out.cash_net=out.cash_in-out.cash_out
+    return out
+end
+
+end
+__mod_48_flip_intel()
+
+local function __mod_49_promo()
+-- v2.2.4: independent opt-in promotional templates. No dialog bypassing,
+-- no posting until a user explicitly starts this session. Bounded rate.
+DSP.promo = DSP.promo or {}
+local P=DSP.promo
+P.running=false;P.last_sent=0;P.session_count=0;P.last_error=nil
+P.MAX_SESSION=12;P.MIN_INTERVAL=180
+function P.settings()
+    if type(DSP.settings.promo)~='table' then DSP.settings.promo={} end
+    local s=DSP.settings.promo
+    if type(s.templates)~='table' then s.templates={} end
+    return s
+end
+function P.validate(text)
+    if type(text)~='string' or #text<5 or #text>200 then return false,'длина 5–200 байт' end
+    if text:find('[\r\n%z\1-\31]') then return false,'запрещены переносы и управляющие символы' end
+    if not text:match('^/vr%s+%S') and not text:match('^/s%s+%S') and not text:match('^/ad%s+%S') then
+        return false,'только /vr, /s или /ad с текстом'
+    end
+    return true
+end
+function P.add(name,text,interval)
+    local s=P.settings()
+    if #s.templates>=8 then return false,'максимум 8 шаблонов' end
+    local ok,err=P.validate(text);if not ok then return false,err end
+    local item={name=tostring(name or 'Объявление'):sub(1,48),text=text,
+        interval=math.max(P.MIN_INTERVAL,math.min(3600,math.floor(tonumber(interval)or 300))),auto=false}
+    s.templates[#s.templates+1]=item
+    if not DSP.save_settings() then table.remove(s.templates);return false,'ошибка сохранения' end
+    return true
+end
+function P.update(index,name,text,interval)
+    local item=P.settings().templates[index]
+    if not item then return false,'шаблон не найден' end
+    local ok,err=P.validate(text);if not ok then return false,err end
+    local previous={name=item.name,text=item.text,interval=item.interval,auto=item.auto}
+    item.name=tostring(name or ''):sub(1,48)
+    item.text=text
+    item.interval=math.max(P.MIN_INTERVAL,math.min(3600,math.floor(tonumber(interval)or 300)))
+    if not DSP.save_settings() then
+        for k,v in pairs(previous)do item[k]=v end
+        return false,'ошибка сохранения'
+    end
+    return true
+end
+function P.remove(index)
+    local s=P.settings();if not s.templates[index] then return false end
+    local old=table.remove(s.templates,index)
+    if not DSP.save_settings() then table.insert(s.templates,index,old);return false end
+    return true
+end
+local function online_check()
+    if type(sampSendChat)~='function' then return false end
+    if type(sampIsSampAvailable)=='function' and not sampIsSampAvailable() then return false end
+    if type(sampIsLocalPlayerSpawned)=='function' and not sampIsLocalPlayerSpawned() then return false end
+    return true
+end
+function P.send_once(index,now,send,online)
+    now=now or os.time()
+    local item=P.settings().templates[index]
+    if not item then return false,'шаблон не найден' end
+    local ok,err=P.validate(item.text);if not ok then return false,err end
+    if P.session_count>=P.MAX_SESSION then P.running=false;return false,'лимит за сессию достигнут' end
+    if P.last_sent>0 and now-P.last_sent<P.MIN_INTERVAL then return false,'подождите до следующей отправки' end
+    if online==nil then online=online_check() end
+    if not online then return false,'нет соединения с игрой' end
+    local sender=send or sampSendChat
+    local sent,response=pcall(sender,item.text)
+    if not sent or response==false then return false,'команда не отправлена' end
+    P.last_sent=now;P.session_count=P.session_count+1
+    item.last_sent=now
+    P.last_error=nil
+    if P.session_count>=P.MAX_SESSION then P.running=false end
+    return true
+end
+function P.start()
+    if #P.settings().templates==0 then return false,'сначала создайте шаблон' end
+    local active=false
+    for _,t in ipairs(P.settings().templates)do if t.auto then active=true end end
+    if not active then return false,'выберите шаблон для автоматической отправки' end
+    if P.session_count>=P.MAX_SESSION then return false,'лимит за сессию исчерпан' end
+    P.running=true
+    P.last_error=nil
+    P.started=os.time()
+    return true
+end
+function P.stop()P.running=false end
+function P.tick(now,send,online)
+    if not P.running then return false end
+    now=now or os.time()
+    if P.session_count>=P.MAX_SESSION then P.stop();return false end
+    if online==false or (online==nil and not online_check()) then
+        P.last_error='авто-пиар остановлен: соединение потеряно'
+        P.stop();return false
+    end
+    if P.last_sent>0 and now-P.last_sent<P.MIN_INTERVAL then return false end
+    for i,t in ipairs(P.settings().templates)do
+        if t.auto and (not t.last_sent or now-t.last_sent>=math.max(P.MIN_INTERVAL,tonumber(t.interval)or 300)) then
+            local ok,err=P.send_once(i,now,send,online)
+            if not ok then P.last_error=err end
+            return ok
+        end
+    end
+    return false
+end
+function P.install()
+    if P.installed then return end
+    P.installed=true
+    if not lua_thread or not wait then return end
+    lua_thread.create(function()
+        while true do
+            wait(1000)
+            local ok,err=pcall(P.tick,os.time())
+            if not ok then P.last_error=tostring(err);P.stop();if DSP.flog then DSP.flog('PROMO '..P.last_error)end end
+            -- Watchlists are checked from the already loaded market snapshot;
+            -- HTTP refresh remains owned by the existing market updater.
+            if DSP.flip and DSP.flip.check_alerts then
+                pcall(DSP.flip.check_alerts,os.time(),DSP.notify)
+            end
+        end
+    end)
+end
+
+end
+__mod_49_promo()
 
 local function __mod_50_overlay()
 -- 50_overlay.lua
@@ -36397,6 +36865,7 @@ function V.geometry(sw,sh)
         y=DSP.clamp(tonumber(p.y)or (sh-h)*.35,0,math.max(0,sh-h))}
 end
 local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'arbitrage','Арбитраж'},
+ {'resale','Перепродажа'},{'promo','Авто-пиар'},
  {'search','Поиск товара'},{'calculator','Калькулятор'},{'logs','Журнал'},
  {'stats','Статистика'},{'notes','Заметки'},{'settings','Настройки'}}
 function V.set_screen(id)
@@ -36487,6 +36956,8 @@ function U.draw()
                 if V.screen=='palatka'then V.trade()
                 elseif V.screen=='lavki'then V.shops()
                 elseif V.screen=='arbitrage'then V.arbitrage()
+                elseif V.screen=='resale'then V.flip_screen()
+                elseif V.screen=='promo'then V.promo_screen()
                 elseif V.screen=='logs'then V.journal()
                 elseif V.screen=='calculator'then V.calculator()
                 elseif V.tools then V.tools(V.screen)
@@ -36883,25 +37354,36 @@ local function sort_toggle()
 end
 local function footer()
     sort_toggle();local w=imgui.GetContentRegionAvail().x
-    if w>200 then V.inline();V.muted('Снимок API · наличие не гарантировано')end
+    if w>200 then V.inline();V.muted('Объём API непроверен; 1 может означать слот')end
 end
+-- Each market card has a genuine large touch action; no tiny title hitbox.
 local function group_row(g,i)
-    V.row('shop_group_'..i,56,function(w,x,y)
-        M.thumbnail({name=g.row.display,id=g.row.id},32)
-        V.at(x+42,y-3)
-        if V.text_button(V.fit(g.row.display,w-212),'shops_item_'..i,w-204,false,30)then V.shop_item=g.row.key;V.reset_list('shop_offers_'..V.shops_mode)end
-        V.at(x+42,y+27);V.muted(g.shops..' лавок · '..g.qty..' шт. по API')
-        V.at(x+w-154,y+6)
-        if b(DSP.money(g.best)..' >','price_'..i,154)then V.shop_item=g.row.key;V.reset_list('shop_offers_'..V.shops_mode)end
+    V.row('shop_group_'..i,84,function(w,x,y)
+        M.thumbnail({name=g.row.display,id=g.row.id},34)
+        V.at(x+44,y+2);V.text(V.fit(g.row.display,w-222))
+        V.at(x+44,y+28);V.muted(V.fit(g.shops..' лавок · '..DSP.market.format_units(g.qty)..
+            ' шт. по API (не проверено)',w-222))
+        V.at(x+44,y+54);V.text(V.fit('Лучшая цена: '..DSP.money(g.best)..'/шт.',w-222))
+        V.at(x+w-165,y+16)
+        if b('Предложения >','item_'..i,160)then
+            V.shop_item=g.row.key;V.reset_list('shop_offers_'..V.shops_mode)
+        end
     end)
 end
 local function offer_row(o,i)
-    V.row('shop_offer_'..i,58,function(w,x,y)
-        V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),w-260))
-        V.at(x,y+24);V.muted(V.fit('API: '..tostring(o.qty)..' шт. · '..DSP.market.offer_freshness(o.ts),w-240))
-        V.at(x+w-246,y+5)
-        if b(DSP.money(o.price)..' >','detail_'..i,176)then V.offer_detail=o;V.open_popup('Предложение','offer')end
-        V.at(x+w-64,y+5);if b('Метка','pin_'..i,64)then DSP.market.mark_shop(o.shop)end
+    V.row('shop_offer_'..i,86,function(w,x,y)
+        local left=math.max(120,w-258)
+        V.at(x,y+2);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),left))
+        V.at(x,y+27);V.muted(V.fit('По API '..DSP.market.format_units(o.qty)..' шт. · '..
+            DSP.market.offer_freshness(o.ts),left))
+        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/шт.',left))
+        V.at(x+w-246,y+15)
+        if b('Подробнее','detail_'..i,142)then
+            V.offer_detail=o;V.offer_detail_row=V.shop_item;V.offer_detail_side=V.shops_mode
+            V.open_popup('Предложение','offer')
+        end
+        V.inline(4)
+        if b('Метка','pin_'..i,96)then DSP.market.mark_shop(o.shop)end
     end)
 end
 local function stall_view()
@@ -36919,7 +37401,7 @@ local function stall_view()
     local entries=shop[V.shops_mode..'_offers']or{}
     V.list_rows('stall_'..tostring(shop.num)..V.shops_mode,entries,56,function(e,i)
         V.row('stall_item_'..i,56,function(w,x,y)
-            V.text(V.fit(e.row.display,w-170));V.muted(tostring(e.offer.qty)..' шт. (API)')
+            V.text(V.fit(e.row.display,w-170));V.muted(DSP.market.format_units(e.offer.qty)..' шт. (API, не проверено)')
             V.at(x+w-160,y+8);V.text(DSP.money(e.offer.price))
         end)
     end,{footer=function()
@@ -36930,7 +37412,14 @@ local function stall_view()
 end
 local function api_browser()
     local st=DSP.market.state;local sig=tostring(st.sid)..'/'..tostring(st.version)
-    if V.shop_version~=sig then V.shop_version=sig;V.shop_item=nil;V.shop_detail=nil end
+    if V.shop_version~=sig then
+        -- A local quantity confirmation bumps the model revision without
+        -- replacing its source offers; keep the current item card open.
+        local server_changed=V.shop_sid~=nil and V.shop_sid~=st.sid
+        V.shop_sid=st.sid;V.shop_version=sig
+        if server_changed then V.shop_item=nil;V.shop_detail=nil
+        elseif V.shop_item and not (st.by_key and st.by_key[V.shop_item]) then V.shop_item=nil end
+    end
     if V.shop_detail then return stall_view()end
     if V.shop_item and b('< К товарам','back_items',140)then V.shop_item=nil end
     if V.shop_item then V.inline()end
@@ -36947,11 +37436,11 @@ local function api_browser()
         for _,g in ipairs(groups)do if g.row.key==V.shop_item then group=g;break end end
         if group then
             V.text(V.fit(group.row.display,imgui.GetContentRegionAvail().x))
-            V.list_rows('shop_offers_'..V.shops_mode,group.offers,58,offer_row,{footer=footer})
+            V.list_rows('shop_offers_'..V.shops_mode,group.offers,86,offer_row,{footer=footer})
         else V.muted('Нет предложений с этим фильтром')end
     else
         V.muted(#groups..' предметов · '..(V.shops_mode=='sell'and'Купить у игроков'or'Продать игрокам'))
-        V.list_rows('shops_'..V.shops_mode,groups,56,group_row,{footer=footer})
+        V.list_rows('shops_'..V.shops_mode,groups,84,group_row,{footer=footer})
     end
 end
 function V.shops()
@@ -36983,13 +37472,49 @@ function V.popups()
     if previous then previous()end
     V.popup('Предложение','offer',function()
         local o=V.offer_detail;if not o then return end
+        local current=DSP.market.state.by_key and DSP.market.state.by_key[V.offer_detail_row]
+        local same=false
+        local side=current and current[V.offer_detail_side]
+        for _,active in ipairs(side and side.offers or {})do if active==o then same=true;break end end
+        if not same then
+            V.red('Предложение устарело. Закройте окно и обновите список.')
+            if b('Закрыть','modal_close',150)then imgui.CloseCurrentPopup()end
+            return
+        end
+        local avail=imgui.GetContentRegionAvail().y
+        V.list('offer_detail_panel',function()
         V.text('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'))
-        V.text('Цена за штуку: '..DSP.money(o.price));V.text('Объём API: '..tostring(o.qty))
-        V.muted(DSP.market.offer_freshness(o.ts));V.muted('Данные снимка не гарантируют наличие')
-        if b('Лавка целиком','open_stall',185)then V.shop_detail=tostring(o.shop);imgui.CloseCurrentPopup()end
-        V.inline();if b('Метка','modal_pin',100)then DSP.market.mark_shop(o.shop)end
-        if b('Закрыть','modal_close',140)then imgui.CloseCurrentPopup()end
-    end,{w=620,h=290})
+        V.text('Цена за штуку: '..DSP.money(o.price))
+        local row=DSP.market.state.by_key and DSP.market.state.by_key[V.offer_detail_row]
+        local info=DSP.market.quantity_info(row,V.offer_detail_side,o)
+        V.text('Количество API: '..DSP.market.format_units(info.api)..' шт. (не проверено)')
+        if info.api==1 then V.red('1 по API может означать один слот, а не один предмет!')end
+        if info.live~=nil then
+            V.text('Открытая лавка: '..DSP.market.format_units(info.live)..' шт. (игровой пакет)')
+            if info.disagreement then V.red('Источники расходятся — не используйте API как точный остаток')end
+            if b('Принять количество из игры','accept_game_qty',-1)then
+                local ok,err=DSP.market.confirm_offer_quantity(row,V.offer_detail_side,o,info.live,'game')
+                if not ok then DSP.notify(err) end
+            end
+        else V.muted('Откройте эту лавку для сверки. При необходимости проверьте вручную.') end
+        if V.shop_qty_offer~=o then
+            V.shop_qty_offer=o;V.shop_qty_input={value=tonumber(o.qty) or 0}
+        end
+        V.muted('Если видели точный остаток в игре, введите его:')
+        M.compact_number(V.shop_qty_input,'value','shop_verified_qty',165,0)
+        V.inline();if b('Подтвердить вручную','confirm_qty',215)then
+            local ok,err=DSP.market.confirm_offer_quantity(row,V.offer_detail_side,o,V.shop_qty_input.value,'manual')
+            if not ok then DSP.notify(err) end
+        end
+        V.muted(DSP.market.offer_freshness(o.ts));V.muted('Цены и объёмы из API могут устареть')
+        end,{height=math.max(80,avail-72),footer=function()
+            if b('Лавка целиком','open_stall',170)then
+                V.shop_detail=tostring(o.shop);imgui.CloseCurrentPopup()
+            end
+            V.inline();if b('Метка','modal_pin',96)then DSP.market.mark_shop(o.shop)end
+            V.inline();if b('Закрыть','modal_close',120)then imgui.CloseCurrentPopup()end
+        end})
+    end,{w=700,h=490})
 end
 
 end
@@ -37050,20 +37575,31 @@ end
 local function offer_row(o,i)
     local selected=V.arb_tab=='sell'and V.arb_sellers or V.arb_buyers
     local key=offerkey(o);local checked=selected and selected[key]
-    V.row('arb_offer_'..V.arb_tab..i,80,function(w,x,y)
-        if b(checked and 'x'or' ','select_'..i,42,checked)then
+    V.row('arb_offer_'..V.arb_tab..i,100,function(w,x,y)
+        local right=math.max(155,w-170)
+        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),right-8))
+        local count=DSP.market.format_units(o.qty)
+        local row=V.arb_detail_group and V.arb_detail_group.row
+        local live_qty=DSP.market.live_offer_quantity(row,V.arb_tab,o)
+        local status=o.qty_source=='game' and 'проверено: игра' or
+            o.qty_source=='manual' and 'проверено вручную' or 'API, не подтверждено'
+        V.at(x,y+26);V.muted(V.fit(count..' шт. · '..status..
+            (live_qty and (' · Игра: '..DSP.market.format_units(live_qty)) or ''),right-8))
+        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.offer_freshness(o.ts),right-8))
+        if o.qty==1 and not o.verified_at then
+            V.at(x,y+76);V.muted(V.fit('Внимание: 1 может быть количеством слотов',right-8))
+        end
+        V.at(x+right,y+1)
+        if b(checked and 'Снять выбор' or 'Выбрать','select_'..i,160,checked)then
             selected[key]=not checked or nil;V.arb_revision=V.arb_revision+1
         end
-        V.at(x+50,y+2);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),w-230))
-        V.at(x+50,y+24);V.muted(V.fit(tostring(o.qty)..' шт. · '..DSP.market.offer_freshness(o.ts),w-220))
-        V.at(x+w-232,y+8);V.text(DSP.money(o.price)..'/шт.')
-        V.at(x+w-72,y+5)
-        if b('Метка','pin_'..i,72,false)then DSP.market.mark_shop(o.shop)end
-        V.at(x+w-150,y+40)
-        if b('Уточнить шт.','verify_'..V.arb_tab..i,146,false)then
-            V.arb_verify={offer=o,side=V.arb_tab}
-            V.arb_verify_value={qty=tonumber(o.qty) or 0}
+        V.at(x+right,y+49)
+        if b('Уточнить','verify_'..V.arb_tab..i,92,false)then
+            V.arb_verify={offer=o,side=V.arb_tab,source=live_qty and 'game' or 'manual'}
+            V.arb_verify_value={qty=live_qty or tonumber(o.qty) or 0}
         end
+        V.inline(4)
+        if b('Метка','pin_'..i,64,false)then DSP.market.mark_shop(o.shop)end
     end)
 end
 local function route_rows(p)
@@ -37119,10 +37655,12 @@ local function details(g)
     if V.arb_best_error then V.red(V.arb_best_error)end
     if V.arb_verify and V.arb_verify_value then
         local vr=V.arb_verify
-        V.muted('Проверили в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'))
+        V.muted('Укажите количество, фактически проверенное в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'))
         V.inline();M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',104,0)
         V.inline();if b('Применить','verify_save',112)then
-            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty)
+            local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
+            local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
+            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
             if ok then
                 V.arb_verify=nil;V.arb_verify_value=nil
                 V.arb_revision=V.arb_revision+1;V.arb_route=false
@@ -37133,7 +37671,7 @@ local function details(g)
     end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
     local height=math.max(48,imgui.GetContentRegionAvail().y-110)
-    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,80,offer_row,{height=height,footer=function()
+    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{height=height,footer=function()
         if b('Маршрут >','route',142,true)then V.arb_route=true end
         V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
     end})
@@ -37171,18 +37709,20 @@ function V.arbitrage()
         for _,g in ipairs(groups)do if q==''or DSP.lower(g.name):find(q,1,true)then out[#out+1]=g end end
         return out
     end)
-    V.list_rows('arb_main',filtered,60,function(g,i)
-        V.row('arb_group_'..i,60,function(w,x,y)
-            M.thumbnail({name=g.name,id=g.row and g.row.id},32)
-            V.at(x+42,y-3)
-            if V.text_button(V.fit(g.name,w-242),'arb_group_'..i,w-230,false,30)then
+    V.list_rows('arb_main',filtered,92,function(g,i)
+        V.row('arb_group_'..i,92,function(w,x,y)
+            M.thumbnail({name=g.name,id=g.row and g.row.id},34)
+            V.at(x+44,y+2);V.text(V.fit(g.name,w-220))
+            V.at(x+44,y+29);V.muted(V.fit('Купить: '..DSP.market.format_units(g.supply)..
+                ' · Сдать: '..DSP.market.format_units(g.demand)..' шт. (API)',w-220))
+            V.at(x+44,y+54);V.muted(V.fit('План '..DSP.market.format_units(g.planned)..
+                ' шт. · Оценка прибыли '..DSP.money(g.profit),w-220))
+            V.at(x+w-164,y+15)
+            if b('Предложения >','group_'..i,160,false)then
                 V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                 V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
                 V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
             end
-            V.at(x+42,y+28);V.muted(V.fit('Доступно '..g.supply..' · Спрос '..g.demand..' · План '..g.planned..' шт.',w-244))
-            V.at(x+w-172,y+4);V.muted('Оценка прибыли')
-            V.at(x+w-172,y+27);V.green(V.fit(DSP.money(g.profit),169))
         end)
     end,{footer=function()V.muted('Оценка по API, не гарантированная прибыль. Количество у скупщика может уменьшиться.')end})
 end
@@ -37921,6 +38461,369 @@ end
 end
 __mod_67_ui22_shop_scan()
 
+local function __mod_68_ui22_flip_promo()
+-- v2.2.4: practical reseller workstation / separate user opt-in promotion UI.
+local ffi=require('ffi')
+local V,M,F,P=DSP.ui22,DSP.mobile,DSP.flip,DSP.promo
+local function b(label,id,width,active,primary)return V.button(label,'flip24_'..id,width,active,primary)end
+local function save()if not DSP.save_settings()then V.flip_error='Не удалось сохранить настройки';return false end
+    if M.defer_save then M.defer_save() end;return true end
+local function money(n)return DSP.money(n or 0)end
+local function fixed(s,w)return V.fit(tostring(s),math.max(1,w))end
+local function row_price(r,w)
+    return fixed('Спрос: '..money(r.buy and r.buy.best or 0)..' · Предложения: '..money(r.sell and r.sell.med or 0),w)
+end
+local function risk_label(n)
+    return ({[0]='низкий',[1]='умеренный',[2]='высокий',[3]='очень высокий'})[n]or'нет оценки'
+end
+local function data_groups()
+    if DSP.market.arbitrage_grouped_ui then return DSP.market.arbitrage_grouped_ui() end
+    return DSP.market.arbitrage_grouped() or{},'ready'
+end
+local function open_arb(item)
+    local g=item.group
+    if not g then return end
+    local st=DSP.market.state or{}
+    V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
+    V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
+    V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil
+    V.arb_sellers={};V.arb_buyers={};V.arb_revision=(V.arb_revision or 0)+1
+    for _,o in ipairs(g.sellers or{})do V.arb_sellers[DSP.market.offer_key(o)]=true end
+    for _,o in ipairs(g.buyers or{})do V.arb_buyers[DSP.market.offer_key(o)]=true end
+    V.open_popup('Арбитраж','arb_details')
+end
+local function opportunities()
+    local groups,status=data_groups()
+    if status=='loading' then V.muted('Расчёт рынка...')end
+    if status=='error' then V.red('Ошибка подготовки рынка')end
+    V.muted('Найдено по снимку API. Это НЕ совершённые сделки и НЕ гарантированный остаток.')
+    local query,edited=V.search('flip','Предмет или название...',-1)
+    if edited then V.reset_list('flip_results')end
+    local snap=F.rank(groups)
+    local visible=V.memo('flip_results',snap.version..'|'..DSP.lower(query),function()
+        local out={};local needle=DSP.lower(query)
+        for _,x in ipairs(snap.rows)do if needle==''or DSP.lower(x.name):find(needle,1,true)then out[#out+1]=x end end
+        return out
+    end)
+    local sum=snap.summary
+    V.muted(fixed('План: '..sum.count..' связок · Вложить '..money(sum.cost)..' · Прибыль ~ '..money(sum.profit),imgui.GetContentRegionAvail().x))
+    if sum.limited then V.muted('Резерв капитала '..money(sum.reserve)..' · Свободно '..money(sum.unallocated))end
+    V.list_rows('flip_results',visible,112,function(x,i)
+        V.row('flip_'..i,112,function(w,l,t)
+            M.thumbnail({name=x.name,id=x.group.row and x.group.row.id},30)
+            V.at(l+40,t);V.text(fixed(x.name,w-205))
+            V.at(l+40,t+27);V.muted(fixed('КУПИТЬ #'..tostring(x.seller_shop)..' '..money(x.buy_price)..' · СДАТЬ #'..tostring(x.buyer_shop)..' '..money(x.sell_price),w-205))
+            V.at(l+40,t+54);V.green(fixed('~ +'..money(x.profit)..' · '..string.format('%.1f',x.roi)..'% · '..x.qty..' шт.',w-205))
+            V.at(l+40,t+80);V.muted(fixed('Риск: '..risk_label(x.risk)..' · '..(x.reason~='' and x.reason or 'проверьте в игре'),w-205))
+            V.at(l+w-158,t+4)
+            if b('Разобрать >','detail_'..i,154)then
+                V.flip_focus=x;V.open_popup('Разбор сделки','flip_detail')
+            end
+            V.at(l+w-158,t+57)
+            if b('Маршрут','route_'..i,154)then open_arb(x)end
+        end)
+    end,{footer=function()V.muted('Скорость продажи неизвестна: число скупщиков не равно реальному обороту.')end})
+end
+local function portfolio()
+    local s=F.settings()
+    V.muted('Бюджет — сумма доступных денег. Ноль означает расчёт без ограничения.')
+    V.muted('Капитал для торговли ($)')
+    if M.compact_number(s,'capital','flip_capital',210,0)then F.invalidate();save()end
+    V.muted('Резерв на непредвиденные расходы')
+    for _,pct in ipairs({0,10,20,30})do
+        if b(pct..'%','reserve_'..pct,70,s.reserve_pct==pct)then s.reserve_pct=pct;F.invalidate();save()end
+        V.inline(4)
+    end
+    V.text('Максимум на один предмет')
+    for _,pct in ipairs({20,35,50,100})do
+        if b(pct..'%','exposure_'..pct,74,s.max_position_pct==pct)then s.max_position_pct=pct;F.invalidate();save()end
+        V.inline(4)
+    end
+    V.text('Минимальный ROI')
+    for _,pct in ipairs({0,5,10,20})do
+        if b(pct..'%','roi_'..pct,74,s.min_roi==pct)then s.min_roi=pct;F.invalidate();save()end
+        V.inline(4)
+    end
+    V.text('Показывать риск до уровня')
+    for _,x in ipairs({{1,'Умер.'},{2,'Высок.'},{3,'Все'}})do
+        if b(x[2],'risk_'..x[1],100,s.max_risk==x[1])then s.max_risk=x[1];F.invalidate();save()end
+        V.inline(4)
+    end
+    V.text('Рейтинг по:')
+    for _,x in ipairs({{'profit','Прибыль'},{'roi','ROI'},{'unit','За шт.'}})do
+        if b(x[2],'sort_'..x[1],115,s.sort==x[1])then s.sort=x[1];F.invalidate();save()end
+        V.inline(4)
+    end
+    V.muted('Ограничения считаются на весь план, не отдельно на каждый маршрут.')
+end
+local function watchlist()
+    local s=F.settings()
+    if b(s.alerts and 'Оповещения: ВКЛ' or 'Оповещения: ВЫКЛ','watch_enabled',225,s.alerts)then
+        s.alerts=not s.alerts;save()
+    end
+    V.muted('Цена из API; не значит, что лот ещё доступен. Не чаще одного уведомления в 5 минут.')
+    local rows={}
+    for key,rule in pairs(s.watch)do rows[#rows+1]={key=key,rule=rule}end
+    table.sort(rows,function(a,b)return a.key<b.key end)
+    V.list_rows('flip_watch',rows,96,function(x,i)
+        V.row('watch_'..i,96,function(w,l,t)
+            V.at(l,t);V.text(fixed(x.rule.name,w-150))
+            V.at(l,t+30);V.muted(fixed('Порог '..money(x.rule.max_price)..' · сервер '..tostring(x.rule.server),w-150))
+            local st=DSP.market.state or{}
+            local actual=(st.by_key or{})[x.key]
+            V.at(l,t+56);V.muted(actual and row_price(actual,w-150)or'На текущем снимке отсутствует')
+            V.at(l+w-142,t+22)
+            if b('Удалить','watch_delete_'..i,138)then
+                V.flip_remove_watch=x.key;V.open_popup('Удалить наблюдение?','flip_watch_delete')
+            end
+        end)
+    end,{footer=function()V.muted('Не выполняет покупок и не отправляет дополнительные запросы.')end})
+end
+local function pricing()
+    local query,edited=V.search('flip_prices','Предмет для настройки цены',-1)
+    if edited then V.reset_list('flip_prices')end
+    local needle=DSP.lower(query)
+    local st=DSP.market.state or{}
+    local rows=V.memo('flip_price_rows',tostring(st.version)..'|'..needle,function()
+        local out={}
+        for _,r in ipairs(st.rows or{})do
+            if r.sell and r.sell.count>0 and (needle=='' or DSP.lower(r.display):find(needle,1,true)) then out[#out+1]=r end
+            if #out>=180 then break end
+        end
+        return out
+    end)
+    V.muted('Быстро / рынок / маржа — цены ОБЪЯВЛЕНИЙ; без известной себестоимости прибыль неизвестна.')
+    V.list_rows('flip_prices',rows,100,function(r,i)
+        V.row('price_'..i,100,function(w,l,t)
+            V.at(l,t);V.text(fixed(r.display,w-170))
+            V.at(l,t+30);V.muted(row_price(r,w-170))
+            local fast=F.suggest_price(r,'fast');local regular=F.suggest_price(r,'market');local premium=F.suggest_price(r,'premium')
+            V.at(l,t+60);V.muted(fixed('Быстро '..money(fast)..' · Рынок '..money(regular)..' · Маржа '..money(premium),w-170))
+            V.at(l+w-160,t+26)
+            if b('Настроить >','price_select_'..i,156)then
+                V.flip_price_row=r;V.flip_cost={value=0};V.flip_cost_known=false
+                V.open_popup('Цена для пресета','flip_price_modal')
+            end
+        end)
+    end,{footer=function()V.muted('Последние 180 строк списка; используй поиск. Новых HTTP-запросов нет.')end})
+end
+local function earnings()
+    local today=F.cash_summary(DSP.settings.trades,true)
+    local all=F.cash_summary(DSP.settings.trades,false)
+    V.text('Подтверждённые денежные потоки')
+    for _,x in ipairs({{'Сегодня',today},{'Всего',all}})do
+        V.text(x[1]..' · записей '..x[2].trades)
+        V.muted('Получено денег '..money(x[2].cash_in)..' · Отдано '..money(x[2].cash_out))
+        V.muted('Движение наличных '..money(x[2].cash_net))
+        V.muted('Трейдов с предметами/оценкой: '..x[2].valued_trades)
+    end
+    V.red('Движение наличных НЕ равно прибыли: стоимость предметов и незакрытые позиции не учтены.')
+    if b('Открыть полный журнал >','journal',265)then V.set_screen('logs')end
+end
+function V.flip_screen()
+    local tabs={{'opportunities','Сделки'},{'portfolio','Капитал'},{'watch','Охота'},
+        {'pricing','Цены'},{'earnings','Итоги'}}
+    V.flip_tab=V.flip_tab or 'opportunities'
+    V.heading('Перепродажа',function()
+        if b('Арбитраж >','main_arb',146)then V.set_screen('arbitrage')end
+    end,148)
+    local w=imgui.GetContentRegionAvail().x
+    local compact=w<700
+    if compact then
+        local current=1
+        for i,x in ipairs(tabs)do if x[1]==V.flip_tab then current=i end end
+        if b('<','flip_tab_prev',46)then current=(current-2)%#tabs+1 end
+        V.inline(3)
+        if b(tabs[current][2],'flip_tab_name',160,true)then current=current%#tabs+1 end
+        V.inline(3)
+        if b('>','flip_tab_next',46)then current=current%#tabs+1 end
+        V.flip_tab=tabs[current][1]
+    else
+        for i,x in ipairs(tabs)do
+            if b(x[2],'flip_tab_'..i,math.floor((w-24)/5),V.flip_tab==x[1])then
+                V.flip_tab=x[1];V.reset_list('flip_results')
+            end
+            if i<#tabs then V.inline(6)end
+        end
+    end
+    if V.flip_error then V.red(V.flip_error)end
+    if V.flip_tab=='opportunities'then opportunities()
+    elseif V.flip_tab=='portfolio'then V.list('flip_portfolio',function()portfolio()end)
+    elseif V.flip_tab=='watch'then watchlist()
+    elseif V.flip_tab=='pricing'then pricing()
+    else V.list('flip_earnings',function()earnings()end)end
+end
+local function fill_buffer(buf,value,max)
+    local utf=DSP.to_u8(tostring(value or ''))
+    ffi.fill(buf,max);ffi.copy(buf,utf:sub(1,max-1))
+end
+local function input_buffer(label,id,buf,max)
+    imgui.SetNextItemWidth(-1)
+    return imgui.InputTextWithHint('##prom24_'..id,DSP.utf8(label),buf,max)
+end
+local function promo_edit(index)
+    local item=P.settings().templates[index]
+    V.promo_edit_index=index
+    if not V.promo_name then V.promo_name=imgui.new.char[80]();V.promo_text=imgui.new.char[256]()end
+    fill_buffer(V.promo_name,item and item.name or '',80)
+    fill_buffer(V.promo_text,item and item.text or '/vr ',256)
+    V.promo_interval={value=item and item.interval or 300}
+    V.open_popup('Шаблон рекламы','promo_edit')
+end
+function V.promo_screen()
+    V.text('Авто-пиар · Палатка AI')
+    local total=P.session_count
+    V.muted('Отправлено за сессию: '..total..' / '..P.MAX_SESSION..' · интервал минимум '..P.MIN_INTERVAL..' сек.')
+    V.muted('Активируется вручную. Не обходит ограничений чата или диалогов /ad.')
+    if P.running then
+        if b('ОСТАНОВИТЬ','promo_stop',185,true,true)then P.stop()end
+    else
+        if b('Запустить авто-пиар','promo_start',210,false,true)then
+            local ok,err=P.start();V.promo_error=ok and nil or err
+        end
+    end
+    V.inline();if b('+ Шаблон','promo_new',155)then promo_edit(nil)end
+    if V.promo_error or P.last_error then V.red(tostring(V.promo_error or P.last_error))end
+    local rows=P.settings().templates
+    V.list_rows('promo_list',rows,126,function(it,i)
+        V.row('promo_row_'..i,126,function(w,l,t)
+            V.at(l,t);V.text(fixed((it.auto and '[x] ' or '[ ] ')..it.name,w-170))
+            V.at(l,t+28);V.muted(fixed(it.text,w-170))
+            V.at(l,t+54);V.muted('Каждые '..tostring(it.interval or 300)..'с · /vr, /s, /ad')
+            V.at(l,t+80)
+            if b(it.auto and 'Авто: да' or 'Авто: нет','promo_toggle_'..i,118,it.auto)then
+                it.auto=not it.auto
+                if not save()then it.auto=not it.auto end
+            end
+            V.inline(4);if b('Отправить','promo_send_'..i,134)then
+                local ok,err=P.send_once(i)
+                V.promo_error=ok and nil or err
+            end
+            V.at(l+w-155,t+8)
+            if b('Изменить','promo_edit_'..i,151)then promo_edit(i)end
+            V.at(l+w-155,t+63)
+            if b('Удалить','promo_del_'..i,151)then
+                V.promo_delete=i;V.open_popup('Удалить шаблон?','promo_delete')
+            end
+        end)
+    end,{footer=function()V.muted('Не отправляет сообщений, пока не нажата кнопка запуска.')end})
+end
+local previous_popups=V.popups
+function V.popups()
+    if previous_popups then previous_popups()end
+    V.popup('Разбор сделки','flip_detail',function()
+        local x=V.flip_focus
+        if not x then imgui.CloseCurrentPopup();return end
+        local st=DSP.market.state or{}
+        if x.group and (x.group.row~=(st.by_key or{})[x.key]) then
+            V.red('Рынок изменился. Откройте предложение заново.');V.cancel('flip_detail');return
+        end
+        V.text(x.name)
+        V.muted('Купить '..x.qty..' шт. в #'..tostring(x.seller_shop)..' по '..money(x.buy_price))
+        V.muted('Продать в скупку #'..tostring(x.buyer_shop)..' по '..money(x.sell_price))
+        V.text('Затраты '..money(x.cost))
+        V.text('Валовая выручка '..money(x.gross))
+        V.text('Комиссия ~ '..money(x.fee))
+        V.text('После комиссии ~ '..money(x.revenue))
+        V.green('Потенциальная прибыль ~ '..money(x.profit)..' · ROI '..string.format('%.1f%%',x.roi))
+        V.red('Риск '..risk_label(x.risk)..': '..x.reason)
+        V.muted('Интерес рынка: '..F.market_interest(x.group and x.group.row))
+        V.muted('Сверьте количества и готовность скупщика в игре ДО покупки.')
+        if b('Метка продавца','flip_detail_sell',187)then DSP.market.mark_shop(x.seller_shop)end
+        V.inline();if b('Метка скупщика','flip_detail_buy',188)then DSP.market.mark_shop(x.buyer_shop)end
+        V.muted('Отслеживать цену входа (за шт.)')
+        V.flip_watch_price=V.flip_watch_price or {value=x.buy_price}
+        M.compact_number(V.flip_watch_price,'value','flip_watch_target',170,1)
+        if b('Следить за ценой','flip_watch_add',208)then
+            local ok,err=F.watch_set(x.key,x.name,V.flip_watch_price.value)
+            V.flip_error=ok and nil or err
+        end
+        V.inline();V.cancel('flip_detail')
+    end,{w=690,h=460})
+    V.popup('Цена для пресета','flip_price_modal',function()
+        local r=V.flip_price_row
+        if not r then imgui.CloseCurrentPopup();return end
+        V.text(r.display)
+        local evidence=F.price_evidence(r)
+        V.muted('API '..(evidence.api and money(evidence.api)or'нет')..' · Скупка '..(evidence.buy and money(evidence.buy)or'нет'))
+        V.muted('ЦР '..(evidence.cr and money(evidence.cr)or'нет')..' · Открытая лавка '..(evidence.opened and money(evidence.opened)or'нет'))
+        V.muted('Продано сегодня: '..(evidence.today and (money(evidence.today)..' · '..tostring(evidence.today_qty)..' шт.')or'нет подтверждённой истории'))
+        V.muted('Неизвестная себестоимость не подменяется нулём.')
+        if b(V.flip_cost_known and 'Себестоимость известна' or 'Себестоимость неизвестна','cost_toggle',300,V.flip_cost_known)then V.flip_cost_known=not V.flip_cost_known end
+        if V.flip_cost_known then M.compact_number(V.flip_cost,'value','flip_cost_input',180,0)end
+        local w=imgui.GetContentRegionAvail().x
+        for i,mode in ipairs({{'fast','Быстро'},{'market','Рынок'},{'premium','Маржа'}})do
+            local price,info=F.suggest_price(r,mode[1],V.flip_cost_known and V.flip_cost.value or nil)
+            if b(mode[2]..' '..money(price),'price_mode_'..i,math.max(95,(w-16)/3))then
+                if price then
+                    V.flip_chosen_price=price;V.flip_chosen_key=r.key
+                else V.flip_error=info end
+            end
+            if i<3 then V.inline(6)end
+        end
+        for _,pair in ipairs({{'cr','ЦР',evidence.cr},{'today','Сегодня',evidence.today},{'opened','Лавка',evidence.opened}})do
+            if pair[3] and b(pair[2]..' '..money(pair[3]),'evidence_'..pair[1],174)then
+                V.flip_chosen_price=pair[3];V.flip_chosen_key=r.key
+            end
+            V.inline(4)
+        end
+        V.text('Выбранная цена: '..(V.flip_chosen_key==r.key and money(V.flip_chosen_price) or 'нет'))
+        V.muted('Подставление возможно только для существующей позиции активного пресета.')
+        if b('Применить в продажу','price_apply',235)then
+            local found=DSP.presets.find('sell',r.key)
+            if not found then V.flip_error='Сначала добавьте предмет в пресет продажи'
+            elseif V.flip_chosen_key~=r.key then V.flip_error='Выберите цену'
+            elseif V.flip_cost_known and math.floor(V.flip_chosen_price*(10000-math.max(0,math.min(10000,tonumber(DSP.settings.tax_bp)or 200)))/10000)<(tonumber(V.flip_cost.value)or 0) then
+                V.flip_error='Цена ниже себестоимости после комиссии'
+            else
+                local ok,err=DSP.presets.update('sell',found,{price=V.flip_chosen_price})
+                V.flip_error=ok and nil or err
+                if ok then imgui.CloseCurrentPopup()end
+            end
+        end
+        V.inline();V.cancel('flip_price_modal')
+        if V.flip_error then V.red(V.flip_error)end
+    end,{w=650,h=410})
+    V.popup('Удалить наблюдение?','flip_watch_delete',function()
+        V.text('Удалить наблюдение?')
+        if b('Удалить','watch_delete_confirm',160)then
+            local ok,err=F.watch_remove(V.flip_remove_watch)
+            V.flip_error=ok and nil or err
+            if ok then imgui.CloseCurrentPopup()end
+        end
+        V.inline();V.cancel('flip_watch_delete')
+    end,{w=450,h=230})
+    V.popup('Удалить шаблон?','promo_delete',function()
+        V.text('Удалить выбранный шаблон?')
+        if b('Удалить','promo_delete_yes',170)then
+            local ok=P.remove(V.promo_delete)
+            if ok then imgui.CloseCurrentPopup()else V.promo_error='Не удалось сохранить удаление'end
+        end
+        V.inline();V.cancel('promo_delete')
+    end,{w=460,h=240})
+    V.popup('Шаблон рекламы','promo_edit',function()
+        V.text('Название шаблона');input_buffer('Название','name',V.promo_name,80)
+        V.text('Команда с текстом: /vr, /s или /ad');input_buffer('/vr Продаю...','text',V.promo_text,256)
+        V.text('Интервал в секундах: 180–3600')
+        M.compact_number(V.promo_interval,'value','promo_interval',175,180)
+        if b('Сохранить','promo_save_edit',168,true)then
+            local name=DSP.to_cp(ffi.string(V.promo_name))
+            local text=DSP.to_cp(ffi.string(V.promo_text))
+            local ok,err
+            if V.promo_edit_index then
+                ok,err=P.update(V.promo_edit_index,name,text,V.promo_interval.value)
+            else ok,err=P.add(name,text,V.promo_interval.value)end
+            if ok then V.promo_error=nil;imgui.CloseCurrentPopup()
+            else V.promo_error=err end
+        end
+        V.inline();V.cancel('promo_edit')
+        if V.promo_error then V.red(V.promo_error)end
+    end,{w=650,h=360})
+end
+
+end
+__mod_68_ui22_flip_promo()
+
 local function __mod_99_main()
 -- Main entry: catalog, price base, market, UI, screens, live hooks, craglog, overlay.
 -- v1.2 hotfix (safe-mode): pcall around all install() calls so a
@@ -37956,6 +38859,7 @@ safe('screens.install', function()
     if DSP.screens and DSP.screens.install then DSP.screens.install() end
 end)
 safe('live.install',  function() DSP.live.install() end)
+safe('promo.install', function() DSP.promo.install() end)
 safe('shop_marker.install', function() DSP.shop_marker.install() end)
 safe('overlay.install', function() DSP.overlay.install() end)
 safe('logs.install',  function() DSP.logs.install() end)

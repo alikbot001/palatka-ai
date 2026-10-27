@@ -195,8 +195,23 @@ function L.parse_shop_item(obj, side)
     local raw_price=text:match('%$%s*([%d%., ]+)') or text:match('([%d][%d%., ]*)%s*%$')
     local text_price=raw_price and tonumber((raw_price:gsub('[^%d]','')))
     local price=shop_number(obj,'price') or math.max(text_price or 0,shop_number(obj,'amount') or 0)
-    local qty=shop_number(obj,'count') or shop_number(obj,'qty')
-    if qty==nil then qty=tonumber(text:match('%((%d+)%s*шт%.?%)')) end
+    local qty=shop_number(obj,'count') or shop_number(obj,'qty') or shop_number(obj,'quantity')
+    if qty==nil then
+        -- Read only explicitly labelled units, never infer stack size from
+        -- a price or an inventory slot. Accept 45000 and 45.000/45 000 шт.
+        local label=text:match('%(([%d%., ]+)%s*шт%.?%)')
+            or text:match('([%d][%d%., ]*)%s*шт%.?')
+        if label then
+            label=label:match('^%s*(.-)%s*$')
+            local parts={};for digits in label:gmatch('%d+')do parts[#parts+1]=digits end
+            local valid=#parts>0
+            if #parts>1 then
+                if #parts[1]>3 then valid=false end
+                for i=2,#parts do if #parts[i]~=3 then valid=false end end
+            end
+            if valid then qty=tonumber(table.concat(parts)) end
+        end
+    end
     if tonumber(item_raw)==0 or price==0 or qty==0 then
         if previous then
             for i,e in ipairs(list) do if e==previous then table.remove(list,i);break end end

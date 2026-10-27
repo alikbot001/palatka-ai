@@ -52,20 +52,31 @@ end
 local function offer_row(o,i)
     local selected=V.arb_tab=='sell'and V.arb_sellers or V.arb_buyers
     local key=offerkey(o);local checked=selected and selected[key]
-    V.row('arb_offer_'..V.arb_tab..i,80,function(w,x,y)
-        if b(checked and 'x'or' ','select_'..i,42,checked)then
+    V.row('arb_offer_'..V.arb_tab..i,100,function(w,x,y)
+        local right=math.max(155,w-170)
+        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),right-8))
+        local count=DSP.market.format_units(o.qty)
+        local row=V.arb_detail_group and V.arb_detail_group.row
+        local live_qty=DSP.market.live_offer_quantity(row,V.arb_tab,o)
+        local status=o.qty_source=='game' and 'проверено: игра' or
+            o.qty_source=='manual' and 'проверено вручную' or 'API, не подтверждено'
+        V.at(x,y+26);V.muted(V.fit(count..' шт. · '..status..
+            (live_qty and (' · Игра: '..DSP.market.format_units(live_qty)) or ''),right-8))
+        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.offer_freshness(o.ts),right-8))
+        if o.qty==1 and not o.verified_at then
+            V.at(x,y+76);V.muted(V.fit('Внимание: 1 может быть количеством слотов',right-8))
+        end
+        V.at(x+right,y+1)
+        if b(checked and 'Снять выбор' or 'Выбрать','select_'..i,160,checked)then
             selected[key]=not checked or nil;V.arb_revision=V.arb_revision+1
         end
-        V.at(x+50,y+2);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),w-230))
-        V.at(x+50,y+24);V.muted(V.fit(tostring(o.qty)..' шт. · '..DSP.market.offer_freshness(o.ts),w-220))
-        V.at(x+w-232,y+8);V.text(DSP.money(o.price)..'/шт.')
-        V.at(x+w-72,y+5)
-        if b('Метка','pin_'..i,72,false)then DSP.market.mark_shop(o.shop)end
-        V.at(x+w-150,y+40)
-        if b('Уточнить шт.','verify_'..V.arb_tab..i,146,false)then
-            V.arb_verify={offer=o,side=V.arb_tab}
-            V.arb_verify_value={qty=tonumber(o.qty) or 0}
+        V.at(x+right,y+49)
+        if b('Уточнить','verify_'..V.arb_tab..i,92,false)then
+            V.arb_verify={offer=o,side=V.arb_tab,source=live_qty and 'game' or 'manual'}
+            V.arb_verify_value={qty=live_qty or tonumber(o.qty) or 0}
         end
+        V.inline(4)
+        if b('Метка','pin_'..i,64,false)then DSP.market.mark_shop(o.shop)end
     end)
 end
 local function route_rows(p)
@@ -121,10 +132,12 @@ local function details(g)
     if V.arb_best_error then V.red(V.arb_best_error)end
     if V.arb_verify and V.arb_verify_value then
         local vr=V.arb_verify
-        V.muted('Проверили в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'))
+        V.muted('Укажите количество, фактически проверенное в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'))
         V.inline();M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',104,0)
         V.inline();if b('Применить','verify_save',112)then
-            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty)
+            local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
+            local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
+            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
             if ok then
                 V.arb_verify=nil;V.arb_verify_value=nil
                 V.arb_revision=V.arb_revision+1;V.arb_route=false
@@ -135,7 +148,7 @@ local function details(g)
     end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
     local height=math.max(48,imgui.GetContentRegionAvail().y-110)
-    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,80,offer_row,{height=height,footer=function()
+    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{height=height,footer=function()
         if b('Маршрут >','route',142,true)then V.arb_route=true end
         V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
     end})
@@ -173,18 +186,20 @@ function V.arbitrage()
         for _,g in ipairs(groups)do if q==''or DSP.lower(g.name):find(q,1,true)then out[#out+1]=g end end
         return out
     end)
-    V.list_rows('arb_main',filtered,60,function(g,i)
-        V.row('arb_group_'..i,60,function(w,x,y)
-            M.thumbnail({name=g.name,id=g.row and g.row.id},32)
-            V.at(x+42,y-3)
-            if V.text_button(V.fit(g.name,w-242),'arb_group_'..i,w-230,false,30)then
+    V.list_rows('arb_main',filtered,92,function(g,i)
+        V.row('arb_group_'..i,92,function(w,x,y)
+            M.thumbnail({name=g.name,id=g.row and g.row.id},34)
+            V.at(x+44,y+2);V.text(V.fit(g.name,w-220))
+            V.at(x+44,y+29);V.muted(V.fit('Купить: '..DSP.market.format_units(g.supply)..
+                ' · Сдать: '..DSP.market.format_units(g.demand)..' шт. (API)',w-220))
+            V.at(x+44,y+54);V.muted(V.fit('План '..DSP.market.format_units(g.planned)..
+                ' шт. · Оценка прибыли '..DSP.money(g.profit),w-220))
+            V.at(x+w-164,y+15)
+            if b('Предложения >','group_'..i,160,false)then
                 V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                 V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
                 V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
             end
-            V.at(x+42,y+28);V.muted(V.fit('Доступно '..g.supply..' · Спрос '..g.demand..' · План '..g.planned..' шт.',w-244))
-            V.at(x+w-172,y+4);V.muted('Оценка прибыли')
-            V.at(x+w-172,y+27);V.green(V.fit(DSP.money(g.profit),169))
         end)
     end,{footer=function()V.muted('Оценка по API, не гарантированная прибыль. Количество у скупщика может уменьшиться.')end})
 end

@@ -49,25 +49,36 @@ local function sort_toggle()
 end
 local function footer()
     sort_toggle();local w=imgui.GetContentRegionAvail().x
-    if w>200 then V.inline();V.muted('Снимок API · наличие не гарантировано')end
+    if w>200 then V.inline();V.muted('Объём API непроверен; 1 может означать слот')end
 end
+-- Each market card has a genuine large touch action; no tiny title hitbox.
 local function group_row(g,i)
-    V.row('shop_group_'..i,56,function(w,x,y)
-        M.thumbnail({name=g.row.display,id=g.row.id},32)
-        V.at(x+42,y-3)
-        if V.text_button(V.fit(g.row.display,w-212),'shops_item_'..i,w-204,false,30)then V.shop_item=g.row.key;V.reset_list('shop_offers_'..V.shops_mode)end
-        V.at(x+42,y+27);V.muted(g.shops..' лавок · '..g.qty..' шт. по API')
-        V.at(x+w-154,y+6)
-        if b(DSP.money(g.best)..' >','price_'..i,154)then V.shop_item=g.row.key;V.reset_list('shop_offers_'..V.shops_mode)end
+    V.row('shop_group_'..i,84,function(w,x,y)
+        M.thumbnail({name=g.row.display,id=g.row.id},34)
+        V.at(x+44,y+2);V.text(V.fit(g.row.display,w-222))
+        V.at(x+44,y+28);V.muted(V.fit(g.shops..' лавок · '..DSP.market.format_units(g.qty)..
+            ' шт. по API (не проверено)',w-222))
+        V.at(x+44,y+54);V.text(V.fit('Лучшая цена: '..DSP.money(g.best)..'/шт.',w-222))
+        V.at(x+w-165,y+16)
+        if b('Предложения >','item_'..i,160)then
+            V.shop_item=g.row.key;V.reset_list('shop_offers_'..V.shops_mode)
+        end
     end)
 end
 local function offer_row(o,i)
-    V.row('shop_offer_'..i,58,function(w,x,y)
-        V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),w-260))
-        V.at(x,y+24);V.muted(V.fit('API: '..tostring(o.qty)..' шт. · '..DSP.market.offer_freshness(o.ts),w-240))
-        V.at(x+w-246,y+5)
-        if b(DSP.money(o.price)..' >','detail_'..i,176)then V.offer_detail=o;V.open_popup('Предложение','offer')end
-        V.at(x+w-64,y+5);if b('Метка','pin_'..i,64)then DSP.market.mark_shop(o.shop)end
+    V.row('shop_offer_'..i,86,function(w,x,y)
+        local left=math.max(120,w-258)
+        V.at(x,y+2);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),left))
+        V.at(x,y+27);V.muted(V.fit('По API '..DSP.market.format_units(o.qty)..' шт. · '..
+            DSP.market.offer_freshness(o.ts),left))
+        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/шт.',left))
+        V.at(x+w-246,y+15)
+        if b('Подробнее','detail_'..i,142)then
+            V.offer_detail=o;V.offer_detail_row=V.shop_item;V.offer_detail_side=V.shops_mode
+            V.open_popup('Предложение','offer')
+        end
+        V.inline(4)
+        if b('Метка','pin_'..i,96)then DSP.market.mark_shop(o.shop)end
     end)
 end
 local function stall_view()
@@ -85,7 +96,7 @@ local function stall_view()
     local entries=shop[V.shops_mode..'_offers']or{}
     V.list_rows('stall_'..tostring(shop.num)..V.shops_mode,entries,56,function(e,i)
         V.row('stall_item_'..i,56,function(w,x,y)
-            V.text(V.fit(e.row.display,w-170));V.muted(tostring(e.offer.qty)..' шт. (API)')
+            V.text(V.fit(e.row.display,w-170));V.muted(DSP.market.format_units(e.offer.qty)..' шт. (API, не проверено)')
             V.at(x+w-160,y+8);V.text(DSP.money(e.offer.price))
         end)
     end,{footer=function()
@@ -96,7 +107,14 @@ local function stall_view()
 end
 local function api_browser()
     local st=DSP.market.state;local sig=tostring(st.sid)..'/'..tostring(st.version)
-    if V.shop_version~=sig then V.shop_version=sig;V.shop_item=nil;V.shop_detail=nil end
+    if V.shop_version~=sig then
+        -- A local quantity confirmation bumps the model revision without
+        -- replacing its source offers; keep the current item card open.
+        local server_changed=V.shop_sid~=nil and V.shop_sid~=st.sid
+        V.shop_sid=st.sid;V.shop_version=sig
+        if server_changed then V.shop_item=nil;V.shop_detail=nil
+        elseif V.shop_item and not (st.by_key and st.by_key[V.shop_item]) then V.shop_item=nil end
+    end
     if V.shop_detail then return stall_view()end
     if V.shop_item and b('< К товарам','back_items',140)then V.shop_item=nil end
     if V.shop_item then V.inline()end
@@ -113,11 +131,11 @@ local function api_browser()
         for _,g in ipairs(groups)do if g.row.key==V.shop_item then group=g;break end end
         if group then
             V.text(V.fit(group.row.display,imgui.GetContentRegionAvail().x))
-            V.list_rows('shop_offers_'..V.shops_mode,group.offers,58,offer_row,{footer=footer})
+            V.list_rows('shop_offers_'..V.shops_mode,group.offers,86,offer_row,{footer=footer})
         else V.muted('Нет предложений с этим фильтром')end
     else
         V.muted(#groups..' предметов · '..(V.shops_mode=='sell'and'Купить у игроков'or'Продать игрокам'))
-        V.list_rows('shops_'..V.shops_mode,groups,56,group_row,{footer=footer})
+        V.list_rows('shops_'..V.shops_mode,groups,84,group_row,{footer=footer})
     end
 end
 function V.shops()
@@ -149,11 +167,47 @@ function V.popups()
     if previous then previous()end
     V.popup('Предложение','offer',function()
         local o=V.offer_detail;if not o then return end
+        local current=DSP.market.state.by_key and DSP.market.state.by_key[V.offer_detail_row]
+        local same=false
+        local side=current and current[V.offer_detail_side]
+        for _,active in ipairs(side and side.offers or {})do if active==o then same=true;break end end
+        if not same then
+            V.red('Предложение устарело. Закройте окно и обновите список.')
+            if b('Закрыть','modal_close',150)then imgui.CloseCurrentPopup()end
+            return
+        end
+        local avail=imgui.GetContentRegionAvail().y
+        V.list('offer_detail_panel',function()
         V.text('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'))
-        V.text('Цена за штуку: '..DSP.money(o.price));V.text('Объём API: '..tostring(o.qty))
-        V.muted(DSP.market.offer_freshness(o.ts));V.muted('Данные снимка не гарантируют наличие')
-        if b('Лавка целиком','open_stall',185)then V.shop_detail=tostring(o.shop);imgui.CloseCurrentPopup()end
-        V.inline();if b('Метка','modal_pin',100)then DSP.market.mark_shop(o.shop)end
-        if b('Закрыть','modal_close',140)then imgui.CloseCurrentPopup()end
-    end,{w=620,h=290})
+        V.text('Цена за штуку: '..DSP.money(o.price))
+        local row=DSP.market.state.by_key and DSP.market.state.by_key[V.offer_detail_row]
+        local info=DSP.market.quantity_info(row,V.offer_detail_side,o)
+        V.text('Количество API: '..DSP.market.format_units(info.api)..' шт. (не проверено)')
+        if info.api==1 then V.red('1 по API может означать один слот, а не один предмет!')end
+        if info.live~=nil then
+            V.text('Открытая лавка: '..DSP.market.format_units(info.live)..' шт. (игровой пакет)')
+            if info.disagreement then V.red('Источники расходятся — не используйте API как точный остаток')end
+            if b('Принять количество из игры','accept_game_qty',-1)then
+                local ok,err=DSP.market.confirm_offer_quantity(row,V.offer_detail_side,o,info.live,'game')
+                if not ok then DSP.notify(err) end
+            end
+        else V.muted('Откройте эту лавку для сверки. При необходимости проверьте вручную.') end
+        if V.shop_qty_offer~=o then
+            V.shop_qty_offer=o;V.shop_qty_input={value=tonumber(o.qty) or 0}
+        end
+        V.muted('Если видели точный остаток в игре, введите его:')
+        M.compact_number(V.shop_qty_input,'value','shop_verified_qty',165,0)
+        V.inline();if b('Подтвердить вручную','confirm_qty',215)then
+            local ok,err=DSP.market.confirm_offer_quantity(row,V.offer_detail_side,o,V.shop_qty_input.value,'manual')
+            if not ok then DSP.notify(err) end
+        end
+        V.muted(DSP.market.offer_freshness(o.ts));V.muted('Цены и объёмы из API могут устареть')
+        end,{height=math.max(80,avail-72),footer=function()
+            if b('Лавка целиком','open_stall',170)then
+                V.shop_detail=tostring(o.shop);imgui.CloseCurrentPopup()
+            end
+            V.inline();if b('Метка','modal_pin',96)then DSP.market.mark_shop(o.shop)end
+            V.inline();if b('Закрыть','modal_close',120)then imgui.CloseCurrentPopup()end
+        end})
+    end,{w=700,h=490})
 end

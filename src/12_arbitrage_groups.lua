@@ -61,7 +61,7 @@ end
 
 -- Optional manual correction after the player visits a stall. Keep the
 -- original API number visible, and discard this correction on the next pull.
-function M.confirm_offer_quantity(row,kind,offer,value)
+function M.confirm_offer_quantity(row,kind,offer,value,source)
     if not row or (kind~='buy' and kind~='sell') or not offer then
         return false,'неверное предложение'
     end
@@ -75,10 +75,20 @@ function M.confirm_offer_quantity(row,kind,offer,value)
         if o==offer then found=true; break end
     end
     if not found then return false,'предложение устарело' end
+    -- A UI button may be clicked while a new game packet replaces the opened
+    -- shop. Do not promote a previously displayed quantity to "game-verified"
+    -- unless it is STILL visible for this exact shop/server/item/price now.
+    if source=='game' then
+        local observed=M.live_offer_quantity and M.live_offer_quantity(row,kind,offer)
+        if observed~=n then
+            return false,'игровое количество изменилось или лавка закрыта; проверьте заново'
+        end
+    end
     if offer.snapshot_qty==nil then offer.snapshot_qty=qty(offer.qty) end
     side.qty=math.max(0,qty(side.qty)-qty(offer.qty)+n)
     offer.qty=n
     offer.verified_at=os.time()
+    offer.qty_source=source=='game' and 'game' or 'manual'
     M.state.version=(M.state.version or 0)+1
     M.invalidate_arbitrage()
     return true

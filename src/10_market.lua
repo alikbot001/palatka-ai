@@ -1202,3 +1202,49 @@ function DSP.market.market_label_for(row)
     return string.format('Рынок #%d: Продажа ~%s | Скупка ~%s (на основе %d лавок)',
         sid, DSP.money(sell.med), DSP.money(buy.med), shops)
 end
+
+
+-- Quantity is not a single trustworthy number. Older mobile clients can send
+-- one *slot* as qty=1 to /shops/push even when the game contains a large stack.
+-- Keep API snapshots immutable until the player explicitly confirms a live
+-- observation. No network requests, parsing of unrelated packets or IO here.
+local function quantity_integer(v)
+    local n=tonumber(v)
+    if n and n==n and n>=0 and n<=9007199254740991 and n%1==0 then return n end
+end
+function DSP.market.format_units(n)
+    local v=quantity_integer(n)
+    if not v then return '?' end
+    return tostring(v):reverse():gsub('(%d%d%d)','%1 '):reverse():gsub('^ ','')
+end
+function DSP.market.live_offer_quantity(row, side, offer)
+    if not row or (side~='sell' and side~='buy') or not offer then return nil end
+    local s=DSP.live and DSP.live.shop
+    if not s or not s.num or tostring(s.num)=='' or tostring(s.num)~=tostring(offer.shop) then return nil end
+    local sid=tonumber(DSP.market.state.sid)
+    if not sid or tonumber(s.server)~=sid or (s.menu_closed or 0)>0 then return nil end
+    if not s.owner or s.owner=='' then return nil end
+    local owner=DSP.lower(DSP.trim(tostring(offer.owner or '')))
+    if owner~='' and owner~='?' and DSP.lower(DSP.trim(s.owner))~=owner then return nil end
+    local stamp=tonumber(s.items_updated) or 0
+    if stamp<=0 or stamp>os.time()+60 or os.time()-stamp>120 then return nil end
+    local wanted=row.key or DSP.item_key(row.name or row.display or '',row.ench or 0)
+    local total,matched,unknown=0,0,false
+    for _,it in ipairs(s[side] or {}) do
+        if DSP.item_key(it.name or '',it.ench or 0)==wanted and tonumber(it.price)==tonumber(offer.price) then
+            matched=matched+1
+            local n=it.qty_known==true and quantity_integer(it.qty) or nil
+            if not n then unknown=true else total=total+n end
+        end
+    end
+    if matched==0 or unknown then return nil end
+    return total,{source='game',shop=s.num,seen_at=stamp,slots=matched}
+end
+function DSP.market.quantity_info(row,side,offer)
+    local api=quantity_integer(offer and (offer.snapshot_qty or offer.qty))
+    local live,meta=DSP.market.live_offer_quantity(row,side,offer)
+    return {api=api,shown=quantity_integer(offer and offer.qty),
+        verified=offer and offer.verified_at~=nil or false,
+        live=live,live_meta=meta,
+        disagreement=live~=nil and api~=nil and live~=api}
+end
