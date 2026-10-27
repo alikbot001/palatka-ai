@@ -99,7 +99,7 @@ function DSP.player_nick()
         if ok then nick = sampGetPlayerNickname(pid) or '' end
     end)
     if nick == '' then pcall(function() nick = sampGetCurrentPlayerName() or '' end) end
-    if nick == '' then nick = 'DsPic' end
+    -- No hard-coded author nickname: blank means unknown identity, not a player.
     return nick
 end
 

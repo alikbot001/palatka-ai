@@ -101,6 +101,37 @@ function _G.dsp_click_slot(interfaceid, id, subid, json_str)
     raknetDeleteBitStream(bs)
 end
 
+-- A matching ID alone is not enough: MonetLoader may expose a previous dialog's
+-- text while the server is replacing it. Confirm both the active ID and the
+-- stabilized title/body before submitting any values.
+local function wait_trade_item_dialog(ids, item_name, timeout)
+    local elapsed=0
+    local wanted=base_name(item_name)
+    local observed=''
+    while elapsed<(timeout or 3200) do
+        trade_wait(40); elapsed=elapsed+40
+        if sampIsDialogActive() then
+            local id=sampGetCurrentDialogId()
+            local allowed=false
+            for _,x in ipairs(ids) do if x==id then allowed=true;break end end
+            if allowed then
+                local txt=DSP.dialog_clean(sampGetDialogText() or '')
+                if txt~='' then
+                    observed=txt
+                    if DSP.trade_runtime.matches(txt,wanted) then
+                        local stable=DSP.dialog_clean(wait_text(id,360))
+                        if sampIsDialogActive() and sampGetCurrentDialogId()==id
+                            and DSP.trade_runtime.matches(stable,wanted) then
+                            return id,stable
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil,observed
+end
+
 local function parse_inventory(text)
     local raw = {}
     for line in tostring(text or ''):gmatch('[^\r\n]+') do
@@ -299,4 +330,5 @@ function DSP.auto.install()
 end
 
 DSP.auto.helpers = {close_dialog = close_dialog, wait_dialog = wait_dialog, wait_text = wait_text,
-    clean = clean, base_name = base_name, has_qty = has_qty}
+    clean = clean, base_name = base_name, has_qty = has_qty,
+    wait_trade_item_dialog = wait_trade_item_dialog}

@@ -70,7 +70,7 @@ function C.describe(e)
     for _,side in ipairs({{'items_give','Отдано'},{'items_get','Получено'}}) do
         for _,it in ipairs(e[side[1]] or {}) do parts[#parts+1]=side[2]..': '..tostring(it.name)..' x'..tostring(it.qty or 1) end
     end
-    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..'Итог сделки: '..DSP.money(e.profit or 0)
+    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..(e.profit_estimated==false and 'Денежный итог: ' or 'Оценка обмена: ')..DSP.money(e.profit or 0)
 end
 local function store_event(e)
     if not e.id and e.type~='payday_detail' and C.new_event_id then e.id=C.new_event_id(e.ts) end

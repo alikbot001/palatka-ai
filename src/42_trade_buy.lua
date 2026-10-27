@@ -5,15 +5,27 @@ local log = DSP.add_log
 local h = DSP.auto.helpers
 local close_dialog, wait_dialog, wait_text = h.close_dialog, h.wait_dialog, h.wait_text
 local clean, base_name, has_qty = h.clean, h.base_name, h.has_qty
+local wait_item = h.wait_trade_item_dialog
+-- Search results may carry a line number, price/count columns and colour tags.
+-- Match the complete normalized item name; do not pick an unrelated first-word hit.
 local function find_list_index(text, name)
-    local idx = 0
+    local idx=0
+    local fold=DSP.lower or string.lower
+    local wanted=fold(base_name(name)):match('^%s*(.-)%s*$')
+    local found=nil
     for line in tostring(text or ''):gmatch('[^\r\n]+') do
-        local nm = clean(line):gsub('^%s*%d+[%.%)]%s*', ''):match('^%s*(.-)%s*$')
-        nm = nm:match('^(.-)\t') or nm
-        if nm == name then return idx end
-        idx = idx + 1
+        local nm=clean(line):gsub('^%s*%d+[%.%)]%s*',''):match('^%s*(.-)%s*$')
+        nm=(nm:match('^(.-)\t') or nm):match('^%s*(.-)%s*$')
+        -- Some builds put quantity in square brackets after the item name.
+        local base=nm:match('^(.-)%s+%[%d+[^%]]*%]') or nm
+        base=fold(base_name(base)):match('^%s*(.-)%s*$')
+        if base==wanted then
+            if found~=nil then return nil,'несколько одинаковых строк' end
+            found=idx
+        end
+        idx=idx+1
     end
-    return nil
+    return found
 end
 
 local function open_shop_menu()
@@ -25,7 +37,7 @@ end
 
 local function buy_one(it, pi, total, dry_run)
     DSP.auto.status = 'скупка: ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
-    if not sampIsDialogActive() or sampGetCurrentDialogId() ~= 3040 then
+    if not sampIsDialogActive() or (sampGetCurrentDialogId() ~= 3040 and sampGetCurrentDialogId()~=15072) then
         if not open_shop_menu() then
             log('Скупка: меню не открылось для ' .. it.name, 'error')
             return false
@@ -50,9 +62,9 @@ local function buy_one(it, pi, total, dry_run)
         return false
     end
     local list_text = DSP.dialog_clean(wait_text(id, 500))
-    local idx = find_list_index(list_text, it.name)
-    if not idx then
-        log('Скупка: не найдено: ' .. it.name, 'error')
+    local idx,index_err = find_list_index(list_text, it.name)
+    if idx==nil then
+        log('Скупка: '..tostring(index_err or 'не найдено')..': ' .. it.name, 'error')
         close_dialog()
         return false
     end
@@ -70,17 +82,19 @@ local function buy_one(it, pi, total, dry_run)
     end
     -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final выставление dialog.
     if id ~= 26563 and id ~= 15071 then return false end
-    wait_text(id, 500)
-    local txt = DSP.dialog_clean(sampGetDialogText() or '')
+    local validated_id,txt=wait_item({id},it.name,1300)
     local base = base_name(it.name)
-    if not runtime.matches(txt, it.name) then
+    if not validated_id then
         log('Скупка: в диалоге другой товар: ' .. it.name, 'error')
         close_dialog()
         return false
     end
     local qty = tonumber(it.qty) or 1
     if qty < 1 then qty = 1 end
-    if not has_qty(txt) then qty = 1 end
+    if not has_qty(txt) and qty>1 then
+        log('Скупка: сервер не предлагает поле количества; лимит будет добавлен по одной штуке','error')
+        qty=1
+    end
     local resp = has_qty(txt) and (tostring(qty) .. ',' .. tostring(it.price))
         or tostring(it.price)
     if dry_run then

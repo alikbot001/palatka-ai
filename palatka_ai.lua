@@ -1,7 +1,7 @@
--- Palatka AI v2.2.4 mobile release, built from src/*.lua
+-- Palatka AI v2.2.5 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.2.4')
+script_version('2.2.5')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1413823
+DSP.item_icon_blob_offset = 1420635
 local function __mod_00_core()
--- DsPic Helper standalone core: state, settings, encoding, formatting.
+-- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.4'
+DSP.version = '2.2.5'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -25401,7 +25401,7 @@ function DSP.notify(text)
     if mh_notify then
         pcall(mh_notify, text, 0xFFFFFF)
     elseif sampAddChatMessage then
-        pcall(sampAddChatMessage, '[DsPic] ' .. text, 0xFFAAFF)
+        pcall(sampAddChatMessage, '[Palatka AI] ' .. text, 0xFFAAFF)
     end
 end
 
@@ -25969,7 +25969,7 @@ function DSP.player_nick()
         if ok then nick = sampGetPlayerNickname(pid) or '' end
     end)
     if nick == '' then pcall(function() nick = sampGetCurrentPlayerName() or '' end) end
-    if nick == '' then nick = 'DsPic' end
+    -- No hard-coded author nickname: blank means unknown identity, not a player.
     return nick
 end
 
@@ -27973,6 +27973,9 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
             total_get = total_get + e.buy.max * (it.qty or 1)
         end
     end
+    -- Item values are taken from price reference, NOT acquisition cost.
+    -- Thus a barter deal involving items has an estimate, not proven profit.
+    local estimated=(#(items_give or {})>0 or #(items_get or {})>0)
     local profit = total_get - total_give
     local delta_pct = total_give > 0 and (profit / total_give * 100) or 0
     local kind = profit > 0 and 'profit' or (profit < 0 and 'loss' or 'neutral')
@@ -27985,6 +27988,8 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
         total_get = total_get,
         total_give = total_give,
         profit = profit,
+        profit_estimated = estimated,
+        valuation_source = estimated and 'market_buy_reference' or 'cash_only',
         delta_pct = delta_pct,
         items_give = items_give or {},
         items_get = items_get or {},
@@ -28006,8 +28011,8 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
         pcall(DSP.craglog.log_trade, entry)
     end
     if DSP.live and DSP.live.reset_trade then DSP.live.reset_trade(partner) end
-    DSP.notify('СДЕЛКА: ' .. DSP.money(profit) .. ' (' .. string.format('%+.1f%%', delta_pct) .. ')', kind == 'profit' and 'ok' or 'error')
-    DSP.add_log('СДЕЙКА с ' .. tostring(partner) .. ': ' .. DSP.money(profit) .. ' (' .. DSP.money(total_get) .. '/' .. DSP.money(total_give) .. ')',
+    DSP.notify((estimated and 'СДЕЛКА, оценка: ' or 'СДЕЛКА, денежный итог: ') .. DSP.money(profit) .. ' (' .. string.format('%+.1f%%', delta_pct) .. ')', kind == 'profit' and 'ok' or 'error')
+    DSP.add_log((estimated and 'Оценка сделки с ' or 'Денежная сделка с ') .. tostring(partner) .. ': ' .. DSP.money(profit) .. ' (' .. DSP.money(total_get) .. '/' .. DSP.money(total_give) .. ')',
         kind == 'profit' and 'ok' or 'error')
     -- Telegram notification for trade
     if DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
@@ -28128,10 +28133,14 @@ function DSP.logs.profit_summary(mode)
     end
     local total_count, total_profit, total_get, total_give = 0, 0, 0, 0
     local cash_get,cash_give=0,0
+    local estimated_result,confirmed_result=0,0
     for _,e in pairs(DSP.settings.trades or {}) do
         local included=mode~='day' or os.date('%Y-%m-%d',e.ts or 0)==os.date('%Y-%m-%d',os.time())
         if mode=='session' then included=(tonumber(e.ts) or 0)>=DSP.logs.session_started end
         if e.type=='trade' and included then
+            if e.profit_estimated~=false then
+                estimated_result=estimated_result+(tonumber(e.profit) or 0)
+            else confirmed_result=confirmed_result+(tonumber(e.profit) or 0) end
             cash_get=cash_get+(tonumber(e.money_get) or 0)
             cash_give=cash_give+(tonumber(e.money_give) or 0)
         end
@@ -28150,6 +28159,7 @@ function DSP.logs.profit_summary(mode)
         count = total_count,
         profit = total_profit,
         cash_get=cash_get, cash_give=cash_give,
+        estimated_result=estimated_result,confirmed_result=confirmed_result,
         avg_profit = total_count > 0 and math.floor(total_profit / total_count) or 0,
         total_get = total_get,
         total_give = total_give,
@@ -33446,6 +33456,37 @@ function _G.dsp_click_slot(interfaceid, id, subid, json_str)
     raknetDeleteBitStream(bs)
 end
 
+-- A matching ID alone is not enough: MonetLoader may expose a previous dialog's
+-- text while the server is replacing it. Confirm both the active ID and the
+-- stabilized title/body before submitting any values.
+local function wait_trade_item_dialog(ids, item_name, timeout)
+    local elapsed=0
+    local wanted=base_name(item_name)
+    local observed=''
+    while elapsed<(timeout or 3200) do
+        trade_wait(40); elapsed=elapsed+40
+        if sampIsDialogActive() then
+            local id=sampGetCurrentDialogId()
+            local allowed=false
+            for _,x in ipairs(ids) do if x==id then allowed=true;break end end
+            if allowed then
+                local txt=DSP.dialog_clean(sampGetDialogText() or '')
+                if txt~='' then
+                    observed=txt
+                    if DSP.trade_runtime.matches(txt,wanted) then
+                        local stable=DSP.dialog_clean(wait_text(id,360))
+                        if sampIsDialogActive() and sampGetCurrentDialogId()==id
+                            and DSP.trade_runtime.matches(stable,wanted) then
+                            return id,stable
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil,observed
+end
+
 local function parse_inventory(text)
     local raw = {}
     for line in tostring(text or ''):gmatch('[^\r\n]+') do
@@ -33644,7 +33685,8 @@ function DSP.auto.install()
 end
 
 DSP.auto.helpers = {close_dialog = close_dialog, wait_dialog = wait_dialog, wait_text = wait_text,
-    clean = clean, base_name = base_name, has_qty = has_qty}
+    clean = clean, base_name = base_name, has_qty = has_qty,
+    wait_trade_item_dialog = wait_trade_item_dialog}
 
 end
 __mod_40_auto()
@@ -33657,6 +33699,7 @@ local log = DSP.add_log
 local h = DSP.auto.helpers
 local close_dialog, wait_dialog, wait_text = h.close_dialog, h.wait_dialog, h.wait_text
 local clean, base_name, has_qty = h.clean, h.base_name, h.has_qty
+local wait_item = h.wait_trade_item_dialog
 local function queue_sell()
     local queue, available = {}, {}
     for _, p in ipairs(DSP.settings.sell_preset.items) do
@@ -33716,28 +33759,24 @@ function DSP.auto.start_sell()
             if not DSP.auto.sell_running then break end
             DSP.auto.status = 'продажа: ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
             local json = '{"amount":' .. it.qty .. ',"id":0,"slot":' .. it.slot .. ',"type":1}'
-            local got, id = false, nil
+            local got, id, dialog_text = false, nil, nil
             for attempt = 1, 3 do
                 close_dialog()
                 DSP.auto.sell_confirmed = false
                 DSP.auto.sell_forbidden, DSP.auto.sell_no_slots = false, false
                 _G.dsp_click_slot(60, -1, 2, json)
                 -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile выставление dialogs).
-                id = wait_dialog({ 26547, 15068, 15069, 15070, 15071 }, 1800)
+                id,dialog_text = wait_item({ 26547, 15068, 15069, 15070, 15071 }, it.name, 2200)
                 if id then
-                    local txt = DSP.dialog_clean(wait_text(id, 700))
-                    local base = base_name(it.base)
-                    if runtime.matches(txt, it.name) then
-                        got = true
-                        break
-                    end
-                    log('Продажа: диалог не тот (' .. tostring(attempt) .. '): ' .. txt:sub(1, 60), 'error')
-                    close_dialog()
+                    got = true
+                    break
                 end
+                log('Продажа: диалог предмета не готов ('..attempt..'): '..tostring(dialog_text or ''):sub(1,90),'error')
+                close_dialog()
                 trade_wait(180)
             end
             if got then
-                local txt = DSP.dialog_clean(sampGetDialogText() or '')
+                local txt = dialog_text or ''
                 local resp = has_qty(txt) and (tostring(it.qty) .. ',' .. tostring(it.price))
                     or tostring(it.price)
                 if not has_qty(txt) and it.qty > 1 then
@@ -33757,7 +33796,9 @@ function DSP.auto.start_sell()
                         if DSP.auto.sell_confirmed then break end
                         trade_wait(40)
                     end
-                    sampSendDialogResponse(resp_id, 0, 0, '')
+                    if sampIsDialogActive() and sampGetCurrentDialogId()==resp_id then
+                        sampSendDialogResponse(resp_id, 0, 0, '')
+                    end
                     if DSP.auto.sell_no_slots then
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
                         log('Продажа: нет свободных мест', 'error')
@@ -33814,15 +33855,27 @@ local log = DSP.add_log
 local h = DSP.auto.helpers
 local close_dialog, wait_dialog, wait_text = h.close_dialog, h.wait_dialog, h.wait_text
 local clean, base_name, has_qty = h.clean, h.base_name, h.has_qty
+local wait_item = h.wait_trade_item_dialog
+-- Search results may carry a line number, price/count columns and colour tags.
+-- Match the complete normalized item name; do not pick an unrelated first-word hit.
 local function find_list_index(text, name)
-    local idx = 0
+    local idx=0
+    local fold=DSP.lower or string.lower
+    local wanted=fold(base_name(name)):match('^%s*(.-)%s*$')
+    local found=nil
     for line in tostring(text or ''):gmatch('[^\r\n]+') do
-        local nm = clean(line):gsub('^%s*%d+[%.%)]%s*', ''):match('^%s*(.-)%s*$')
-        nm = nm:match('^(.-)\t') or nm
-        if nm == name then return idx end
-        idx = idx + 1
+        local nm=clean(line):gsub('^%s*%d+[%.%)]%s*',''):match('^%s*(.-)%s*$')
+        nm=(nm:match('^(.-)\t') or nm):match('^%s*(.-)%s*$')
+        -- Some builds put quantity in square brackets after the item name.
+        local base=nm:match('^(.-)%s+%[%d+[^%]]*%]') or nm
+        base=fold(base_name(base)):match('^%s*(.-)%s*$')
+        if base==wanted then
+            if found~=nil then return nil,'несколько одинаковых строк' end
+            found=idx
+        end
+        idx=idx+1
     end
-    return nil
+    return found
 end
 
 local function open_shop_menu()
@@ -33834,7 +33887,7 @@ end
 
 local function buy_one(it, pi, total, dry_run)
     DSP.auto.status = 'скупка: ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
-    if not sampIsDialogActive() or sampGetCurrentDialogId() ~= 3040 then
+    if not sampIsDialogActive() or (sampGetCurrentDialogId() ~= 3040 and sampGetCurrentDialogId()~=15072) then
         if not open_shop_menu() then
             log('Скупка: меню не открылось для ' .. it.name, 'error')
             return false
@@ -33859,9 +33912,9 @@ local function buy_one(it, pi, total, dry_run)
         return false
     end
     local list_text = DSP.dialog_clean(wait_text(id, 500))
-    local idx = find_list_index(list_text, it.name)
-    if not idx then
-        log('Скупка: не найдено: ' .. it.name, 'error')
+    local idx,index_err = find_list_index(list_text, it.name)
+    if idx==nil then
+        log('Скупка: '..tostring(index_err or 'не найдено')..': ' .. it.name, 'error')
         close_dialog()
         return false
     end
@@ -33879,17 +33932,19 @@ local function buy_one(it, pi, total, dry_run)
     end
     -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final выставление dialog.
     if id ~= 26563 and id ~= 15071 then return false end
-    wait_text(id, 500)
-    local txt = DSP.dialog_clean(sampGetDialogText() or '')
+    local validated_id,txt=wait_item({id},it.name,1300)
     local base = base_name(it.name)
-    if not runtime.matches(txt, it.name) then
+    if not validated_id then
         log('Скупка: в диалоге другой товар: ' .. it.name, 'error')
         close_dialog()
         return false
     end
     local qty = tonumber(it.qty) or 1
     if qty < 1 then qty = 1 end
-    if not has_qty(txt) then qty = 1 end
+    if not has_qty(txt) and qty>1 then
+        log('Скупка: сервер не предлагает поле количества; лимит будет добавлен по одной штуке','error')
+        qty=1
+    end
     local resp = has_qty(txt) and (tostring(qty) .. ',' .. tostring(it.price))
         or tostring(it.price)
     if dry_run then
@@ -35292,13 +35347,57 @@ function P.settings()
     if type(s.templates)~='table' then s.templates={} end
     return s
 end
+-- One preset can contain multiple channels. Each line is sent separately
+-- with the global cooldown: never batch flood several chats together.
+P.ALLOWED={vr=true,s=true,ad=true,fam=true,gd=true}
+function P.lines(text)
+    local rows={}
+    for line in (tostring(text or '')..'\n'):gmatch('([^\r\n]*)\r?\n') do
+        line=line:match('^%s*(.-)%s*$')
+        if line~='' then rows[#rows+1]=line end
+    end
+    return rows
+end
 function P.validate(text)
-    if type(text)~='string' or #text<5 or #text>200 then return false,'длина 5–200 байт' end
-    if text:find('[\r\n%z\1-\31]') then return false,'запрещены переносы и управляющие символы' end
-    if not text:match('^/vr%s+%S') and not text:match('^/s%s+%S') and not text:match('^/ad%s+%S') then
-        return false,'только /vr, /s или /ad с текстом'
+    if type(text)~='string' or #text<5 or #text>720 then return false,'текст 5–720 байт' end
+    if text:find('[%z\1-\8\11\12\14-\31]') then return false,'запрещён управляющий символ' end
+    local lines=P.lines(text)
+    if #lines==0 or #lines>6 then return false,'от 1 до 6 строк рекламы' end
+    for _,line in ipairs(lines) do
+        if #line>200 then return false,'строка превышает 200 байт' end
+        local command=line:match('^/([%a]+)%s+%S')
+        if not (command and P.ALLOWED[command]) then
+            return false,'строка должна начинаться с /vr, /s, /ad, /fam или /gd'
+        end
     end
     return true
+end
+function P.own_shop_number()
+    local s=P.settings()
+    local manual=tonumber(s.shop_number)
+    if manual and manual>=1 and manual<=99999 and manual%1==0 then return math.floor(manual),'в настройках' end
+    local shop=DSP.live and DSP.live.shop
+    local nickname=DSP.player_nick and DSP.player_nick() or ''
+    local id=shop and tonumber(shop.num)
+    if nickname~='' and shop and shop.owner==nickname and id and id>=1 and id<=99999 and id%1==0 then
+        return math.floor(id),'своя открытая лавка'
+    end
+    return nil,'номер своей лавки неизвестен'
+end
+function P.set_shop_number(n)
+    n=tonumber(n)
+    if not n or n%1~=0 or n<0 or n>99999 then return false,'номер: 0–99999' end
+    local s=P.settings();local before=s.shop_number
+    s.shop_number=n
+    if not DSP.save_settings() then s.shop_number=before;return false,'не удалось сохранить' end
+    return true
+end
+function P.expand(text)
+    if not (text:find('{лавка}',1,true) or text:find('{shop}',1,true) or text:find('[ЛАВКА]',1,true) or text:find('{номер}',1,true)) then return text end
+    local num,err=P.own_shop_number()
+    if not num then return nil,err end
+    local clickable=':lavka'..tostring(num)..':'
+    return (text:gsub('{лавка}',clickable):gsub('{shop}',clickable):gsub('%[ЛАВКА%]',clickable):gsub('{номер}',tostring(num)))
 end
 function P.add(name,text,interval)
     local s=P.settings()
@@ -35346,10 +35445,16 @@ function P.send_once(index,now,send,online)
     if online==nil then online=online_check() end
     if not online then return false,'нет соединения с игрой' end
     local sender=send or sampSendChat
-    local sent,response=pcall(sender,item.text)
+    local lines=P.lines(item.text)
+    local index=(tonumber(item.line_index) or 0)%#lines+1
+    local resolved,expand_err=P.expand(lines[index])
+    if not resolved then return false,expand_err end
+    if #resolved>200 then return false,'после подстановки текст слишком длинный' end
+    local sent,response=pcall(sender,resolved)
     if not sent or response==false then return false,'команда не отправлена' end
     P.last_sent=now;P.session_count=P.session_count+1
     item.last_sent=now
+    item.line_index=index
     P.last_error=nil
     if P.session_count>=P.MAX_SESSION then P.running=false end
     return true
@@ -35903,7 +36008,7 @@ function C.describe(e)
     for _,side in ipairs({{'items_give','Отдано'},{'items_get','Получено'}}) do
         for _,it in ipairs(e[side[1]] or {}) do parts[#parts+1]=side[2]..': '..tostring(it.name)..' x'..tostring(it.qty or 1) end
     end
-    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..'Итог сделки: '..DSP.money(e.profit or 0)
+    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..(e.profit_estimated==false and 'Денежный итог: ' or 'Оценка обмена: ')..DSP.money(e.profit or 0)
 end
 local function store_event(e)
     if not e.id and e.type~='payday_detail' and C.new_event_id then e.id=C.new_event_id(e.ts) end
@@ -36845,9 +36950,17 @@ function V.popup(title,id,draw,size)
     local sz=imgui.GetIO().DisplaySize
     imgui.SetNextWindowPos(imgui.ImVec2(sz.x*.5,sz.y*.5),imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
     imgui.SetNextWindowSize(imgui.ImVec2(math.min(size.w or 620,sz.x-24),math.min(size.h or 410,sz.y-24)),imgui.Cond.Appearing)
-    if imgui.BeginPopupModal(u(title)..'##v22_'..id,nil,imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar)then
+    -- Resizable sheet with a real scrollable content region and fixed arrow buttons.
+    -- Only explicitly marked detail popups use this: delete confirmation remains modal.
+    local flags=size.resizable and imgui.WindowFlags.NoScrollbar
+        or (imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar)
+    if imgui.BeginPopupModal(u(title)..'##v22_'..id,nil,flags)then
         V.apply_font()
-        draw();imgui.EndPopup()
+        if size.resizable then
+            V.muted('Размер окна: потяните за нижний правый угол')
+            V.list('modal_'..id,function()draw()end,{footer=true})
+        else draw() end
+        imgui.EndPopup()
     end
 end
 function V.open_popup(title,id)
@@ -38664,9 +38777,9 @@ end
 local function promo_edit(index)
     local item=P.settings().templates[index]
     V.promo_edit_index=index
-    if not V.promo_name then V.promo_name=imgui.new.char[80]();V.promo_text=imgui.new.char[256]()end
+    if not V.promo_name then V.promo_name=imgui.new.char[80]();V.promo_text=imgui.new.char[768]()end
     fill_buffer(V.promo_name,item and item.name or '',80)
-    fill_buffer(V.promo_text,item and item.text or '/vr ',256)
+    fill_buffer(V.promo_text,item and item.text or '/vr ',768)
     V.promo_interval={value=item and item.interval or 300}
     V.open_popup('Шаблон рекламы','promo_edit')
 end
@@ -38674,7 +38787,8 @@ function V.promo_screen()
     V.text('Авто-пиар · Палатка AI')
     local total=P.session_count
     V.muted('Отправлено за сессию: '..total..' / '..P.MAX_SESSION..' · интервал минимум '..P.MIN_INTERVAL..' сек.')
-    V.muted('Активируется вручную. Не обходит ограничений чата или диалогов /ad.')
+    V.muted('Активируется вручную. Строки /vr, /fam, /gd, /s, /ad идут по очереди.')
+    V.muted('Доступность каналов зависит от сервера, прав игрока и ограничений чата.')
     if P.running then
         if b('ОСТАНОВИТЬ','promo_stop',185,true,true)then P.stop()end
     else
@@ -38689,7 +38803,7 @@ function V.promo_screen()
         V.row('promo_row_'..i,126,function(w,l,t)
             V.at(l,t);V.text(fixed((it.auto and '[x] ' or '[ ] ')..it.name,w-170))
             V.at(l,t+28);V.muted(fixed(it.text,w-170))
-            V.at(l,t+54);V.muted('Каждые '..tostring(it.interval or 300)..'с · /vr, /s, /ad')
+            V.at(l,t+54);V.muted('Каждые '..tostring(it.interval or 300)..'с · '..#P.lines(it.text)..' строк по очереди')
             V.at(l,t+80)
             if b(it.auto and 'Авто: да' or 'Авто: нет','promo_toggle_'..i,118,it.auto)then
                 it.auto=not it.auto
@@ -38739,7 +38853,7 @@ function V.popups()
             V.flip_error=ok and nil or err
         end
         V.inline();V.cancel('flip_detail')
-    end,{w=690,h=460})
+    end,{w=690,h=500,resizable=true})
     V.popup('Цена для пресета','flip_price_modal',function()
         local r=V.flip_price_row
         if not r then imgui.CloseCurrentPopup();return end
@@ -38783,7 +38897,7 @@ function V.popups()
         end
         V.inline();V.cancel('flip_price_modal')
         if V.flip_error then V.red(V.flip_error)end
-    end,{w=650,h=410})
+    end,{w=650,h=485,resizable=true})
     V.popup('Удалить наблюдение?','flip_watch_delete',function()
         V.text('Удалить наблюдение?')
         if b('Удалить','watch_delete_confirm',160)then
@@ -38803,7 +38917,25 @@ function V.popups()
     end,{w=460,h=240})
     V.popup('Шаблон рекламы','promo_edit',function()
         V.text('Название шаблона');input_buffer('Название','name',V.promo_name,80)
-        V.text('Команда с текстом: /vr, /s или /ad');input_buffer('/vr Продаю...','text',V.promo_text,256)
+        V.muted('Несколько строк: /vr, /fam, /gd, /s или /ad — по одной раз в интервал.')
+        imgui.SetNextItemWidth(-1)
+        imgui.InputTextMultiline('##prom24_text',V.promo_text,768,imgui.ImVec2(-1,116))
+        if b('Вставить лавку','promo_insert_shop',206)then
+            local raw=ffi.string(V.promo_text)
+            local marker=' {лавка}'
+            if #raw+#marker<767 then fill_buffer(V.promo_text,raw..marker,768) end
+        end
+        local shop,reason=P.own_shop_number()
+        V.muted('Моя лавка: '..(shop and tostring(shop) or 'не задан')..' ('..reason..')')
+        local ps=P.settings()
+        V.promo_shop_number=V.promo_shop_number or {value=tonumber(ps.shop_number) or 0}
+        M.compact_number(V.promo_shop_number,'value','promo_shop_num',126,0)
+        V.inline(4)
+        if b('Запомнить №','promo_shop_save',160)then
+            local ok,err=P.set_shop_number(V.promo_shop_number.value)
+            V.promo_error=ok and nil or err
+        end
+        V.muted('Маркер {лавка} -> кликабельное :lavkaID:. {номер} -> просто цифры.')
         V.text('Интервал в секундах: 180–3600')
         M.compact_number(V.promo_interval,'value','promo_interval',175,180)
         if b('Сохранить','promo_save_edit',168,true)then
@@ -38818,7 +38950,7 @@ function V.popups()
         end
         V.inline();V.cancel('promo_edit')
         if V.promo_error then V.red(V.promo_error)end
-    end,{w=650,h=360})
+    end,{w=650,h=550,resizable=true})
 end
 
 end
@@ -38892,7 +39024,7 @@ if lua_thread and wait and DSP.detect_server then
                 local ok, err = pcall(function()
                     local sid = DSP.detect_server()
                     local nick = DSP.player_nick()
-                    local nick_changed = nick ~= 'DsPic' and nick ~= (DSP.market.state.nick or '')
+                    local nick_changed = nick ~= '' and nick ~= (DSP.market.state.nick or '')
                     if DSP.market.state.status ~= 'loading'
                         and ((sid and sid ~= (DSP.market.state.sid or 0)) or nick_changed
                             or (DSP.market.should_refresh and DSP.market.should_refresh(os.time()))) then

@@ -10,13 +10,57 @@ function P.settings()
     if type(s.templates)~='table' then s.templates={} end
     return s
 end
+-- One preset can contain multiple channels. Each line is sent separately
+-- with the global cooldown: never batch flood several chats together.
+P.ALLOWED={vr=true,s=true,ad=true,fam=true,gd=true}
+function P.lines(text)
+    local rows={}
+    for line in (tostring(text or '')..'\n'):gmatch('([^\r\n]*)\r?\n') do
+        line=line:match('^%s*(.-)%s*$')
+        if line~='' then rows[#rows+1]=line end
+    end
+    return rows
+end
 function P.validate(text)
-    if type(text)~='string' or #text<5 or #text>200 then return false,'длина 5–200 байт' end
-    if text:find('[\r\n%z\1-\31]') then return false,'запрещены переносы и управляющие символы' end
-    if not text:match('^/vr%s+%S') and not text:match('^/s%s+%S') and not text:match('^/ad%s+%S') then
-        return false,'только /vr, /s или /ad с текстом'
+    if type(text)~='string' or #text<5 or #text>720 then return false,'текст 5–720 байт' end
+    if text:find('[%z\1-\8\11\12\14-\31]') then return false,'запрещён управляющий символ' end
+    local lines=P.lines(text)
+    if #lines==0 or #lines>6 then return false,'от 1 до 6 строк рекламы' end
+    for _,line in ipairs(lines) do
+        if #line>200 then return false,'строка превышает 200 байт' end
+        local command=line:match('^/([%a]+)%s+%S')
+        if not (command and P.ALLOWED[command]) then
+            return false,'строка должна начинаться с /vr, /s, /ad, /fam или /gd'
+        end
     end
     return true
+end
+function P.own_shop_number()
+    local s=P.settings()
+    local manual=tonumber(s.shop_number)
+    if manual and manual>=1 and manual<=99999 and manual%1==0 then return math.floor(manual),'в настройках' end
+    local shop=DSP.live and DSP.live.shop
+    local nickname=DSP.player_nick and DSP.player_nick() or ''
+    local id=shop and tonumber(shop.num)
+    if nickname~='' and shop and shop.owner==nickname and id and id>=1 and id<=99999 and id%1==0 then
+        return math.floor(id),'своя открытая лавка'
+    end
+    return nil,'номер своей лавки неизвестен'
+end
+function P.set_shop_number(n)
+    n=tonumber(n)
+    if not n or n%1~=0 or n<0 or n>99999 then return false,'номер: 0–99999' end
+    local s=P.settings();local before=s.shop_number
+    s.shop_number=n
+    if not DSP.save_settings() then s.shop_number=before;return false,'не удалось сохранить' end
+    return true
+end
+function P.expand(text)
+    if not (text:find('{лавка}',1,true) or text:find('{shop}',1,true) or text:find('[ЛАВКА]',1,true) or text:find('{номер}',1,true)) then return text end
+    local num,err=P.own_shop_number()
+    if not num then return nil,err end
+    local clickable=':lavka'..tostring(num)..':'
+    return (text:gsub('{лавка}',clickable):gsub('{shop}',clickable):gsub('%[ЛАВКА%]',clickable):gsub('{номер}',tostring(num)))
 end
 function P.add(name,text,interval)
     local s=P.settings()
@@ -64,10 +108,16 @@ function P.send_once(index,now,send,online)
     if online==nil then online=online_check() end
     if not online then return false,'нет соединения с игрой' end
     local sender=send or sampSendChat
-    local sent,response=pcall(sender,item.text)
+    local lines=P.lines(item.text)
+    local index=(tonumber(item.line_index) or 0)%#lines+1
+    local resolved,expand_err=P.expand(lines[index])
+    if not resolved then return false,expand_err end
+    if #resolved>200 then return false,'после подстановки текст слишком длинный' end
+    local sent,response=pcall(sender,resolved)
     if not sent or response==false then return false,'команда не отправлена' end
     P.last_sent=now;P.session_count=P.session_count+1
     item.last_sent=now
+    item.line_index=index
     P.last_error=nil
     if P.session_count>=P.MAX_SESSION then P.running=false end
     return true

@@ -163,9 +163,17 @@ function V.popup(title,id,draw,size)
     local sz=imgui.GetIO().DisplaySize
     imgui.SetNextWindowPos(imgui.ImVec2(sz.x*.5,sz.y*.5),imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
     imgui.SetNextWindowSize(imgui.ImVec2(math.min(size.w or 620,sz.x-24),math.min(size.h or 410,sz.y-24)),imgui.Cond.Appearing)
-    if imgui.BeginPopupModal(u(title)..'##v22_'..id,nil,imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar)then
+    -- Resizable sheet with a real scrollable content region and fixed arrow buttons.
+    -- Only explicitly marked detail popups use this: delete confirmation remains modal.
+    local flags=size.resizable and imgui.WindowFlags.NoScrollbar
+        or (imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar)
+    if imgui.BeginPopupModal(u(title)..'##v22_'..id,nil,flags)then
         V.apply_font()
-        draw();imgui.EndPopup()
+        if size.resizable then
+            V.muted('Размер окна: потяните за нижний правый угол')
+            V.list('modal_'..id,function()draw()end,{footer=true})
+        else draw() end
+        imgui.EndPopup()
     end
 end
 function V.open_popup(title,id)

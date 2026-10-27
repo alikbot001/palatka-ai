@@ -5,6 +5,7 @@ local log = DSP.add_log
 local h = DSP.auto.helpers
 local close_dialog, wait_dialog, wait_text = h.close_dialog, h.wait_dialog, h.wait_text
 local clean, base_name, has_qty = h.clean, h.base_name, h.has_qty
+local wait_item = h.wait_trade_item_dialog
 local function queue_sell()
     local queue, available = {}, {}
     for _, p in ipairs(DSP.settings.sell_preset.items) do
@@ -64,28 +65,24 @@ function DSP.auto.start_sell()
             if not DSP.auto.sell_running then break end
             DSP.auto.status = 'продажа: ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
             local json = '{"amount":' .. it.qty .. ',"id":0,"slot":' .. it.slot .. ',"type":1}'
-            local got, id = false, nil
+            local got, id, dialog_text = false, nil, nil
             for attempt = 1, 3 do
                 close_dialog()
                 DSP.auto.sell_confirmed = false
                 DSP.auto.sell_forbidden, DSP.auto.sell_no_slots = false, false
                 _G.dsp_click_slot(60, -1, 2, json)
                 -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile выставление dialogs).
-                id = wait_dialog({ 26547, 15068, 15069, 15070, 15071 }, 1800)
+                id,dialog_text = wait_item({ 26547, 15068, 15069, 15070, 15071 }, it.name, 2200)
                 if id then
-                    local txt = DSP.dialog_clean(wait_text(id, 700))
-                    local base = base_name(it.base)
-                    if runtime.matches(txt, it.name) then
-                        got = true
-                        break
-                    end
-                    log('Продажа: диалог не тот (' .. tostring(attempt) .. '): ' .. txt:sub(1, 60), 'error')
-                    close_dialog()
+                    got = true
+                    break
                 end
+                log('Продажа: диалог предмета не готов ('..attempt..'): '..tostring(dialog_text or ''):sub(1,90),'error')
+                close_dialog()
                 trade_wait(180)
             end
             if got then
-                local txt = DSP.dialog_clean(sampGetDialogText() or '')
+                local txt = dialog_text or ''
                 local resp = has_qty(txt) and (tostring(it.qty) .. ',' .. tostring(it.price))
                     or tostring(it.price)
                 if not has_qty(txt) and it.qty > 1 then
@@ -105,7 +102,9 @@ function DSP.auto.start_sell()
                         if DSP.auto.sell_confirmed then break end
                         trade_wait(40)
                     end
-                    sampSendDialogResponse(resp_id, 0, 0, '')
+                    if sampIsDialogActive() and sampGetCurrentDialogId()==resp_id then
+                        sampSendDialogResponse(resp_id, 0, 0, '')
+                    end
                     if DSP.auto.sell_no_slots then
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
                         log('Продажа: нет свободных мест', 'error')

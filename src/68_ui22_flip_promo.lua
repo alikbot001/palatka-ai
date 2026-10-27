@@ -200,9 +200,9 @@ end
 local function promo_edit(index)
     local item=P.settings().templates[index]
     V.promo_edit_index=index
-    if not V.promo_name then V.promo_name=imgui.new.char[80]();V.promo_text=imgui.new.char[256]()end
+    if not V.promo_name then V.promo_name=imgui.new.char[80]();V.promo_text=imgui.new.char[768]()end
     fill_buffer(V.promo_name,item and item.name or '',80)
-    fill_buffer(V.promo_text,item and item.text or '/vr ',256)
+    fill_buffer(V.promo_text,item and item.text or '/vr ',768)
     V.promo_interval={value=item and item.interval or 300}
     V.open_popup('Шаблон рекламы','promo_edit')
 end
@@ -210,7 +210,8 @@ function V.promo_screen()
     V.text('Авто-пиар · Палатка AI')
     local total=P.session_count
     V.muted('Отправлено за сессию: '..total..' / '..P.MAX_SESSION..' · интервал минимум '..P.MIN_INTERVAL..' сек.')
-    V.muted('Активируется вручную. Не обходит ограничений чата или диалогов /ad.')
+    V.muted('Активируется вручную. Строки /vr, /fam, /gd, /s, /ad идут по очереди.')
+    V.muted('Доступность каналов зависит от сервера, прав игрока и ограничений чата.')
     if P.running then
         if b('ОСТАНОВИТЬ','promo_stop',185,true,true)then P.stop()end
     else
@@ -225,7 +226,7 @@ function V.promo_screen()
         V.row('promo_row_'..i,126,function(w,l,t)
             V.at(l,t);V.text(fixed((it.auto and '[x] ' or '[ ] ')..it.name,w-170))
             V.at(l,t+28);V.muted(fixed(it.text,w-170))
-            V.at(l,t+54);V.muted('Каждые '..tostring(it.interval or 300)..'с · /vr, /s, /ad')
+            V.at(l,t+54);V.muted('Каждые '..tostring(it.interval or 300)..'с · '..#P.lines(it.text)..' строк по очереди')
             V.at(l,t+80)
             if b(it.auto and 'Авто: да' or 'Авто: нет','promo_toggle_'..i,118,it.auto)then
                 it.auto=not it.auto
@@ -275,7 +276,7 @@ function V.popups()
             V.flip_error=ok and nil or err
         end
         V.inline();V.cancel('flip_detail')
-    end,{w=690,h=460})
+    end,{w=690,h=500,resizable=true})
     V.popup('Цена для пресета','flip_price_modal',function()
         local r=V.flip_price_row
         if not r then imgui.CloseCurrentPopup();return end
@@ -319,7 +320,7 @@ function V.popups()
         end
         V.inline();V.cancel('flip_price_modal')
         if V.flip_error then V.red(V.flip_error)end
-    end,{w=650,h=410})
+    end,{w=650,h=485,resizable=true})
     V.popup('Удалить наблюдение?','flip_watch_delete',function()
         V.text('Удалить наблюдение?')
         if b('Удалить','watch_delete_confirm',160)then
@@ -339,7 +340,25 @@ function V.popups()
     end,{w=460,h=240})
     V.popup('Шаблон рекламы','promo_edit',function()
         V.text('Название шаблона');input_buffer('Название','name',V.promo_name,80)
-        V.text('Команда с текстом: /vr, /s или /ad');input_buffer('/vr Продаю...','text',V.promo_text,256)
+        V.muted('Несколько строк: /vr, /fam, /gd, /s или /ad — по одной раз в интервал.')
+        imgui.SetNextItemWidth(-1)
+        imgui.InputTextMultiline('##prom24_text',V.promo_text,768,imgui.ImVec2(-1,116))
+        if b('Вставить лавку','promo_insert_shop',206)then
+            local raw=ffi.string(V.promo_text)
+            local marker=' {лавка}'
+            if #raw+#marker<767 then fill_buffer(V.promo_text,raw..marker,768) end
+        end
+        local shop,reason=P.own_shop_number()
+        V.muted('Моя лавка: '..(shop and tostring(shop) or 'не задан')..' ('..reason..')')
+        local ps=P.settings()
+        V.promo_shop_number=V.promo_shop_number or {value=tonumber(ps.shop_number) or 0}
+        M.compact_number(V.promo_shop_number,'value','promo_shop_num',126,0)
+        V.inline(4)
+        if b('Запомнить №','promo_shop_save',160)then
+            local ok,err=P.set_shop_number(V.promo_shop_number.value)
+            V.promo_error=ok and nil or err
+        end
+        V.muted('Маркер {лавка} -> кликабельное :lavkaID:. {номер} -> просто цифры.')
         V.text('Интервал в секундах: 180–3600')
         M.compact_number(V.promo_interval,'value','promo_interval',175,180)
         if b('Сохранить','promo_save_edit',168,true)then
@@ -354,5 +373,5 @@ function V.popups()
         end
         V.inline();V.cancel('promo_edit')
         if V.promo_error then V.red(V.promo_error)end
-    end,{w=650,h=360})
+    end,{w=650,h=550,resizable=true})
 end

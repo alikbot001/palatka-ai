@@ -65,7 +65,7 @@ if lua_thread and wait and DSP.detect_server then
                 local ok, err = pcall(function()
                     local sid = DSP.detect_server()
                     local nick = DSP.player_nick()
-                    local nick_changed = nick ~= 'DsPic' and nick ~= (DSP.market.state.nick or '')
+                    local nick_changed = nick ~= '' and nick ~= (DSP.market.state.nick or '')
                     if DSP.market.state.status ~= 'loading'
                         and ((sid and sid ~= (DSP.market.state.sid or 0)) or nick_changed
                             or (DSP.market.should_refresh and DSP.market.should_refresh(os.time()))) then

@@ -135,6 +135,9 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
             total_get = total_get + e.buy.max * (it.qty or 1)
         end
     end
+    -- Item values are taken from price reference, NOT acquisition cost.
+    -- Thus a barter deal involving items has an estimate, not proven profit.
+    local estimated=(#(items_give or {})>0 or #(items_get or {})>0)
     local profit = total_get - total_give
     local delta_pct = total_give > 0 and (profit / total_give * 100) or 0
     local kind = profit > 0 and 'profit' or (profit < 0 and 'loss' or 'neutral')
@@ -147,6 +150,8 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
         total_get = total_get,
         total_give = total_give,
         profit = profit,
+        profit_estimated = estimated,
+        valuation_source = estimated and 'market_buy_reference' or 'cash_only',
         delta_pct = delta_pct,
         items_give = items_give or {},
         items_get = items_get or {},
@@ -168,8 +173,8 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
         pcall(DSP.craglog.log_trade, entry)
     end
     if DSP.live and DSP.live.reset_trade then DSP.live.reset_trade(partner) end
-    DSP.notify('СДЕЛКА: ' .. DSP.money(profit) .. ' (' .. string.format('%+.1f%%', delta_pct) .. ')', kind == 'profit' and 'ok' or 'error')
-    DSP.add_log('СДЕЙКА с ' .. tostring(partner) .. ': ' .. DSP.money(profit) .. ' (' .. DSP.money(total_get) .. '/' .. DSP.money(total_give) .. ')',
+    DSP.notify((estimated and 'СДЕЛКА, оценка: ' or 'СДЕЛКА, денежный итог: ') .. DSP.money(profit) .. ' (' .. string.format('%+.1f%%', delta_pct) .. ')', kind == 'profit' and 'ok' or 'error')
+    DSP.add_log((estimated and 'Оценка сделки с ' or 'Денежная сделка с ') .. tostring(partner) .. ': ' .. DSP.money(profit) .. ' (' .. DSP.money(total_get) .. '/' .. DSP.money(total_give) .. ')',
         kind == 'profit' and 'ok' or 'error')
     -- Telegram notification for trade
     if DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
@@ -290,10 +295,14 @@ function DSP.logs.profit_summary(mode)
     end
     local total_count, total_profit, total_get, total_give = 0, 0, 0, 0
     local cash_get,cash_give=0,0
+    local estimated_result,confirmed_result=0,0
     for _,e in pairs(DSP.settings.trades or {}) do
         local included=mode~='day' or os.date('%Y-%m-%d',e.ts or 0)==os.date('%Y-%m-%d',os.time())
         if mode=='session' then included=(tonumber(e.ts) or 0)>=DSP.logs.session_started end
         if e.type=='trade' and included then
+            if e.profit_estimated~=false then
+                estimated_result=estimated_result+(tonumber(e.profit) or 0)
+            else confirmed_result=confirmed_result+(tonumber(e.profit) or 0) end
             cash_get=cash_get+(tonumber(e.money_get) or 0)
             cash_give=cash_give+(tonumber(e.money_give) or 0)
         end
@@ -312,6 +321,7 @@ function DSP.logs.profit_summary(mode)
         count = total_count,
         profit = total_profit,
         cash_get=cash_get, cash_give=cash_give,
+        estimated_result=estimated_result,confirmed_result=confirmed_result,
         avg_profit = total_count > 0 and math.floor(total_profit / total_count) or 0,
         total_get = total_get,
         total_give = total_give,

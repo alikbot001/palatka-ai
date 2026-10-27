@@ -1,7 +1,7 @@
--- DsPic Helper standalone core: state, settings, encoding, formatting.
+-- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.4'
+DSP.version = '2.2.5'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -260,7 +260,7 @@ function DSP.notify(text)
     if mh_notify then
         pcall(mh_notify, text, 0xFFFFFF)
     elseif sampAddChatMessage then
-        pcall(sampAddChatMessage, '[DsPic] ' .. text, 0xFFAAFF)
+        pcall(sampAddChatMessage, '[Palatka AI] ' .. text, 0xFFAAFF)
     end
 end
 
