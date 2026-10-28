@@ -1,19 +1,19 @@
 {
   "AGENTS.md": {
-    "bytes": 15719,
-    "sha256": "9027e379e4088d6394d7d233a18bf642c35ffcc0f7079e4679862a203e260089"
+    "bytes": 16030,
+    "sha256": "900919467948f6b9f722b350e9a3f216f45bf38272484954f03a31908506e5cd"
   },
   "HANDOFF.md": {
-    "bytes": 21967,
-    "sha256": "319bec1c9f3806b9644c9c1c2aaca319c7c7843940db2311432456d42e0c62b3"
+    "bytes": 22591,
+    "sha256": "f181c128fde1f15e283195fb658dce5bcadfca0770d94d3e2d7c6891de830fe4"
   },
   "PROMPT_FOR_NEXT_AI_RU.md": {
     "bytes": 4971,
     "sha256": "c87c0401ab7d4cf6b50223a90a84f7b71ae0353555df84bde34075453cfeff6e"
   },
   "README.md": {
-    "bytes": 10348,
-    "sha256": "5e74b00b7f35527b4670bb21ea503ce0fa29e045d2ec73ac4b9fdd46457c2ee5"
+    "bytes": 10698,
+    "sha256": "5c4c7ef81eb5cccd067cf23496cd8cbb4859d8add5720e0099c8877bf752b106"
   },
   "RELEASE_1.3.2.md": {
     "bytes": 1357,
@@ -51,6 +51,10 @@
     "bytes": 4649,
     "sha256": "c7f92830d34213723d53549e1533caadfbba1e8e4d341347c729a8370274b45c"
   },
+  "RELEASE_2.2.10.md": {
+    "bytes": 4006,
+    "sha256": "ad896c8387a88b6d26263c0ab9e22944dd8b58ceb699eb0a0a9fc977dc22ee77"
+  },
   "RELEASE_2.2.3.md": {
     "bytes": 892,
     "sha256": "97b454122a2e144c3d306b0be1753cb519050fe0489571fe8b3622982fe85448"
@@ -76,8 +80,8 @@
     "sha256": "5a1eb18eeee498348bba31b45e34f45d34bde11a7588928a24eabe7ff43762fc"
   },
   "build.py": {
-    "bytes": 5242,
-    "sha256": "48a53bc8f718684237c9ad18ac69af229b0341b6ab32e527e9f2e9d00324b2b9"
+    "bytes": 5303,
+    "sha256": "fec8218c8a29137116e0b8a3aaab831c823de2012a7bb01b79fef03299220a59"
   },
   "data/arz_items.json": {
     "bytes": 304471,
@@ -294,6 +298,18 @@
   "docs/texlua-v223-2026-10-27.json": {
     "bytes": 12859,
     "sha256": "2f29404f3c16539a6f4c02b78e930ba3be463b093eb02c1121dbd23b3ed45700"
+  },
+  "docs/v2210_build.log": {
+    "bytes": 97,
+    "sha256": "3664a970047e476b0a3f71606eda594160504fc92175767fd35d8d96827a315e"
+  },
+  "docs/v2210_luajit_attempt.txt": {
+    "bytes": 70,
+    "sha256": "9218c9ecca9a8278ba7bbf48cf722ca6756747bd3b81ecae1991c2c08af1b712"
+  },
+  "docs/v2210_texlua_results.json": {
+    "bytes": 15347,
+    "sha256": "a5bc9fbbf3c41324040009e0a0afb17c51e21f6ade279be72658cdfd0614eebe"
   },
   "docs/v224-local-results.json": {
     "bytes": 13328,
@@ -32468,16 +32484,16 @@
     "sha256": "25f30e8b0eba7f0e585471f240bb34d343c644aae0e3f7f84ecb0af2f828c792"
   },
   "palatka_ai.lua": {
-    "bytes": 71716928,
-    "sha256": "e4babbde00507622eec20699bb58d10f7750c134b5a95961f5db95fc4c2eed38"
+    "bytes": 71724284,
+    "sha256": "50819e4cb4cf07ffaf075257a3cb5eca27c88ab51443c4f341a503c7e5cb4b0d"
   },
   "run_tests.py": {
     "bytes": 1421,
     "sha256": "a45a42accb67d53289079028c3e83721c3d41e32ebdde8ca8f9097b90d53a1f7"
   },
   "src/00_core.lua": {
-    "bytes": 19818,
-    "sha256": "408963aa91f91a01c2bf9097aec719efd106ee785dcff87e72c1c7e787456c33"
+    "bytes": 19819,
+    "sha256": "5e51bbcc878503f16608096ef6d39c70b4590f527c4b4594c21a3b532928d334"
   },
   "src/05_items.lua": {
     "bytes": 5056,
@@ -32504,8 +32520,8 @@
     "sha256": "ae80bfbc2ed72f1e02fa6ab03d8b345b865864e79d374fa04a2ffb4ac6849832"
   },
   "src/12_arbitrage_groups.lua": {
-    "bytes": 4317,
-    "sha256": "a4edce0394057c42eed530bf36dfbdf9e8cf2ad76e6317ce70e050d989103900"
+    "bytes": 4446,
+    "sha256": "ab4d4b7c54f69eb5c269089a9adc092b6c9daa35ff9b29f32f1051c946b73486"
   },
   "src/13_arbitrage_async.lua": {
     "bytes": 4295,
@@ -32592,8 +32608,12 @@
     "sha256": "72fbeae0d3045cbcf99d7c705303a2c9353a85ef06ac2c1d40e2fa8057951bf9"
   },
   "src/47_storage.lua": {
-    "bytes": 8017,
-    "sha256": "244d55ede8b7cc1d025a60ed3b7c4de597ab72b134a0d00f765ec3abae82da6f"
+    "bytes": 8619,
+    "sha256": "5d3e4a46833813c54afad2c7b713057d513e0c7c134f66f04eb2675cb7f7d0d0"
+  },
+  "src/47a_storage_textdraw.lua": {
+    "bytes": 3528,
+    "sha256": "577edc426e35d58bd6e0d7a258aa9b8314f18990f098c12db5148521ae3245ca"
   },
   "src/48_flip_intel.lua": {
     "bytes": 13186,
@@ -32636,16 +32656,20 @@
     "sha256": "a2daa231a07de23ec2523b15efd2686f1c14e39175c6705c48de1513e887dabf"
   },
   "src/60_ui21_shell.lua": {
-    "bytes": 17703,
-    "sha256": "46f543a73b9471ae17292e7df6a13a548495dbcf8745943b1bcc38134f3ed89f"
+    "bytes": 17921,
+    "sha256": "f609f40775400475f1c72f9366c6080ba5ff1dcf1a33d67bf5879bd97894e0e8"
   },
   "src/60a_carbon_home.lua": {
     "bytes": 4665,
     "sha256": "891cf69f290a2a7205819bac752afdd8f656f80596e8aac89811a4978da2741a"
   },
   "src/60b_carbon_storage.lua": {
-    "bytes": 6393,
-    "sha256": "bab5b2a9fdc6d8060cdfba3680042d50dcebdb91448949e9c961b9677955e0d0"
+    "bytes": 7499,
+    "sha256": "aa7e209d6e275308c64209e6a8f42c307ff226682330ada660b3c53fb5d8daf1"
+  },
+  "src/60c_carbon_draw.lua": {
+    "bytes": 1064,
+    "sha256": "c17d0d01d518a692847c5aa5589e0bf6f3b8259e054799fc3cbde8e6024f0991"
   },
   "src/61_ui21_trade.lua": {
     "bytes": 18515,
@@ -32656,16 +32680,16 @@
     "sha256": "12c6b6c6a6476cfda2579223ca72aedf980a763c91aaaa9a424cb63d2e1c4dad"
   },
   "src/63_ui21_arbitrage.lua": {
-    "bytes": 18818,
-    "sha256": "83489694ed3be5364f6ccf14dba419441f58b837c0b1ea41056243e1d50c6df7"
+    "bytes": 19471,
+    "sha256": "1502d4bc231f0878f40c24a89c96b1d88552ac8a6149f5492a664905d8732f4c"
   },
   "src/64_ui21_journal_calc.lua": {
     "bytes": 7879,
     "sha256": "066a6b47c9a61d1c1e31694209aa9eb18790726958ad99872343a04ff8bd8f98"
   },
   "src/65_ui22_tools.lua": {
-    "bytes": 14091,
-    "sha256": "31f5c2177593df86df87e83ec7d21a02b10c1a292244fbe2924da3aef9850b22"
+    "bytes": 14198,
+    "sha256": "d21d976d00510b408e915fe38707401258607b0ccdfc55b66b031a3b8ea71de6"
   },
   "src/66_ui22_journal.lua": {
     "bytes": 7955,
@@ -32680,8 +32704,8 @@
     "sha256": "96bf54ce3511ae7d9307a88c3f7d2b30fc9cd7de2c9c9aaf1e16708fde1ddf8c"
   },
   "src/99_main.lua": {
-    "bytes": 3680,
-    "sha256": "5ee0593fef67f4d7f1d3a7fc43bc167df8a29d6a195cc81aee11db4046ae1443"
+    "bytes": 3809,
+    "sha256": "7bac4219302b5ad16163351f4c15c81bd5804d360873b7a8812162098026a0a4"
   },
   "tests/legacy/test_mobile_ui_v15.lua": {
     "bytes": 14969,
@@ -32744,8 +32768,8 @@
     "sha256": "9fecc65ee033b3b2dd199825d9338815d4d35570e89f9661392778c4d9a747dc"
   },
   "tests/test_standalone.lua": {
-    "bytes": 1885,
-    "sha256": "6ee8bbb6afe76af9761f57af957a9151206beca51664773be9ba32fca7647301"
+    "bytes": 1886,
+    "sha256": "ecb5f5c6ac09789ff2137265610df1719df6577ee824cb40777c270f94d87c53"
   },
   "tests/test_trades.lua": {
     "bytes": 5081,
@@ -32787,6 +32811,18 @@
     "bytes": 2454,
     "sha256": "f62aedefe6514bac018bcf154455d2cc6dae8b91e582f1c25312b772e2aab818"
   },
+  "tests/test_v2210_draw.lua": {
+    "bytes": 732,
+    "sha256": "fee6ddfbb77404ac693849d38a90be5dd45431698579588916964c526a196d5d"
+  },
+  "tests/test_v2210_group_sort.lua": {
+    "bytes": 928,
+    "sha256": "bcc940b8826839bb38004f488298c9cd131d931d105c76d43fcd7fc02e205ba0"
+  },
+  "tests/test_v2210_storage_textdraw.lua": {
+    "bytes": 2492,
+    "sha256": "56d6178464b7bf40d9c162fce1f8cfd34d4b68dd8c39a9e04642c0a3e5f1301a"
+  },
   "tests/test_v224_flip.lua": {
     "bytes": 3394,
     "sha256": "0b0e3ceb616a5d1d44e2744c78d59810bba613d318255a27e1b24403525c005e"
@@ -32808,8 +32844,8 @@
     "sha256": "9fa7536487d027b1aca2dd55916d839d9dd0e8bb5e5f307fd7df27a1d6f310ab"
   },
   "tests/test_v224_version.lua": {
-    "bytes": 771,
-    "sha256": "7757ae38b5142ee8a8e278eb455af8fc06d0738fdacb056f7578082bb61d501f"
+    "bytes": 776,
+    "sha256": "7aad435ee2f3eaed73340a1d3c10c85b5775bf2257dc93c86f1c7a2e8bc42ee5"
   },
   "tests/test_v225_game_sim.lua": {
     "bytes": 3491,
@@ -32836,8 +32872,8 @@
     "sha256": "48b745a5e09b0ef5b204781c77faf6139e0c610cee41f54e5addcbfe2f3b3349"
   },
   "tests/test_v229_storage.lua": {
-    "bytes": 2460,
-    "sha256": "b897d2c9e17110f4c550f37e64f6622f043fc59ddae4f3aebd5cd6be5c1f9b0d"
+    "bytes": 2707,
+    "sha256": "6694efa278605a84a2a0684daaf287086056e6cb5e7bc205bc29eade99c3351b"
   },
   "tests/test_v22_arbitrage.lua": {
     "bytes": 5070,

@@ -1,6 +1,6 @@
 -- One item per row. Details are a real modal, allocations use raw offer IDs.
 local V,M=DSP.ui21,DSP.mobile
-V.arb_tab='sell';V.arb_revision=0
+V.arb_tab='sell';V.arb_revision=0;V.arb_sort='az'
 local function b(s,id,w,on)return V.button(s,'arb_'..id,w,on)end
 local function offerkey(o)return DSP.market.offer_key(o)end
 function V.arb_group(groups)
@@ -166,6 +166,11 @@ function V.arbitrage()
     if st.error then V.red(V.fit('API: '..tostring(st.error),imgui.GetContentRegionAvail().x))end
     local query,edited=V.search('arb','Поиск предмета',-1)
     if edited then V.reset_list('arb_main')end
+    if b(V.arb_sort=='az' and 'А—Я' or 'Прибыль: больше','sort',143,V.arb_sort=='az')then
+        V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
+        V.reset_list('arb_main')
+    end
+    V.inline()
     if b('Фильтры','filters',120,V.arb_filters)then
         V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
     end
@@ -185,10 +190,17 @@ function V.arbitrage()
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
     if status=='loading'then V.muted('Расчёт рынка...')elseif status=='error'then V.red('Ошибка расчёта. См. журнал')end
-    local sig=tostring(groups)..'|'..DSP.lower(query)
+    local sig=tostring(groups)..'|'..DSP.lower(query)..'|'..tostring(V.arb_sort)
     local filtered=V.memo('arb_rows',sig,function()
         local out={};local q=DSP.lower(query)
         for _,g in ipairs(groups)do if q==''or DSP.lower(g.name):find(q,1,true)then out[#out+1]=g end end
+        -- Cached per market snapshot, filter and sort mode; never sort every render frame.
+        table.sort(out,function(a,b)
+            if V.arb_sort=='profit' and a.profit~=b.profit then return a.profit>b.profit end
+            local an,bn=DSP.lower(a.name),DSP.lower(b.name)
+            if an~=bn then return an<bn end
+            return tostring(a.key)<tostring(b.key)
+        end)
         return out
     end)
     if st.status=='cache' then V.red(V.fit('Сеть недоступна: расчёт по сохранённому снимку, наличие не подтверждено',imgui.GetContentRegionAvail().x))end

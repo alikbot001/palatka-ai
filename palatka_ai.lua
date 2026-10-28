@@ -1,7 +1,7 @@
--- Palatka AI v2.2.9 mobile release, built from src/*.lua
+-- Palatka AI v2.2.10 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.2.9')
+script_version('2.2.10')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1460060
+DSP.item_icon_blob_offset = 1467416
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.9'
+DSP.version = '2.2.10'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -27670,9 +27670,11 @@ function M.arbitrage_grouped()
         g.revenue=g.revenue+(tonumber(deal.net_revenue) or 0)
         g.profit=g.profit+(tonumber(deal.net_profit) or 0)
     end
+    -- Readable A-Z is the default. Profit sorting remains optional in the UI.
     table.sort(groups,function(a,b)
-        if a.profit~=b.profit then return a.profit>b.profit end
-        return a.name<b.name
+        local an,bn=DSP.lower(a.name),DSP.lower(b.name)
+        if an~=bn then return an<bn end
+        return tostring(a.key)<tostring(b.key)
     end)
     cached_deals,cached_groups=deals,groups
     return groups
@@ -35422,7 +35424,7 @@ end
 function S.accept(kind,title,text,ts,source)
     local snap,err=S.parse_text(kind,title,text,ts)
     if not snap then S.last_error=err;return false,err end
-    snap.source=source=='manual' and 'manual' or 'dialog'
+    snap.source=source=='manual' and 'manual' or source=='textdraw' and 'textdraw' or 'dialog'
     for _,r in ipairs(snap.rows)do
         if r.qty then snap.count_known=snap.count_known+r.qty end
     end
@@ -35483,7 +35485,14 @@ function S.evaluate(snapshot,lookup)
     end
     return res
 end
+S.sort_cache=setmetatable({},{__mode='k'})
 function S.sorted(snapshot,mode,lookup)
+    if not lookup and snapshot then
+        local st=DSP.market and DSP.market.state or {}
+        local key=tostring(mode)..'/'..tostring(st.sid)..'/'..tostring(st.version)
+        local entry=S.sort_cache[snapshot]
+        if entry and entry.key==key then return entry.rows,entry.info end
+    end
     local info=S.evaluate(snapshot,lookup)
     local sorted=info.rows
     table.sort(sorted,function(a,b)
@@ -35508,11 +35517,106 @@ function S.sorted(snapshot,mode,lookup)
         end
         return tostring(a.name)<tostring(b.name)
     end)
+    if not lookup and snapshot then
+        local st=DSP.market and DSP.market.state or {}
+        S.sort_cache[snapshot]={key=tostring(mode)..'/'..tostring(st.sid)..'/'..tostring(st.version),rows=sorted,info=info}
+    end
     return sorted,info
 end
 
 end
 __mod_47_storage()
+
+local function __mod_47a_storage_textdraw()
+-- Bounded, explicitly armed TextDraw observation for container diagnostics.
+-- This is NOT OCR, memory reading or a general inventory scraper.
+local S=DSP.storage
+S.td_session=S.td_session or {state='off',draws={},seen=0}
+local T=S.td_session
+local function now() return os.time() end
+local function valid()
+    if T.state~='armed' then return false end
+    if now()>(T.until_ts or 0) then T.state='expired';return false end
+    return true
+end
+function S.arm_textdraw(seconds)
+    T.state='armed';T.until_ts=now()+math.max(5,math.min(60,tonumber(seconds)or 25))
+    T.draws={};T.seen=0;T.unique=0;T.last_error=nil;T.selected_kind=nil;T.result=nil
+    return true
+end
+function S.textdraw_state()
+    valid()
+    return T.state,T.seen or 0,T.last_error
+end
+local function text_of(value)
+    if type(value)=='table' then value=value.text end
+    if type(value)~='string' then return nil end
+    local s=DSP.clean_text(value):gsub('~[%w]~',''):gsub('[\r\n]',' ')
+    s=DSP.trim(s)
+    if s=='' or #s>255 then return nil end
+    return s
+end
+function S.observe_textdraw(id,value)
+    if not valid() then return false end
+    if type(id)~='number' and type(id)~='string' then return false end
+    local s=text_of(value)
+    if not s then return false end
+    T.seen=T.seen+1
+    -- Bounded by 110 unique IDs; update in place, no per-frame scanning.
+    if T.draws[id]==nil and (T.unique or 0)>=110 then return false end
+    if T.draws[id]==nil then T.unique=(T.unique or 0)+1 end
+    T.draws[id]=s
+    return true
+end
+function S.finish_textdraw()
+    if T.state~='armed' and T.state~='expired' then return false,'Нет активного сбора' end
+    T.state='done'
+    local lines={}
+    local kind,title
+    local ids={}
+    for id in pairs(T.draws or {}) do ids[#ids+1]=id end
+    table.sort(ids,function(a,b)return tostring(a)<tostring(b)end)
+    for _,id in ipairs(ids) do
+        local line=T.draws[id]
+        local k=S.kind_of(line)
+        if k and not kind then kind=k;title=line end
+        local r=S.parse_line(line)
+        -- Unknown qty from a TextDraw is a UI label, not a reliable item count.
+        if r and r.quantity_confirmed and not k then lines[#lines+1]=line end
+    end
+    if not kind then
+        T.last_error='В TextDraw не обнаружен заголовок хранилища. Возможно, окно нативное.'
+        return false,T.last_error
+    end
+    if #lines==0 then
+        T.last_error='Есть заголовок '..tostring(title)..', но нет строк с достоверным количеством.'
+        return false,T.last_error
+    end
+    local ok,r=S.accept(kind,title,table.concat(lines,'\n'),now(),'textdraw')
+    if not ok then T.last_error=tostring(r);return false,T.last_error end
+    T.result=r;T.last_error=nil
+    return true,r
+end
+function S.install_textdraw()
+    if S.td_hook_installed then return end
+    local ok,sampev=pcall(require,'samp.events')
+    if not ok or not sampev then return false,'samp.events unavailable' end
+    S.td_hook_installed=true
+    local prev_show=sampev.onShowTextDraw
+    sampev.onShowTextDraw=function(id,data)
+        if T.state=='armed' then pcall(S.observe_textdraw,id,data) end
+        if prev_show then return prev_show(id,data) end
+    end
+    local prev_change=sampev.onTextDrawSetString
+    sampev.onTextDrawSetString=function(id,text)
+        if T.state=='armed' then pcall(S.observe_textdraw,id,text) end
+        if prev_change then return prev_change(id,text) end
+    end
+    return true
+end
+
+end
+__mod_47a_storage_textdraw()
 
 local function __mod_48_flip_intel()
 -- v2.2.4: independent resale workstation. All values are estimates from market
@@ -37387,9 +37491,12 @@ function V.row(id,height,draw)
     local w=imgui.GetContentRegionAvail().x
     if imgui.GetWindowDrawList and imgui.GetCursorScreenPos and imgui.GetColorU32 then
         local p=imgui.GetCursorScreenPos()
-        local dl=imgui.GetWindowDrawList()
-        dl:AddRectFilled(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.FrameBg),6)
-        if dl.AddRect then dl:AddRect(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.Border),6)end
+        local custom=DSP.carbon_draw and DSP.carbon_draw.row and DSP.carbon_draw.row(p.x,p.y,w,height-4)
+        if not custom then
+            local dl=imgui.GetWindowDrawList()
+            dl:AddRectFilled(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.FrameBg),6)
+            if dl.AddRect then dl:AddRect(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.Border),6)end
+        end
     end
     imgui.PushIDStr(id);imgui.SetCursorPos(imgui.ImVec2(x+8,y+5))
     local ok,err=xpcall(function()draw(w-16,x+8,y+5)end,debug.traceback)
@@ -37487,6 +37594,7 @@ function V.font_scale_for(base,width,dpi)
     return 18*(tonumber(dpi)or 1.25)/1.25*math.min(1.35,math.max(1,width/1000))/math.max(1,base)
 end
 function U.draw()
+    if DSP.carbon_draw then DSP.carbon_draw.begin_frame() end
     local io=imgui.GetIO();local sz=io.DisplaySize;local g=V.geometry(sz.x,sz.y)
     if not V.initialized then V.screen=(U.screen and U.screen~='palatka') and U.screen or 'home';V.initialized=true end
     V.track_touch(io)
@@ -37683,7 +37791,22 @@ function V.storage_screen()
     V.heading('Хранилища',function()
         if b('Очистить','clear',105)then V.open_popup('Очистить снимки?','storage_clear')end
     end,109)
-    V.muted('Багажник · шкаф · склад | только наблюдение открытого контейнера')
+    V.muted('Багажник · шкаф · склад | пассивное чтение, без действий с вещами')
+    local capstate,capcount,caperr=S.textdraw_state()
+    if b(capstate=='armed' and 'Сбор TextDraw активен' or 'Начать сбор интерфейса','td_arm',250,capstate=='armed')then
+        S.arm_textdraw(35)
+    end
+    if capstate=='armed' or capstate=='expired' then
+        V.inline()
+        if b('Завершить и разобрать','td_finish',230,false,true)then
+            local ok,err=S.finish_textdraw()
+            if ok then V.storage_selected=1;V.storage_error=nil else V.storage_error=err end
+        end
+    end
+    V.muted('Сначала запустите сбор, откройте багажник в игре, закройте его, затем завершите сбор.')
+    V.muted('TextDraw-событий: '..tostring(capcount)..' · состояние: '..tostring(capstate))
+    if caperr then V.red(V.fit(tostring(caperr),imgui.GetContentRegionAvail().x))end
+    V.muted('Если событий 0 — окно может быть нативным; нужен лог интерфейса MonetLoader.')
     if b(V.storage_manual and 'Скрыть ввод' or 'Вставить список','manual_toggle',190)then
         V.storage_manual=not V.storage_manual
     end
@@ -37723,7 +37846,7 @@ function V.storage_screen()
         end
         local rows,info=S.sorted(current,V.storage_sort)
         V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
-            (current.source=='manual' and ' · введено вручную' or ' · игровой диалог'),imgui.GetContentRegionAvail().x))
+            (current.source=='manual' and ' · ручной ввод' or current.source=='textdraw' and ' · TextDraw' or ' · игровой диалог'),imgui.GetContentRegionAvail().x))
         V.text('Подтверждено: '..info.total_qty..' шт. · неизвестное количество: '..info.unknown_qty..' строк')
         V.green('Оценка по скупке: '..DSP.money(info.sell_to_buyers))
         V.muted('Прибыль: неизвестна (нет подтверждённой себестоимости)')
@@ -37767,6 +37890,36 @@ end
 
 end
 __mod_60b_carbon_storage()
+
+local function __mod_60c_carbon_draw()
+-- Carbon Trade lightweight skin primitives; existing ImGui handles input and clipping.
+-- Geometry only for visible rows, no bitmap allocations or HTTP.
+DSP.carbon_draw = DSP.carbon_draw or {}
+local D=DSP.carbon_draw
+D.frame_shapes=0
+D.max_shapes=240
+function D.begin_frame()
+    D.frame_shapes=0
+end
+function D.row(x,y,w,h)
+    if DSP.settings and DSP.settings.carbon_draw_enabled==false then return false end
+    if D.frame_shapes+3>D.max_shapes then return true end
+    if not imgui or not imgui.GetWindowDrawList or not imgui.GetColorU32 then return false end
+    local draw=imgui.GetWindowDrawList()
+    if not draw then return false end
+    local p1=imgui.ImVec2(x,y)
+    local p2=imgui.ImVec2(x+w,y+h)
+    draw:AddRectFilled(p1,p2,imgui.GetColorU32(imgui.Col.FrameBg),5)
+    if draw.AddRect then draw:AddRect(p1,p2,imgui.GetColorU32(imgui.Col.Border),5) end
+    if draw.AddLine then
+        draw:AddLine(imgui.ImVec2(x+5,y+1),imgui.ImVec2(x+w-5,y+1),imgui.GetColorU32(imgui.Col.CheckMark),1)
+    end
+    D.frame_shapes=D.frame_shapes+3
+    return true
+end
+
+end
+__mod_60c_carbon_draw()
 
 local function __mod_61_ui21_trade()
 -- Trade view: two tabs, inline editing, fixed actions; execution stays in auto.
@@ -38315,7 +38468,7 @@ __mod_62_ui21_shops()
 local function __mod_63_ui21_arbitrage()
 -- One item per row. Details are a real modal, allocations use raw offer IDs.
 local V,M=DSP.ui21,DSP.mobile
-V.arb_tab='sell';V.arb_revision=0
+V.arb_tab='sell';V.arb_revision=0;V.arb_sort='az'
 local function b(s,id,w,on)return V.button(s,'arb_'..id,w,on)end
 local function offerkey(o)return DSP.market.offer_key(o)end
 function V.arb_group(groups)
@@ -38481,6 +38634,11 @@ function V.arbitrage()
     if st.error then V.red(V.fit('API: '..tostring(st.error),imgui.GetContentRegionAvail().x))end
     local query,edited=V.search('arb','Поиск предмета',-1)
     if edited then V.reset_list('arb_main')end
+    if b(V.arb_sort=='az' and 'А—Я' or 'Прибыль: больше','sort',143,V.arb_sort=='az')then
+        V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
+        V.reset_list('arb_main')
+    end
+    V.inline()
     if b('Фильтры','filters',120,V.arb_filters)then
         V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
     end
@@ -38500,10 +38658,17 @@ function V.arbitrage()
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
     if status=='loading'then V.muted('Расчёт рынка...')elseif status=='error'then V.red('Ошибка расчёта. См. журнал')end
-    local sig=tostring(groups)..'|'..DSP.lower(query)
+    local sig=tostring(groups)..'|'..DSP.lower(query)..'|'..tostring(V.arb_sort)
     local filtered=V.memo('arb_rows',sig,function()
         local out={};local q=DSP.lower(query)
         for _,g in ipairs(groups)do if q==''or DSP.lower(g.name):find(q,1,true)then out[#out+1]=g end end
+        -- Cached per market snapshot, filter and sort mode; never sort every render frame.
+        table.sort(out,function(a,b)
+            if V.arb_sort=='profit' and a.profit~=b.profit then return a.profit>b.profit end
+            local an,bn=DSP.lower(a.name),DSP.lower(b.name)
+            if an~=bn then return an<bn end
+            return tostring(a.key)<tostring(b.key)
+        end)
         return out
     end)
     if st.status=='cache' then V.red(V.fit('Сеть недоступна: расчёт по сохранённому снимку, наличие не подтверждено',imgui.GetContentRegionAvail().x))end
@@ -38875,6 +39040,7 @@ local function appearance(w)
     toggle('Оценка трейда',DSP.settings,'overlay_trade',true)
     toggle('Оценка лавки',DSP.settings,'overlay_shop',true)
     toggle('Оверлей поверх окон',DSP.settings,'overlay_top',true)
+    toggle('Carbon: рисование карточек DrawList',DSP.settings,'carbon_draw_enabled',true)
     local c=DSP.settings.craglog
     toggle('Показывать мини-журнал',c,'open',false)
     if toggle('Закрепить мини-журнал',c,'pinned',false)then DSP.craglog.set_pinned(c.pinned)end
@@ -39719,6 +39885,7 @@ safe('screens.install', function()
     if DSP.screens and DSP.screens.install then DSP.screens.install() end
 end)
 safe('live.install',  function() DSP.live.install() end)
+safe('storage.textdraw', function() if DSP.storage and DSP.storage.install_textdraw then DSP.storage.install_textdraw() end end)
 safe('promo.install', function() DSP.promo.install() end)
 safe('shop_marker.install', function() DSP.shop_marker.install() end)
 safe('overlay.install', function() DSP.overlay.install() end)

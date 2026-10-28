@@ -12,7 +12,7 @@ package.preload['samp.events']=function()return {} end
 addEventHandler=function()end
 DSP=nil
 assert(loadfile('palatka_ai.lua'))()
-assert(DSP.version=='2.2.9')
+assert(DSP.version=='2.2.10')
 assert(DSP.items.loaded and DSP.items.name(5723)~='ID:5723','clean install has embedded catalog')
 assert(DSP.ui22 and DSP.ui22.tools and DSP.craglog.delete_event)
 assert(DSP.mobile and DSP.notes and DSP.rewards and DSP.trade_runtime)

@@ -78,7 +78,7 @@ end
 function S.accept(kind,title,text,ts,source)
     local snap,err=S.parse_text(kind,title,text,ts)
     if not snap then S.last_error=err;return false,err end
-    snap.source=source=='manual' and 'manual' or 'dialog'
+    snap.source=source=='manual' and 'manual' or source=='textdraw' and 'textdraw' or 'dialog'
     for _,r in ipairs(snap.rows)do
         if r.qty then snap.count_known=snap.count_known+r.qty end
     end
@@ -139,7 +139,14 @@ function S.evaluate(snapshot,lookup)
     end
     return res
 end
+S.sort_cache=setmetatable({},{__mode='k'})
 function S.sorted(snapshot,mode,lookup)
+    if not lookup and snapshot then
+        local st=DSP.market and DSP.market.state or {}
+        local key=tostring(mode)..'/'..tostring(st.sid)..'/'..tostring(st.version)
+        local entry=S.sort_cache[snapshot]
+        if entry and entry.key==key then return entry.rows,entry.info end
+    end
     local info=S.evaluate(snapshot,lookup)
     local sorted=info.rows
     table.sort(sorted,function(a,b)
@@ -164,5 +171,9 @@ function S.sorted(snapshot,mode,lookup)
         end
         return tostring(a.name)<tostring(b.name)
     end)
+    if not lookup and snapshot then
+        local st=DSP.market and DSP.market.state or {}
+        S.sort_cache[snapshot]={key=tostring(mode)..'/'..tostring(st.sid)..'/'..tostring(st.version),rows=sorted,info=info}
+    end
     return sorted,info
 end

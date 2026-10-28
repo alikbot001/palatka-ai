@@ -32,6 +32,7 @@ safe('screens.install', function()
     if DSP.screens and DSP.screens.install then DSP.screens.install() end
 end)
 safe('live.install',  function() DSP.live.install() end)
+safe('storage.textdraw', function() if DSP.storage and DSP.storage.install_textdraw then DSP.storage.install_textdraw() end end)
 safe('promo.install', function() DSP.promo.install() end)
 safe('shop_marker.install', function() DSP.shop_marker.install() end)
 safe('overlay.install', function() DSP.overlay.install() end)

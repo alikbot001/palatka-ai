@@ -112,6 +112,7 @@ local function appearance(w)
     toggle('Оценка трейда',DSP.settings,'overlay_trade',true)
     toggle('Оценка лавки',DSP.settings,'overlay_shop',true)
     toggle('Оверлей поверх окон',DSP.settings,'overlay_top',true)
+    toggle('Carbon: рисование карточек DrawList',DSP.settings,'carbon_draw_enabled',true)
     local c=DSP.settings.craglog
     toggle('Показывать мини-журнал',c,'open',false)
     if toggle('Закрепить мини-журнал',c,'pinned',false)then DSP.craglog.set_pinned(c.pinned)end

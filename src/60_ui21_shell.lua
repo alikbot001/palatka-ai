@@ -149,9 +149,12 @@ function V.row(id,height,draw)
     local w=imgui.GetContentRegionAvail().x
     if imgui.GetWindowDrawList and imgui.GetCursorScreenPos and imgui.GetColorU32 then
         local p=imgui.GetCursorScreenPos()
-        local dl=imgui.GetWindowDrawList()
-        dl:AddRectFilled(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.FrameBg),6)
-        if dl.AddRect then dl:AddRect(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.Border),6)end
+        local custom=DSP.carbon_draw and DSP.carbon_draw.row and DSP.carbon_draw.row(p.x,p.y,w,height-4)
+        if not custom then
+            local dl=imgui.GetWindowDrawList()
+            dl:AddRectFilled(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.FrameBg),6)
+            if dl.AddRect then dl:AddRect(p,imgui.ImVec2(p.x+w,p.y+height-4),imgui.GetColorU32(imgui.Col.Border),6)end
+        end
     end
     imgui.PushIDStr(id);imgui.SetCursorPos(imgui.ImVec2(x+8,y+5))
     local ok,err=xpcall(function()draw(w-16,x+8,y+5)end,debug.traceback)
@@ -249,6 +252,7 @@ function V.font_scale_for(base,width,dpi)
     return 18*(tonumber(dpi)or 1.25)/1.25*math.min(1.35,math.max(1,width/1000))/math.max(1,base)
 end
 function U.draw()
+    if DSP.carbon_draw then DSP.carbon_draw.begin_frame() end
     local io=imgui.GetIO();local sz=io.DisplaySize;local g=V.geometry(sz.x,sz.y)
     if not V.initialized then V.screen=(U.screen and U.screen~='palatka') and U.screen or 'home';V.initialized=true end
     V.track_touch(io)

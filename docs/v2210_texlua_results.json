@@ -1,0 +1,452 @@
+[
+  {
+    "test": "test_arbitrage.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "arbitrage tests: ok\narbitrage allocation, slot merging, server isolation: ok\n"
+  },
+  {
+    "test": "test_arbitrage_ui.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "ui tests: ok\nv1.5 arbitrage grouped UI: ok\n"
+  },
+  {
+    "test": "test_auto.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "auto tests: ok\n"
+  },
+  {
+    "test": "test_core.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "core tests: ok\n"
+  },
+  {
+    "test": "test_encoding.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "encoding tests: ok\n"
+  },
+  {
+    "test": "test_http.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "http tests: ok\n"
+  },
+  {
+    "test": "test_live.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "live tests: ok\n"
+  },
+  {
+    "test": "test_mini_journal.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "mini journal tests: ok\nui tests: ok\nmini journal rendering fixture: ok\n"
+  },
+  {
+    "test": "test_mobile_ui.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "ui tests: ok\nv1.6 compact mobile UI: ok\n"
+  },
+  {
+    "test": "test_presets.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "preset tests: ok\n"
+  },
+  {
+    "test": "test_rewards.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "rewards tests: ok\n"
+  },
+  {
+    "test": "test_settings.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "settings tests: ok\n"
+  },
+  {
+    "test": "test_standalone.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "ui tests: ok\nstandalone startup tests: ok\nstandalone indexed real PNG bank: ok\n"
+  },
+  {
+    "test": "test_trades.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "trades tests: ok\n"
+  },
+  {
+    "test": "test_ui.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "ui tests: ok\n"
+  },
+  {
+    "test": "test_ui21_pure.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "UI 2.1: 3 sellers vs 700 demand, owner/shop search, grouped deals: OK\n"
+  },
+  {
+    "test": "test_ui21_render.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  },
+  {
+    "test": "test_v14_events.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v1.4 server + payday + income tests: OK\n"
+  },
+  {
+    "test": "test_v14_icons.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v1.4 icons extracted\n"
+  },
+  {
+    "test": "test_v14_trade_ui.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v1.4 trade UI tests: OK\n"
+  },
+  {
+    "test": "test_v151_mobile_workflow.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "1.5.1 popup and swipe: OK\n1.5.1 Market Helper layout: OK\n"
+  },
+  {
+    "test": "test_v15_groups.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v1.5 item grouping and 1-vs-700 source tests: ok\n"
+  },
+  {
+    "test": "test_v16_workflow.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "ui tests: ok\nv1.6 trading and calculator tests: ok\n"
+  },
+  {
+    "test": "test_v2210_draw.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "PASS v2.2.10 custom DrawList budget/disable\n"
+  },
+  {
+    "test": "test_v2210_group_sort.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "PASS v2.2.10 arbitration alphabetical default and unchanged finance\n"
+  },
+  {
+    "test": "test_v2210_storage_textdraw.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "PASS v2.2.10 bounded opt-in textdraw capture and trusted qty only\n"
+  },
+  {
+    "test": "test_v224_flip.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2.4 resale: capital, reserve, risk, pricing, alerts, cash provenance PASS\n"
+  },
+  {
+    "test": "test_v224_navigation.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2.4 mobile navigation / modal / background boundaries PASS\n"
+  },
+  {
+    "test": "test_v224_promo.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2.4 promo: opt-in, template CRUD, sanitized commands, cooldown, stop, session cap PASS\n"
+  },
+  {
+    "test": "test_v224_sources.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2.4 separate API/CR/day/opened-shop prices, server/time guards PASS\n"
+  },
+  {
+    "test": "test_v224_ui_model.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2.4 UI model: all resale panes, promo, modal registration OK (headless)\n"
+  },
+  {
+    "test": "test_v224_version.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "PASS v2.2.10 shared UI and Lua metadata\n"
+  },
+  {
+    "test": "test_v225_game_sim.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v225 SAMP fake RPC/dialog sell+buy: dry-run, correct slots, no real listing PASS\n"
+  },
+  {
+    "test": "test_v225_journal_provenance.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v225 journal: market-valued trades marked estimated, cash flows separated PASS\n"
+  },
+  {
+    "test": "test_v225_promo_batch.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v225 promo batch, macro, foreign shop guard, opt-in cooldown PASS\n"
+  },
+  {
+    "test": "test_v226_network.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v226 network response, fallback, errors, backoff and isolation: PASS\n"
+  },
+  {
+    "test": "test_v228_same_stall.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2.8 split API, 1-unit route, live same-stall, carbon: OK\n"
+  },
+  {
+    "test": "test_v229_home_model.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "PASS v2.2.9 Carbon landing page navigation / opt-in refresh / live counters\n"
+  },
+  {
+    "test": "test_v229_storage.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "PASS v2.2.9 storage snapshot read-only / safe amounts / valuation\n"
+  },
+  {
+    "test": "test_v22_arbitrage.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2 arbitrage: 295k purchase, 360k gross, 7.2k commission, 57.8k profit: OK\nv2.2 arbitrage selection, no double counting, batch commission: ok\nv2.2 manual pair validation and large-price arithmetic: ok\n"
+  },
+  {
+    "test": "test_v22_arbitrage_finance_ui.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 arbitrage popup labels, commission, net profit, loss color and best-plan route: OK\n"
+  },
+  {
+    "test": "test_v22_arbitrage_risk.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "market risk: same stall, reserve, real correction, shared buy limit, stale expiry: OK\n"
+  },
+  {
+    "test": "test_v22_arbitrage_touch_ui.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "arbitrage touch buttons: visible dedicated open/select/verify/marker: OK\n"
+  },
+  {
+    "test": "test_v22_async.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2 async arbitrage: deferred cold work, stable cache, yields, stale cancellation, expiry, errors: ok\n"
+  },
+  {
+    "test": "test_v22_calc_grouping.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "calculator: grouping, decimal separator, arithmetic and negative values: OK\n"
+  },
+  {
+    "test": "test_v22_calculator.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 calculator chaining, percent, decimals, history, division zero: OK\n"
+  },
+  {
+    "test": "test_v22_cash_once.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2 event regressions: OK\nv22 cash receipt appears once across PayDay/reward channels: OK\n"
+  },
+  {
+    "test": "test_v22_catalog.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  },
+  {
+    "test": "test_v22_cr_prices.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "CR market prices: real list format, page index, dedup, cached day history and server guard: OK\n"
+  },
+  {
+    "test": "test_v22_events.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2 event regressions: OK\n"
+  },
+  {
+    "test": "test_v22_finance_layout.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  },
+  {
+    "test": "test_v22_group_cache.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 stable grouped cache / refresh / empty snapshot / no repeated sorts: OK\n"
+  },
+  {
+    "test": "test_v22_history.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2 full durable history regressions: OK\n"
+  },
+  {
+    "test": "test_v22_loot.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 loot: individual quantities, estimates, unknown prices, sources, inspection, cache: OK\n"
+  },
+  {
+    "test": "test_v22_native_api.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 target MonetLoader mimgui exports: OK\n"
+  },
+  {
+    "test": "test_v22_native_style.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  },
+  {
+    "test": "test_v22_overlay_market_reference.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "overlay: self-reference excluded, market parity and server isolation: OK\n"
+  },
+  {
+    "test": "test_v22_overlay_unknown.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 legacy shop overlay unknown qty: OK\n"
+  },
+  {
+    "test": "test_v22_payday.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 PayDay deposit income: live, summary, history, restart, legacy evidence, counts: OK\n"
+  },
+  {
+    "test": "test_v22_persistence.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "e\nPASS clear rolls back failed save\nPASS recalculate rolls back failed save\nPASS save exception rolls back and reports its cause\nPASS missing library migration is rolled back with the failed transaction\nPASS success commits once and keeps legacy alias identity\nPASS failed export preserves the previous file\nv2.2 transactional preset persistence: OK\n"
+  },
+  {
+    "test": "test_v22_price_quick_actions.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "price quick actions: observed medians, source, no fake day trades, server isolation: OK\n"
+  },
+  {
+    "test": "test_v22_qty_sources.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "quantity provenance: API slot=1, game 45000, explicit consent, scope/freshness, parser: OK\n"
+  },
+  {
+    "test": "test_v22_real_icons.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 real item icons: identity, lazy decode, texture reuse, no stock fallback: OK\nv22 indexed autonomous image bank: bounded reads, no eager image strings: OK\n"
+  },
+  {
+    "test": "test_v22_resources.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "tests/test_v22_resources.lua:34: syntax error near '+'\n"
+  },
+  {
+    "test": "test_v22_scan_ui.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  },
+  {
+    "test": "test_v22_shop_marker.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 shop 3D marker: exact target, RPC chaining, toggle, projection and server isolation: OK\n"
+  },
+  {
+    "test": "test_v22_shop_quantity_modal.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "shop quantity modal: source disagreement, scrolling, explicit game/manual actions, stale guard: OK\n"
+  },
+  {
+    "test": "test_v22_shop_scan.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 current stall scan: slots, quantity evidence, learn, named copy, price-only correction, rollback: OK\n"
+  },
+  {
+    "test": "test_v22_shops.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 shops strict sorting + cache invalidation: OK\n"
+  },
+  {
+    "test": "test_v22_snapshot.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  },
+  {
+    "test": "test_v22_tools.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v2.2 tools: stats, settings/Telegram, note debounce, modal delete rollback: ok\n"
+  },
+  {
+    "test": "test_v22_touch.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "v22 isolated scrolling / virtualization / viewport: OK\n"
+  },
+  {
+    "test": "test_v22_trade.lua",
+    "status": "PASS",
+    "exit": 0,
+    "tail": "ng the item\nPASS invalid edit buffers block listing until corrected\nPASS nonfinite oversized and unsafe totals are rejected\nPASS buy queue preserves launch price quantity and test mode\nPASS sell queue preserves launch values and aggregates disjoint stacks\nPASS sell queue cannot spend one inventory slot twice\nv2.2 trade validation and snapshots: OK\n"
+  },
+  {
+    "test": "test_v22_trade_totals.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  },
+  {
+    "test": "test_v22_ui.lua",
+    "status": "NOT_RUN_OR_FAIL",
+    "exit": 1,
+    "tail": "preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n"
+  }
+]

@@ -8,7 +8,22 @@ function V.storage_screen()
     V.heading('Хранилища',function()
         if b('Очистить','clear',105)then V.open_popup('Очистить снимки?','storage_clear')end
     end,109)
-    V.muted('Багажник · шкаф · склад | только наблюдение открытого контейнера')
+    V.muted('Багажник · шкаф · склад | пассивное чтение, без действий с вещами')
+    local capstate,capcount,caperr=S.textdraw_state()
+    if b(capstate=='armed' and 'Сбор TextDraw активен' or 'Начать сбор интерфейса','td_arm',250,capstate=='armed')then
+        S.arm_textdraw(35)
+    end
+    if capstate=='armed' or capstate=='expired' then
+        V.inline()
+        if b('Завершить и разобрать','td_finish',230,false,true)then
+            local ok,err=S.finish_textdraw()
+            if ok then V.storage_selected=1;V.storage_error=nil else V.storage_error=err end
+        end
+    end
+    V.muted('Сначала запустите сбор, откройте багажник в игре, закройте его, затем завершите сбор.')
+    V.muted('TextDraw-событий: '..tostring(capcount)..' · состояние: '..tostring(capstate))
+    if caperr then V.red(V.fit(tostring(caperr),imgui.GetContentRegionAvail().x))end
+    V.muted('Если событий 0 — окно может быть нативным; нужен лог интерфейса MonetLoader.')
     if b(V.storage_manual and 'Скрыть ввод' or 'Вставить список','manual_toggle',190)then
         V.storage_manual=not V.storage_manual
     end
@@ -48,7 +63,7 @@ function V.storage_screen()
         end
         local rows,info=S.sorted(current,V.storage_sort)
         V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
-            (current.source=='manual' and ' · введено вручную' or ' · игровой диалог'),imgui.GetContentRegionAvail().x))
+            (current.source=='manual' and ' · ручной ввод' or current.source=='textdraw' and ' · TextDraw' or ' · игровой диалог'),imgui.GetContentRegionAvail().x))
         V.text('Подтверждено: '..info.total_qty..' шт. · неизвестное количество: '..info.unknown_qty..' строк')
         V.green('Оценка по скупке: '..DSP.money(info.sell_to_buyers))
         V.muted('Прибыль: неизвестна (нет подтверждённой себестоимости)')

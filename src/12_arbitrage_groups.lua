@@ -36,9 +36,11 @@ function M.arbitrage_grouped()
         g.revenue=g.revenue+(tonumber(deal.net_revenue) or 0)
         g.profit=g.profit+(tonumber(deal.net_profit) or 0)
     end
+    -- Readable A-Z is the default. Profit sorting remains optional in the UI.
     table.sort(groups,function(a,b)
-        if a.profit~=b.profit then return a.profit>b.profit end
-        return a.name<b.name
+        local an,bn=DSP.lower(a.name),DSP.lower(b.name)
+        if an~=bn then return an<bn end
+        return tostring(a.key)<tostring(b.key)
     end)
     cached_deals,cached_groups=deals,groups
     return groups
