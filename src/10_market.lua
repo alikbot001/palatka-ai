@@ -24,82 +24,142 @@ DSP.market.servers = {
     { id = 103, name = 'Mobile III' },
 }
 
+-- Requests runs in an effil worker, never in the UI/render callback.
+-- Return only primitive values: this also works with effil builds that do not
+-- serialize ordinary Lua tables between Lua states reliably.
 function _G.dsp_http_get(url)
-    local ok, requests = pcall(require, 'requests')
-    if not ok or not requests then return { code = 0, body = '', err = 'requests missing' } end
-    local ok2, resp = pcall(requests.request, 'GET', url)
-    if not ok2 or not resp then return { code = 0, body = '', err = 'request failed: ' .. tostring(resp) } end
-    return { code = tonumber(resp.status_code) or 0, body = tostring(resp.text or ''), err = nil }
+    local ok_req, requests = pcall(require, 'requests')
+    if not ok_req or not requests or type(requests.request) ~= 'function' then
+        return 0, '', 'requests unavailable in network worker'
+    end
+    local function request_one(target)
+        local ok, resp = pcall(requests.request, 'GET', target, nil)
+        if not ok then return 0, '', 'connect: ' .. tostring(resp) end
+        if not resp then return 0, '', 'empty HTTP response' end
+        local status = tonumber(resp.status_code) or 0
+        local body = resp.text or resp.content or ''
+        if type(body) ~= 'string' then body = tostring(body or '') end
+        local headers = resp.headers or {}
+        local redirect = headers.Location or headers.location
+        return status, body, nil, redirect
+    end
+    local status, body, err, redirect = request_one(url)
+    -- Respect a single HTTPS redirect on the same host (no plaintext HTTP
+    -- downgrade, and no accidental delivery of API parameters to new hosts).
+    if (status == 301 or status == 302 or status == 303 or status == 307 or status == 308)
+        and type(redirect) == 'string' and redirect ~= '' then
+        local original_host = url:match('^https://([^/:?]+)')
+        local redirect_host = redirect:match('^https://([^/:?]+)')
+        if original_host and redirect_host and original_host:lower() == redirect_host:lower() then
+            return request_one(redirect)
+        end
+        return status, body, 'redirect blocked (different host or insecure scheme)'
+    end
+    return status, body, err
 end
 
+-- Compatible with older mocks that returned one table, and with real effil's
+-- multiple return values. thread:get() is *not* an HTTP status indicator.
 local function effil_result(thread)
-    local ok_get, result = pcall(function() return thread:get() end)
-    if not ok_get then
-        return nil, tostring(result)
+    local ok, first, second, third = pcall(function() return thread:get() end)
+    if not ok then return nil, 'worker result: ' .. tostring(first) end
+    if type(first) == 'table' or type(first) == 'userdata' then
+        return {
+            code = tonumber(first.code or first[1]) or 0,
+            body = tostring(first.body or first[2] or ''),
+            err = first.err or first[3],
+        }
     end
-    if type(result) == 'table' or type(result) == 'userdata' then
-        local code = tonumber(result.code or result[1] or 0)
-        local body = tostring(result.body or result[2] or '')
-        local werr = result.err or result[3]
-        return { code = code, body = body, err = werr }, nil
+    if type(first) == 'number' then
+        return {code = tonumber(first) or 0, body = tostring(second or ''), err = third}
     end
-    if type(result) == 'number' then
-        return { code = result, body = '', err = nil }, nil
-    end
-    return nil, 'unexpected result type: ' .. type(result)
+    if first == false then return nil, tostring(second or 'network worker failed') end
+    return nil, 'unexpected network result: ' .. type(first)
 end
 
 function DSP.http_get(url, cb)
-    local ok, effil = pcall(require, 'effil')
-    if not ok or not effil then
-        return cb(nil, 'effil missing')
+    local ok_effil, effil = pcall(require, 'effil')
+    if not ok_effil or not effil or type(effil.thread) ~= 'function' then
+        return cb(nil, 'effil unavailable', 0)
+    end
+    if not lua_thread or type(lua_thread.create) ~= 'function' or not wait then
+        return cb(nil, 'Lua thread scheduler unavailable', 0)
     end
     local ok_th, thread = pcall(function() return effil.thread(_G.dsp_http_get)(url) end)
     if not ok_th or not thread then
-        return cb(nil, 'thread create: ' .. tostring(thread))
+        return cb(nil, 'worker start: ' .. tostring(thread), 0)
     end
-    lua_thread.create(function()
-        local deadline = os.time() + 60
-        while true do
-            wait(25)
-            if os.time() > deadline then
+    local ok_scheduler, scheduler_err = pcall(lua_thread.create, function()
+        local deadline = os.time() + 45
+        local finished = false
+        local function finish(body, err, code)
+            if finished then return end
+            finished = true
+            local ok_cb, cb_err = pcall(cb, body, err, code)
+            if not ok_cb and DSP.flog then DSP.flog('HTTP callback error: ' .. tostring(cb_err)) end
+        end
+        while not finished do
+            wait(50)
+            if os.time() >= deadline then
                 pcall(function() thread:cancel() end)
-                return cb(nil, 'timeout')
+                return finish(nil, 'timeout after 45s', 0)
             end
-            local ok_status, status, err = pcall(function() return thread:status() end)
-            if not ok_status then
-                return cb(nil, 'thread status error')
+            local ok_status, status, status_err = pcall(function() return thread:status() end)
+            if not ok_status or not status then
+                return finish(nil, 'worker status: ' .. tostring(status_err or status), 0)
             end
-            if status == 'completed' or status == 'canceled' then
-                local res, rerr = effil_result(thread)
-                if not res then
-                    return cb(nil, 'get: ' .. tostring(rerr))
-                end
+            if status == 'completed' then
+                local res, err = effil_result(thread)
+                if not res then return finish(nil, err, 0) end
                 if res.code ~= 200 then
-                    return cb(nil, 'HTTP ' .. tostring(res.code) .. (res.err and (' ' .. tostring(res.err)) or ''))
+                    if res.code == 0 and res.err then
+                        return finish(nil, 'Сеть: ' .. tostring(res.err), 0)
+                    end
+                    local hint = res.err and (' · ' .. tostring(res.err)) or ''
+                    if res.code == 401 or res.code == 403 then
+                        hint = ' · доступ к API не разрешён или требуется авторизация'
+                    elseif res.code == 404 then
+                        hint = ' · endpoint не найден'
+                    elseif res.code == 429 then
+                        hint = ' · лимит запросов'
+                    end
+                    return finish(nil, 'HTTP ' .. tostring(res.code) .. hint, res.code)
                 end
-                if type(res.body) ~= 'string' or res.body == '' then
-                    return cb(nil, 'empty response')
-                end
-                return cb(res.body, nil)
+                if res.body == '' then return finish(nil, 'empty response', 200) end
+                return finish(res.body, nil, 200)
             end
+            if status == 'canceled' then return finish(nil, 'request canceled', 0) end
             if status == 'error' or status == 'failed' then
-                local e = tostring(err or 'thread error')
-                if type(err) == 'table' and err.message then e = err.message end
-                return cb(nil, e)
+                return finish(nil, 'worker failed: ' .. tostring(status_err or 'unknown'), 0)
             end
         end
     end)
+    if not ok_scheduler then return cb(nil, 'scheduler failed: ' .. tostring(scheduler_err), 0) end
 end
 
 function DSP.player_nick()
     local nick = ''
+    -- Some Android builds cannot resolve PLAYER_PED before first spawn.
+    -- Use a native local-player id when available; never fake an identity.
     pcall(function()
-        local ok, pid = sampGetPlayerIdByCharHandle(PLAYER_PED)
-        if ok then nick = sampGetPlayerNickname(pid) or '' end
+        if sampGetPlayerIdByCharHandle and PLAYER_PED then
+            local ok, pid = sampGetPlayerIdByCharHandle(PLAYER_PED)
+            if ok and pid ~= nil and sampGetPlayerNickname then
+                nick = sampGetPlayerNickname(pid) or ''
+            end
+        end
     end)
-    if nick == '' then pcall(function() nick = sampGetCurrentPlayerName() or '' end) end
-    -- No hard-coded author nickname: blank means unknown identity, not a player.
+    if nick == '' then pcall(function()
+        if sampGetLocalPlayerId and sampGetPlayerNickname then
+            local id = sampGetLocalPlayerId()
+            if id ~= nil then nick = sampGetPlayerNickname(id) or '' end
+        end
+    end) end
+    if nick == '' then pcall(function()
+        if sampGetCurrentPlayerName then nick = sampGetCurrentPlayerName() or '' end
+    end) end
+    if type(nick) ~= 'string' then nick = '' end
+    if nick:find('[%c]') then nick = '' end
     return nick
 end
 
@@ -319,11 +379,20 @@ function DSP.market.freshness()
     return math.floor(age / 86400) .. ' дн'
 end
 
+local function query_value(s)
+    -- Nicknames normally contain ASCII, but URLs must never concatenate a
+    -- raw nickname or version string containing &, ?, #, + or spaces.
+    return (tostring(s or ''):gsub('([^%w%-%._~])', function(c)
+        return string.format('%%%02X', string.byte(c))
+    end))
+end
+
 function DSP.market.url(sid)
-    return DSP.market.api
-        .. '?server=' .. tostring(sid)
-        .. '&nick=' .. tostring(DSP.player_nick())
-        .. '&ver=' .. tostring(DSP.version)
+    local url = DSP.market.api .. '?server=' .. query_value(sid)
+        .. '&ver=' .. query_value(DSP.version)
+    local nick = DSP.player_nick()
+    if nick ~= '' then url = url .. '&nick=' .. query_value(nick) end
+    return url
 end
 
 function DSP.market.clear_for_server(sid)
@@ -334,56 +403,94 @@ function DSP.market.clear_for_server(sid)
     st.filter_cache, st.filter_version = nil, -1
     st.version = (st.version or 0) + 1
     st.sid = sid
+    st.pending_sid = nil
+    st.request_generation = (st.request_generation or 0) + 1
+    st.error = nil
+    st.failures, st.next_auto_retry = 0, 0
     DSP.market.invalidate_arbitrage()
 end
 
+local function market_request_error(sid, err, code, done)
+    local st = DSP.market.state
+    st.error = tostring(err or 'ошибка сети')
+    st.last_http_code = tonumber(code) or 0
+    st.failed_at = os.time()
+    st.failures = math.min(8, (tonumber(st.failures) or 0) + 1)
+    -- Do not hammer a broken/private endpoint. Manual 'Обновить' is still
+    -- allowed. Keep the last valid same-server cache visible, clearly stale.
+    local delay = math.min(900, 30 * (2 ^ (st.failures - 1)))
+    if code == 429 then delay = math.max(delay, 300) end
+    if code == 401 or code == 403 or code == 404 then delay = 900 end
+    st.next_auto_retry = os.time() + delay
+    st.status = (st.rows and #st.rows > 0) and 'cache' or 'error'
+    DSP.flog('PULL error sid=' .. tostring(sid) .. ' code=' .. tostring(code or 0)
+        .. ' retry_in=' .. delay .. 's ' .. st.error)
+    DSP.add_log('Рынок: ' .. st.error .. (st.status == 'cache' and ' (показан старый снимок)' or ''), 'error')
+    if done then done(false, st.error) end
+end
+
 function DSP.market.pull(sid, done)
-    sid = tonumber(sid) or DSP.market.state.sid
-    if DSP.market.state.status == 'loading' then return end
+    local st = DSP.market.state
+    sid = tonumber(sid) or st.sid
+    -- A server switch invalidates the previous request. Late responses are
+    -- ignored instead of silently contaminating the next server's market.
+    if st.status == 'loading' and tonumber(st.pending_sid) == sid then return false, 'already loading' end
     DSP.market.clear_for_server(sid)
-    DSP.market.state.sid = sid
-    DSP.market.state.status = 'loading'
-    DSP.market.state.last_request = os.time()
-    DSP.market.state.error = nil
-    DSP.market.state.nick = DSP.player_nick()
+    st.request_generation = (st.request_generation or 0) + 1
+    local generation = st.request_generation
+    st.pending_sid = sid
+    st.sid = sid
+    st.status = 'loading'
+    st.last_request = os.time()
+    st.error = nil
+    st.nick = DSP.player_nick()
     DSP.add_log('Запрос рынка Mobile ' .. tostring(sid) .. '...')
-    DSP.flog('PULL start sid=' .. tostring(sid) .. ' nick=' .. DSP.player_nick())
-    DSP.http_get(DSP.market.url(sid), function(body, err)
-        if not body then
-            DSP.flog('PULL error: ' .. tostring(err))
-            DSP.market.state.status = 'error'
-            DSP.market.state.error = tostring(err or 'ошибка')
-            DSP.add_log('Рынок: ' .. DSP.market.state.error, 'error')
-            if done then done(false, err) end
+    DSP.flog('PULL start sid=' .. tostring(sid) .. ' generation=' .. tostring(generation))
+    DSP.http_get(DSP.market.url(sid), function(body, err, code)
+        if generation ~= st.request_generation or tonumber(st.sid) ~= sid then
+            DSP.flog('PULL ignored stale response sid=' .. tostring(sid))
             return
         end
-        DSP.flog('PULL body bytes=' .. tostring(#body) .. ' head=' .. body:sub(1, 80):gsub('[\r\n]', ' '))
-        local ok, payload = pcall(decodeJson, body)
-        if not ok or type(payload) ~= 'table' then
-            DSP.flog('PULL decode error: ' .. tostring(payload))
-            DSP.market.state.status = 'error'
-            DSP.market.state.error = 'JSON: ' .. tostring(payload)
-            DSP.add_log('Рынок: JSON ' .. tostring(payload), 'error')
-            if done then done(false, payload) end
-            return
+        if not body then return market_request_error(sid, err, code, done) end
+        if body:match('^%s*<![Dd][Oo][Cc][Tt][Yy][Pp][Ee]') or body:match('^%s*<[Hh][Tt][Mm][Ll]') then
+            return market_request_error(sid, 'API вернул HTML вместо JSON (ошибка шлюза или защита сайта)', code, done)
+        end
+        local ok_json, payload = pcall(decodeJson, body)
+        if not ok_json or type(payload) ~= 'table' then
+            return market_request_error(sid, 'API вернул некорректный JSON', code, done)
+        end
+        if payload.ok == false or payload.success == false then
+            return market_request_error(sid, 'API отказал: ' .. tostring(payload.error or payload.message or 'unknown'), code, done)
         end
         if type(payload.shops) ~= 'table' then
-            DSP.market.state.status = 'error'
-            DSP.market.state.error = 'API: нет списка лавок'
-            if done then done(false, DSP.market.state.error) end
-            return
+            return market_request_error(sid, 'API изменил формат: отсутствует shops', code, done)
         end
-        pcall(function() DSP.market.save_cache(sid, body) end)
-        DSP.market.state.sid = sid
+        -- Do not replace a known-good snapshot when rebuild fails.
+        local previous = {rows=st.rows, by_key=st.by_key, shops=st.shops,
+            offers=st.offers, updated=st.updated, oldest=st.oldest,
+            version=st.version, filter_cache=st.filter_cache,
+            filter_version=st.filter_version}
+        local ok_rebuild, rebuild_err = pcall(DSP.market.rebuild, payload, sid)
+        if not ok_rebuild then
+            for k, v in pairs(previous) do st[k] = v end
+            return market_request_error(sid, 'API parsing: ' .. tostring(rebuild_err), code, done)
+        end
+        st.failures, st.next_auto_retry, st.failed_at = 0, 0, nil
+        st.last_http_code, st.pending_sid = 200, nil
+        -- Cache write is best-effort; never turn a successful refresh into a
+        -- network failure simply because phone storage is unavailable.
+        local ok_cache, cache_err = pcall(DSP.market.save_cache, sid, body)
+        if not ok_cache then DSP.flog('PULL cache error: ' .. tostring(cache_err)) end
         DSP.settings.server = sid
-        DSP.save_settings()
-        DSP.market.rebuild(payload, sid)
+        local ok_save, save_err = pcall(DSP.save_settings)
+        if not ok_save then DSP.flog('PULL settings error: ' .. tostring(save_err)) end
         DSP.flog(string.format('PULL ok shops=%d offers=%d rows=%d newest=%d',
-            DSP.market.state.shops, DSP.market.state.offers, #DSP.market.state.rows, DSP.market.state.updated))
+            st.shops, st.offers, #st.rows, st.updated))
         DSP.add_log(string.format('Рынок: %d лавок, %d офферов, свежесть %s',
-            DSP.market.state.shops, DSP.market.state.offers, DSP.market.freshness()))
+            st.shops, st.offers, DSP.market.freshness()))
         if done then done(true) end
     end)
+    return true
 end
 
 function DSP.market.save_cache(sid, body)

@@ -120,7 +120,13 @@ local function api_browser()
     if V.shop_item then V.inline()end
     V.muted(V.fit(DSP.market.freshness(),imgui.GetContentRegionAvail().x-114))
     V.inline();if b('Обновить','refresh',108)then DSP.market.pull(st.sid)end
-    if st.status=='error'then V.red(V.fit(st.error or'Ошибка обновления',imgui.GetContentRegionAvail().x))end
+    if st.error then
+        V.red(V.fit(st.error,imgui.GetContentRegionAvail().x))
+        if st.status=='cache' then V.muted('Сеть недоступна: показаны сохранённые цены, они могут устареть') end
+        if st.next_auto_retry and st.next_auto_retry>os.time() then
+            V.muted('Автоповтор через '..tostring(st.next_auto_retry-os.time())..' сек; Обновить — вручную')
+        end
+    end
     if b('Продают','sell',120,V.shops_mode=='sell')then V.shops_mode='sell'end
     V.inline();if b('Скупают','buy',120,V.shops_mode=='buy')then V.shops_mode='buy'end
     V.inline();local query,edited=V.search('shops','Предмет, ник, # лавки',-1)

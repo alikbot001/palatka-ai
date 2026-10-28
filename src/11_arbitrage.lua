@@ -14,6 +14,7 @@ end
 
 function M.should_refresh(now)
     if M.state.status == 'loading' then return false end
+    if (tonumber(M.state.next_auto_retry) or 0) > (now or os.time()) then return false end
     local interval = math.max(30, tonumber(DSP.settings.refresh_seconds) or 60)
     return (now or os.time()) - (M.state.last_request or 0) >= interval
 end
