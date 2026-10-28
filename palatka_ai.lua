@@ -1,7 +1,7 @@
--- Palatka AI v2.2.6 mobile release, built from src/*.lua
+-- Palatka AI v2.2.9 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.2.6')
+script_version('2.2.9')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1427157
+DSP.item_icon_blob_offset = 1460060
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.6'
+DSP.version = '2.2.9'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -25330,7 +25330,7 @@ function DSP.load_settings()
     end
     DSP.settings.buy_preset.items = DSP.settings.buy_preset.items or {}
     DSP.settings.sell_preset.items = DSP.settings.sell_preset.items or {}
-    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'ocean_blue' end
+    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'carbon_trade' end
     if type(DSP.settings.opacity) ~= 'number' then DSP.settings.opacity = 0.97 end
     if type(DSP.settings.screen) ~= 'string' then DSP.settings.screen = 'palatka' end
     if type(DSP.settings.tax_bp) ~= 'number' then DSP.settings.tax_bp = 200 end
@@ -25427,6 +25427,13 @@ end
 DSP.theme = DSP.theme or {}
 
 DSP.theme.list = {
+    carbon_trade = {
+        name = 'Carbon Trade',
+        bg={0.060,0.075,0.066}, panel={0.075,0.093,0.080},
+        accent={0.729,0.996,0.376}, text={0.925,0.959,0.932},
+        muted={0.620,0.700,0.645}, good={0.729,0.996,0.376},
+        bad={1.000,0.415,0.390},warn={1.000,0.775,0.330},
+    },
     ocean_blue = {
         name = 'Palatka Blue',
         bg={0.045,0.075,0.120},panel={0.075,0.110,0.165},accent={0.290,0.612,0.965},
@@ -25490,7 +25497,7 @@ DSP.theme.list = {
     },
 }
 
-DSP.theme.current = 'ocean_blue'
+DSP.theme.current = 'carbon_trade'
 DSP.theme.opacity = 0.97
 
 function DSP.theme.get()
@@ -25634,11 +25641,11 @@ DSP.load_settings()
 DSP.load_ui_state()
 -- Migrate the stock 1.3.x amber look on first v1.4 launch. Respect custom themes.
 if not DSP.settings.ui_v14_migrated then
-    if DSP.settings.theme=='dark_amber' then DSP.settings.theme='ocean_blue' end
+    if DSP.settings.theme=='ocean_blue' then DSP.settings.theme='carbon_trade' end
     DSP.settings.ui_v14_migrated=true
     DSP.save_settings()
 end
-DSP.theme.current = DSP.settings.theme or 'ocean_blue'
+DSP.theme.current = DSP.settings.theme or 'carbon_trade'
 DSP.save_ui_state()
 DSP.theme.opacity = DSP.clamp(DSP.settings.opacity or 0.97, 0.65, 1.00)
 DSP.flog('--- load v' .. DSP.version .. ' theme=' .. DSP.theme.current .. ' opacity=' .. tostring(DSP.theme.opacity) .. ' ---')
@@ -25902,8 +25909,13 @@ function _G.dsp_http_get(url)
     if not ok_req or not requests or type(requests.request) ~= 'function' then
         return 0, '', 'requests unavailable in network worker'
     end
+    -- The installed Android requests.lua silently falls back to plaintext
+    -- when ssl.https is missing. Fail explicitly instead of taking that path.
+    if requests.http_socket and not requests.https_socket then
+        return 0, '', 'HTTPS unavailable: ssl.https is not installed'
+    end
     local function request_one(target)
-        local ok, resp = pcall(requests.request, 'GET', target, nil)
+        local ok, resp = pcall(requests.request, 'GET', target, {allow_redirects=false,timeout=15})
         if not ok then return 0, '', 'connect: ' .. tostring(resp) end
         if not resp then return 0, '', 'empty HTTP response' end
         local status = tonumber(resp.status_code) or 0
@@ -25919,6 +25931,9 @@ function _G.dsp_http_get(url)
     if (status == 301 or status == 302 or status == 303 or status == 307 or status == 308)
         and type(redirect) == 'string' and redirect ~= '' then
         local original_host = url:match('^https://([^/:?]+)')
+        if original_host and redirect:sub(1,1)=='/' and redirect:sub(1,2)~='//' then
+            redirect='https://'..original_host..redirect
+        end
         local redirect_host = redirect:match('^https://([^/:?]+)')
         if original_host and redirect_host and original_host:lower() == redirect_host:lower() then
             return request_one(redirect)
@@ -25971,7 +25986,9 @@ function DSP.http_get(url, cb)
         while not finished do
             wait(50)
             if os.time() >= deadline then
-                pcall(function() thread:cancel() end)
+                -- No blocking cancellation on the game scheduler: a worker
+                -- stuck in a native TLS call may not reach an interruption point.
+                pcall(function() thread:cancel(0) end)
                 return finish(nil, 'timeout after 45s', 0)
             end
             local ok_status, status, status_err = pcall(function() return thread:status() end)
@@ -25998,7 +26015,7 @@ function DSP.http_get(url, cb)
                 if res.body == '' then return finish(nil, 'empty response', 200) end
                 return finish(res.body, nil, 200)
             end
-            if status == 'canceled' then return finish(nil, 'request canceled', 0) end
+            if status == 'canceled' or status == 'cancelled' then return finish(nil, 'request canceled', 0) end
             if status == 'error' or status == 'failed' then
                 return finish(nil, 'worker failed: ' .. tostring(status_err or 'unknown'), 0)
             end
@@ -26125,8 +26142,51 @@ local function finish_side(side, asc)
 end
 
 function DSP.market.rebuild(payload, sid)
+    local generation = DSP.market.state.request_generation
     sid = tonumber(sid) or DSP.market.state.sid
     local shops = type(payload) == 'table' and payload.shops or {}
+    -- The API can split sell_slots and buy_slots of one physical stall into
+    -- separate records with the same timestamp. Previous 'last record wins'
+    -- discarded one side, hiding profitable same-stall buy/resell offers.
+    -- Merge sides of the *newest* stall snapshot, not quantities across
+    -- historical/replayed records. Each side keeps the most complete record;
+    -- within that record distinct slots retain their original quantities.
+    local latest, merged = {}, {}
+    local function stall_key(shop,index)
+        if shop.shop_num==nil then return 'unknown:'..index end
+        return tostring(tonumber(shop.shop_num) or shop.shop_num)
+    end
+    local function side_weight(slots)
+        local total=0
+        for _,slot in ipairs(slots or{}) do total=total+item_units(slot.qty) end
+        return total
+    end
+    for index,shop in ipairs(shops) do
+        local server=tonumber(shop.server_id)
+        if not server or server==sid then
+            local key=stall_key(shop,index)
+            local stamp=item_units(shop.updated_at)
+            local entry=latest[key]
+            if not entry or stamp>entry.stamp then
+                entry={stamp=stamp,shop_num=shop.shop_num,owner=shop.owner,
+                    server_id=shop.server_id,updated_at=shop.updated_at,
+                    sell_slots={},buy_slots={}}
+                latest[key]=entry
+            end
+            if stamp==entry.stamp then
+                if shop.owner and shop.owner~='' then entry.owner=shop.owner end
+                for _,side in ipairs({'sell_slots','buy_slots'}) do
+                    local slots=shop[side]
+                    if type(slots)=='table' and #slots>0 and
+                       (#entry[side]==0 or side_weight(slots)>side_weight(entry[side])) then
+                        entry[side]=slots
+                    end
+                end
+            end
+        end
+    end
+    for _,entry in pairs(latest) do merged[#merged+1]=entry end
+    table.sort(merged,function(a,b)return tostring(a.shop_num or '')<tostring(b.shop_num or '') end)
     local map = {}
     local offers_n, shops_n = 0, 0
     local newest, oldest = 0, 0
@@ -26138,9 +26198,8 @@ function DSP.market.rebuild(payload, sid)
     local co = (coroutine and coroutine.running and coroutine.running()) or nil
     local can_yield = co ~= nil and wait ~= nil
     local yield_count = 0
-    for shop_idx, shop in ipairs(shops) do
-        local ssid = tonumber(shop.server_id)
-        if not ssid or ssid == sid then
+    for shop_idx, shop in ipairs(merged) do
+        do
             local owner = DSP.to_cp(shop.owner or '?')
             local shop_num = tostring(shop.shop_num or '?')
             local ts = tonumber(shop.updated_at or 0) or 0
@@ -26213,6 +26272,9 @@ function DSP.market.rebuild(payload, sid)
         if (a.sell.best or 0) ~= (b.sell.best or 0) then return (a.sell.best or 0) < (b.sell.best or 0) end
         return a.display < b.display
     end)
+    -- wait(0) above permits a new request/server switch while we build locally.
+    -- Nothing from a superseded build may reach the UI or persistent price DB.
+    if generation ~= DSP.market.state.request_generation then return false end
     DSP.market.state.rows = rows
     DSP.market.state.by_key = map
     DSP.market.state.sid = sid
@@ -26237,6 +26299,7 @@ function DSP.market.rebuild(payload, sid)
         local ok_db, err_db = pcall(DSP.db.set_rows, rows, sid)
         if not ok_db then DSP.flog('DB set error: ' .. tostring(err_db)) end
     end
+    return true
 end
 
 function DSP.market.freshness()
@@ -26269,7 +26332,7 @@ function DSP.market.clear_for_server(sid)
     local st = DSP.market.state
     if tonumber(st.sid) == tonumber(sid) then return end
     st.rows, st.by_key = {}, {}
-    st.shops, st.offers, st.updated, st.oldest, st.saved_at = 0, 0, 0, 0, 0
+    st.shops, st.offers, st.updated, st.oldest, st.saved_at, st.received_at = 0, 0, 0, 0, 0, 0
     st.filter_cache, st.filter_version = nil, -1
     st.version = (st.version or 0) + 1
     st.sid = sid
@@ -26341,11 +26404,16 @@ function DSP.market.pull(sid, done)
             version=st.version, filter_cache=st.filter_cache,
             filter_version=st.filter_version}
         local ok_rebuild, rebuild_err = pcall(DSP.market.rebuild, payload, sid)
+        if generation ~= st.request_generation or tonumber(st.sid) ~= sid then
+            DSP.flog('PULL ignored superseded rebuild sid=' .. tostring(sid))
+            return
+        end
         if not ok_rebuild then
             for k, v in pairs(previous) do st[k] = v end
             return market_request_error(sid, 'API parsing: ' .. tostring(rebuild_err), code, done)
         end
         st.failures, st.next_auto_retry, st.failed_at = 0, 0, nil
+        st.received_at = os.time()
         st.last_http_code, st.pending_sid = 200, nil
         -- Cache write is best-effort; never turn a successful refresh into a
         -- network failure simply because phone storage is unavailable.
@@ -26436,9 +26504,10 @@ function DSP.market.load_cache(sid)
     if not ok or type(pack) ~= 'table' then return false end
     if type(pack.body) == 'string' then
         local ok2, payload = pcall(decodeJson, pack.body)
-        if not ok2 or type(payload) ~= 'table' then return false end
-        DSP.market.state.sid = sid
-        DSP.market.rebuild(payload, sid)
+        if not ok2 or type(payload) ~= 'table' or type(payload.shops) ~= 'table'
+            or payload.ok == false or payload.success == false then return false end
+        local rebuilt = pcall(DSP.market.rebuild, payload, sid)
+        if not rebuilt then return false end
         DSP.market.state.saved_at = tonumber(pack.saved_at) or 0
         DSP.market.state.status = 'cache'
         return true
@@ -26449,7 +26518,9 @@ function DSP.market.load_cache(sid)
         return true
     end
     if type(pack.shops) == 'table' then
-        DSP.market.rebuild(pack, sid)
+        if pack.ok == false or pack.success == false then return false end
+        local rebuilt = pcall(DSP.market.rebuild, pack, sid)
+        if not rebuilt then return false end
         DSP.market.state.saved_at = tonumber(pack.saved_at) or 0
         DSP.market.state.status = 'cache'
         return true
@@ -27308,6 +27379,12 @@ local function opportunities(filters, now, rows, selections)
                             demand_qty=math.floor(demand_qty/100)*factor
                                 + math.floor((demand_qty%100)*factor/100)
                         end
+                        -- On a one-unit quote, a 10% reserve cannot be a
+                        -- fractional item. Retain 1 as a *potential* trade,
+                        -- not as a guarantee that the order still exists.
+                        if integer(buyer.qty)>0 and reserve_pct<100 then
+                            demand_qty=math.max(1,demand_qty)
+                        end
                         buyers_left[buyer] = demand_qty
                         -- Tax is rounded on the batch, not on each individual item.
                         local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
@@ -27488,6 +27565,69 @@ function M.offer_freshness(ts)
     return math.floor(age / 60) .. ' мин назад', 'muted'
 end
 
+-- Direct observations from a currently open mobile stall are independent of
+-- the web API. Even if the API is stale/empty, detect its own bid/ask spread.
+-- Lack of server-provided quantity is explicitly unknown, never x1.
+function M.live_shop_spreads()
+    local shop=DSP.live and DSP.live.shop
+    if not shop or (shop.menu_closed or 0)>0 or not shop.num or shop.num==''
+       or not shop.owner or shop.owner=='' then return {} end
+    if shop.server and tonumber(shop.server)~=tonumber(DSP.settings.server) then return {} end
+    if os.time()-(shop.items_updated or 0)>120 then return {} end
+    local sells={}
+    for _,it in ipairs(shop.sell or{}) do
+        local key=DSP.item_key(it.name,it.ench)
+        if tonumber(it.price) and it.price>0 and
+           (not sells[key] or it.price<sells[key].price) then sells[key]=it end
+    end
+    local results={}
+    local factor=tax_factor(DSP.settings.tax_bp)
+    for _,buyer in ipairs(shop.buy or{}) do
+        local seller=sells[DSP.item_key(buyer.name,buyer.ench)]
+        if seller and tonumber(buyer.price) and buyer.price>0 then
+            local margin=after_tax(buyer.price,DSP.settings.tax_bp)-seller.price
+            if margin>0 then
+                local sq=tonumber(seller.qty);local bq=tonumber(buyer.qty)
+                local confirmed=sq and bq and sq>0 and bq>0
+                local count=confirmed and math.min(sq,bq) or nil
+                results[#results+1]={name=buyer.name,ench=buyer.ench,
+                    shop=shop.num,owner=shop.owner,buy_price=seller.price,
+                    sell_price=buyer.price,profit_unit=margin,
+                    quantity=count,verified_quantity=confirmed and true or false,
+                    source='opened_shop',updated=shop.items_updated}
+            end
+        end
+    end
+    table.sort(results,function(a,b)return a.profit_unit>b.profit_unit end)
+    return results
+end
+
+-- Cheap diagnostic summary from the current market, memoized per revision.
+function M.arbitrage_visibility()
+    local st=M.state;local c=M._arb_visibility
+    local key=tostring(st.sid)..':'..tostring(st.version)..':'..tostring(DSP.settings.tax_bp)
+    if c and c.key==key then return c.value end
+    local result={pairs=0,same_shop=0,only_one=0,rows=#(st.rows or{})}
+    for _,row in ipairs(st.rows or{})do
+        if row.sell and row.buy and (row.sell.min or 0)>0
+           and (row.buy.max or 0)>(row.sell.min or math.huge) then
+            result.pairs=result.pairs+1
+            local one=(row.sell.qty or 0)<=1 or (row.buy.qty or 0)<=1
+            if one then result.only_one=result.only_one+1 end
+            for _,s in ipairs(row.sell.offers or{})do
+                for _,b in ipairs(row.buy.offers or{})do
+                    if s.shop==b.shop and after_tax(b.price,DSP.settings.tax_bp)>s.price then
+                        result.same_shop=result.same_shop+1
+                        break
+                    end
+                end
+            end
+        end
+    end
+    M._arb_visibility={key=key,value=result}
+    return result
+end
+
 end
 __mod_11_arbitrage()
 
@@ -27558,6 +27698,9 @@ end
 function M.confirm_offer_quantity(row,kind,offer,value,source)
     if not row or (kind~='buy' and kind~='sell') or not offer then
         return false,'неверное предложение'
+    end
+    if not M.state.by_key or M.state.by_key[row.key]~=row then
+        return false,'предложение относится к устаревшему снимку'
     end
     local n=tonumber(value)
     if not n or n~=n or n<0 or n>1000000000 or n~=math.floor(n) then
@@ -29850,7 +29993,7 @@ function DSP.ui.settings_tab()
 
     -- v1.2 Section 1: theme + opacity slider
     imgui.TextDisabled(DSP.utf8('Тема оформления:'))
-    local theme_order = { 'dark_amber', 'amoled', 'cyberpunk', 'purple', 'emerald' }
+    local theme_order = { 'carbon_trade', 'ocean_blue', 'dark_amber', 'amoled', 'cyberpunk', 'purple', 'emerald' }
     for _, id in ipairs(theme_order) do
         local e = DSP.theme.list[id]
         if e then
@@ -33884,6 +34027,21 @@ function DSP.auto.start_sell()
                 trade_wait(180)
             end
             if got then
+                -- mimgui/MonetLoader may publish the dialog text before the
+                -- native input control is ready. Follow the observed game
+                -- sequence: one short settle, then verify the *same* item/ID.
+                trade_wait(180)
+                local current=sampIsDialogActive() and sampGetCurrentDialogId() or nil
+                local actual=current and DSP.dialog_clean(sampGetDialogText() or '') or ''
+                if current~=id or not runtime.matches(actual,it.base) then
+                    got=false
+                    log('Продажа: диалог сменился до отправки, id='..tostring(current)..
+                        ', ожидался='..tostring(id)..' · '..it.name,'error')
+                else
+                    dialog_text=actual
+                end
+            end
+            if got then
                 local txt = dialog_text or ''
                 local resp = has_qty(txt) and (tostring(it.qty) .. ',' .. tostring(it.price))
                     or tostring(it.price)
@@ -33950,7 +34108,6 @@ function DSP.auto.stop_sell()
     close_dialog()
     log('Продажа остановлена')
 end
-
 
 end
 __mod_41_trade_listing()
@@ -34044,6 +34201,15 @@ local function buy_one(it, pi, total, dry_run)
     local base = base_name(it.name)
     if not validated_id then
         log('Скупка: в диалоге другой товар: ' .. it.name, 'error')
+        close_dialog()
+        return false
+    end
+    -- Stabilize the native price input after the dialog text appears. Never
+    -- submit to another item/ID that replaced it during the delay.
+    trade_wait(180)
+    if not sampIsDialogActive() or sampGetCurrentDialogId()~=id or
+       not runtime.matches(DSP.dialog_clean(sampGetDialogText() or ''),base) then
+        log('Скупка: диалог изменился до отправки · '..it.name,'error')
         close_dialog()
         return false
     end
@@ -34686,6 +34852,10 @@ function L.parse_dialog_trade(title, text)
 end
 
 function L.on_dialog(dialog_id, style, title, b1, b2, text)
+    if DSP.storage and DSP.storage.on_dialog then
+        local ok,err=pcall(DSP.storage.on_dialog,dialog_id,style,title,text)
+        if not ok then DSP.flog('STORAGE dialog: '..tostring(err))end
+    end
     if dialog_id == 28148 then
         L.parse_dialog_trade(title, text)
         -- Also check for trade result in dialog text
@@ -35170,6 +35340,179 @@ end
 
 end
 __mod_47_shop_marker()
+
+local function __mod_47_storage()
+-- Read-only inventory analysis for classic SA-MP cabinet/trunk dialogs.
+-- Does not issue game commands, move items, infer missing counts or inspect memory.
+DSP.storage = DSP.storage or {}
+local S = DSP.storage
+S.snapshots = S.snapshots or (DSP.settings and DSP.settings.storage_snapshots) or {}
+S.last_error = nil
+S.max_rows = 180
+
+local function normal(s)
+    s = DSP.clean_text(tostring(s or ''))
+    return s:gsub('\t',' '):gsub(' +',' ')
+end
+local function int(s)
+    if not s then return nil end
+    s=tostring(s):gsub('[%s%.%,]','')
+    if not s:match('^%d+$') then return nil end
+    local n=tonumber(s)
+    if not n or n<1 or n>2000000000 or n%1~=0 then return nil end
+    return n
+end
+local function kind_of(title)
+    local s=DSP.lower(normal(title))
+    if s:find('багажник',1,true) or s:find('Багажник',1,true) then return 'trunk' end
+    if s:find('шкаф',1,true) or s:find('Шкаф',1,true) then return 'cabinet' end
+    if s:find('склад',1,true) or s:find('Склад',1,true) or s:find('хранилище',1,true) or s:find('Хранилище',1,true) then return 'warehouse' end
+    return nil
+end
+S.kind_of = kind_of
+function S.parse_line(raw)
+    local s=normal(raw)
+    -- Strip only UI list position, not arbitrary numeric prefixes or item IDs.
+    s=s:gsub('^%s*%d+[%.%)]%s+','')
+    if s=='' or #s>320 then return nil end
+    local name,qty
+    -- An explicit unit is mandatory: 'slot #1' is NOT one item.
+    name,qty=s:match('^(.-)%s*%(%s*([%d%., ]+)%s*шт%.?%s*%)%s*$')
+    if not name then name,qty=s:match('^(.-)%s*%[%s*([%d%., ]+)%s*шт%.?%s*%]%s*$') end
+    if not name then name,qty=s:match('^(.-)%s*[%-%—:]%s*([%d%., ]+)%s*шт%.?%s*$')end
+    if not name then name,qty=s:match('^(.-)%s+[xхXХ]%s*([%d%., ]+)%s*$')end
+    if not name then name,qty=s:match('^(.-)%s*%([xхXХ]%s*([%d%., ]+)%)%s*$')end
+    if not name then
+        -- Legitimate unlabeled line: show unknown count, never silently x1.
+        if s:find('%$',1,true) or s:find('Выберите',1,true) or s:find('Назад',1,true)
+            or DSP.lower(s):find('вместимость',1,true) or s:match('^[-=]+$')
+            or s:find('Открыть',1,true) or s:find('Закрыть',1,true)
+            or s:find('Забрать',1,true) or s:find('Положить',1,true) then return nil end
+        name=s
+    end
+    name=DSP.trim(name or '')
+    if name=='' or #name>125 then return nil end
+    if name:match('^%d+$') then return nil end
+    local count=int(qty)
+    -- Explicitly malformed quantities are not accepted as reliable numeric values.
+    return {name=name,qty=count,quantity_confirmed=count~=nil,raw=raw}
+end
+function S.parse_text(kind,title,text,ts)
+    if not S.kind_of(title) or S.kind_of(title)~=kind then return nil,'not a container dialog' end
+    if type(text)~='string' then return nil,'not text' end
+    local rows,by_name={},{}
+    for line in (text..'\n'):gmatch('(.-)\r?\n')do
+        if #rows>=S.max_rows then break end
+        local r=S.parse_line(line)
+        if r then
+            local key=DSP.item_key(r.name,0)
+            if not by_name[key] then
+                rows[#rows+1]=r;by_name[key]=r
+            else
+                -- Repeated view of the same item in one dialog is ambiguous;
+                -- keep separate slots, never fabricate an aggregate count.
+                rows[#rows+1]=r
+            end
+        end
+    end
+    if #rows==0 then return nil,'no item lines' end
+    return {kind=kind,title=normal(title),rows=rows,observed_at=ts or os.time(),
+        source='dialog',count_known=0}
+end
+function S.accept(kind,title,text,ts,source)
+    local snap,err=S.parse_text(kind,title,text,ts)
+    if not snap then S.last_error=err;return false,err end
+    snap.source=source=='manual' and 'manual' or 'dialog'
+    for _,r in ipairs(snap.rows)do
+        if r.qty then snap.count_known=snap.count_known+r.qty end
+    end
+    local signature=kind..'|'..snap.source..'|'..snap.title..'|'..text
+    if S.last_signature==signature and S.last_snapshot and math.abs((ts or os.time())-(S.last_ts or 0))<=3 then
+        -- Repeated same dialog callback does not add slots or duplicate snapshots.
+        return true,S.last_snapshot
+    end
+    snap.id=tostring(ts or os.time())..'_'..tostring(#S.snapshots+1)
+    snap.server=DSP.market and DSP.market.state and DSP.market.state.sid or nil
+    table.insert(S.snapshots,1,snap)
+    while #S.snapshots>8 do table.remove(S.snapshots)end
+    S.last_signature=signature;S.last_snapshot=snap;S.last_ts=ts or os.time();S.last_error=nil
+    if DSP.settings and DSP.save_settings then
+        DSP.settings.storage_snapshots=S.snapshots
+        local ok,err=DSP.save_settings()
+        if not ok then S.last_error='Не удалось сохранить снимок: '..tostring(err) end
+    end
+    return true,snap
+end
+function S.on_dialog(id,style,title,text)
+    local kind=kind_of(title)
+    if not kind then return false end
+    local ok,err=S.accept(kind,title,text)
+    if ok then DSP.flog('STORAGE read-only '..kind..' rows='..#S.snapshots[1].rows..' dialog='..tostring(id))
+    else DSP.flog('STORAGE unavailable '..tostring(err))end
+    return ok
+end
+local function market_lookup(name)
+    local row=DSP.market and DSP.market.row_for and DSP.market.row_for(name,0)
+    if not row then return nil,nil end
+    local buy=row.buy and tonumber(row.buy.max)
+    local sell=row.sell and tonumber(row.sell.min)
+    if buy and buy<=0 then buy=nil end
+    if sell and sell<=0 then sell=nil end
+    return buy,sell
+end
+S.market_lookup=market_lookup
+function S.evaluate(snapshot,lookup)
+    lookup=lookup or market_lookup
+    local res={total_qty=0,known_qty_rows=0,unknown_qty=0,missing_prices=0,
+        sell_to_buyers=0,ask_value=0,estimated_rows=0,rows={},cross_server=false}
+    local current=DSP.market and DSP.market.state and DSP.market.state.sid
+    local wrong_server=snapshot and snapshot.server and current and tonumber(snapshot.server)~=tonumber(current)
+    res.cross_server=not not wrong_server
+    for i,src in ipairs(snapshot and snapshot.rows or {})do
+        local bid,ask
+        if not wrong_server then bid,ask=lookup(src.name) end
+        local row={name=src.name,qty=src.qty,bid=bid,ask=ask,index=i}
+        res.rows[#res.rows+1]=row
+        if src.qty then
+            res.total_qty=res.total_qty+src.qty
+            res.known_qty_rows=res.known_qty_rows+1
+            if bid then res.sell_to_buyers=res.sell_to_buyers+bid*src.qty;res.estimated_rows=res.estimated_rows+1
+            else res.missing_prices=res.missing_prices+1 end
+            if ask then res.ask_value=res.ask_value+ask*src.qty end
+        else res.unknown_qty=res.unknown_qty+1 end
+    end
+    return res
+end
+function S.sorted(snapshot,mode,lookup)
+    local info=S.evaluate(snapshot,lookup)
+    local sorted=info.rows
+    table.sort(sorted,function(a,b)
+        if mode=='category' then
+            local function cat(n)
+                n=DSP.lower(tostring(n or ''))
+                if n:find('дров',1,true) or n:find('металл',1,true) or n:find('камень',1,true)
+                    or n:find('лен',1,true) or n:find('хлоп',1,true) then return 1 end
+                if n:find('ларец',1,true) or n:find('кейс',1,true) then return 2 end
+                if n:find('деталь тюнинга',1,true) then return 3 end
+                return 4
+            end
+            if cat(a.name)~=cat(b.name)then return cat(a.name)<cat(b.name)end
+        elseif mode=='qty' then
+            if (a.qty or -1)~=(b.qty or -1)then return(a.qty or -1)>(b.qty or -1)end
+        elseif mode=='value' then
+            local av=a.bid and a.qty and a.bid*a.qty or -1
+            local bv=b.bid and b.qty and b.bid*b.qty or -1
+            if av~=bv then return av>bv end
+        elseif mode=='price' then
+            if (a.bid or -1)~=(b.bid or -1)then return(a.bid or -1)>(b.bid or -1)end
+        end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    return sorted,info
+end
+
+end
+__mod_47_storage()
 
 local function __mod_48_flip_intel()
 -- v2.2.4: independent resale workstation. All values are estimates from market
@@ -36896,7 +37239,7 @@ local function __mod_60_ui21_shell()
 -- Mobile workspace v2.2. Lists own their scrolling; headers never scroll.
 local ffi=require('ffi')
 local U,M=DSP.ui,DSP.mobile
-local V={screen='palatka',kind='sell',tab='items',source='inventory',nav=false,
+local V={screen='home',kind='sell',tab='items',source='inventory',nav=false,
     pages={},searches={},scrolls={},cache={},errors={}}
 DSP.ui21=V;DSP.ui22=V
 local function u(s)return DSP.utf8(tostring(s or ''))end
@@ -37086,38 +37429,46 @@ function V.geometry(sw,sh)
         y=DSP.clamp(tonumber(p.y)or (sh-h)*.35,0,math.max(0,sh-h))}
 end
 local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'arbitrage','Арбитраж'},
- {'resale','Перепродажа'},{'promo','Авто-пиар'},
+ {'resale','Перепродажа'},{'promo','Авто-пиар'},{'scan','Скан лавки'},
  {'search','Поиск товара'},{'calculator','Калькулятор'},{'logs','Журнал'},
- {'stats','Статистика'},{'notes','Заметки'},{'settings','Настройки'}}
+ {'stats','Статистика'},{'notes','Заметки'},{'storage','Хранилища'},
+ {'market','Рынок'},{'history','История'},{'settings','Настройки'}}
 function V.set_screen(id)
     if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
     V.screen=id;V.nav=false
     if DSP.screens and DSP.screens.set then DSP.screens.set(id)end
 end
 local function header(g,io)
-    if V.button(V.nav and 'x' or 'Меню','menu',66)then V.nav=not V.nav end
-    V.inline();V.text_button('PALATKA AI','drag',160)
-    local brand_active=imgui.IsItemActive()
-    V.inline();V.muted(tostring(DSP.version or '2.2'))
-    if brand_active then
+    local x0,y0=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+    -- True Carbon Trade top bar: brand/home at left, version, server status and actions at right.
+    if V.button('P','carbon_brand',42,false,true,38)then V.set_screen('home')end
+    V.inline();if V.text_button('PALATKA AI','carbon_title',132,false,38)then V.set_screen('home')end
+    local drag=imgui.IsItemActive()
+    V.inline();V.muted('v'..tostring(DSP.version or '2.2'))
+    if drag and io.MouseDelta then
         local d=io.MouseDelta
-        if d and(d.x~=0 or d.y~=0)then
+        if d.x~=0 or d.y~=0 then
             DSP.settings.mobile_window={x=DSP.clamp(g.x+d.x,0,io.DisplaySize.x-g.w),
                 y=DSP.clamp(g.y+d.y,0,io.DisplaySize.y-g.h),w=g.w,h=g.h};M.defer_save()
         end
     end
-    V.inline()
-    local avail=imgui.GetContentRegionAvail().x
-    if avail>270 then V.muted(V.fit(tostring(DSP.market.state.sid)..' · '..DSP.market.freshness(),avail-110));V.inline()end
-    if V.button('x','close',44)then U.set_open(false)end
-    V.inline();V.button('/','resize',44)
-    if imgui.IsItemActive()then
+    local available=imgui.GetContentRegionAvail().x
+    if available>260 then
+        V.inline();V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' · '..DSP.market.freshness(),available-150))
+    end
+    V.inline();if V.button('Меню','menu',72,V.nav,false,38)then V.nav=not V.nav end
+    V.inline();if V.button('X','close',38,false,false,38)then U.set_open(false)end
+    V.inline();V.button('[]','resize',42,false,false,38)
+    if imgui.IsItemActive() and io.MouseDelta then
         local d=io.MouseDelta
-        if d and(d.x~=0 or d.y~=0)then
-            DSP.settings.mobile_window={x=g.x,y=g.y,w=DSP.clamp(g.w+d.x,math.min(560,io.DisplaySize.x),io.DisplaySize.x-g.x),
-                h=DSP.clamp(g.h+d.y,math.min(330,io.DisplaySize.y),io.DisplaySize.y-g.y)};M.defer_save()
+        if d.x~=0 or d.y~=0 then
+            DSP.settings.mobile_window={x=g.x,y=g.y,
+                w=DSP.clamp(g.w+d.x,math.min(560,io.DisplaySize.x),io.DisplaySize.x-g.x),
+                h=DSP.clamp(g.h+d.y,math.min(330,io.DisplaySize.y),io.DisplaySize.y-g.y)}
+            M.defer_save()
         end
     end
+    V.at(x0,y0+49)
 end
 function V.track_touch(io)
     local frame=imgui.GetFrameCount and imgui.GetFrameCount()
@@ -37137,7 +37488,7 @@ function V.font_scale_for(base,width,dpi)
 end
 function U.draw()
     local io=imgui.GetIO();local sz=io.DisplaySize;local g=V.geometry(sz.x,sz.y)
-    if not V.initialized then V.screen=U.screen or V.screen;V.initialized=true end
+    if not V.initialized then V.screen=(U.screen and U.screen~='palatka') and U.screen or 'home';V.initialized=true end
     V.track_touch(io)
     imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
     imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
@@ -37148,11 +37499,11 @@ function U.draw()
         if c then DSP.flog(string.format('UI22 native bg %.3f %.3f %.3f %.3f colors=%d',c.x,c.y,c.z,c.w,colors or 0))end
         V.style_reported=true
     end
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(10,8))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(6,4))
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(9,7))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(6,5))
     imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(8,10))
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,12)
-    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,7)
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
+    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,5)
     local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoMove+
         imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar
     M.flush_save(false)
@@ -37161,34 +37512,57 @@ function U.draw()
         V.font_pixels=V.font_scale_for(1,g.w,U.d)
         V.apply_font()
         header(g,io);imgui.Separator()
-        local drawer_only=V.nav and g.w<850
-        if V.nav then
-            local h=imgui.GetContentRegionAvail().y
-            if imgui.BeginChild('##v22_nav',imgui.ImVec2(drawer_only and 0 or 190,h),false,imgui.WindowFlags.NoScrollbar)then
+        local wide=g.w>=930
+        local show_side=V.nav or wide
+        local drawer_only=V.nav and not wide
+        if show_side then
+            local h=imgui.GetContentRegionAvail().y-48
+            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(196,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
                 V.apply_font()
-                V.list_rows('navigation',nav,46,function(e,i)if V.button(e[2],'nav_'..i,-1,V.screen==e[1])then V.set_screen(e[1])end end)
+                V.muted('НАВИГАЦИЯ')
+                if V.button('Главная','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
+                V.list_rows('navigation',nav,44,function(e,i)
+                    local symbols={palatka='= ',lavki='# ',arbitrage='> ',resale='* ',promo='@ ',scan='[] ',
+                        search='? ',calculator='+ ',logs='| ',stats='% ',notes='- ',storage='[] ',market='$ ',history=': ',settings=': '}
+                    if V.button((symbols[e[1]] or ' ')..e[2],'nav_'..i,-1,V.screen==e[1],V.screen==e[1],42)then V.set_screen(e[1])end
+                end,{height=math.max(70,imgui.GetContentRegionAvail().y-85),footer=true})
+                if imgui.GetContentRegionAvail().y>25 then V.muted('  PALATKA AI · LIVE')end
             end
-            imgui.EndChild();V.inline()
+            imgui.EndChild()
+            if not drawer_only then V.inline(4)end
         end
         if not drawer_only then
-        if imgui.BeginChild('##v22_workspace',imgui.ImVec2(0,0),false,imgui.WindowFlags.NoScrollbar)then
-            V.apply_font()
-            local ok,err=xpcall(function()
-                if V.screen=='palatka'then V.trade()
-                elseif V.screen=='lavki'then V.shops()
-                elseif V.screen=='arbitrage'then V.arbitrage()
-                elseif V.screen=='resale'then V.flip_screen()
-                elseif V.screen=='promo'then V.promo_screen()
-                elseif V.screen=='logs'then V.journal()
-                elseif V.screen=='calculator'then V.calculator()
-                elseif V.tools then V.tools(V.screen)
-                else DSP.screens.draw(V.screen)end
-            end,debug.traceback)
-            if not ok then
-                V.last_error=err;if V.errors[V.screen]~=err then DSP.flog('UI22 '..err)end;V.errors[V.screen]=err;V.red('Ошибка экрана. Подробности в standalone.log')
+            -- Workspace and global footer are separate, as in the supplied Carbon HTML.
+            if imgui.BeginChild('##v22_workspace',imgui.ImVec2(0,-48),false,imgui.WindowFlags.NoScrollbar)then
+                V.apply_font()
+                local ok,err=xpcall(function()
+                    if V.screen=='home'then V.home()
+                    elseif V.screen=='storage'then V.storage_screen()
+                    elseif V.screen=='scan'then V.shops_source='scan';V.shops()
+                    elseif V.screen=='market'then V.shops_source='api';V.shops()
+                    elseif V.screen=='history'then V.journal_mode='events';V.journal()
+                    elseif V.screen=='palatka'then V.trade()
+                    elseif V.screen=='lavki'then V.shops()
+                    elseif V.screen=='arbitrage'then V.arbitrage()
+                    elseif V.screen=='resale'then V.flip_screen()
+                    elseif V.screen=='promo'then V.promo_screen()
+                    elseif V.screen=='logs'then V.journal()
+                    elseif V.screen=='calculator'then V.calculator()
+                    elseif V.tools then V.tools(V.screen)
+                    else DSP.screens.draw(V.screen)end
+                end,debug.traceback)
+                if not ok then
+                    V.last_error=err
+                    if V.errors[V.screen]~=err then DSP.flog('UI22 '..err)end
+                    V.errors[V.screen]=err;V.red('Ошибка экрана. Подробности в standalone.log')
+                end
             end
-        end
-        imgui.EndChild()
+            imgui.EndChild()
+            imgui.Separator()
+            if V.button('Окна','carbon_windows',100,false,true,38)then V.nav=not V.nav end
+            V.inline()
+            local remain=imgui.GetContentRegionAvail().x
+            V.muted(V.fit('Palatka AI · '..tostring(DSP.market.state.status or 'offline')..' · без автоматических сделок',math.max(40,remain-6)))
         end
         if V.popup_pending then
             local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(u(p.title)..'##v22_'..p.id)
@@ -37209,6 +37583,190 @@ end
 
 end
 __mod_60_ui21_shell()
+
+local function __mod_60a_carbon_home()
+-- Carbon Trade 02: real landing screen with persistent sections and action tiles.
+local V=DSP.ui21
+local function metrics()
+    local ok,r=pcall(function()return DSP.craglog.summary('day')end)
+    return ok and type(r)=='table'and r or {}
+end
+function V.home()
+    V.heading('Главная',function()
+        if V.button('Обновить','carbon_refresh',126,false,true)then
+            if DSP.market and DSP.market.state.status~='loading' then
+                DSP.market.pull(DSP.detect_server() or DSP.market.state.sid or DSP.settings.server)
+            end
+        end
+    end,130)
+    V.list('carbon_home',function(w)
+        V.muted('Обзор · данные игры и рынка; отсутствие источника не заменяется демонстрацией')
+        local cw=math.max(90,(w-8)/3)
+        if V.button('Найти сделку','carbon_quick_arb',cw,false,true)then V.set_screen('arbitrage')end
+        V.inline(4)
+        if V.button('Моя лавка','carbon_quick_shop',cw)then V.set_screen('lavki')end
+        V.inline(4)
+        if V.button('Сканировать','carbon_quick_storage',cw)then V.set_screen('scan')end
+        imgui.Separator()
+        local r=metrics()
+        local cards={
+            {'Денежный итог сегодня',r.net and DSP.money(r.net)or'Нет данных', 'из журнала'},
+            {'Получено денег',r.income and DSP.money(r.income)or'Нет данных','это не прибыль'},
+            {'Расходы',r.expense and DSP.money(r.expense)or'Нет данных','по журналу'},
+            {'Рыночных позиций',tostring(#((DSP.market and DSP.market.state.rows)or{})),DSP.market.freshness()},
+        }
+        for i=1,4,2 do
+            local cw2=math.max(90,(w-9)/2)
+            for n=0,1 do
+                local c=cards[i+n]
+                if imgui.BeginChild('##carbon_metric_'..(i+n),imgui.ImVec2(cw2,91),true,imgui.WindowFlags.NoScrollbar)then
+                    V.apply_font()
+                    V.muted(V.fit(c[1],cw2-25))
+                    V.green(V.fit(c[2],cw2-25))
+                    V.muted(V.fit(c[3],cw2-25))
+                    if imgui.GetWindowDrawList and imgui.GetWindowPos and imgui.GetColorU32 then
+                        local dl=imgui.GetWindowDrawList()
+                        local pos=imgui.GetWindowPos()
+                        if dl and dl.AddLine then
+                            dl:AddLine(imgui.ImVec2(pos.x+1,pos.y+1),imgui.ImVec2(pos.x+cw2-2,pos.y+1),
+                                imgui.GetColorU32(imgui.Col.CheckMark),2)
+                        end
+                    end
+                end
+                imgui.EndChild()
+                if n==0 then V.inline(8)end
+            end
+        end
+        V.text('Быстрый доступ')
+        local links={{'Арбитраж','arbitrage'},{'Продажа / скупка','palatka'},
+            {'Скан лавки','scan'},{'Перепродажа','resale'},
+            {'Авто-пиар','promo'},{'Журнал','logs'}}
+        local cols=w>=560 and 3 or 2
+        local cell=(w-8*(cols-1))/cols
+        for i,entry in ipairs(links)do
+            if V.button(entry[1],'carbon_link_'..i,cell)then V.set_screen(entry[2])end
+            if i%cols~=0 and i<#links then V.inline(8)end
+        end
+        imgui.Separator()
+        V.text('Последние события')
+        local recent=DSP.craglog and DSP.craglog.ring_recent and DSP.craglog.ring_recent(4) or {}
+        if #recent==0 then V.muted('Записей за сессию пока нет')end
+        for j=#recent,1,-1 do
+            local event=recent[j]
+            if event then
+                V.row('carbon_recent_'..j,43,function(ww,x,y)
+                    V.at(x,y);V.muted(V.fit(os.date('%H:%M',event.ts or os.time())..' · '..
+                        tostring((DSP.craglog.describe and DSP.craglog.describe(event)) or event.kind or 'Событие'),ww-12))
+                end)
+            end
+        end
+        imgui.Separator()
+        V.text('Состояние системы')
+        local st=DSP.market.state
+        V.muted('API: '..tostring(st.status or '?')..' · Сервер: '..tostring(st.sid or '?'))
+        V.muted('Данные могут устареть. Рыночная стоимость имущества не равна заработку.')
+        if V.button('Цены / источники','carbon_link_prices',w)then V.set_screen('resale');V.flip_tab='prices'end
+    end,{footer=function() V.muted('Carbon Trade · Главная · данные без вымысла')end})
+end
+
+end
+__mod_60a_carbon_home()
+
+local function __mod_60b_carbon_storage()
+-- Safe container analyzer; cannot read bespoke game UIs without a packet parser.
+local ffi=require('ffi')
+local V,S=DSP.ui21,DSP.storage
+V.storage_sort='value'
+V.storage_selected=1
+local function b(s,id,w,on,primary)return V.button(s,'storage_'..id,w,on,primary)end
+function V.storage_screen()
+    V.heading('Хранилища',function()
+        if b('Очистить','clear',105)then V.open_popup('Очистить снимки?','storage_clear')end
+    end,109)
+    V.muted('Багажник · шкаф · склад | только наблюдение открытого контейнера')
+    if b(V.storage_manual and 'Скрыть ввод' or 'Вставить список','manual_toggle',190)then
+        V.storage_manual=not V.storage_manual
+    end
+    if V.storage_manual then
+        V.storage_manual_kind=V.storage_manual_kind or 'trunk'
+        if b('Багажник','manual_trunk',110,V.storage_manual_kind=='trunk')then V.storage_manual_kind='trunk'end
+        V.inline();if b('Шкаф','manual_cabinet',100,V.storage_manual_kind=='cabinet')then V.storage_manual_kind='cabinet'end
+        V.inline();if b('Склад','manual_warehouse',100,V.storage_manual_kind=='warehouse')then V.storage_manual_kind='warehouse'end
+        V.storage_input=V.storage_input or imgui.new.char[8192]()
+        V.muted('По строке на предмет: Дрова x45000 / Дрова (45000 шт.)')
+        imgui.InputTextMultiline('##storage_text',V.storage_input,8192,imgui.ImVec2(-1,100))
+        if b('Разобрать список','manual_accept',180,false,true)then
+            local kind=V.storage_manual_kind
+            local title=kind=='trunk'and'Багажник (ручной список)' or kind=='cabinet'and'Шкаф (ручной список)' or 'Склад (ручной список)'
+            local ok,err=S.accept(kind,title,DSP.to_cp(ffi.string(V.storage_input)),nil,'manual')
+            if ok then V.storage_manual=false;V.storage_selected=1
+            else V.storage_error=err end
+        end
+        if V.storage_error then V.red(tostring(V.storage_error))end
+    end
+    local snapshots=S.snapshots
+    if #snapshots==0 then
+        V.text('Снимков пока нет. Откройте шкаф или багажник в игре.')
+        V.muted('Автоматически читаются только классические текстовые диалоги SA-MP.')
+        V.muted('Кастомный UI может не отдавать данные — тогда нужен игровой дамп.')
+    else
+        V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
+        local current=snapshots[V.storage_selected]
+        if b('Снимок '..V.storage_selected..' / '..#snapshots,'next',170)then
+            V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
+        end
+        V.inline()
+        if b(V.storage_sort=='value'and'Сорт.: оценка' or V.storage_sort=='qty'and'Сорт.: количество'
+            or V.storage_sort=='price'and'Сорт.: цена' or V.storage_sort=='category'and'Сорт.: категории' or'Сорт.: название','sort',220)then
+            V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
+                or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value';V.reset_list('storage_items')
+        end
+        local rows,info=S.sorted(current,V.storage_sort)
+        V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
+            (current.source=='manual' and ' · введено вручную' or ' · игровой диалог'),imgui.GetContentRegionAvail().x))
+        V.text('Подтверждено: '..info.total_qty..' шт. · неизвестное количество: '..info.unknown_qty..' строк')
+        V.green('Оценка по скупке: '..DSP.money(info.sell_to_buyers))
+        V.muted('Прибыль: неизвестна (нет подтверждённой себестоимости)')
+        V.muted('По объявлениям продажи: '..DSP.money(info.ask_value)..' · без цены: '..info.missing_prices)
+        if info.cross_server then V.red('Другой сервер: оценки цен отключены')end
+        V.muted('Это не прибыль и не гарантированный доход. Котировки могут устареть.')
+        V.list_rows('storage_items',rows,88,function(it,i)
+            V.row('storage_item_'..i,88,function(w,x,y)
+                V.at(x,y);V.text(V.fit(it.name,w-10))
+                V.at(x,y+28);V.muted('Остаток: '..(it.qty and tostring(it.qty)..' шт.' or 'неизвестен'))
+                V.at(x,y+55)
+                local total=(it.bid and it.qty)and DSP.money(it.bid*it.qty)or'нет оценки'
+                V.muted(V.fit('Скупают: '..(it.bid and DSP.money(it.bid)or'?')..' / шт. · '..total,w-10))
+            end)
+        end,{footer=function()V.muted('Сортировка не перемещает игровые предметы.')end})
+    end
+end
+
+-- Deletion is a real modal confirmation; cancellation never changes snapshots.
+local old_popups=V.popups
+function V.popups()
+    if old_popups then old_popups()end
+    V.popup('Очистить снимки?','storage_clear',function()
+        V.text('Удалить сохранённые снимки шкафов и багажников?')
+        V.muted('Предметы в игре останутся без изменений.')
+        if b('Удалить снимки','confirm_clear',170,false,true)then
+            local old=S.snapshots
+            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1
+            if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+            if DSP.save_settings and not DSP.save_settings() then
+                S.snapshots=old
+                if DSP.settings then DSP.settings.storage_snapshots=old end
+                V.storage_error='Не удалось сохранить удаление';return
+            end
+            imgui.CloseCurrentPopup()
+        end
+        V.inline()
+        if b('Отмена','cancel_clear',120)then imgui.CloseCurrentPopup()end
+    end,{w=480,h=230})
+end
+
+end
+__mod_60b_carbon_storage()
 
 local function __mod_61_ui21_trade()
 -- Trade view: two tabs, inline editing, fixed actions; execution stays in auto.
@@ -37329,7 +37887,7 @@ local function price_choice(it,i,which,label,w)
     end
 end
 local function preset_row(it,i)
-    V.row('preset_'..V.kind..i,94,function(w,x,y)
+    V.row('preset_'..V.kind..i,100,function(w,x,y)
         local namew=math.max(80,w-318)
         V.at(x,y)
         if busy()then V.muted(it.enabled~=false and '[x]'or'[ ]')
@@ -37370,7 +37928,7 @@ local function my_preset()
     local px=x+8+math.max(80,w-16-318)+6
     V.at(px,y);V.muted('Цена');V.at(px+128,y);V.muted('Шт.')
     V.at(x,y+24)
-    V.list_rows('preset_'..V.kind..'_'..tostring(p),p.items or{},94,preset_row,{toolbar=footer,footer_height=footer_height()})
+    V.list_rows('preset_'..V.kind..'_'..tostring(p),p.items or{},100,preset_row,{toolbar=footer,footer_height=footer_height()})
 end
 function V.trade()
     V.heading('Торговля',function()
@@ -37378,6 +37936,8 @@ function V.trade()
         V.inline();if b('Скупка','buy',112,V.kind=='buy')then V.kind='buy'end
     end,230)
     local w=imgui.GetContentRegionAvail().x
+    V.muted(V.fit('Очередь: '..tostring(DSP.auto.status or 'готов')..
+        ' · Инвентарь: '..tostring(DSP.auto.inv_status or 'не сканирован'),w))
     local tabs=w*.56;local each=(tabs-6)/2
     if b('Предметы','items_tab',each,V.tab=='items')then V.tab='items'end
     V.inline();if b('Мой пресет · '..#(preset().items or{}),'preset_tab',each,V.tab=='preset')then V.tab='preset'end
@@ -37644,14 +38204,19 @@ local function api_browser()
     if V.shop_detail then return stall_view()end
     if V.shop_item and b('< К товарам','back_items',140)then V.shop_item=nil end
     if V.shop_item then V.inline()end
-    V.muted(V.fit(DSP.market.freshness(),imgui.GetContentRegionAvail().x-114))
-    V.inline();if b('Обновить','refresh',108)then DSP.market.pull(st.sid)end
+    local received=tonumber(st.received_at)or 0
+    local status=st.status=='loading' and 'Обновление API...' or
+        ((st.status=='cache'and 'Кэш · 'or '')..(received>0 and ('Получено '..os.date('%H:%M:%S',received)) or 'Сохранённый снимок')..
+        ' · данные: '..DSP.market.freshness())
+    V.muted(V.fit(status,imgui.GetContentRegionAvail().x-114))
+    V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',108)then DSP.market.pull(st.sid)end
+    if st.error then V.red(V.fit('API: '..tostring(st.error),imgui.GetContentRegionAvail().x))end
     if st.error then
-        V.red(V.fit(st.error,imgui.GetContentRegionAvail().x))
-        if st.status=='cache' then V.muted('Сеть недоступна: показаны сохранённые цены, они могут устареть') end
+        local message=st.error
         if st.next_auto_retry and st.next_auto_retry>os.time() then
-            V.muted('Автоповтор через '..tostring(st.next_auto_retry-os.time())..' сек; Обновить — вручную')
+            message=message..' · повтор через '..tostring(st.next_auto_retry-os.time())..'с'
         end
+        V.red(V.fit(message,imgui.GetContentRegionAvail().x))
     end
     if b('Продают','sell',120,V.shops_mode=='sell')then V.shops_mode='sell'end
     V.inline();if b('Скупают','buy',120,V.shops_mode=='buy')then V.shops_mode='buy'end
@@ -37666,7 +38231,7 @@ local function api_browser()
             V.list_rows('shop_offers_'..V.shops_mode,group.offers,86,offer_row,{footer=footer})
         else V.muted('Нет предложений с этим фильтром')end
     else
-        V.muted(#groups..' предметов · '..(V.shops_mode=='sell'and'Купить у игроков'or'Продать игрокам'))
+        if not st.error then V.muted(#groups..' предметов · '..(V.shops_mode=='sell'and'Купить у игроков'or'Продать игрокам'))end
         V.list_rows('shops_'..V.shops_mode,groups,84,group_row,{footer=footer})
     end
 end
@@ -37844,25 +38409,50 @@ local function route_rows(p)
         end)
     end
 end
-local function finance(p)
+local function finance(p,compact)
     local available=imgui.GetContentRegionAvail().x
     V.muted(V.fit('Закупка (затраты): '..DSP.money(p.cost)..' · Валовая выручка: '..DSP.money(p.gross),available))
     V.muted(V.fit('Комиссия: '..DSP.money(p.fee)..' · Чистая выручка: '..DSP.money(p.revenue),available))
     local profit_label=V.fit('ПРИБЫЛЬ после закупки, комиссии и расходов: '..DSP.money(p.profit),available)
     if p.profit>=0 then V.green(profit_label)else V.red(profit_label)end
-    if p.extra>0 then V.muted(V.fit('Дополнительные расходы: '..DSP.money(p.extra)..' (учтены один раз)',available))end
+    if p.extra>0 and not compact then V.muted(V.fit('Дополнительные расходы: '..DSP.money(p.extra)..' (учтены один раз)',available))end
 end
 local function details(g)
     local p=V.arb_plan(g)
-    V.text(V.fit(g.name,imgui.GetContentRegionAvail().x))
+    local compact=imgui.GetContentRegionAvail().y<400
+    V.arb_extra=V.arb_extra or{value=0}
+    local function extra_control()
+        if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
+        if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
+    end
+    V.text(V.fit(g.name,imgui.GetContentRegionAvail().x-(compact and 290 or 0)))
+    if compact then V.inline();extra_control()end
     V.muted('Продают '..(g.row.sell.qty or g.supply)..' · Скупают '..(g.row.buy.qty or g.demand)..' · План '..p.qty..' шт.')
     local changed=V.arb_snapshot~=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
-    V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
-        (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))
-    finance(p)
+    if not compact then V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
+        (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))end
+    finance(p,compact)
     local f=DSP.settings.arb_filters or {}
-    V.muted('План условный: доступность не забронирована. Запас спроса: '
-        ..tostring(f.safety_pct or 0)..'%; обновите и проверьте скупку перед закупкой.')
+    if not compact then V.muted('План условный: доступность не забронирована. Запас спроса: '
+        ..tostring(f.safety_pct or 0)..'%; обновите и проверьте скупку перед закупкой.')end
+    if V.arb_verify and V.arb_verify_value then
+        local vr=V.arb_verify
+        V.muted(V.fit('Фактически проверено в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'),imgui.GetContentRegionAvail().x))
+        M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',130,0)
+        V.inline();if b('Применить','verify_save',112)then
+            local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
+            local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
+            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
+            if ok then
+                V.arb_verify=nil;V.arb_verify_value=nil
+                V.arb_revision=V.arb_revision+1;V.arb_route=false
+                V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
+            else V.arb_best_error=tostring(err)end
+        end
+        V.inline();if b('Отмена','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
+        if V.arb_best_error then V.red(V.fit(V.arb_best_error,imgui.GetContentRegionAvail().x))end
+        return
+    end
     if V.arb_route then
         if b('< Предложения','back_offers',170)then V.arb_route=false end
         V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
@@ -37876,29 +38466,10 @@ local function details(g)
     V.inline();if b('Скупают · продать '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
     V.inline();if b('Лучший план >','best',tw*.27)then best_plan(g)end
     V.inline();if b('Сброс','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
-    V.arb_extra=V.arb_extra or{value=0}
-    if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
-    if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
+    if not compact then extra_control()end
     if V.arb_best_error then V.red(V.arb_best_error)end
-    if V.arb_verify and V.arb_verify_value then
-        local vr=V.arb_verify
-        V.muted('Укажите количество, фактически проверенное в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'))
-        V.inline();M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',104,0)
-        V.inline();if b('Применить','verify_save',112)then
-            local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
-            local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
-            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
-            if ok then
-                V.arb_verify=nil;V.arb_verify_value=nil
-                V.arb_revision=V.arb_revision+1;V.arb_route=false
-                V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
-            else V.arb_best_error=tostring(err)end
-        end
-        V.inline();if b('Отмена','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
-    end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
-    local height=math.max(48,imgui.GetContentRegionAvail().y-110)
-    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{height=height,footer=function()
+    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{footer=function()
         if b('Маршрут >','route',142,true)then V.arb_route=true end
         V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
     end})
@@ -37906,26 +38477,25 @@ end
 function V.arbitrage()
     local st=DSP.market.state
     V.text('Арбитраж');V.inline();V.muted('Снимок: '..DSP.market.freshness())
-    V.inline();if b('Обновить','refresh',120)then DSP.market.pull(st.sid)end
+    V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',120)then DSP.market.pull(st.sid)end
+    if st.error then V.red(V.fit('API: '..tostring(st.error),imgui.GetContentRegionAvail().x))end
     local query,edited=V.search('arb','Поиск предмета',-1)
     if edited then V.reset_list('arb_main')end
-    if b('Фильтры','filters',120,V.arb_filters)then V.arb_filters=not V.arb_filters end
-    if V.arb_filters then
-        local f=DSP.settings.arb_filters or{};DSP.settings.arb_filters=f
-        V.inline();V.muted('Бюджет');V.inline()
-        local changed=M.compact_number(f,'budget','arb_budget',122,0)
-        V.inline();V.muted('Мин. прибыль');V.inline()
-        changed=M.compact_number(f,'min_profit','arb_minprofit',122,0)or changed
-        V.inline();V.muted('Резерв спроса %');V.inline()
-        if b(tostring(f.safety_pct or 0)..'%','reserve',64)then
-            f.safety_pct=({[0]=10,[10]=20,[20]=0})[f.safety_pct or 0] or 10
-            changed=true
-        end
-        V.inline();if b('Свежесть '..tostring(math.floor((f.max_age or 600)/60))..'м','age',142)then
-            f.max_age=({[300]=600,[600]=1800,[1800]=300})[f.max_age or 600] or 300
-            changed=true
-        end
-        if changed then DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1;DSP.save_settings()end
+    if b('Фильтры','filters',120,V.arb_filters)then
+        V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+    end
+    -- Direct game observation does not require the external API to refresh.
+    local live=DSP.market.live_shop_spreads and DSP.market.live_shop_spreads() or {}
+    if #live>0 then
+        V.green('НАЙДЕНО В ОТКРЫТОЙ ЛАВКЕ: '..tostring(#live))
+        V.list_rows('arb_live_shop',live,86,function(deal,i)
+            V.row('arb_live_row_'..i,86,function(w,x,y)
+                V.at(x,y+2);V.text(V.fit(deal.name..' · лавка #'..tostring(deal.shop),w))
+                V.at(x,y+27);V.muted(V.fit('Купить '..DSP.money(deal.buy_price)..' / сдать '..DSP.money(deal.sell_price),w))
+                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/шт. после комиссии · '..
+                    (deal.verified_quantity and ('до '..tostring(deal.quantity)..' шт.') or 'количество неизвестно'),w))
+            end)
+        end,{height=math.min(180,math.max(90,imgui.GetContentRegionAvail().y*.30)),footer=false})
     end
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
@@ -37936,6 +38506,21 @@ function V.arbitrage()
         for _,g in ipairs(groups)do if q==''or DSP.lower(g.name):find(q,1,true)then out[#out+1]=g end end
         return out
     end)
+    if st.status=='cache' then V.red(V.fit('Сеть недоступна: расчёт по сохранённому снимку, наличие не подтверждено',imgui.GetContentRegionAvail().x))end
+    if status~='loading' and #groups==0 and DSP.market.arbitrage_visibility then
+        local d=DSP.market.arbitrage_visibility()
+        if d.pairs>0 then
+            V.muted(V.fit('В API есть '..d.pairs..' ценовых разрывов (в одной лавке: '..d.same_shop..
+                '), но фильтр свежести/объёма/комиссии исключил маршруты.',imgui.GetContentRegionAvail().x))
+        end
+    end
+    if #filtered==0 and status~='loading' then
+        local age=tonumber((DSP.settings.arb_filters or{}).max_age)or 1800
+        local reason=#groups>0 and 'По запросу ничего не найдено' or
+            (#(st.rows or{})==0 and 'Нет рынка: нажмите «Обновить»' or
+            ('Нет выгодных связок по фильтрам'..(age>0 and (' · старше '..math.floor(age/60)..'м исключены')or '')))
+        V.muted(V.fit(reason,imgui.GetContentRegionAvail().x))
+    end
     V.list_rows('arb_main',filtered,92,function(g,i)
         V.row('arb_group_'..i,92,function(w,x,y)
             M.thumbnail({name=g.name,id=g.row and g.row.id},34)
@@ -37956,6 +38541,21 @@ end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
+    if V.arb_filters then V.popup('Фильтры арбитража','arb_filters',function()
+        local f=DSP.settings.arb_filters or{};DSP.settings.arb_filters=f
+        V.muted('Бюджет закупки (0 — без лимита)')
+        local changed=M.compact_number(f,'budget','arb_budget',220,0)
+        V.muted('Минимальная прибыль на маршрут')
+        changed=M.compact_number(f,'min_profit','arb_minprofit',220,0)or changed
+        if b('Резерв спроса: '..tostring(f.safety_pct or 0)..'%','reserve',230)then
+            f.safety_pct=({[0]=10,[10]=20,[20]=0})[f.safety_pct or 0]or 10;changed=true
+        end
+        V.inline();if b('Свежесть: '..tostring(math.floor((f.max_age or 600)/60))..'м','age',190)then
+            f.max_age=({[300]=600,[600]=1800,[1800]=300})[f.max_age or 600]or 300;changed=true
+        end
+        if changed then DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1;M.defer_save()end
+        if b('Готово','filters_done',160,true)then V.arb_filters=false;imgui.CloseCurrentPopup()end
+    end,{w=590,h=310})end
     V.popup('Арбитраж','arb_details',function()
         local st=DSP.market.state
         if V.arb_server~=st.sid then
@@ -37983,6 +38583,20 @@ function V.popups()
                 end
             end
             V.inline();if b('Закрыть','stale_close_version',140)then imgui.CloseCurrentPopup()end
+            -- Keep the inspected snapshot browsable, but expose no old route,
+            -- quantity confirmation or marker actions after a refresh.
+            local snapshot=V.arb_detail_group
+            if snapshot then
+                if b('Продают · снимок','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
+                V.inline();if b('Скупают · снимок','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
+                local offers=V.arb_tab=='sell'and snapshot.sellers or snapshot.buyers
+                V.list_rows('arb_stale_'..snapshot.key..'_'..V.arb_tab,offers,76,function(o,i)
+                    V.row('stale_offer_'..i,76,function(w,x,y)
+                        V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),w))
+                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.format_units(o.qty)..' шт. · старый API-снимок',w))
+                    end)
+                end)
+            end
             return
         end
         local g=V.arb_detail_group
@@ -38245,7 +38859,7 @@ end
 local sections={'Вид','Торговля','Данные','Telegram','Инструменты'}
 local function appearance(w)
     V.muted('Тема оформления')
-    local themes={'ocean_blue','dark_amber','amoled','cyberpunk','purple','emerald'}
+    local themes={'carbon_trade','ocean_blue','dark_amber','amoled','cyberpunk','purple','emerald'}
     local columns=w>700 and 3 or 2
     for i,id in ipairs(themes)do
         local theme=DSP.theme.list[id]

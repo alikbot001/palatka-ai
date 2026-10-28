@@ -1,19 +1,19 @@
 {
   "AGENTS.md": {
-    "bytes": 13407,
-    "sha256": "59461e6577787a062d25f6171c93ab0d88ba6ff448e2dd402fc93cadc9717963"
+    "bytes": 15719,
+    "sha256": "9027e379e4088d6394d7d233a18bf642c35ffcc0f7079e4679862a203e260089"
   },
   "HANDOFF.md": {
-    "bytes": 15187,
-    "sha256": "a5594d0619c397b572e01891bd09fdc7ea349ed9ef20f31cea830855abd9558e"
+    "bytes": 21967,
+    "sha256": "319bec1c9f3806b9644c9c1c2aaca319c7c7843940db2311432456d42e0c62b3"
   },
   "PROMPT_FOR_NEXT_AI_RU.md": {
     "bytes": 4971,
     "sha256": "c87c0401ab7d4cf6b50223a90a84f7b71ae0353555df84bde34075453cfeff6e"
   },
   "README.md": {
-    "bytes": 8915,
-    "sha256": "149ce4b05f981e78c71cf0d85c660b495757d9a9545dc2d84894e2134e4579a1"
+    "bytes": 10348,
+    "sha256": "5e74b00b7f35527b4670bb21ea503ce0fa29e045d2ec73ac4b9fdd46457c2ee5"
   },
   "RELEASE_1.3.2.md": {
     "bytes": 1357,
@@ -51,9 +51,33 @@
     "bytes": 4649,
     "sha256": "c7f92830d34213723d53549e1533caadfbba1e8e4d341347c729a8370274b45c"
   },
+  "RELEASE_2.2.3.md": {
+    "bytes": 892,
+    "sha256": "97b454122a2e144c3d306b0be1753cb519050fe0489571fe8b3622982fe85448"
+  },
+  "RELEASE_2.2.4.md": {
+    "bytes": 6347,
+    "sha256": "a7facc78914477897973e939957ebf9c517901ccf7a39c26f9860716dc62f478"
+  },
+  "RELEASE_2.2.5.md": {
+    "bytes": 8280,
+    "sha256": "11c0d6182bb769690de59c3dc92da68005f9d82bd2ea0e301d4d09f94695efba"
+  },
+  "RELEASE_2.2.6.md": {
+    "bytes": 1000,
+    "sha256": "f371b3b6add3621cb7da25f9242fa9d111df27e091cf5ca91c41b6bb714b007e"
+  },
+  "RELEASE_2.2.8.md": {
+    "bytes": 8031,
+    "sha256": "26502fd15e24d27b411b81aee2a363a27f2e3025e4f73ca2ecff2dbc8f3ad36b"
+  },
+  "RELEASE_2.2.9.md": {
+    "bytes": 5335,
+    "sha256": "5a1eb18eeee498348bba31b45e34f45d34bde11a7588928a24eabe7ff43762fc"
+  },
   "build.py": {
-    "bytes": 5104,
-    "sha256": "f2746652b07b9dd2ee169513f1987709b48e137c2afb1b2883d698734f0735b4"
+    "bytes": 5242,
+    "sha256": "48a53bc8f718684237c9ad18ac69af229b0341b6ab32e527e9f2e9d00324b2b9"
   },
   "data/arz_items.json": {
     "bytes": 304471,
@@ -71,9 +95,37 @@
     "bytes": 9857,
     "sha256": "84b3a0d31b040623ce82baa27d72a32ea437c954e42143296d75cc333e921d92"
   },
+  "docs/QA_MARKET_PATCH_2026-10-27.md": {
+    "bytes": 8990,
+    "sha256": "617d6e7bf823201e131f84c7dccdbe54cf92f081e526e879d21159c658f07ac6"
+  },
+  "docs/QA_RC3_MARKET_RISK_2026-10-27.md": {
+    "bytes": 11430,
+    "sha256": "abb41a976f51f1984f86a97890567a5ac26b53fd544fe85fb9004d5f0e300aa4"
+  },
+  "docs/QA_RC4_1_INDEPENDENT_2026-10-27.md": {
+    "bytes": 7581,
+    "sha256": "c31d6fb20cad78b933ed531f83e8b627ddc8a0f2607b39761476c474eb3fd52f"
+  },
+  "docs/QA_RC4_QUANTITY_UX_2026-10-27.md": {
+    "bytes": 9975,
+    "sha256": "6080e60dacb82090b86495f7580eaaba05ff2d4efb937bfb9680ada073210dd1"
+  },
+  "docs/QA_VERSION_2.2.3_2026-10-27.md": {
+    "bytes": 2929,
+    "sha256": "1662228914d87182da3b4dba646c6e1de8516737280649cb09ddece6fcd573ee"
+  },
+  "docs/QA_VERSION_2.2.4_2026-10-27.md": {
+    "bytes": 8986,
+    "sha256": "48eca45043c7a694525f77c245c4fd7745163a0e7669c9f2bc49699702e69288"
+  },
   "docs/QA_v2.2.md": {
     "bytes": 24321,
     "sha256": "7dbc45afd1722c340044eb4c6ba8a78a55825c527dddf8727f3ecd7796255aaf"
+  },
+  "docs/QA_v226_network.md": {
+    "bytes": 7771,
+    "sha256": "626e08a6abc9408475af6776ccc327908ef8cdf086563a7ea5ccc9dc4d933385"
   },
   "docs/adr/0001-mobile-trading-workspace.md": {
     "bytes": 1527,
@@ -95,6 +147,10 @@
     "bytes": 6861,
     "sha256": "c05a8a499e9720e9d947bc761e33d7b21bd8df26157da137f54078fbb095401f"
   },
+  "docs/build-rc4-2026-10-27.log": {
+    "bytes": 78,
+    "sha256": "fac7037dca2545855700871e9eb6c3f76412f1b1a1f8c9a4e730dd9b4743c259"
+  },
   "docs/current-validation.json": {
     "bytes": 766,
     "sha256": "b7044fe35923e3acad74ae2955013b5ec63a07098560fc8b198b813069b76793"
@@ -103,13 +159,25 @@
     "bytes": 17413,
     "sha256": "c6904a6df797f780772eccfaad97ffc60d23c78788fb85dabe46a7afb136af1c"
   },
+  "docs/design/CARBON_TRADE_02_REFERENCE.html": {
+    "bytes": 234878,
+    "sha256": "bd8c97df7fda6f5c9b10022733a9f7e9533d69627bdcaf806d2438c72b976724"
+  },
+  "docs/design/CARBON_TRADE_02_USER_SCREENSHOT.png": {
+    "bytes": 213825,
+    "sha256": "490e3cb209716f7ffed28da6676e638c3f578b47e3aa2fdfb5c3b470f3f6b0c1"
+  },
+  "docs/design/CARBON_TRADE_USER_10_CONCEPTS.html": {
+    "bytes": 234879,
+    "sha256": "91832b5d8beb20ef2ef33900bbc7af8bceb5f8fca6a18edacb8331ac6973e36b"
+  },
   "docs/design/REFERENCE_UI.html": {
     "bytes": 121826,
     "sha256": "87cc14f1e7dd16df054f149c1a52f837e5df5c56db544a5ae2fbb16bec2e575e"
   },
   "docs/design/UI_CONTRACT.md": {
-    "bytes": 15803,
-    "sha256": "254848fe24990335e20b66943d5e6efe7c51239d309d802c10581b76a97c7518"
+    "bytes": 17919,
+    "sha256": "8bdd43e340b1e7aeb4b928de1c64ff9677cf3a0705edabaa7cb67dde02ded028"
   },
   "docs/design/arbitrage.png": {
     "bytes": 84689,
@@ -130,6 +198,18 @@
   "docs/design/trade_landscape.png": {
     "bytes": 76423,
     "sha256": "86d81ad612ffb8ba79aa153c91b973e0e4626b256592949e068b26e37f93ec88"
+  },
+  "docs/icons-rc4-2026-10-27.log": {
+    "bytes": 69,
+    "sha256": "8d16d5e8abd269983d71dccbb0ec140352813cb2fa1a2d3313f07fcbe8ab6f9a"
+  },
+  "docs/luajit-rc4-attempt.log": {
+    "bytes": 70,
+    "sha256": "9218c9ecca9a8278ba7bbf48cf722ca6756747bd3b81ecae1991c2c08af1b712"
+  },
+  "docs/run_tests_attempt_current.txt": {
+    "bytes": 70,
+    "sha256": "9218c9ecca9a8278ba7bbf48cf722ca6756747bd3b81ecae1991c2c08af1b712"
   },
   "docs/screenshots/phone_arbitrage.png": {
     "bytes": 97010,
@@ -191,9 +271,57 @@
     "bytes": 10350,
     "sha256": "f9ddad5b7678cdbdcdbc21f3cd049204c7a14a9a7dbbfedccbb7a1b9fc31d2a0"
   },
+  "docs/texlua-current-2026-10-27.json": {
+    "bytes": 11749,
+    "sha256": "39348133e59c54a3d3a27e03bc72c0d396cf59253ba4efed6222831ded9cb7e2"
+  },
+  "docs/texlua-market-patch-results.txt": {
+    "bytes": 4987,
+    "sha256": "3df1c9b4de8f26bbd8781cd6d411fc813a4c6616c69b1d02891da816c4debf4d"
+  },
+  "docs/texlua-rc4-2026-10-27.json": {
+    "bytes": 12441,
+    "sha256": "c16c54772c73c18abb106fcc466aef217d35398abb566ca683cd71d915a77fc8"
+  },
+  "docs/texlua-rc41-2026-10-27.json": {
+    "bytes": 15314,
+    "sha256": "c900fe504fef07296e907f6e787a8082d02ffbf6ea925e506c6ed370bdec318a"
+  },
   "docs/texlua-test-results.json": {
     "bytes": 11065,
     "sha256": "7054c31331d16e1a22530b21227fd75f04aa4461fb1fa70a2fe372705c827e11"
+  },
+  "docs/texlua-v223-2026-10-27.json": {
+    "bytes": 12859,
+    "sha256": "2f29404f3c16539a6f4c02b78e930ba3be463b093eb02c1121dbd23b3ed45700"
+  },
+  "docs/v224-local-results.json": {
+    "bytes": 13328,
+    "sha256": "3c3d454679bd5dd398a2262f1c36639d4c2f393f8a2329d2d63079e66c158c09"
+  },
+  "docs/v225_texlua_results.json": {
+    "bytes": 15361,
+    "sha256": "b739abf2b8ee81bd0f9a0666a4567e1b53d8de75afe019488769575e5de2559c"
+  },
+  "docs/v226_luajit_attempt.txt": {
+    "bytes": 70,
+    "sha256": "9218c9ecca9a8278ba7bbf48cf722ca6756747bd3b81ecae1991c2c08af1b712"
+  },
+  "docs/v226_texlua_results.json": {
+    "bytes": 13320,
+    "sha256": "98d01fc61f0f2cecd2c511aec3cd49dd8a6aa99b3934c8051d174dd50a737bf9"
+  },
+  "docs/v228_luajit_attempt.txt": {
+    "bytes": 70,
+    "sha256": "9218c9ecca9a8278ba7bbf48cf722ca6756747bd3b81ecae1991c2c08af1b712"
+  },
+  "docs/v228_texlua_results.json": {
+    "bytes": 14977,
+    "sha256": "c6e2f19ed8c4ca8870a4270af32fb04b8d812e776898dfb1fb0703d518c23f89"
+  },
+  "docs/v229_texlua_results.json": {
+    "bytes": 12282,
+    "sha256": "c2412a98dad4a8bcd0c229ccba241c5e6ebb6cc3585b6d655364ce617cb9a58b"
   },
   "icons/categories/ammo.png": {
     "bytes": 6116,
@@ -32340,24 +32468,24 @@
     "sha256": "25f30e8b0eba7f0e585471f240bb34d343c644aae0e3f7f84ecb0af2f828c792"
   },
   "palatka_ai.lua": {
-    "bytes": 71607221,
-    "sha256": "a8c6f0a3ff150dfaf5f8409d478ff0e586f1dc7cc95e0c96c2a5d220ad3b354c"
+    "bytes": 71716928,
+    "sha256": "e4babbde00507622eec20699bb58d10f7750c134b5a95961f5db95fc4c2eed38"
   },
   "run_tests.py": {
     "bytes": 1421,
     "sha256": "a45a42accb67d53289079028c3e83721c3d41e32ebdde8ca8f9097b90d53a1f7"
   },
   "src/00_core.lua": {
-    "bytes": 19104,
-    "sha256": "1bc8f3fc904fb34a0956f19afe0881b064731bc04f8a03b1b7de62a5c2bb9ba8"
+    "bytes": 19818,
+    "sha256": "408963aa91f91a01c2bf9097aec719efd106ee785dcff87e72c1c7e787456c33"
   },
   "src/05_items.lua": {
     "bytes": 5056,
     "sha256": "f4da0e2be9478a1d1bbb346d1993fb6f0624135eb7caf566c69ba1809ec28e0f"
   },
   "src/05_trades.lua": {
-    "bytes": 18725,
-    "sha256": "612bef118b6f679bbdcd6e13e875a2df1e488b8d3ae4925925baeeba1b4c765b"
+    "bytes": 19535,
+    "sha256": "40c7faadce508993d5381b80ecd764715c5a8e18044a4ee65e94762ae14eb682"
   },
   "src/06_rewards.lua": {
     "bytes": 11904,
@@ -32368,24 +32496,24 @@
     "sha256": "bdb52b560168e3629eebafc4758b6845d81d8ee033cbd555fa338edbb53c7830"
   },
   "src/10_market.lua": {
-    "bytes": 47859,
-    "sha256": "ab70e5a8cd5d7882cb9d436dc82ba74e5f5c47441e5aae8ec515b0c2a86a55c2"
+    "bytes": 63865,
+    "sha256": "dc2542da632857ca95f7e9b1753e03b6fbced3f71968c8f8180361555413e70f"
   },
   "src/11_arbitrage.lua": {
-    "bytes": 11217,
-    "sha256": "ed62dd20d8df8beb4c20569f315aa0e66cc86b185ffc275d9da648be4b780c33"
+    "bytes": 15787,
+    "sha256": "ae80bfbc2ed72f1e02fa6ab03d8b345b865864e79d374fa04a2ffb4ac6849832"
   },
   "src/12_arbitrage_groups.lua": {
-    "bytes": 3530,
-    "sha256": "3560a10748b2032c772d58e7b1c34f5ed0a763c2a464957ac3b25e1c9d5c9807"
+    "bytes": 4317,
+    "sha256": "a4edce0394057c42eed530bf36dfbdf9e8cf2ad76e6317ce70e050d989103900"
   },
   "src/13_arbitrage_async.lua": {
-    "bytes": 4277,
-    "sha256": "aab9da3ed432ce42eb3b5984593eb0118192b32b659a20ea7b3440c5de3bf5a0"
+    "bytes": 4295,
+    "sha256": "af9941375c161aa8d577bdf3999ce5d0e4198f629a0aeee9600fbd8a96553acd"
   },
   "src/15_prices.lua": {
-    "bytes": 5418,
-    "sha256": "274eb5a1af3b891059d2f336b67b2472bd49642e18787c5aaa4c5c61b90f1d4f"
+    "bytes": 8944,
+    "sha256": "1dcc44b26b49b82cc0d30386a828ce4079edef802ebbf05c82b10f9029202743"
   },
   "src/20_presets.lua": {
     "bytes": 6590,
@@ -32396,8 +32524,8 @@
     "sha256": "f2abac838058d724c97ddb87f492fa10b6df0251374b85a608934b444ca6cf14"
   },
   "src/30_ui.lua": {
-    "bytes": 83278,
-    "sha256": "038567316f19d4c824c9f1a2ccb0f1079fe260979b1cee30d49ef0bf77188930"
+    "bytes": 83308,
+    "sha256": "4f056904d17c21909377c7ecb5f3fa986db8b1c2a6d1f5b7d1f283c38b8ad00a"
   },
   "src/35_screens.lua": {
     "bytes": 9986,
@@ -32432,28 +32560,28 @@
     "sha256": "8bc2ee0fe89be019a5654139eda2db57d0cc5740f277b12ee259355c583f8d3b"
   },
   "src/40_auto.lua": {
-    "bytes": 10805,
-    "sha256": "8258ea10136540d1f170aa0fb2998c6e0fb0b518488ffdf008d1c955ba254e45"
+    "bytes": 13671,
+    "sha256": "86a61a15d73907a58601e57a196c1b4a85903f349991528ae83f1ec855c68e70"
   },
   "src/40_mobile_notes.lua": {
     "bytes": 6988,
     "sha256": "75c32103fc672b3f120d156ce609774198e49e70c4710a390312bc469dd10ceb"
   },
   "src/41_trade_listing.lua": {
-    "bytes": 7597,
-    "sha256": "dab452625482693fc40a856387576a53d401921fcf2fc73adc811cce93afd5f5"
+    "bytes": 8461,
+    "sha256": "c409578af166b98aa9bcfd486c37b9d3bc543b9c56759fdb85b77f735b1bf20e"
   },
   "src/42_trade_buy.lua": {
-    "bytes": 7200,
-    "sha256": "b80b172ed19c2bc4b0e647a866daf381ffb0054da428440935515549b3ebdb15"
+    "bytes": 8572,
+    "sha256": "985ede7b756e91b3068401d332b43704fea58f5d2cc10e5026a2ca6d6d356913"
   },
   "src/43_calculator_nav.lua": {
-    "bytes": 5902,
-    "sha256": "0c6a1c37c764425d24f425b9816857b5d7b08150287b200b640268175f2b6bc6"
+    "bytes": 6465,
+    "sha256": "daa1dba22c51815e052592b6ec4ac268c519c8a057fe0f867b80a3ba98c26dab"
   },
   "src/45_live.lua": {
-    "bytes": 24152,
-    "sha256": "161c63398bef05bf2eb95a89e077505e65244ee9c137e3ce9e1b7381a8be9d7b"
+    "bytes": 25052,
+    "sha256": "37cb50b55d957fdfd3ea972329cc946a040e747e0b766165ec74631f02381c70"
   },
   "src/46_shop_scan.lua": {
     "bytes": 8728,
@@ -32463,17 +32591,29 @@
     "bytes": 5879,
     "sha256": "72fbeae0d3045cbcf99d7c705303a2c9353a85ef06ac2c1d40e2fa8057951bf9"
   },
+  "src/47_storage.lua": {
+    "bytes": 8017,
+    "sha256": "244d55ede8b7cc1d025a60ed3b7c4de597ab72b134a0d00f765ec3abae82da6f"
+  },
+  "src/48_flip_intel.lua": {
+    "bytes": 13186,
+    "sha256": "3dfa0c89a875bdfca01cf2ab7803dbf173ebd2ed57b2c3000b6ed8f4679310a3"
+  },
+  "src/49_promo.lua": {
+    "bytes": 8314,
+    "sha256": "e08678ec3e12aae766c8f2a317fed7aff7c9128c3e25db81ec4a952a528d212d"
+  },
   "src/50_overlay.lua": {
-    "bytes": 15724,
-    "sha256": "8b03974a6c8b36e989794e6e4ad7490c248c3c602cb4a988d1bad68c668d5d5d"
+    "bytes": 17676,
+    "sha256": "d00214e7584f794b326ad34025c9912dd10f51659a1e40cc3c4c4e3b75128ef8"
   },
   "src/54_payday_parse.lua": {
     "bytes": 2266,
     "sha256": "6a559d3135c6a2cd156368409a16771266dd0d3020dc4a213f2c60e3cb4b94ed"
   },
   "src/55_craglog.lua": {
-    "bytes": 15503,
-    "sha256": "2b1940d8f7d62649faf3aa3180bc0a1cb5c8e7fe131acfa087982ad439b92901"
+    "bytes": 15572,
+    "sha256": "546b1c2385f517d21ab55e073813e54272b4dbddcf7255953fba905c84705082"
   },
   "src/56_mini_journal.lua": {
     "bytes": 4836,
@@ -32496,28 +32636,36 @@
     "sha256": "a2daa231a07de23ec2523b15efd2686f1c14e39175c6705c48de1513e887dabf"
   },
   "src/60_ui21_shell.lua": {
-    "bytes": 14693,
-    "sha256": "58f5113d154ce93bdf8d6fff2a6e29df5eb0722fae340eb123bf8f1e7ce03abc"
+    "bytes": 17703,
+    "sha256": "46f543a73b9471ae17292e7df6a13a548495dbcf8745943b1bcc38134f3ed89f"
+  },
+  "src/60a_carbon_home.lua": {
+    "bytes": 4665,
+    "sha256": "891cf69f290a2a7205819bac752afdd8f656f80596e8aac89811a4978da2741a"
+  },
+  "src/60b_carbon_storage.lua": {
+    "bytes": 6393,
+    "sha256": "bab5b2a9fdc6d8060cdfba3680042d50dcebdb91448949e9c961b9677955e0d0"
   },
   "src/61_ui21_trade.lua": {
-    "bytes": 15383,
-    "sha256": "0d7454ab7e3b74e2d894e5baf11cc9c0d4f716047d7f3bb934e57a85ff621e2e"
+    "bytes": 18515,
+    "sha256": "8ba6446819df7a5bf348089608b539a0410b5e4cbd41895c31c89854fb4d99be"
   },
   "src/62_ui21_shops.lua": {
-    "bytes": 9055,
-    "sha256": "2f6c27fe0f05d021ab29602baf9a51c71a03722c68f11760d31d588aa496e9aa"
+    "bytes": 12999,
+    "sha256": "12c6b6c6a6476cfda2579223ca72aedf980a763c91aaaa9a424cb63d2e1c4dad"
   },
   "src/63_ui21_arbitrage.lua": {
-    "bytes": 10083,
-    "sha256": "04eebe2de48948fe95eb78aa0ff9907c33ab3beab1f35878ed24d647e12b4347"
+    "bytes": 18818,
+    "sha256": "83489694ed3be5364f6ccf14dba419441f58b837c0b1ea41056243e1d50c6df7"
   },
   "src/64_ui21_journal_calc.lua": {
-    "bytes": 7870,
-    "sha256": "570477465b2d4ea205ad5412eb70fd75db15d151c216c6bb80e3025739886c1f"
+    "bytes": 7879,
+    "sha256": "066a6b47c9a61d1c1e31694209aa9eb18790726958ad99872343a04ff8bd8f98"
   },
   "src/65_ui22_tools.lua": {
-    "bytes": 14076,
-    "sha256": "bd1f61cf4493de77ff22e3c3e0cdcbabbe3969698cd7ce5d39968dd1b0b8b2ee"
+    "bytes": 14091,
+    "sha256": "31f5c2177593df86df87e83ec7d21a02b10c1a292244fbe2924da3aef9850b22"
   },
   "src/66_ui22_journal.lua": {
     "bytes": 7955,
@@ -32527,9 +32675,13 @@
     "bytes": 8974,
     "sha256": "4ab71e6cb964d81bb21952a6f41d8f42582f860795842ca1e5705a6f4ad4d263"
   },
+  "src/68_ui22_flip_promo.lua": {
+    "bytes": 22960,
+    "sha256": "96bf54ce3511ae7d9307a88c3f7d2b30fc9cd7de2c9c9aaf1e16708fde1ddf8c"
+  },
   "src/99_main.lua": {
-    "bytes": 3627,
-    "sha256": "d68c6b3834f6af3e146cb3d9d67bda5f58c7fc30a665e779cc55dbc24abda7ce"
+    "bytes": 3680,
+    "sha256": "5ee0593fef67f4d7f1d3a7fc43bc167df8a29d6a195cc81aee11db4046ae1443"
   },
   "tests/legacy/test_mobile_ui_v15.lua": {
     "bytes": 14969,
@@ -32552,8 +32704,8 @@
     "sha256": "b606802ed15d1113a0aa7ef04e210550be57484e652f7f4ecc9afb6b90475b97"
   },
   "tests/test_auto.lua": {
-    "bytes": 5424,
-    "sha256": "daf32e24fcc99d912d3fd03f9f183696a4cfc777eec503340643800cf67994dc"
+    "bytes": 7030,
+    "sha256": "4f6a4a5420914772dd6b14ce1e74c905997295143559b65c1c260f590ec56d3f"
   },
   "tests/test_core.lua": {
     "bytes": 3384,
@@ -32593,7 +32745,7 @@
   },
   "tests/test_standalone.lua": {
     "bytes": 1885,
-    "sha256": "988616fcc7dbfba9c2eafd306c826d8da5270e3660f65d4b561a5e698e2e9494"
+    "sha256": "6ee8bbb6afe76af9761f57af957a9151206beca51664773be9ba32fca7647301"
   },
   "tests/test_trades.lua": {
     "bytes": 5081,
@@ -32635,17 +32787,81 @@
     "bytes": 2454,
     "sha256": "f62aedefe6514bac018bcf154455d2cc6dae8b91e582f1c25312b772e2aab818"
   },
+  "tests/test_v224_flip.lua": {
+    "bytes": 3394,
+    "sha256": "0b0e3ceb616a5d1d44e2744c78d59810bba613d318255a27e1b24403525c005e"
+  },
+  "tests/test_v224_navigation.lua": {
+    "bytes": 1219,
+    "sha256": "dff31f3797e5fe4bf893663743b0085a8049c6846bd0a7de3067cd5e2f41bd97"
+  },
+  "tests/test_v224_promo.lua": {
+    "bytes": 1794,
+    "sha256": "c476dec54eb2916b299756d9b1803c4aafa57edcf19fb6159af7f7d205468820"
+  },
+  "tests/test_v224_sources.lua": {
+    "bytes": 1491,
+    "sha256": "20d959b7ec0ac0b786582f7617e78bbff4014effd7bac51f9191a2e278fc170d"
+  },
+  "tests/test_v224_ui_model.lua": {
+    "bytes": 2692,
+    "sha256": "9fa7536487d027b1aca2dd55916d839d9dd0e8bb5e5f307fd7df27a1d6f310ab"
+  },
+  "tests/test_v224_version.lua": {
+    "bytes": 771,
+    "sha256": "7757ae38b5142ee8a8e278eb455af8fc06d0738fdacb056f7578082bb61d501f"
+  },
+  "tests/test_v225_game_sim.lua": {
+    "bytes": 3491,
+    "sha256": "e0c6ea9c7d5ec89ff7019608bd3df7353a56ee88b6cf456f6f7f1395d4c14af2"
+  },
+  "tests/test_v225_journal_provenance.lua": {
+    "bytes": 1357,
+    "sha256": "b19c1d7d42f2baf57f45ea378f238046cf711d7e3fce2bfd6f2df6b2102cc18f"
+  },
+  "tests/test_v225_promo_batch.lua": {
+    "bytes": 1397,
+    "sha256": "ecb4d15a571110e266d76f2582105255f5d4215d701146153c1a33a6da80b7a4"
+  },
+  "tests/test_v226_network.lua": {
+    "bytes": 5225,
+    "sha256": "fc79016980e189c37cc6406e379d411d806005948fb7ba3cdff095bc45986b48"
+  },
+  "tests/test_v228_same_stall.lua": {
+    "bytes": 3525,
+    "sha256": "ccfcf890e49fa103c0803ece56810b80b1a350f57a02aa63fdff8ff5cec9c44e"
+  },
+  "tests/test_v229_home_model.lua": {
+    "bytes": 1749,
+    "sha256": "48b745a5e09b0ef5b204781c77faf6139e0c610cee41f54e5addcbfe2f3b3349"
+  },
+  "tests/test_v229_storage.lua": {
+    "bytes": 2460,
+    "sha256": "b897d2c9e17110f4c550f37e64f6622f043fc59ddae4f3aebd5cd6be5c1f9b0d"
+  },
   "tests/test_v22_arbitrage.lua": {
     "bytes": 5070,
     "sha256": "923e1da23c78de52f25c3f9c041f9a14d37c58a9dcf0f4816b23143f67742c54"
   },
   "tests/test_v22_arbitrage_finance_ui.lua": {
-    "bytes": 3840,
-    "sha256": "a6ae48f3c25da1fcbf2f1071b59720db29dbe825bef10f93ab623ec1bbfd9511"
+    "bytes": 4223,
+    "sha256": "00af3b7580d248e00eb5dbcd05a8b4a9b83b922c3eab8176364e528d2adb4ec1"
+  },
+  "tests/test_v22_arbitrage_risk.lua": {
+    "bytes": 2324,
+    "sha256": "663476e057e0f5c2815dbbf9b54c4d8823501cbad4195883413e43c018bb5913"
+  },
+  "tests/test_v22_arbitrage_touch_ui.lua": {
+    "bytes": 2889,
+    "sha256": "42d5a510fa869bf97e9845371dd2473726205e4019958e6d3b52eb331439dc05"
   },
   "tests/test_v22_async.lua": {
     "bytes": 6170,
     "sha256": "17c5495991f1e44ef104e021b4fd9efbd72e82e9b431e543f2b45fe47ee9df1d"
+  },
+  "tests/test_v22_calc_grouping.lua": {
+    "bytes": 855,
+    "sha256": "ed8f551b0c9491d4d7e439c24a692a2df7a7e4ef947da9405b8f7fc6ac6b823e"
   },
   "tests/test_v22_calculator.lua": {
     "bytes": 775,
@@ -32658,6 +32874,10 @@
   "tests/test_v22_catalog.lua": {
     "bytes": 540,
     "sha256": "4211659f21a6af954f1011dba580fa1dde3d86d5b570917004bc62611c754b6c"
+  },
+  "tests/test_v22_cr_prices.lua": {
+    "bytes": 3630,
+    "sha256": "24c2ca32b98ea541b0e0a9d4f8274c957ca39b3ad3a149dfced8f7cad1df53af"
   },
   "tests/test_v22_events.lua": {
     "bytes": 11370,
@@ -32687,6 +32907,10 @@
     "bytes": 1479,
     "sha256": "180de5d05f3f5c59586da8954a3ad4bdc098d3335c9ba22341313c044819a625"
   },
+  "tests/test_v22_overlay_market_reference.lua": {
+    "bytes": 2617,
+    "sha256": "33518a5e027a02e4e42b287392a3406f828c326495ae27d65a35694881bd7653"
+  },
   "tests/test_v22_overlay_unknown.lua": {
     "bytes": 1853,
     "sha256": "088eac728965dbf89ac8a4e61ab5a747c5887f0f57d20b5457643de01cf2d831"
@@ -32698,6 +32922,14 @@
   "tests/test_v22_persistence.lua": {
     "bytes": 5242,
     "sha256": "f1bbd4c3760415bf0d22515e52efbf13e6d006bb0b9834cc9e65dfa61fe1447c"
+  },
+  "tests/test_v22_price_quick_actions.lua": {
+    "bytes": 1877,
+    "sha256": "166756f74e1ff20a4542b535a544843e5272c84c694e769402197c7d6e3637c1"
+  },
+  "tests/test_v22_qty_sources.lua": {
+    "bytes": 4835,
+    "sha256": "c0d9f8e49228bdb04a17436567b434d609759b3b191ffc37d3ae2905e4d176ec"
   },
   "tests/test_v22_real_icons.lua": {
     "bytes": 2621,
@@ -32714,6 +32946,10 @@
   "tests/test_v22_shop_marker.lua": {
     "bytes": 2657,
     "sha256": "fd3f32786052c80330f659d3535c3ec41611ce323f9b37dde23a8c88315ff4da"
+  },
+  "tests/test_v22_shop_quantity_modal.lua": {
+    "bytes": 2609,
+    "sha256": "12f94092270a8a436c26e869742c6d0a2cd6aa81c56714d30acaa66a614506ff"
   },
   "tests/test_v22_shop_scan.lua": {
     "bytes": 12604,

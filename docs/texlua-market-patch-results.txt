@@ -1,0 +1,137 @@
+47/56 texlua tests passed; remainder NOT validated in LuaJIT
+PASS test_arbitrage.lua
+PASS test_arbitrage_ui.lua
+PASS test_auto.lua
+PASS test_core.lua
+PASS test_encoding.lua
+PASS test_http.lua
+PASS test_live.lua
+PASS test_mini_journal.lua
+PASS test_mobile_ui.lua
+PASS test_presets.lua
+PASS test_rewards.lua
+PASS test_settings.lua
+PASS test_standalone.lua
+PASS test_trades.lua
+PASS test_ui.lua
+PASS test_ui21_pure.lua
+PASS test_v14_events.lua
+PASS test_v14_icons.lua
+PASS test_v14_trade_ui.lua
+PASS test_v151_mobile_workflow.lua
+PASS test_v15_groups.lua
+PASS test_v16_workflow.lua
+PASS test_v22_arbitrage.lua
+PASS test_v22_arbitrage_finance_ui.lua
+PASS test_v22_arbitrage_risk.lua
+PASS test_v22_async.lua
+PASS test_v22_calc_grouping.lua
+PASS test_v22_calculator.lua
+PASS test_v22_cash_once.lua
+PASS test_v22_cr_prices.lua
+PASS test_v22_events.lua
+PASS test_v22_group_cache.lua
+PASS test_v22_history.lua
+PASS test_v22_loot.lua
+PASS test_v22_native_api.lua
+PASS test_v22_overlay_market_reference.lua
+PASS test_v22_overlay_unknown.lua
+PASS test_v22_payday.lua
+PASS test_v22_persistence.lua
+PASS test_v22_price_quick_actions.lua
+PASS test_v22_real_icons.lua
+PASS test_v22_shop_marker.lua
+PASS test_v22_shop_scan.lua
+PASS test_v22_shops.lua
+PASS test_v22_tools.lua
+PASS test_v22_touch.lua
+PASS test_v22_trade.lua
+FAIL test_ui21_render.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'
+FAIL test_v22_catalog.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'
+FAIL test_v22_finance_layout.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'
+FAIL test_v22_native_style.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'
+FAIL test_v22_resources.lua: tests/test_v22_resources.lua:34: syntax error near '+'
+FAIL test_v22_scan_ui.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'
+FAIL test_v22_snapshot.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'
+FAIL test_v22_trade_totals.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'
+FAIL test_v22_ui.lua: tests/support/imgui22.lua:3: module 'bit' not found:
+	no field package.preload['bit']
+	no file '/usr/local/share/lua/5.3/bit.lua'
+	no file '/usr/local/share/lua/5.3/bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.lua'
+	no file '/usr/local/lib/lua/5.3/bit/init.lua'
+	no file './bit.lua'
+	no file './bit/init.lua'
+	no file '/usr/local/lib/lua/5.3/bit.so'
+	no file '/usr/local/lib/lua/5.3/loadall.so'
+	no file './bit.so'

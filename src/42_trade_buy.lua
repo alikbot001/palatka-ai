@@ -89,6 +89,15 @@ local function buy_one(it, pi, total, dry_run)
         close_dialog()
         return false
     end
+    -- Stabilize the native price input after the dialog text appears. Never
+    -- submit to another item/ID that replaced it during the delay.
+    trade_wait(180)
+    if not sampIsDialogActive() or sampGetCurrentDialogId()~=id or
+       not runtime.matches(DSP.dialog_clean(sampGetDialogText() or ''),base) then
+        log('Скупка: диалог изменился до отправки · '..it.name,'error')
+        close_dialog()
+        return false
+    end
     local qty = tonumber(it.qty) or 1
     if qty < 1 then qty = 1 end
     if not has_qty(txt) and qty>1 then

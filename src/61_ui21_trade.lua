@@ -116,7 +116,7 @@ local function price_choice(it,i,which,label,w)
     end
 end
 local function preset_row(it,i)
-    V.row('preset_'..V.kind..i,94,function(w,x,y)
+    V.row('preset_'..V.kind..i,100,function(w,x,y)
         local namew=math.max(80,w-318)
         V.at(x,y)
         if busy()then V.muted(it.enabled~=false and '[x]'or'[ ]')
@@ -157,7 +157,7 @@ local function my_preset()
     local px=x+8+math.max(80,w-16-318)+6
     V.at(px,y);V.muted('Цена');V.at(px+128,y);V.muted('Шт.')
     V.at(x,y+24)
-    V.list_rows('preset_'..V.kind..'_'..tostring(p),p.items or{},94,preset_row,{toolbar=footer,footer_height=footer_height()})
+    V.list_rows('preset_'..V.kind..'_'..tostring(p),p.items or{},100,preset_row,{toolbar=footer,footer_height=footer_height()})
 end
 function V.trade()
     V.heading('Торговля',function()
@@ -165,6 +165,8 @@ function V.trade()
         V.inline();if b('Скупка','buy',112,V.kind=='buy')then V.kind='buy'end
     end,230)
     local w=imgui.GetContentRegionAvail().x
+    V.muted(V.fit('Очередь: '..tostring(DSP.auto.status or 'готов')..
+        ' · Инвентарь: '..tostring(DSP.auto.inv_status or 'не сканирован'),w))
     local tabs=w*.56;local each=(tabs-6)/2
     if b('Предметы','items_tab',each,V.tab=='items')then V.tab='items'end
     V.inline();if b('Мой пресет · '..#(preset().items or{}),'preset_tab',each,V.tab=='preset')then V.tab='preset'end

@@ -32,8 +32,13 @@ function _G.dsp_http_get(url)
     if not ok_req or not requests or type(requests.request) ~= 'function' then
         return 0, '', 'requests unavailable in network worker'
     end
+    -- The installed Android requests.lua silently falls back to plaintext
+    -- when ssl.https is missing. Fail explicitly instead of taking that path.
+    if requests.http_socket and not requests.https_socket then
+        return 0, '', 'HTTPS unavailable: ssl.https is not installed'
+    end
     local function request_one(target)
-        local ok, resp = pcall(requests.request, 'GET', target, nil)
+        local ok, resp = pcall(requests.request, 'GET', target, {allow_redirects=false,timeout=15})
         if not ok then return 0, '', 'connect: ' .. tostring(resp) end
         if not resp then return 0, '', 'empty HTTP response' end
         local status = tonumber(resp.status_code) or 0
@@ -49,6 +54,9 @@ function _G.dsp_http_get(url)
     if (status == 301 or status == 302 or status == 303 or status == 307 or status == 308)
         and type(redirect) == 'string' and redirect ~= '' then
         local original_host = url:match('^https://([^/:?]+)')
+        if original_host and redirect:sub(1,1)=='/' and redirect:sub(1,2)~='//' then
+            redirect='https://'..original_host..redirect
+        end
         local redirect_host = redirect:match('^https://([^/:?]+)')
         if original_host and redirect_host and original_host:lower() == redirect_host:lower() then
             return request_one(redirect)
@@ -101,7 +109,9 @@ function DSP.http_get(url, cb)
         while not finished do
             wait(50)
             if os.time() >= deadline then
-                pcall(function() thread:cancel() end)
+                -- No blocking cancellation on the game scheduler: a worker
+                -- stuck in a native TLS call may not reach an interruption point.
+                pcall(function() thread:cancel(0) end)
                 return finish(nil, 'timeout after 45s', 0)
             end
             local ok_status, status, status_err = pcall(function() return thread:status() end)
@@ -128,7 +138,7 @@ function DSP.http_get(url, cb)
                 if res.body == '' then return finish(nil, 'empty response', 200) end
                 return finish(res.body, nil, 200)
             end
-            if status == 'canceled' then return finish(nil, 'request canceled', 0) end
+            if status == 'canceled' or status == 'cancelled' then return finish(nil, 'request canceled', 0) end
             if status == 'error' or status == 'failed' then
                 return finish(nil, 'worker failed: ' .. tostring(status_err or 'unknown'), 0)
             end
@@ -255,8 +265,51 @@ local function finish_side(side, asc)
 end
 
 function DSP.market.rebuild(payload, sid)
+    local generation = DSP.market.state.request_generation
     sid = tonumber(sid) or DSP.market.state.sid
     local shops = type(payload) == 'table' and payload.shops or {}
+    -- The API can split sell_slots and buy_slots of one physical stall into
+    -- separate records with the same timestamp. Previous 'last record wins'
+    -- discarded one side, hiding profitable same-stall buy/resell offers.
+    -- Merge sides of the *newest* stall snapshot, not quantities across
+    -- historical/replayed records. Each side keeps the most complete record;
+    -- within that record distinct slots retain their original quantities.
+    local latest, merged = {}, {}
+    local function stall_key(shop,index)
+        if shop.shop_num==nil then return 'unknown:'..index end
+        return tostring(tonumber(shop.shop_num) or shop.shop_num)
+    end
+    local function side_weight(slots)
+        local total=0
+        for _,slot in ipairs(slots or{}) do total=total+item_units(slot.qty) end
+        return total
+    end
+    for index,shop in ipairs(shops) do
+        local server=tonumber(shop.server_id)
+        if not server or server==sid then
+            local key=stall_key(shop,index)
+            local stamp=item_units(shop.updated_at)
+            local entry=latest[key]
+            if not entry or stamp>entry.stamp then
+                entry={stamp=stamp,shop_num=shop.shop_num,owner=shop.owner,
+                    server_id=shop.server_id,updated_at=shop.updated_at,
+                    sell_slots={},buy_slots={}}
+                latest[key]=entry
+            end
+            if stamp==entry.stamp then
+                if shop.owner and shop.owner~='' then entry.owner=shop.owner end
+                for _,side in ipairs({'sell_slots','buy_slots'}) do
+                    local slots=shop[side]
+                    if type(slots)=='table' and #slots>0 and
+                       (#entry[side]==0 or side_weight(slots)>side_weight(entry[side])) then
+                        entry[side]=slots
+                    end
+                end
+            end
+        end
+    end
+    for _,entry in pairs(latest) do merged[#merged+1]=entry end
+    table.sort(merged,function(a,b)return tostring(a.shop_num or '')<tostring(b.shop_num or '') end)
     local map = {}
     local offers_n, shops_n = 0, 0
     local newest, oldest = 0, 0
@@ -268,9 +321,8 @@ function DSP.market.rebuild(payload, sid)
     local co = (coroutine and coroutine.running and coroutine.running()) or nil
     local can_yield = co ~= nil and wait ~= nil
     local yield_count = 0
-    for shop_idx, shop in ipairs(shops) do
-        local ssid = tonumber(shop.server_id)
-        if not ssid or ssid == sid then
+    for shop_idx, shop in ipairs(merged) do
+        do
             local owner = DSP.to_cp(shop.owner or '?')
             local shop_num = tostring(shop.shop_num or '?')
             local ts = tonumber(shop.updated_at or 0) or 0
@@ -343,6 +395,9 @@ function DSP.market.rebuild(payload, sid)
         if (a.sell.best or 0) ~= (b.sell.best or 0) then return (a.sell.best or 0) < (b.sell.best or 0) end
         return a.display < b.display
     end)
+    -- wait(0) above permits a new request/server switch while we build locally.
+    -- Nothing from a superseded build may reach the UI or persistent price DB.
+    if generation ~= DSP.market.state.request_generation then return false end
     DSP.market.state.rows = rows
     DSP.market.state.by_key = map
     DSP.market.state.sid = sid
@@ -367,6 +422,7 @@ function DSP.market.rebuild(payload, sid)
         local ok_db, err_db = pcall(DSP.db.set_rows, rows, sid)
         if not ok_db then DSP.flog('DB set error: ' .. tostring(err_db)) end
     end
+    return true
 end
 
 function DSP.market.freshness()
@@ -399,7 +455,7 @@ function DSP.market.clear_for_server(sid)
     local st = DSP.market.state
     if tonumber(st.sid) == tonumber(sid) then return end
     st.rows, st.by_key = {}, {}
-    st.shops, st.offers, st.updated, st.oldest, st.saved_at = 0, 0, 0, 0, 0
+    st.shops, st.offers, st.updated, st.oldest, st.saved_at, st.received_at = 0, 0, 0, 0, 0, 0
     st.filter_cache, st.filter_version = nil, -1
     st.version = (st.version or 0) + 1
     st.sid = sid
@@ -471,11 +527,16 @@ function DSP.market.pull(sid, done)
             version=st.version, filter_cache=st.filter_cache,
             filter_version=st.filter_version}
         local ok_rebuild, rebuild_err = pcall(DSP.market.rebuild, payload, sid)
+        if generation ~= st.request_generation or tonumber(st.sid) ~= sid then
+            DSP.flog('PULL ignored superseded rebuild sid=' .. tostring(sid))
+            return
+        end
         if not ok_rebuild then
             for k, v in pairs(previous) do st[k] = v end
             return market_request_error(sid, 'API parsing: ' .. tostring(rebuild_err), code, done)
         end
         st.failures, st.next_auto_retry, st.failed_at = 0, 0, nil
+        st.received_at = os.time()
         st.last_http_code, st.pending_sid = 200, nil
         -- Cache write is best-effort; never turn a successful refresh into a
         -- network failure simply because phone storage is unavailable.
@@ -566,9 +627,10 @@ function DSP.market.load_cache(sid)
     if not ok or type(pack) ~= 'table' then return false end
     if type(pack.body) == 'string' then
         local ok2, payload = pcall(decodeJson, pack.body)
-        if not ok2 or type(payload) ~= 'table' then return false end
-        DSP.market.state.sid = sid
-        DSP.market.rebuild(payload, sid)
+        if not ok2 or type(payload) ~= 'table' or type(payload.shops) ~= 'table'
+            or payload.ok == false or payload.success == false then return false end
+        local rebuilt = pcall(DSP.market.rebuild, payload, sid)
+        if not rebuilt then return false end
         DSP.market.state.saved_at = tonumber(pack.saved_at) or 0
         DSP.market.state.status = 'cache'
         return true
@@ -579,7 +641,9 @@ function DSP.market.load_cache(sid)
         return true
     end
     if type(pack.shops) == 'table' then
-        DSP.market.rebuild(pack, sid)
+        if pack.ok == false or pack.success == false then return false end
+        local rebuilt = pcall(DSP.market.rebuild, pack, sid)
+        if not rebuilt then return false end
         DSP.market.state.saved_at = tonumber(pack.saved_at) or 0
         DSP.market.state.status = 'cache'
         return true

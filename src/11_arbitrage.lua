@@ -76,6 +76,12 @@ local function opportunities(filters, now, rows, selections)
                             demand_qty=math.floor(demand_qty/100)*factor
                                 + math.floor((demand_qty%100)*factor/100)
                         end
+                        -- On a one-unit quote, a 10% reserve cannot be a
+                        -- fractional item. Retain 1 as a *potential* trade,
+                        -- not as a guarantee that the order still exists.
+                        if integer(buyer.qty)>0 and reserve_pct<100 then
+                            demand_qty=math.max(1,demand_qty)
+                        end
                         buyers_left[buyer] = demand_qty
                         -- Tax is rounded on the batch, not on each individual item.
                         local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
@@ -254,4 +260,67 @@ function M.offer_freshness(ts)
     if age < 180 then return 'свежее', 'good' end
     if age < 600 then return math.floor(age / 60) .. ' мин назад', 'warn' end
     return math.floor(age / 60) .. ' мин назад', 'muted'
+end
+
+-- Direct observations from a currently open mobile stall are independent of
+-- the web API. Even if the API is stale/empty, detect its own bid/ask spread.
+-- Lack of server-provided quantity is explicitly unknown, never x1.
+function M.live_shop_spreads()
+    local shop=DSP.live and DSP.live.shop
+    if not shop or (shop.menu_closed or 0)>0 or not shop.num or shop.num==''
+       or not shop.owner or shop.owner=='' then return {} end
+    if shop.server and tonumber(shop.server)~=tonumber(DSP.settings.server) then return {} end
+    if os.time()-(shop.items_updated or 0)>120 then return {} end
+    local sells={}
+    for _,it in ipairs(shop.sell or{}) do
+        local key=DSP.item_key(it.name,it.ench)
+        if tonumber(it.price) and it.price>0 and
+           (not sells[key] or it.price<sells[key].price) then sells[key]=it end
+    end
+    local results={}
+    local factor=tax_factor(DSP.settings.tax_bp)
+    for _,buyer in ipairs(shop.buy or{}) do
+        local seller=sells[DSP.item_key(buyer.name,buyer.ench)]
+        if seller and tonumber(buyer.price) and buyer.price>0 then
+            local margin=after_tax(buyer.price,DSP.settings.tax_bp)-seller.price
+            if margin>0 then
+                local sq=tonumber(seller.qty);local bq=tonumber(buyer.qty)
+                local confirmed=sq and bq and sq>0 and bq>0
+                local count=confirmed and math.min(sq,bq) or nil
+                results[#results+1]={name=buyer.name,ench=buyer.ench,
+                    shop=shop.num,owner=shop.owner,buy_price=seller.price,
+                    sell_price=buyer.price,profit_unit=margin,
+                    quantity=count,verified_quantity=confirmed and true or false,
+                    source='opened_shop',updated=shop.items_updated}
+            end
+        end
+    end
+    table.sort(results,function(a,b)return a.profit_unit>b.profit_unit end)
+    return results
+end
+
+-- Cheap diagnostic summary from the current market, memoized per revision.
+function M.arbitrage_visibility()
+    local st=M.state;local c=M._arb_visibility
+    local key=tostring(st.sid)..':'..tostring(st.version)..':'..tostring(DSP.settings.tax_bp)
+    if c and c.key==key then return c.value end
+    local result={pairs=0,same_shop=0,only_one=0,rows=#(st.rows or{})}
+    for _,row in ipairs(st.rows or{})do
+        if row.sell and row.buy and (row.sell.min or 0)>0
+           and (row.buy.max or 0)>(row.sell.min or math.huge) then
+            result.pairs=result.pairs+1
+            local one=(row.sell.qty or 0)<=1 or (row.buy.qty or 0)<=1
+            if one then result.only_one=result.only_one+1 end
+            for _,s in ipairs(row.sell.offers or{})do
+                for _,b in ipairs(row.buy.offers or{})do
+                    if s.shop==b.shop and after_tax(b.price,DSP.settings.tax_bp)>s.price then
+                        result.same_shop=result.same_shop+1
+                        break
+                    end
+                end
+            end
+        end
+    end
+    M._arb_visibility={key=key,value=result}
+    return result
 end

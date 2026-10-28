@@ -94,25 +94,50 @@ local function route_rows(p)
         end)
     end
 end
-local function finance(p)
+local function finance(p,compact)
     local available=imgui.GetContentRegionAvail().x
     V.muted(V.fit('Закупка (затраты): '..DSP.money(p.cost)..' · Валовая выручка: '..DSP.money(p.gross),available))
     V.muted(V.fit('Комиссия: '..DSP.money(p.fee)..' · Чистая выручка: '..DSP.money(p.revenue),available))
     local profit_label=V.fit('ПРИБЫЛЬ после закупки, комиссии и расходов: '..DSP.money(p.profit),available)
     if p.profit>=0 then V.green(profit_label)else V.red(profit_label)end
-    if p.extra>0 then V.muted(V.fit('Дополнительные расходы: '..DSP.money(p.extra)..' (учтены один раз)',available))end
+    if p.extra>0 and not compact then V.muted(V.fit('Дополнительные расходы: '..DSP.money(p.extra)..' (учтены один раз)',available))end
 end
 local function details(g)
     local p=V.arb_plan(g)
-    V.text(V.fit(g.name,imgui.GetContentRegionAvail().x))
+    local compact=imgui.GetContentRegionAvail().y<400
+    V.arb_extra=V.arb_extra or{value=0}
+    local function extra_control()
+        if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
+        if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
+    end
+    V.text(V.fit(g.name,imgui.GetContentRegionAvail().x-(compact and 290 or 0)))
+    if compact then V.inline();extra_control()end
     V.muted('Продают '..(g.row.sell.qty or g.supply)..' · Скупают '..(g.row.buy.qty or g.demand)..' · План '..p.qty..' шт.')
     local changed=V.arb_snapshot~=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
-    V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
-        (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))
-    finance(p)
+    if not compact then V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
+        (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))end
+    finance(p,compact)
     local f=DSP.settings.arb_filters or {}
-    V.muted('План условный: доступность не забронирована. Запас спроса: '
-        ..tostring(f.safety_pct or 0)..'%; обновите и проверьте скупку перед закупкой.')
+    if not compact then V.muted('План условный: доступность не забронирована. Запас спроса: '
+        ..tostring(f.safety_pct or 0)..'%; обновите и проверьте скупку перед закупкой.')end
+    if V.arb_verify and V.arb_verify_value then
+        local vr=V.arb_verify
+        V.muted(V.fit('Фактически проверено в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'),imgui.GetContentRegionAvail().x))
+        M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',130,0)
+        V.inline();if b('Применить','verify_save',112)then
+            local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
+            local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
+            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
+            if ok then
+                V.arb_verify=nil;V.arb_verify_value=nil
+                V.arb_revision=V.arb_revision+1;V.arb_route=false
+                V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
+            else V.arb_best_error=tostring(err)end
+        end
+        V.inline();if b('Отмена','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
+        if V.arb_best_error then V.red(V.fit(V.arb_best_error,imgui.GetContentRegionAvail().x))end
+        return
+    end
     if V.arb_route then
         if b('< Предложения','back_offers',170)then V.arb_route=false end
         V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
@@ -126,29 +151,10 @@ local function details(g)
     V.inline();if b('Скупают · продать '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
     V.inline();if b('Лучший план >','best',tw*.27)then best_plan(g)end
     V.inline();if b('Сброс','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
-    V.arb_extra=V.arb_extra or{value=0}
-    if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
-    if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
+    if not compact then extra_control()end
     if V.arb_best_error then V.red(V.arb_best_error)end
-    if V.arb_verify and V.arb_verify_value then
-        local vr=V.arb_verify
-        V.muted('Укажите количество, фактически проверенное в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'))
-        V.inline();M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',104,0)
-        V.inline();if b('Применить','verify_save',112)then
-            local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
-            local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
-            local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
-            if ok then
-                V.arb_verify=nil;V.arb_verify_value=nil
-                V.arb_revision=V.arb_revision+1;V.arb_route=false
-                V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
-            else V.arb_best_error=tostring(err)end
-        end
-        V.inline();if b('Отмена','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
-    end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
-    local height=math.max(48,imgui.GetContentRegionAvail().y-110)
-    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{height=height,footer=function()
+    V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{footer=function()
         if b('Маршрут >','route',142,true)then V.arb_route=true end
         V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
     end})
@@ -156,26 +162,25 @@ end
 function V.arbitrage()
     local st=DSP.market.state
     V.text('Арбитраж');V.inline();V.muted('Снимок: '..DSP.market.freshness())
-    V.inline();if b('Обновить','refresh',120)then DSP.market.pull(st.sid)end
+    V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',120)then DSP.market.pull(st.sid)end
+    if st.error then V.red(V.fit('API: '..tostring(st.error),imgui.GetContentRegionAvail().x))end
     local query,edited=V.search('arb','Поиск предмета',-1)
     if edited then V.reset_list('arb_main')end
-    if b('Фильтры','filters',120,V.arb_filters)then V.arb_filters=not V.arb_filters end
-    if V.arb_filters then
-        local f=DSP.settings.arb_filters or{};DSP.settings.arb_filters=f
-        V.inline();V.muted('Бюджет');V.inline()
-        local changed=M.compact_number(f,'budget','arb_budget',122,0)
-        V.inline();V.muted('Мин. прибыль');V.inline()
-        changed=M.compact_number(f,'min_profit','arb_minprofit',122,0)or changed
-        V.inline();V.muted('Резерв спроса %');V.inline()
-        if b(tostring(f.safety_pct or 0)..'%','reserve',64)then
-            f.safety_pct=({[0]=10,[10]=20,[20]=0})[f.safety_pct or 0] or 10
-            changed=true
-        end
-        V.inline();if b('Свежесть '..tostring(math.floor((f.max_age or 600)/60))..'м','age',142)then
-            f.max_age=({[300]=600,[600]=1800,[1800]=300})[f.max_age or 600] or 300
-            changed=true
-        end
-        if changed then DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1;DSP.save_settings()end
+    if b('Фильтры','filters',120,V.arb_filters)then
+        V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+    end
+    -- Direct game observation does not require the external API to refresh.
+    local live=DSP.market.live_shop_spreads and DSP.market.live_shop_spreads() or {}
+    if #live>0 then
+        V.green('НАЙДЕНО В ОТКРЫТОЙ ЛАВКЕ: '..tostring(#live))
+        V.list_rows('arb_live_shop',live,86,function(deal,i)
+            V.row('arb_live_row_'..i,86,function(w,x,y)
+                V.at(x,y+2);V.text(V.fit(deal.name..' · лавка #'..tostring(deal.shop),w))
+                V.at(x,y+27);V.muted(V.fit('Купить '..DSP.money(deal.buy_price)..' / сдать '..DSP.money(deal.sell_price),w))
+                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/шт. после комиссии · '..
+                    (deal.verified_quantity and ('до '..tostring(deal.quantity)..' шт.') or 'количество неизвестно'),w))
+            end)
+        end,{height=math.min(180,math.max(90,imgui.GetContentRegionAvail().y*.30)),footer=false})
     end
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
@@ -186,6 +191,21 @@ function V.arbitrage()
         for _,g in ipairs(groups)do if q==''or DSP.lower(g.name):find(q,1,true)then out[#out+1]=g end end
         return out
     end)
+    if st.status=='cache' then V.red(V.fit('Сеть недоступна: расчёт по сохранённому снимку, наличие не подтверждено',imgui.GetContentRegionAvail().x))end
+    if status~='loading' and #groups==0 and DSP.market.arbitrage_visibility then
+        local d=DSP.market.arbitrage_visibility()
+        if d.pairs>0 then
+            V.muted(V.fit('В API есть '..d.pairs..' ценовых разрывов (в одной лавке: '..d.same_shop..
+                '), но фильтр свежести/объёма/комиссии исключил маршруты.',imgui.GetContentRegionAvail().x))
+        end
+    end
+    if #filtered==0 and status~='loading' then
+        local age=tonumber((DSP.settings.arb_filters or{}).max_age)or 1800
+        local reason=#groups>0 and 'По запросу ничего не найдено' or
+            (#(st.rows or{})==0 and 'Нет рынка: нажмите «Обновить»' or
+            ('Нет выгодных связок по фильтрам'..(age>0 and (' · старше '..math.floor(age/60)..'м исключены')or '')))
+        V.muted(V.fit(reason,imgui.GetContentRegionAvail().x))
+    end
     V.list_rows('arb_main',filtered,92,function(g,i)
         V.row('arb_group_'..i,92,function(w,x,y)
             M.thumbnail({name=g.name,id=g.row and g.row.id},34)
@@ -206,6 +226,21 @@ end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
+    if V.arb_filters then V.popup('Фильтры арбитража','arb_filters',function()
+        local f=DSP.settings.arb_filters or{};DSP.settings.arb_filters=f
+        V.muted('Бюджет закупки (0 — без лимита)')
+        local changed=M.compact_number(f,'budget','arb_budget',220,0)
+        V.muted('Минимальная прибыль на маршрут')
+        changed=M.compact_number(f,'min_profit','arb_minprofit',220,0)or changed
+        if b('Резерв спроса: '..tostring(f.safety_pct or 0)..'%','reserve',230)then
+            f.safety_pct=({[0]=10,[10]=20,[20]=0})[f.safety_pct or 0]or 10;changed=true
+        end
+        V.inline();if b('Свежесть: '..tostring(math.floor((f.max_age or 600)/60))..'м','age',190)then
+            f.max_age=({[300]=600,[600]=1800,[1800]=300})[f.max_age or 600]or 300;changed=true
+        end
+        if changed then DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1;M.defer_save()end
+        if b('Готово','filters_done',160,true)then V.arb_filters=false;imgui.CloseCurrentPopup()end
+    end,{w=590,h=310})end
     V.popup('Арбитраж','arb_details',function()
         local st=DSP.market.state
         if V.arb_server~=st.sid then
@@ -233,6 +268,20 @@ function V.popups()
                 end
             end
             V.inline();if b('Закрыть','stale_close_version',140)then imgui.CloseCurrentPopup()end
+            -- Keep the inspected snapshot browsable, but expose no old route,
+            -- quantity confirmation or marker actions after a refresh.
+            local snapshot=V.arb_detail_group
+            if snapshot then
+                if b('Продают · снимок','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
+                V.inline();if b('Скупают · снимок','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
+                local offers=V.arb_tab=='sell'and snapshot.sellers or snapshot.buyers
+                V.list_rows('arb_stale_'..snapshot.key..'_'..V.arb_tab,offers,76,function(o,i)
+                    V.row('stale_offer_'..i,76,function(w,x,y)
+                        V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),w))
+                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.format_units(o.qty)..' шт. · старый API-снимок',w))
+                    end)
+                end)
+            end
             return
         end
         local g=V.arb_detail_group

@@ -91,6 +91,31 @@ sell_run('Запрещено')
 assert(DSP.auto.progress.done==0 and DSP.auto.progress.failed==1)
 sell_run(nil)
 assert(DSP.auto.progress.done==0 and DSP.auto.progress.failed==1)
+-- Actual listing feedback can arrive as chat, not onShowDialog.
+DSP.auto.sell_running=true
+DSP.auto.sell_confirmed=false
+DSP.auto.on_trade_feedback('Товар успешно выставлен на продажу')
+assert(DSP.auto.sell_confirmed,'native sale ack in server chat was ignored')
+DSP.auto.sell_confirmed=false;DSP.auto.sell_no_slots=false
+DSP.auto.on_trade_feedback('У вас нет доступных ячеек')
+assert(DSP.auto.sell_confirmed and DSP.auto.sell_no_slots,'server no-slot feedback was ignored')
+DSP.auto.sell_confirmed=false;DSP.auto.sell_no_slots=false
+DSP.auto.on_trade_feedback('Другой игрок вошёл в игру')
+assert(not DSP.auto.sell_confirmed,'unrelated server chat confirmed a trade')
+DSP.auto.sell_running=false
+-- The server event hook must preserve an existing handler and report sales.
+local existing=0
+package.preload['samp.events']=function()
+ return {onServerMessage=function(color,text)existing=existing+1;return 'previous handler result'end}
+end
+DSP.auto.install()
+local ev=require('samp.events')
+DSP.auto.sell_running=true;DSP.auto.sell_confirmed=false
+assert(ev.onServerMessage(123,'Товар успешно выставлен на продажу')=='previous handler result')
+assert(DSP.auto.sell_confirmed and existing==1,'server message handler did not preserve chain')
+DSP.auto.sell_running=false
+assert(DSP.auto.helpers.has_qty('Введите количество и цену через запятую'), 'comma-form quantity was missed')
+assert(DSP.auto.helpers.has_qty('Пример: 2,61000'), 'buy example quantity was missed')
 assert(not DSP.trade_runtime.matches('Apple juice Количество','Apple'))
 assert(not DSP.trade_runtime.matches('Item (+1) Количество','Item (+2)'))
 local marker_calls=0

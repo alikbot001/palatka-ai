@@ -82,6 +82,21 @@ function DSP.auto.start_sell()
                 trade_wait(180)
             end
             if got then
+                -- mimgui/MonetLoader may publish the dialog text before the
+                -- native input control is ready. Follow the observed game
+                -- sequence: one short settle, then verify the *same* item/ID.
+                trade_wait(180)
+                local current=sampIsDialogActive() and sampGetCurrentDialogId() or nil
+                local actual=current and DSP.dialog_clean(sampGetDialogText() or '') or ''
+                if current~=id or not runtime.matches(actual,it.base) then
+                    got=false
+                    log('Продажа: диалог сменился до отправки, id='..tostring(current)..
+                        ', ожидался='..tostring(id)..' · '..it.name,'error')
+                else
+                    dialog_text=actual
+                end
+            end
+            if got then
                 local txt = dialog_text or ''
                 local resp = has_qty(txt) and (tostring(it.qty) .. ',' .. tostring(it.price))
                     or tostring(it.price)
@@ -148,4 +163,3 @@ function DSP.auto.stop_sell()
     close_dialog()
     log('Продажа остановлена')
 end
-

@@ -118,14 +118,19 @@ local function api_browser()
     if V.shop_detail then return stall_view()end
     if V.shop_item and b('< К товарам','back_items',140)then V.shop_item=nil end
     if V.shop_item then V.inline()end
-    V.muted(V.fit(DSP.market.freshness(),imgui.GetContentRegionAvail().x-114))
-    V.inline();if b('Обновить','refresh',108)then DSP.market.pull(st.sid)end
+    local received=tonumber(st.received_at)or 0
+    local status=st.status=='loading' and 'Обновление API...' or
+        ((st.status=='cache'and 'Кэш · 'or '')..(received>0 and ('Получено '..os.date('%H:%M:%S',received)) or 'Сохранённый снимок')..
+        ' · данные: '..DSP.market.freshness())
+    V.muted(V.fit(status,imgui.GetContentRegionAvail().x-114))
+    V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',108)then DSP.market.pull(st.sid)end
+    if st.error then V.red(V.fit('API: '..tostring(st.error),imgui.GetContentRegionAvail().x))end
     if st.error then
-        V.red(V.fit(st.error,imgui.GetContentRegionAvail().x))
-        if st.status=='cache' then V.muted('Сеть недоступна: показаны сохранённые цены, они могут устареть') end
+        local message=st.error
         if st.next_auto_retry and st.next_auto_retry>os.time() then
-            V.muted('Автоповтор через '..tostring(st.next_auto_retry-os.time())..' сек; Обновить — вручную')
+            message=message..' · повтор через '..tostring(st.next_auto_retry-os.time())..'с'
         end
+        V.red(V.fit(message,imgui.GetContentRegionAvail().x))
     end
     if b('Продают','sell',120,V.shops_mode=='sell')then V.shops_mode='sell'end
     V.inline();if b('Скупают','buy',120,V.shops_mode=='buy')then V.shops_mode='buy'end
@@ -140,7 +145,7 @@ local function api_browser()
             V.list_rows('shop_offers_'..V.shops_mode,group.offers,86,offer_row,{footer=footer})
         else V.muted('Нет предложений с этим фильтром')end
     else
-        V.muted(#groups..' предметов · '..(V.shops_mode=='sell'and'Купить у игроков'or'Продать игрокам'))
+        if not st.error then V.muted(#groups..' предметов · '..(V.shops_mode=='sell'and'Купить у игроков'or'Продать игрокам'))end
         V.list_rows('shops_'..V.shops_mode,groups,84,group_row,{footer=footer})
     end
 end

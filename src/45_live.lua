@@ -395,6 +395,10 @@ function L.parse_dialog_trade(title, text)
 end
 
 function L.on_dialog(dialog_id, style, title, b1, b2, text)
+    if DSP.storage and DSP.storage.on_dialog then
+        local ok,err=pcall(DSP.storage.on_dialog,dialog_id,style,title,text)
+        if not ok then DSP.flog('STORAGE dialog: '..tostring(err))end
+    end
     if dialog_id == 28148 then
         L.parse_dialog_trade(title, text)
         -- Also check for trade result in dialog text

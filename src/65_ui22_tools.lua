@@ -96,7 +96,7 @@ end
 local sections={'Вид','Торговля','Данные','Telegram','Инструменты'}
 local function appearance(w)
     V.muted('Тема оформления')
-    local themes={'ocean_blue','dark_amber','amoled','cyberpunk','purple','emerald'}
+    local themes={'carbon_trade','ocean_blue','dark_amber','amoled','cyberpunk','purple','emerald'}
     local columns=w>700 and 3 or 2
     for i,id in ipairs(themes)do
         local theme=DSP.theme.list[id]

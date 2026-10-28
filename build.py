@@ -44,6 +44,9 @@ MODULES = [
     "45_live.lua",
     "46_shop_scan.lua",
     "47_shop_marker.lua",
+    "47_storage.lua",
+    "48_flip_intel.lua",
+    "49_promo.lua",
     "50_overlay.lua",
     "54_payday_parse.lua",
     "55_craglog.lua",
@@ -53,6 +56,8 @@ MODULES = [
     "59_history.lua",
     "59a_loot_summary.lua",
     "60_ui21_shell.lua",
+    "60a_carbon_home.lua",
+    "60b_carbon_storage.lua",
     "61_ui21_trade.lua",
     "62_ui21_shops.lua",
     "63_ui21_arbitrage.lua",
@@ -60,13 +65,14 @@ MODULES = [
     "65_ui22_tools.lua",
     "66_ui22_journal.lua",
     "67_ui22_shop_scan.lua",
+    "68_ui22_flip_promo.lua",
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v2.2.1, built from src/*.lua (independent of Market Helper)
+HEADER = """-- Palatka AI v2.2.9 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.2.1')
+script_version('2.2.9')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}

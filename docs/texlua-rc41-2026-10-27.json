@@ -1,0 +1,420 @@
+{
+  "runtime": "texlua",
+  "passed": 50,
+  "total": 59,
+  "results": [
+    {
+      "test": "test_arbitrage.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "arbitrage tests: ok\narbitrage allocation, slot merging, server isolation: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_arbitrage_ui.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "ui tests: ok\nv1.5 arbitrage grouped UI: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_auto.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "auto tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_core.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "core tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_encoding.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "encoding tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_http.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "http tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_live.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "live tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_mini_journal.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "mini journal tests: ok\nui tests: ok\nmini journal rendering fixture: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_mobile_ui.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "ui tests: ok\nv1.6 compact mobile UI: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_presets.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "preset tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_rewards.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "rewards tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_settings.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "settings tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_standalone.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "ui tests: ok\nstandalone startup tests: ok\nstandalone indexed real PNG bank: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_trades.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "trades tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_ui.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "ui tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_ui21_pure.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "UI 2.1: 3 sellers vs 700 demand, owner/shop search, grouped deals: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_ui21_render.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v14_events.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v1.4 server + payday + income tests: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v14_icons.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v1.4 icons extracted\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v14_trade_ui.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v1.4 trade UI tests: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v151_mobile_workflow.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "1.5.1 popup and swipe: OK\n1.5.1 Market Helper layout: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v15_groups.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v1.5 item grouping and 1-vs-700 source tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v16_workflow.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "ui tests: ok\nv1.6 trading and calculator tests: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_arbitrage.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v2.2 arbitrage: 295k purchase, 360k gross, 7.2k commission, 57.8k profit: OK\nv2.2 arbitrage selection, no double counting, batch commission: ok\nv2.2 manual pair validation and large-price arithmetic: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_arbitrage_finance_ui.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 arbitrage popup labels, commission, net profit, loss color and best-plan route: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_arbitrage_risk.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "market risk: same stall, reserve, real correction, shared buy limit, stale expiry: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_arbitrage_touch_ui.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "arbitrage touch buttons: visible dedicated open/select/verify/marker: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_async.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v2.2 async arbitrage: deferred cold work, stable cache, yields, stale cancellation, expiry, errors: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_calc_grouping.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "calculator: grouping, decimal separator, arithmetic and negative values: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_calculator.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 calculator chaining, percent, decimals, history, division zero: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_cash_once.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v2.2 event regressions: OK\nv22 cash receipt appears once across PayDay/reward channels: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_catalog.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_cr_prices.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "CR market prices: real list format, page index, dedup, cached day history and server guard: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_events.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v2.2 event regressions: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_finance_layout.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_group_cache.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 stable grouped cache / refresh / empty snapshot / no repeated sorts: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_history.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v2.2 full durable history regressions: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_loot.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 loot: individual quantities, estimates, unknown prices, sources, inspection, cache: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_native_api.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 target MonetLoader mimgui exports: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_native_style.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_overlay_market_reference.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "overlay: self-reference excluded, market parity and server isolation: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_overlay_unknown.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 legacy shop overlay unknown qty: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_payday.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 PayDay deposit income: live, summary, history, restart, legacy evidence, counts: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_persistence.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": " create rolls back failed save\nPASS rename rolls back failed save\nPASS delete rolls back failed save\nPASS update rolls back failed save\nPASS add manual rolls back failed save\nPASS import both kinds rolls back failed save\nPASS add market new rolls back failed save\nPASS add market existing rolls back failed save\nPASS remove item rolls back failed save\nPASS clear rolls back failed save\nPASS recalculate rolls back failed save\nPASS save exception rolls back and reports its cause\nPASS missing library migration is rolled back with the failed transaction\nPASS success commits once and keeps legacy alias identity\nPASS failed export preserves the previous file\nv2.2 transactional preset persistence: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_price_quick_actions.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "price quick actions: observed medians, source, no fake day trades, server isolation: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_qty_sources.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "quantity provenance: API slot=1, game 45000, explicit consent, scope/freshness, parser: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_real_icons.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 real item icons: identity, lazy decode, texture reuse, no stock fallback: OK\nv22 indexed autonomous image bank: bounded reads, no eager image strings: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_resources.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/test_v22_resources.lua:34: syntax error near '+'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_scan_ui.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_shop_marker.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 shop 3D marker: exact target, RPC chaining, toggle, projection and server isolation: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_shop_quantity_modal.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "shop quantity modal: source disagreement, scrolling, explicit game/manual actions, stale guard: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_shop_scan.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 current stall scan: slots, quantity evidence, learn, named copy, price-only correction, rollback: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_shops.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 shops strict sorting + cache invalidation: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_snapshot.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_tools.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v2.2 tools: stats, settings/Telegram, note debounce, modal delete rollback: ok\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_touch.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "v22 isolated scrolling / virtualization / viewport: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_trade.lua",
+      "ok": true,
+      "exit": 0,
+      "stdout": "PASS zero and invalid inventory counts never become one\nPASS all owned stacks aggregate when adding the item\nPASS invalid edit buffers block listing until corrected\nPASS nonfinite oversized and unsafe totals are rejected\nPASS buy queue preserves launch price quantity and test mode\nPASS sell queue preserves launch values and aggregates disjoint stacks\nPASS sell queue cannot spend one inventory slot twice\nv2.2 trade validation and snapshots: OK\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_trade_totals.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_v22_ui.lua",
+      "ok": false,
+      "exit": 1,
+      "stdout": "tests/support/imgui22.lua:3: module 'bit' not found:\n\tno field package.preload['bit']\n\tno file '/usr/local/share/lua/5.3/bit.lua'\n\tno file '/usr/local/share/lua/5.3/bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.lua'\n\tno file '/usr/local/lib/lua/5.3/bit/init.lua'\n\tno file './bit.lua'\n\tno file './bit/init.lua'\n\tno file '/usr/local/lib/lua/5.3/bit.so'\n\tno file '/usr/local/lib/lua/5.3/loadall.so'\n\tno file './bit.so'\n",
+      "stderr": ""
+    }
+  ]
+}

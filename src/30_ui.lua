@@ -767,7 +767,7 @@ function DSP.ui.settings_tab()
 
     -- v1.2 Section 1: theme + opacity slider
     imgui.TextDisabled(DSP.utf8('Тема оформления:'))
-    local theme_order = { 'dark_amber', 'amoled', 'cyberpunk', 'purple', 'emerald' }
+    local theme_order = { 'carbon_trade', 'ocean_blue', 'dark_amber', 'amoled', 'cyberpunk', 'purple', 'emerald' }
     for _, id in ipairs(theme_order) do
         local e = DSP.theme.list[id]
         if e then

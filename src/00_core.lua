@@ -1,7 +1,7 @@
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.6'
+DSP.version = '2.2.9'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -189,7 +189,7 @@ function DSP.load_settings()
     end
     DSP.settings.buy_preset.items = DSP.settings.buy_preset.items or {}
     DSP.settings.sell_preset.items = DSP.settings.sell_preset.items or {}
-    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'ocean_blue' end
+    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'carbon_trade' end
     if type(DSP.settings.opacity) ~= 'number' then DSP.settings.opacity = 0.97 end
     if type(DSP.settings.screen) ~= 'string' then DSP.settings.screen = 'palatka' end
     if type(DSP.settings.tax_bp) ~= 'number' then DSP.settings.tax_bp = 200 end
@@ -286,6 +286,13 @@ end
 DSP.theme = DSP.theme or {}
 
 DSP.theme.list = {
+    carbon_trade = {
+        name = 'Carbon Trade',
+        bg={0.060,0.075,0.066}, panel={0.075,0.093,0.080},
+        accent={0.729,0.996,0.376}, text={0.925,0.959,0.932},
+        muted={0.620,0.700,0.645}, good={0.729,0.996,0.376},
+        bad={1.000,0.415,0.390},warn={1.000,0.775,0.330},
+    },
     ocean_blue = {
         name = 'Palatka Blue',
         bg={0.045,0.075,0.120},panel={0.075,0.110,0.165},accent={0.290,0.612,0.965},
@@ -349,7 +356,7 @@ DSP.theme.list = {
     },
 }
 
-DSP.theme.current = 'ocean_blue'
+DSP.theme.current = 'carbon_trade'
 DSP.theme.opacity = 0.97
 
 function DSP.theme.get()
@@ -493,11 +500,11 @@ DSP.load_settings()
 DSP.load_ui_state()
 -- Migrate the stock 1.3.x amber look on first v1.4 launch. Respect custom themes.
 if not DSP.settings.ui_v14_migrated then
-    if DSP.settings.theme=='dark_amber' then DSP.settings.theme='ocean_blue' end
+    if DSP.settings.theme=='ocean_blue' then DSP.settings.theme='carbon_trade' end
     DSP.settings.ui_v14_migrated=true
     DSP.save_settings()
 end
-DSP.theme.current = DSP.settings.theme or 'ocean_blue'
+DSP.theme.current = DSP.settings.theme or 'carbon_trade'
 DSP.save_ui_state()
 DSP.theme.opacity = DSP.clamp(DSP.settings.opacity or 0.97, 0.65, 1.00)
 DSP.flog('--- load v' .. DSP.version .. ' theme=' .. DSP.theme.current .. ' opacity=' .. tostring(DSP.theme.opacity) .. ' ---')

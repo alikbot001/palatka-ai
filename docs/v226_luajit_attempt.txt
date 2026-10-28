@@ -1,0 +1,1 @@
+LuaJIT is required for the full FFI/startup suite; no tests were run.

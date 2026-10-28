@@ -65,6 +65,9 @@ function M.confirm_offer_quantity(row,kind,offer,value,source)
     if not row or (kind~='buy' and kind~='sell') or not offer then
         return false,'неверное предложение'
     end
+    if not M.state.by_key or M.state.by_key[row.key]~=row then
+        return false,'предложение относится к устаревшему снимку'
+    end
     local n=tonumber(value)
     if not n or n~=n or n<0 or n>1000000000 or n~=math.floor(n) then
         return false,'введите количество от 0 до 1 000 000 000'

@@ -9,6 +9,7 @@ DSP={ui21={cache={},arb_tab='sell',arb_revision=0,arb_sellers={},arb_buyers={},a
  mobile={},settings={tax_bp=200,arb_filters={}},money=tostring,
  market={state={sid=102,version=1},offer_key=function(o)return o.shop..'|'..o.price end,
    offer_freshness=function()return 'свежее' end,
+   format_units=tostring,live_offer_quantity=function()return nil end,
    plan_offers=function(_,_,_,opts)
      planned=planned+1
      return{qty=5,supply=5,demand=504,cost=295000,gross=360000,fee=7200,
@@ -65,4 +66,9 @@ V.red=function(s)if s:find('ПРИБЫЛЬ после закупки',1,true) th
 V.arb_extra_enabled=true;V.arb_extra={value=60000};V.arb_revision=V.arb_revision+1
 V.popups()
 assert(loss_red,'a route made unprofitable by expenses must not display green profit')
+-- An updated snapshot may not continue to show an old route as actionable.
+DSP.market.state.version=2
+V.red=function(s)output[#output+1]=s end
+output={};V.popups();t=table.concat(output,'\n')
+assert(t:find('Старый маршрут заблокирован',1,true),'stale plan shown after market revision')
 print('v22 arbitrage popup labels, commission, net profit, loss color and best-plan route: OK')
