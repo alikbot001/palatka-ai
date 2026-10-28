@@ -1,3 +1,5 @@
+> **Текущий кандидат v2.2.11 RC** — единый X в правом верхнем углу, захват за нижний правый угол, вкладки сканера и PlayerTextDraw диагностика. См. `RELEASE_2.2.11.md`, `docs/QA_v2211.md`. Нативно не проверено.
+
 > Текущий кандидат: **2.2.10 RC**. Сортировка арбитража А-Я, диагностический захват TextDraw для хранилищ и экономичный DrawList (подробности RELEASE_2.2.10.md). Нативный скан кастомного UI ещё требует теста MonetLoader.
 
 > Latest candidate: **v2.2.9** — native Carbon Trade shell and read-only storage analyzer; see `RELEASE_2.2.9.md`. Previous v2.2.8 functionality is retained.

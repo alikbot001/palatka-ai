@@ -1,7 +1,7 @@
--- Palatka AI v2.2.10 mobile release, built from src/*.lua
+-- Palatka AI v2.2.11 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.2.10')
+script_version('2.2.11')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1467416
+DSP.item_icon_blob_offset = 1471019
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.10'
+DSP.version = '2.2.11'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -35541,7 +35541,7 @@ local function valid()
 end
 function S.arm_textdraw(seconds)
     T.state='armed';T.until_ts=now()+math.max(5,math.min(60,tonumber(seconds)or 25))
-    T.draws={};T.seen=0;T.unique=0;T.last_error=nil;T.selected_kind=nil;T.result=nil
+    T.draws={};T.seen=0;T.events=0;T.unique=0;T.last_error=nil;T.selected_kind=nil;T.result=nil;T.kind=nil;T.title=nil
     return true
 end
 function S.textdraw_state()
@@ -35549,7 +35549,7 @@ function S.textdraw_state()
     return T.state,T.seen or 0,T.last_error
 end
 local function text_of(value)
-    if type(value)=='table' then value=value.text end
+    if type(value)=='table' then value=value.text or value.string or value.value end
     if type(value)~='string' then return nil end
     local s=DSP.clean_text(value):gsub('~[%w]~',''):gsub('[\r\n]',' ')
     s=DSP.trim(s)
@@ -35558,10 +35558,14 @@ local function text_of(value)
 end
 function S.observe_textdraw(id,value)
     if not valid() then return false end
+    T.events=(T.events or 0)+1
     if type(id)~='number' and type(id)~='string' then return false end
     local s=text_of(value)
     if not s then return false end
     T.seen=T.seen+1
+    -- Headers are often overwritten by a later TextDraw update. Remember only
+    -- a title explicitly received during this capture, never guess a source.
+    if S.kind_of(s) then T.kind=S.kind_of(s);T.title=s end
     -- Bounded by 110 unique IDs; update in place, no per-frame scanning.
     if T.draws[id]==nil and (T.unique or 0)>=110 then return false end
     if T.draws[id]==nil then T.unique=(T.unique or 0)+1 end
@@ -35572,7 +35576,7 @@ function S.finish_textdraw()
     if T.state~='armed' and T.state~='expired' then return false,'Нет активного сбора' end
     T.state='done'
     local lines={}
-    local kind,title
+    local kind,title=T.kind,T.title
     local ids={}
     for id in pairs(T.draws or {}) do ids[#ids+1]=id end
     table.sort(ids,function(a,b)return tostring(a)<tostring(b)end)
@@ -35585,11 +35589,11 @@ function S.finish_textdraw()
         if r and r.quantity_confirmed and not k then lines[#lines+1]=line end
     end
     if not kind then
-        T.last_error='В TextDraw не обнаружен заголовок хранилища. Возможно, окно нативное.'
+        T.last_error='Не обнаружен заголовок хранилища: событий '..tostring(T.events or 0)..', текстовых '..tostring(T.seen)..'. Возможно, интерфейс нативный.'
         return false,T.last_error
     end
     if #lines==0 then
-        T.last_error='Есть заголовок '..tostring(title)..', но нет строк с достоверным количеством.'
+        T.last_error='Заголовок '..tostring(title)..' есть, но количество не распознано ('..tostring(T.unique or 0)..' TextDraw). Нужен формат клиента.'
         return false,T.last_error
     end
     local ok,r=S.accept(kind,title,table.concat(lines,'\n'),now(),'textdraw')
@@ -35606,6 +35610,16 @@ function S.install_textdraw()
     sampev.onShowTextDraw=function(id,data)
         if T.state=='armed' then pcall(S.observe_textdraw,id,data) end
         if prev_show then return prev_show(id,data) end
+    end
+    local prev_player=sampev.onShowPlayerTextDraw
+    sampev.onShowPlayerTextDraw=function(id,data)
+        if T.state=='armed' then pcall(S.observe_textdraw,'p'..tostring(id),data) end
+        if prev_player then return prev_player(id,data) end
+    end
+    local prev_player_change=sampev.onPlayerTextDrawSetString
+    sampev.onPlayerTextDrawSetString=function(id,value)
+        if T.state=='armed' then pcall(S.observe_textdraw,'p'..tostring(id),value) end
+        if prev_player_change then return prev_player_change(id,value) end
     end
     local prev_change=sampev.onTextDrawSetString
     sampev.onTextDrawSetString=function(id,text)
@@ -37503,21 +37517,33 @@ function V.row(id,height,draw)
     imgui.PopID();if not ok then error(err,0)end;imgui.SetCursorPos(imgui.ImVec2(x,y+height))
 end
 function V.at(x,y)imgui.SetCursorPos(imgui.ImVec2(x,y))end
+-- One consistent window chrome for every modal: close at the top-right.
+-- A modal can always be dismissed without traversing a sequence of Back buttons.
+-- Keep the native ImGui resize grip enabled (NoResize is intentionally absent).
 function V.popup(title,id,draw,size)
     size=size or {}
     local sz=imgui.GetIO().DisplaySize
     imgui.SetNextWindowPos(imgui.ImVec2(sz.x*.5,sz.y*.5),imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
     imgui.SetNextWindowSize(imgui.ImVec2(math.min(size.w or 620,sz.x-24),math.min(size.h or 410,sz.y-24)),imgui.Cond.Appearing)
-    -- Resizable sheet with a real scrollable content region and fixed arrow buttons.
-    -- Only explicitly marked detail popups use this: delete confirmation remains modal.
-    local flags=size.resizable and imgui.WindowFlags.NoScrollbar
-        or (imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar)
+    local flags=imgui.WindowFlags.NoTitleBar + (size.resizable and imgui.WindowFlags.NoScrollbar or 0)
     if imgui.BeginPopupModal(u(title)..'##v22_'..id,nil,flags)then
         V.apply_font()
-        if size.resizable then
-            V.muted('Размер окна: потяните за нижний правый угол')
+        local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+        local avail=imgui.GetContentRegionAvail().x
+        V.text(V.fit(title,math.max(60,avail-55)))
+        -- Position independent of the previous widgets; old 'Закрыть' buttons remain
+        -- for compatibility, but every modal gets exactly the same close affordance.
+        V.at(x+math.max(0,avail-42),y)
+        local close=V.button('X','modal_x_'..id,40,false,false,34)
+        V.at(x,y+39)
+        imgui.Separator()
+        if close then
+            imgui.CloseCurrentPopup()
+        elseif size.resizable then
             V.list('modal_'..id,function()draw()end,{footer=true})
-        else draw() end
+        else
+            draw()
+        end
         imgui.EndPopup()
     end
 end
@@ -37547,35 +37573,58 @@ function V.set_screen(id)
 end
 local function header(g,io)
     local x0,y0=imgui.GetCursorPosX(),imgui.GetCursorPosY()
-    -- True Carbon Trade top bar: brand/home at left, version, server status and actions at right.
-    if V.button('P','carbon_brand',42,false,true,38)then V.set_screen('home')end
-    V.inline();if V.text_button('PALATKA AI','carbon_title',132,false,38)then V.set_screen('home')end
-    local drag=imgui.IsItemActive()
-    V.inline();V.muted('v'..tostring(DSP.version or '2.2'))
-    if drag and io.MouseDelta then
-        local d=io.MouseDelta
-        if d.x~=0 or d.y~=0 then
-            DSP.settings.mobile_window={x=DSP.clamp(g.x+d.x,0,io.DisplaySize.x-g.w),
-                y=DSP.clamp(g.y+d.y,0,io.DisplaySize.y-g.h),w=g.w,h=g.h};M.defer_save()
-        end
-    end
-    local available=imgui.GetContentRegionAvail().x
-    if available>260 then
-        V.inline();V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' · '..DSP.market.freshness(),available-150))
-    end
-    V.inline();if V.button('Меню','menu',72,V.nav,false,38)then V.nav=not V.nav end
-    V.inline();if V.button('X','close',38,false,false,38)then U.set_open(false)end
-    V.inline();V.button('[]','resize',42,false,false,38)
+    -- Absolute positions: the global X never escapes the right edge, even when
+    -- the server label becomes long or the user narrows the window.
+    local close_x=g.w-56
+    local menu_x=close_x-85
+    if V.button('P','carbon_brand',40,false,true,36)then V.set_screen('home')end
+    V.at(x0+47,y0)
+    if V.text_button('PALATKA AI','carbon_title',121,false,36)then V.set_screen('home')end
     if imgui.IsItemActive() and io.MouseDelta then
         local d=io.MouseDelta
         if d.x~=0 or d.y~=0 then
-            DSP.settings.mobile_window={x=g.x,y=g.y,
-                w=DSP.clamp(g.w+d.x,math.min(560,io.DisplaySize.x),io.DisplaySize.x-g.x),
-                h=DSP.clamp(g.h+d.y,math.min(330,io.DisplaySize.y),io.DisplaySize.y-g.y)}
+            DSP.settings.mobile_window={x=DSP.clamp(g.x+d.x,0,io.DisplaySize.x-g.w),
+                y=DSP.clamp(g.y+d.y,0,io.DisplaySize.y-g.h),w=g.w,h=g.h}
             M.defer_save()
         end
     end
-    V.at(x0,y0+49)
+    V.at(x0+175,y0+11);V.muted('v'..tostring(DSP.version or '2.2'))
+    if g.w>850 then
+        V.at(math.max(x0+240,menu_x-244),y0+11)
+        V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' · '..DSP.market.freshness(),230))
+    end
+    V.at(menu_x,y0)
+    if V.button('Меню','menu',78,V.nav,false,36)then V.nav=not V.nav end
+    V.at(close_x,y0)
+    if V.button('X','close',40,false,false,36)then
+        U.set_open(false)
+    end
+    V.at(x0,y0+44)
+end
+-- A real bottom-right drag handle: unlike the old top-bar [] button, it follows
+-- the edge being resized. No native overlay, no FFI pointer arithmetic.
+function V.resize_grip(g,io)
+    local x,y=g.w-46,g.h-44
+    V.at(x,y)
+    local pos=imgui.GetCursorScreenPos and imgui.GetCursorScreenPos()
+    V.button(' ','global_resize_grip',32,false,false,31)
+    if pos and imgui.GetWindowDrawList and imgui.GetColorU32 then
+        local dl=imgui.GetWindowDrawList()
+        local col=imgui.GetColorU32(imgui.Col.Text)
+        for i=0,2 do
+            dl:AddLine(imgui.ImVec2(pos.x+15+i*5,pos.y+25),
+                imgui.ImVec2(pos.x+27,pos.y+13+i*5),col,1.6)
+        end
+    end
+    if imgui.IsItemActive() and io.MouseDelta then
+        local d=io.MouseDelta
+        if d.x~=0 or d.y~=0 then
+            local w=DSP.clamp(g.w+d.x,math.min(560,io.DisplaySize.x),io.DisplaySize.x-g.x)
+            local h=DSP.clamp(g.h+d.y,math.min(330,io.DisplaySize.y),io.DisplaySize.y-g.y)
+            DSP.settings.mobile_window={x=g.x,y=g.y,w=w,h=h}
+            M.defer_save()
+        end
+    end
 end
 function V.track_touch(io)
     local frame=imgui.GetFrameCount and imgui.GetFrameCount()
@@ -37620,12 +37669,12 @@ function U.draw()
         V.font_pixels=V.font_scale_for(1,g.w,U.d)
         V.apply_font()
         header(g,io);imgui.Separator()
-        local wide=g.w>=930
+        local wide=g.w>=650
         local show_side=V.nav or wide
         local drawer_only=V.nav and not wide
         if show_side then
             local h=imgui.GetContentRegionAvail().y-48
-            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(196,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
+            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(182,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
                 V.apply_font()
                 V.muted('НАВИГАЦИЯ')
                 if V.button('Главная','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
@@ -37676,6 +37725,7 @@ function U.draw()
             local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(u(p.title)..'##v22_'..p.id)
         end
         if V.popups then V.popups()end
+        V.resize_grip(g,io)
     end
     imgui.End();imgui.PopStyleVar(5)
     if colors and colors>0 then imgui.PopStyleColor(colors)end
@@ -37787,82 +37837,110 @@ local V,S=DSP.ui21,DSP.storage
 V.storage_sort='value'
 V.storage_selected=1
 local function b(s,id,w,on,primary)return V.button(s,'storage_'..id,w,on,primary)end
+-- One task per panel: scanner, snapshots, manual fallback. This avoids the
+-- previous giant fixed header which pushed the item list off small screens.
 function V.storage_screen()
     V.heading('Хранилища',function()
         if b('Очистить','clear',105)then V.open_popup('Очистить снимки?','storage_clear')end
     end,109)
-    V.muted('Багажник · шкаф · склад | пассивное чтение, без действий с вещами')
     local capstate,capcount,caperr=S.textdraw_state()
-    if b(capstate=='armed' and 'Сбор TextDraw активен' or 'Начать сбор интерфейса','td_arm',250,capstate=='armed')then
-        S.arm_textdraw(35)
-    end
-    if capstate=='armed' or capstate=='expired' then
-        V.inline()
-        if b('Завершить и разобрать','td_finish',230,false,true)then
-            local ok,err=S.finish_textdraw()
-            if ok then V.storage_selected=1;V.storage_error=nil else V.storage_error=err end
+    V.storage_tab=V.storage_tab or (#S.snapshots>0 and 'snapshots' or 'scan')
+    local w=imgui.GetContentRegionAvail().x
+    local tabw=math.max(78,(w-12)/3)
+    for i,tab in ipairs({{'scan','Скан'}, {'snapshots','Снимки'}, {'manual','Ввод'}})do
+        if b(tab[2],'tab_'..tab[1],tabw,V.storage_tab==tab[1],V.storage_tab==tab[1])then
+            V.storage_tab=tab[1];V.reset_list('storage_scan_panel')
         end
+        if i<3 then V.inline(5)end
     end
-    V.muted('Сначала запустите сбор, откройте багажник в игре, закройте его, затем завершите сбор.')
-    V.muted('TextDraw-событий: '..tostring(capcount)..' · состояние: '..tostring(capstate))
-    if caperr then V.red(V.fit(tostring(caperr),imgui.GetContentRegionAvail().x))end
-    V.muted('Если событий 0 — окно может быть нативным; нужен лог интерфейса MonetLoader.')
-    if b(V.storage_manual and 'Скрыть ввод' or 'Вставить список','manual_toggle',190)then
-        V.storage_manual=not V.storage_manual
+    imgui.Separator()
+    if V.storage_tab=='scan' then
+        V.list('storage_scan_panel',function(width)
+            V.text('Диагностика игрового хранилища')
+            V.muted('Поддерживаются SA-MP Dialog и TextDraw. Нативный UI может быть недоступен.')
+            V.muted('1. Закройте багажник / шкаф / склад в игре.')
+            V.muted('2. Включите сбор и откройте нужное игровое окно.')
+            V.muted('3. Закройте игровое окно и завершите сбор.')
+            if b(capstate=='armed' and 'Сбор активен (35 с)' or 'Начать сбор (35 с)', 'td_arm',math.min(width,240),capstate=='armed',capstate~='armed')then
+                S.arm_textdraw(35);V.storage_error=nil
+            end
+            if capstate=='armed' or capstate=='expired' then
+                if b('Завершить и разобрать','td_finish',math.min(width,240),false,true)then
+                    local ok,err=S.finish_textdraw()
+                    if ok then V.storage_selected=1;V.storage_tab='snapshots';V.storage_error=nil
+                    else V.storage_error=err end
+                end
+            end
+            local T=S.td_session or {}
+            V.muted('Событий: '..tostring(T.events or 0)..' · строк текста: '..tostring(capcount)..' · уникальных: '..tostring(T.unique or 0))
+            V.muted('Состояние: '..tostring(capstate))
+            if caperr or V.storage_error then V.red(V.fit(tostring(V.storage_error or caperr),width))end
+            V.muted('0 событий: возможен нативный интерфейс, не TextDraw.')
+            V.muted('Текстовые ID сами по себе не доказывают количество предметов.')
+            if b('Ручной ввод списка','go_manual',math.min(width,220))then V.storage_tab='manual'end
+        end,{footer=function()V.muted('Скан только читает. Никаких игровых перемещений.')end})
+        return
     end
-    if V.storage_manual then
-        V.storage_manual_kind=V.storage_manual_kind or 'trunk'
-        if b('Багажник','manual_trunk',110,V.storage_manual_kind=='trunk')then V.storage_manual_kind='trunk'end
-        V.inline();if b('Шкаф','manual_cabinet',100,V.storage_manual_kind=='cabinet')then V.storage_manual_kind='cabinet'end
-        V.inline();if b('Склад','manual_warehouse',100,V.storage_manual_kind=='warehouse')then V.storage_manual_kind='warehouse'end
-        V.storage_input=V.storage_input or imgui.new.char[8192]()
-        V.muted('По строке на предмет: Дрова x45000 / Дрова (45000 шт.)')
-        imgui.InputTextMultiline('##storage_text',V.storage_input,8192,imgui.ImVec2(-1,100))
-        if b('Разобрать список','manual_accept',180,false,true)then
-            local kind=V.storage_manual_kind
-            local title=kind=='trunk'and'Багажник (ручной список)' or kind=='cabinet'and'Шкаф (ручной список)' or 'Склад (ручной список)'
-            local ok,err=S.accept(kind,title,DSP.to_cp(ffi.string(V.storage_input)),nil,'manual')
-            if ok then V.storage_manual=false;V.storage_selected=1
-            else V.storage_error=err end
-        end
-        if V.storage_error then V.red(tostring(V.storage_error))end
+    if V.storage_tab=='manual' then
+        V.list('storage_manual_panel',function(width)
+            V.muted('Если игровой интерфейс не выдаёт содержимое через события,')
+            V.muted('можно вставить список вручную — это не игровой скан.')
+            V.storage_manual_kind=V.storage_manual_kind or 'trunk'
+            local bw=math.max(72,(width-12)/3)
+            for i,t in ipairs({{'trunk','Багажник'},{'cabinet','Шкаф'},{'warehouse','Склад'}})do
+                if b(t[2],'manual_'..t[1],bw,V.storage_manual_kind==t[1])then V.storage_manual_kind=t[1]end
+                if i<3 then V.inline(5)end
+            end
+            V.storage_input=V.storage_input or imgui.new.char[8192]()
+            V.muted('Формат: Дрова x45000  или  Дрова (45000 шт.)')
+            imgui.InputTextMultiline('##storage_text',V.storage_input,8192,imgui.ImVec2(-1,100))
+            if b('Сохранить снимок','manual_accept',math.min(width,220),false,true)then
+                local kind=V.storage_manual_kind
+                local title=kind=='trunk'and'Багажник (ручной список)' or kind=='cabinet'and'Шкаф (ручной список)' or 'Склад (ручной список)'
+                local ok,err=S.accept(kind,title,DSP.to_cp(ffi.string(V.storage_input)),nil,'manual')
+                if ok then V.storage_tab='snapshots';V.storage_selected=1;V.storage_error=nil
+                else V.storage_error=err end
+            end
+            if V.storage_error then V.red(tostring(V.storage_error))end
+        end,{footer=false})
+        return
     end
     local snapshots=S.snapshots
     if #snapshots==0 then
-        V.text('Снимков пока нет. Откройте шкаф или багажник в игре.')
-        V.muted('Автоматически читаются только классические текстовые диалоги SA-MP.')
-        V.muted('Кастомный UI может не отдавать данные — тогда нужен игровой дамп.')
-    else
-        V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
-        local current=snapshots[V.storage_selected]
-        if b('Снимок '..V.storage_selected..' / '..#snapshots,'next',170)then
-            V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
-        end
-        V.inline()
-        if b(V.storage_sort=='value'and'Сорт.: оценка' or V.storage_sort=='qty'and'Сорт.: количество'
-            or V.storage_sort=='price'and'Сорт.: цена' or V.storage_sort=='category'and'Сорт.: категории' or'Сорт.: название','sort',220)then
-            V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
-                or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value';V.reset_list('storage_items')
-        end
-        local rows,info=S.sorted(current,V.storage_sort)
-        V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
-            (current.source=='manual' and ' · ручной ввод' or current.source=='textdraw' and ' · TextDraw' or ' · игровой диалог'),imgui.GetContentRegionAvail().x))
-        V.text('Подтверждено: '..info.total_qty..' шт. · неизвестное количество: '..info.unknown_qty..' строк')
-        V.green('Оценка по скупке: '..DSP.money(info.sell_to_buyers))
-        V.muted('Прибыль: неизвестна (нет подтверждённой себестоимости)')
-        V.muted('По объявлениям продажи: '..DSP.money(info.ask_value)..' · без цены: '..info.missing_prices)
-        if info.cross_server then V.red('Другой сервер: оценки цен отключены')end
-        V.muted('Это не прибыль и не гарантированный доход. Котировки могут устареть.')
-        V.list_rows('storage_items',rows,88,function(it,i)
-            V.row('storage_item_'..i,88,function(w,x,y)
-                V.at(x,y);V.text(V.fit(it.name,w-10))
-                V.at(x,y+28);V.muted('Остаток: '..(it.qty and tostring(it.qty)..' шт.' or 'неизвестен'))
-                V.at(x,y+55)
-                local total=(it.bid and it.qty)and DSP.money(it.bid*it.qty)or'нет оценки'
-                V.muted(V.fit('Скупают: '..(it.bid and DSP.money(it.bid)or'?')..' / шт. · '..total,w-10))
-            end)
-        end,{footer=function()V.muted('Сортировка не перемещает игровые предметы.')end})
+        V.muted('Снимков нет: обычный игровой диалог пока не распознан.')
+        if b('Открыть диагностику','scan_open',220,false,true)then V.storage_tab='scan'end
+        return
     end
+    V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
+    local current=snapshots[V.storage_selected]
+    local controlw=math.max(90,(imgui.GetContentRegionAvail().x-8)/2)
+    if b('Снимок '..V.storage_selected..' / '..#snapshots,'next',controlw)then
+        V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
+    end
+    V.inline(7)
+    if b(V.storage_sort=='value'and'Оценка'or V.storage_sort=='qty'and'Количество'
+        or V.storage_sort=='price'and'Цена'or V.storage_sort=='category'and'Категории' or 'А–Я',
+        'sort',controlw)then
+        V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
+            or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value'
+        V.reset_list('storage_items')
+    end
+    local rows,info=S.sorted(current,V.storage_sort)
+    V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
+        (current.source=='manual'and' · вручную' or current.source=='textdraw'and' · TextDraw' or' · Dialog'),imgui.GetContentRegionAvail().x))
+    V.text('Подтверждено: '..info.total_qty..' шт. · неизвестно: '..info.unknown_qty..' строк')
+    V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
+    V.muted('Не прибыль · продажа по объявлениям: '..DSP.money(info.ask_value))
+    if info.cross_server then V.red('Другой сервер: цены скрыты')end
+    V.list_rows('storage_items',rows,84,function(it,i)
+        V.row('storage_item_'..i,84,function(ww,x,y)
+            V.at(x,y);V.text(V.fit(it.name,ww-10))
+            V.at(x,y+27);V.muted('Количество: '..(it.qty and tostring(it.qty)..' шт.'or'неизвестно'))
+            V.at(x,y+53)
+            local total=(it.bid and it.qty)and DSP.money(it.bid*it.qty)or'нет оценки'
+            V.muted(V.fit('Скупают: '..(it.bid and DSP.money(it.bid)or'?')..' / шт. · '..total,ww-10))
+        end)
+    end,{footer=function()V.muted('Только сортировка Palatka AI, не предметов игры.')end})
 end
 
 -- Deletion is a real modal confirmation; cancellation never changes snapshots.

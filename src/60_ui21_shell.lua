@@ -161,21 +161,33 @@ function V.row(id,height,draw)
     imgui.PopID();if not ok then error(err,0)end;imgui.SetCursorPos(imgui.ImVec2(x,y+height))
 end
 function V.at(x,y)imgui.SetCursorPos(imgui.ImVec2(x,y))end
+-- One consistent window chrome for every modal: close at the top-right.
+-- A modal can always be dismissed without traversing a sequence of Back buttons.
+-- Keep the native ImGui resize grip enabled (NoResize is intentionally absent).
 function V.popup(title,id,draw,size)
     size=size or {}
     local sz=imgui.GetIO().DisplaySize
     imgui.SetNextWindowPos(imgui.ImVec2(sz.x*.5,sz.y*.5),imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
     imgui.SetNextWindowSize(imgui.ImVec2(math.min(size.w or 620,sz.x-24),math.min(size.h or 410,sz.y-24)),imgui.Cond.Appearing)
-    -- Resizable sheet with a real scrollable content region and fixed arrow buttons.
-    -- Only explicitly marked detail popups use this: delete confirmation remains modal.
-    local flags=size.resizable and imgui.WindowFlags.NoScrollbar
-        or (imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar)
+    local flags=imgui.WindowFlags.NoTitleBar + (size.resizable and imgui.WindowFlags.NoScrollbar or 0)
     if imgui.BeginPopupModal(u(title)..'##v22_'..id,nil,flags)then
         V.apply_font()
-        if size.resizable then
-            V.muted('Размер окна: потяните за нижний правый угол')
+        local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+        local avail=imgui.GetContentRegionAvail().x
+        V.text(V.fit(title,math.max(60,avail-55)))
+        -- Position independent of the previous widgets; old 'Закрыть' buttons remain
+        -- for compatibility, but every modal gets exactly the same close affordance.
+        V.at(x+math.max(0,avail-42),y)
+        local close=V.button('X','modal_x_'..id,40,false,false,34)
+        V.at(x,y+39)
+        imgui.Separator()
+        if close then
+            imgui.CloseCurrentPopup()
+        elseif size.resizable then
             V.list('modal_'..id,function()draw()end,{footer=true})
-        else draw() end
+        else
+            draw()
+        end
         imgui.EndPopup()
     end
 end
@@ -205,35 +217,58 @@ function V.set_screen(id)
 end
 local function header(g,io)
     local x0,y0=imgui.GetCursorPosX(),imgui.GetCursorPosY()
-    -- True Carbon Trade top bar: brand/home at left, version, server status and actions at right.
-    if V.button('P','carbon_brand',42,false,true,38)then V.set_screen('home')end
-    V.inline();if V.text_button('PALATKA AI','carbon_title',132,false,38)then V.set_screen('home')end
-    local drag=imgui.IsItemActive()
-    V.inline();V.muted('v'..tostring(DSP.version or '2.2'))
-    if drag and io.MouseDelta then
-        local d=io.MouseDelta
-        if d.x~=0 or d.y~=0 then
-            DSP.settings.mobile_window={x=DSP.clamp(g.x+d.x,0,io.DisplaySize.x-g.w),
-                y=DSP.clamp(g.y+d.y,0,io.DisplaySize.y-g.h),w=g.w,h=g.h};M.defer_save()
-        end
-    end
-    local available=imgui.GetContentRegionAvail().x
-    if available>260 then
-        V.inline();V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' · '..DSP.market.freshness(),available-150))
-    end
-    V.inline();if V.button('Меню','menu',72,V.nav,false,38)then V.nav=not V.nav end
-    V.inline();if V.button('X','close',38,false,false,38)then U.set_open(false)end
-    V.inline();V.button('[]','resize',42,false,false,38)
+    -- Absolute positions: the global X never escapes the right edge, even when
+    -- the server label becomes long or the user narrows the window.
+    local close_x=g.w-56
+    local menu_x=close_x-85
+    if V.button('P','carbon_brand',40,false,true,36)then V.set_screen('home')end
+    V.at(x0+47,y0)
+    if V.text_button('PALATKA AI','carbon_title',121,false,36)then V.set_screen('home')end
     if imgui.IsItemActive() and io.MouseDelta then
         local d=io.MouseDelta
         if d.x~=0 or d.y~=0 then
-            DSP.settings.mobile_window={x=g.x,y=g.y,
-                w=DSP.clamp(g.w+d.x,math.min(560,io.DisplaySize.x),io.DisplaySize.x-g.x),
-                h=DSP.clamp(g.h+d.y,math.min(330,io.DisplaySize.y),io.DisplaySize.y-g.y)}
+            DSP.settings.mobile_window={x=DSP.clamp(g.x+d.x,0,io.DisplaySize.x-g.w),
+                y=DSP.clamp(g.y+d.y,0,io.DisplaySize.y-g.h),w=g.w,h=g.h}
             M.defer_save()
         end
     end
-    V.at(x0,y0+49)
+    V.at(x0+175,y0+11);V.muted('v'..tostring(DSP.version or '2.2'))
+    if g.w>850 then
+        V.at(math.max(x0+240,menu_x-244),y0+11)
+        V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' · '..DSP.market.freshness(),230))
+    end
+    V.at(menu_x,y0)
+    if V.button('Меню','menu',78,V.nav,false,36)then V.nav=not V.nav end
+    V.at(close_x,y0)
+    if V.button('X','close',40,false,false,36)then
+        U.set_open(false)
+    end
+    V.at(x0,y0+44)
+end
+-- A real bottom-right drag handle: unlike the old top-bar [] button, it follows
+-- the edge being resized. No native overlay, no FFI pointer arithmetic.
+function V.resize_grip(g,io)
+    local x,y=g.w-46,g.h-44
+    V.at(x,y)
+    local pos=imgui.GetCursorScreenPos and imgui.GetCursorScreenPos()
+    V.button(' ','global_resize_grip',32,false,false,31)
+    if pos and imgui.GetWindowDrawList and imgui.GetColorU32 then
+        local dl=imgui.GetWindowDrawList()
+        local col=imgui.GetColorU32(imgui.Col.Text)
+        for i=0,2 do
+            dl:AddLine(imgui.ImVec2(pos.x+15+i*5,pos.y+25),
+                imgui.ImVec2(pos.x+27,pos.y+13+i*5),col,1.6)
+        end
+    end
+    if imgui.IsItemActive() and io.MouseDelta then
+        local d=io.MouseDelta
+        if d.x~=0 or d.y~=0 then
+            local w=DSP.clamp(g.w+d.x,math.min(560,io.DisplaySize.x),io.DisplaySize.x-g.x)
+            local h=DSP.clamp(g.h+d.y,math.min(330,io.DisplaySize.y),io.DisplaySize.y-g.y)
+            DSP.settings.mobile_window={x=g.x,y=g.y,w=w,h=h}
+            M.defer_save()
+        end
+    end
 end
 function V.track_touch(io)
     local frame=imgui.GetFrameCount and imgui.GetFrameCount()
@@ -278,12 +313,12 @@ function U.draw()
         V.font_pixels=V.font_scale_for(1,g.w,U.d)
         V.apply_font()
         header(g,io);imgui.Separator()
-        local wide=g.w>=930
+        local wide=g.w>=650
         local show_side=V.nav or wide
         local drawer_only=V.nav and not wide
         if show_side then
             local h=imgui.GetContentRegionAvail().y-48
-            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(196,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
+            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(182,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
                 V.apply_font()
                 V.muted('НАВИГАЦИЯ')
                 if V.button('Главная','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
@@ -334,6 +369,7 @@ function U.draw()
             local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(u(p.title)..'##v22_'..p.id)
         end
         if V.popups then V.popups()end
+        V.resize_grip(g,io)
     end
     imgui.End();imgui.PopStyleVar(5)
     if colors and colors>0 then imgui.PopStyleColor(colors)end
