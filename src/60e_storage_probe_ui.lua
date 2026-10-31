@@ -89,7 +89,6 @@ function V.storage_probe_panel(width,kind)
             V.probe_error=nil
             V.storage_tab='library'
             V.storage_library_page='list'
-            V.storage_ask_name=true
         else
             V.probe_error=tostring(saved)
         end
