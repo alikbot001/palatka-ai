@@ -158,7 +158,10 @@ local function queue(reason,at)
     local c=R.config()
     if R.blocked then return false,'Blocked by authentication or kick'end
     if not R.host then R.remember_address()end
-    if not R.host then return false,'No known server address'end
+    if not R.host and type(sampProcessChatInput)~='function' and
+        type(sampSendChat)~='function' then
+        return false,'No supported reconnect command or server address'
+    end
     if R.attempts>=c.max_attempts then
         R.stop('Attempt limit reached');return false,'Attempt limit reached'
     end
@@ -194,7 +197,10 @@ function R.manual(at)
     R.attempts=0
     R.awaiting_input=false
     if not R.host then R.remember_address()end
-    if not R.host then return false,'No known server; enter it through Arizona launcher'end
+    if not R.host and type(sampProcessChatInput)~='function' and
+        type(sampSendChat)~='function' then
+        return false,'No supported reconnect command or server address'
+    end
     R.state='scheduled'
     R.next_at=at or now()
     R.status='Manual reconnect requested'
@@ -214,10 +220,22 @@ end
 -- Connect uses an advertised MoonLoader/MonetLoader-compatible API if available.
 -- Never call arbitrary RakNet disconnect RPCs or modify game memory.
 local function connect()
-    if type(sampConnectToServer)~='function' then
-        return false,'sampConnectToServer not supported by this MonetLoader build'
+    -- Arizona Mobile officially exposes /reconnect in the game client.
+    -- Prefer the chat-input processor so client-side commands execute locally.
+    if type(sampProcessChatInput)=='function' then
+        local ok,result=pcall(sampProcessChatInput,'/reconnect')
+        if ok and result~=false then return true end
     end
-    return pcall(sampConnectToServer,R.host,R.port)
+    -- Some MonetLoader builds expose only SAMP's normal chat dispatch.
+    if type(sampSendChat)=='function' then
+        local ok,result=pcall(sampSendChat,'/reconnect')
+        if ok and result~=false then return true end
+    end
+    if type(sampConnectToServer)=='function' and R.host and R.port then
+        local ok,result=pcall(sampConnectToServer,R.host,R.port)
+        if ok and result~=false then return true end
+    end
+    return false,'No supported reconnect API in this MonetLoader build'
 end
 function R.tick(at)
     at=at or now()
@@ -259,11 +277,11 @@ function R.tick(at)
         R.stop('Attempt limit reached');return false
     end
     R.attempts=R.attempts+1
-    local called,ok,why=connect()
-    if not called or ok==false then
+    local ok,why=connect()
+    if not ok then
         R.status='Reconnect API unavailable'
         R.state='idle'
-        R.last_error=tostring(why or ok or'Unknown connection error')
+        R.last_error=tostring(why or'Unknown connection error')
         return false
     end
     R.state='connecting'
