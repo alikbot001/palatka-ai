@@ -437,15 +437,21 @@ function DSP.theme.set(name)
     if DSP.theme.list[name] then
         DSP.theme.current = name
         DSP.settings.theme = name
-        DSP.save_settings()
-        DSP.add_log(': ' .. DSP.theme.list[name].name)
+        local ok,err=DSP.save_settings()
+        if ok then
+            if DSP.save_ui_state then DSP.save_ui_state() end
+            DSP.add_log(': ' .. DSP.theme.list[name].name)
+        elseif DSP.flog then DSP.flog('THEME SAVE ERROR '..tostring(err)) end
     end
 end
 
 function DSP.theme.set_opacity(v)
     DSP.theme.opacity = DSP.clamp(v, 0.65, 1.00)
     DSP.settings.opacity = DSP.theme.opacity
-    DSP.save_settings()
+    local ok,err=DSP.save_settings()
+    if ok then
+        if DSP.save_ui_state then DSP.save_ui_state() end
+    elseif DSP.flog then DSP.flog('OPACITY SAVE ERROR '..tostring(err)) end
 end
 
 -- Push the full ImGui style palette for the active theme.
@@ -517,7 +523,7 @@ function DSP.theme.push_overlay(accent_alpha)
 end
 
 -- UI state persistence (CR button position, screen, theme transient)
-function DSP.load_ui_state()
+function DSP.load_ui_state(prefer_settings)
     local f = io.open(DSP.ui_state_path, 'rb')
     if not f then return false end
     local raw = f:read('*a')
@@ -528,8 +534,12 @@ function DSP.load_ui_state()
         DSP.settings.cr_pos = { x = tonumber(d.cr_pos.x) or 28, y = tonumber(d.cr_pos.y) or 215 }
     end
     if type(d.screen) == 'string' then DSP.settings.screen = d.screen end
-    if type(d.theme) == 'string' then DSP.settings.theme = d.theme end
-    if type(d.opacity) == 'number' then DSP.settings.opacity = d.opacity end
+    -- The primary settings file is authoritative. An old UI snapshot may only
+    -- restore appearance when the primary settings file was not available.
+    if not prefer_settings then
+        if type(d.theme) == 'string' then DSP.settings.theme = d.theme end
+        if type(d.opacity) == 'number' then DSP.settings.opacity = d.opacity end
+    end
     return true
 end
 
@@ -550,8 +560,8 @@ function DSP.save_ui_state()
     return true
 end
 
-DSP.load_settings()
-DSP.load_ui_state()
+local loaded_settings = DSP.load_settings()
+DSP.load_ui_state(loaded_settings)
 -- Never overwrite a personal theme during startup/migration.
 if not DSP.settings.ui_v14_migrated then
     DSP.settings.ui_v14_migrated=true
