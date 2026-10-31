@@ -56,8 +56,4 @@ V.tools=function(screen)
     if screen=='lombard' then return V.lombard_screen() end
     if previous_tools then return previous_tools(screen) end
 end
--- Command is only a shortcut to the mimgui page, not an automated pawnshop action.
-if sampRegisterChatCommand then
-    pcall(sampRegisterChatCommand,'crrlombardui',function()if V.set_screen then V.set_screen('lombard')end end)
-end
 return true
