@@ -157,6 +157,11 @@ function S.set_snapshot_label(snapshot,label)
     if type(label)~='string' then return false,'invalid label' end
     label=DSP.trim(DSP.clean_text(label))
     if #label>66 or label=='' then return false,'name must be 1-66 bytes' end
+    -- Live scans are deliberately NOT in S.snapshots. Allow naming only the
+    -- current live result; stale objects from previous scans are rejected.
+    if snapshot.source=='packet220_trunk' and S.trunk and S.trunk.snapshot==snapshot then
+        return S.save_named_trunk(snapshot,label)
+    end
     local found=false
     for _,saved in ipairs(S.snapshots or{})do if saved==snapshot then found=true;break end end
     if not found then return false,'stale snapshot' end
