@@ -282,13 +282,11 @@ function C.install()
         -- only needs its last 300 events; do not parse the entire file at login.
         -- Seek from the end and discard the initial partial line.
         local max_tail_bytes=2*1024*1024
-        local length=f:seek('end')
+        local length=type(f.seek)=='function' and f:seek('end') or nil
         if length then
             local start=math.max(0,length-max_tail_bytes)
             f:seek('set',start)
             if start>0 then f:read('*l') end
-        else
-            f:seek('set',0)
         end
         local history,head,count={},1,0
         for line in f:lines() do
