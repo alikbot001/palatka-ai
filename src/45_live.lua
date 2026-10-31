@@ -33,11 +33,11 @@ function DSP.money_val(s)
     s = tostring(s or ''):gsub('{[%x]+}', ''):gsub('%s+', '')
     local low = s:lower()
     local mult = 1
-    if low:find('kk', 1, true) or low:find('кк', 1, true) then
+    if low:find('kk', 1, true) or low:find('ГЄГЄ', 1, true) then
         mult = 1000000
-    elseif low:find('m', 1, true) or low:find('м', 1, true) then
+    elseif low:find('m', 1, true) or low:find('Г¬', 1, true) then
         mult = 1000000
-    elseif low:find('k', 1, true) or low:find('к', 1, true) then
+    elseif low:find('k', 1, true) or low:find('ГЄ', 1, true) then
         mult = 1000
     end
     local number = s:match('(%d[%d%,%.]*)')
@@ -460,6 +460,11 @@ function L.handle_shop_owner(raw)
 end
 
 function L.handle(iface, sub, raw)
+    -- Passive discovery subscriber. Never consumes the packet or changes trade logic.
+    if iface==52 and DSP.storage_probe and DSP.storage_probe.on_packet then
+        local ok,err=pcall(DSP.storage_probe.on_packet,sub,raw)
+        if not ok and DSP.flog then DSP.flog('STORAGE probe error: '..tostring(err)) end
+    end
     -- Own-stall inventory acknowledgement. Real sale listing must first open
     -- the stall inventory, just like the native UI does.
     if iface==52 and sub==2 and DSP.auto then
@@ -492,7 +497,7 @@ function L.handle(iface, sub, raw)
     elseif iface == 8 and sub == 15 then
         local tp = tonumber(raw:match('"type"%s*:%s*(%d+)')) or 0
         local title = strip(raw:match('"title"%s*:%s*"([^"]*)"') or '')
-        if tp == 3 and title:find('Мен', 1, true) then
+        if tp == 3 and title:find('ГЊГҐГ­', 1, true) then
             local s = L.ensure_shop()
             if (s.menu_closed or 0)>0 then L.reset_shop('','');s=L.shop end
             s.updated = now()
@@ -548,7 +553,7 @@ function L.on_receive(packet_id, bs)
 end
 
 function L.parse_dialog_trade(title, text)
-    local partner = strip(title or ''):match('Результат сделки с (.-)%s*$') or ''
+    local partner = strip(title or ''):match('ГђГҐГ§ГіГ«ГјГІГ ГІ Г±Г¤ГҐГ«ГЄГЁ Г± (.-)%s*$') or ''
     if partner == '' then return end
     local t = L.trade
     if not t or t.opened == 0 or t.partner ~= partner then L.reset_trade(partner) end
@@ -561,19 +566,19 @@ function L.parse_dialog_trade(title, text)
     -- (LuaJIT 5.1 permits it but lupa's Lua 5.5 sandbox test enforces the rule.)
     for raw_line in tostring(text or ''):gsub('{[%x]+}', ''):gmatch('[^\r\n]+') do
         local line = strip(raw_line)
-        if line:find('Перед', 1, true) then
+        if line:find('ГЏГҐГ°ГҐГ¤', 1, true) then
             sec = 'give'
-        elseif line:find('Получ', 1, true) then
+        elseif line:find('ГЏГ®Г«ГіГ·', 1, true) then
             sec = 'get'
-        elseif line:find('Комис', 1, true) then
+        elseif line:find('ГЉГ®Г¬ГЁГ±', 1, true) then
             sec = ''
         elseif (sec == 'give' or sec == 'get') and line ~= '' and line ~= '-' then
             local money = DSP.money_val(line)
-            local is_money = (line:find('%$') or line:lower():find('кк') or line:lower():find('kk')) and money > 0
+            local is_money = (line:find('%$') or line:lower():find('ГЄГЄ') or line:lower():find('kk')) and money > 0
             if is_money then
                 if sec == 'give' then t.money_give = money else t.money_get = money end
             else
-                local nm, qty = line:match('^(.-)%s*[xXхХ]%s*(%d+)%s*$')
+                local nm, qty = line:match('^(.-)%s*[xXГµГ•]%s*(%d+)%s*$')
                 if not nm then nm, qty = line:match('^(.-)%s*%((%d+)%s*[^%)]*%)%s*$') end
                 if not nm then nm, qty = line, '1' end
                 local base, e = name_ench(nm)
@@ -603,7 +608,7 @@ function L.on_dialog(dialog_id, style, title, b1, b2, text)
         -- Also check for trade result in dialog text
         local txt = DSP.clean_text(text or '')
         local low_txt = DSP.lower and DSP.lower(txt) or txt
-        if low_txt:find('сделка', 1, true) or low_txt:find('обмен', 1, true) then
+        if low_txt:find('Г±Г¤ГҐГ«ГЄГ ', 1, true) or low_txt:find('Г®ГЎГ¬ГҐГ­', 1, true) then
             local t = L.trade
             if t and t.give and t.get then
                 local items_given, items_received = {}, {}
@@ -710,12 +715,12 @@ end
 -- =========================================================================
 
 -- Recognize only explicit cash receipt messages, not account balances or
--- speculative market valuations. Reward 'Вы получили $' is handled by R.parse.
+-- speculative market valuations. Reward 'Г‚Г» ГЇГ®Г«ГіГ·ГЁГ«ГЁ $' is handled by R.parse.
 function L.check_income_message(text)
     local s=DSP.lower(DSP.clean_text(text or ''))
     local words={
-        'вы заработали', 'доход от бизнеса', 'доход от аренды',
-        'доход с депозита', 'вам выплачена зарплата', 'зарплата за работу',
+        'ГўГ» Г§Г Г°Г ГЎГ®ГІГ Г«ГЁ', 'Г¤Г®ГµГ®Г¤ Г®ГІ ГЎГЁГ§Г­ГҐГ±Г ', 'Г¤Г®ГµГ®Г¤ Г®ГІ Г Г°ГҐГ­Г¤Г»',
+        'Г¤Г®ГµГ®Г¤ Г± Г¤ГҐГЇГ®Г§ГЁГІГ ', 'ГўГ Г¬ ГўГ»ГЇГ«Г Г·ГҐГ­Г  Г§Г Г°ГЇГ«Г ГІГ ', 'Г§Г Г°ГЇГ«Г ГІГ  Г§Г  Г°Г ГЎГ®ГІГі',
     }
     local label
     for _,word in ipairs(words) do
@@ -736,14 +741,14 @@ end
 function L.check_market_message(raw)
     local s=DSP.clean_text(raw or '')
     local dir, item, amount
-    for _,side in ipairs({{'sell','продали'},{'buy','купили'}}) do
+    for _,side in ipairs({{'sell','ГЇГ°Г®Г¤Г Г«ГЁ'},{'buy','ГЄГіГЇГЁГ«ГЁ'}}) do
         local verb=side[2]
-        item,amount=s:match('^Вы '..verb..' (.-) за %$([%d%., ]+)')
-        if not item then item,amount=s:match('^Вы '..verb..' (.-) за ([%d%., ]+)%$') end
+        item,amount=s:match('^Г‚Г» '..verb..' (.-) Г§Г  %$([%d%., ]+)')
+        if not item then item,amount=s:match('^Г‚Г» '..verb..' (.-) Г§Г  ([%d%., ]+)%$') end
         if item and amount then dir=side[1];break end
     end
     if not dir then
-        item,amount=s:match('^Игрок .- купил у вас (.-) за %$([%d%., ]+)')
+        item,amount=s:match('^Г€ГЈГ°Г®ГЄ .- ГЄГіГЇГЁГ« Гі ГўГ Г± (.-) Г§Г  %$([%d%., ]+)')
         if item then dir='sell' end
     end
     local cash=amount and DSP.money_val(amount) or 0
@@ -756,10 +761,10 @@ end
 
 local PAYDAY_PATTERNS = {
     'PayDay',
-    'ПэйДэй',
-    'ПейДей',
-    'вы получили зарплату',
-    'Вам начислена заработная плата',
+    'ГЏГЅГ©Г„ГЅГ©',
+    'ГЏГҐГ©Г„ГҐГ©',
+    'ГўГ» ГЇГ®Г«ГіГ·ГЁГ«ГЁ Г§Г Г°ГЇГ«Г ГІГі',
+    'Г‚Г Г¬ Г­Г Г·ГЁГ±Г«ГҐГ­Г  Г§Г Г°Г ГЎГ®ГІГ­Г Гї ГЇГ«Г ГІГ ',
 }
 
 function L.check_payday_message(text)
@@ -767,7 +772,7 @@ function L.check_payday_message(text)
     local s=DSP.lower(DSP.clean_text(text)):gsub('^[%s|]+','')
     if s:find('%[%d+%]:')or s:match('^%[')then return false end
     local hit=s:match('^payday%s*[!:%.]*$')or s:match('^payday%s*[:%-]')
-    for _,header in ipairs({'БАНКОВСКИЙ ЧЕК','вы получили зарплату','вам начислена заработная плата','ПэйДэй','ПейДей'})do
+    for _,header in ipairs({'ГЃГЂГЌГЉГЋГ‚Г‘ГЉГ€Г‰ Г—Г…ГЉ','ГўГ» ГЇГ®Г«ГіГ·ГЁГ«ГЁ Г§Г Г°ГЇГ«Г ГІГі','ГўГ Г¬ Г­Г Г·ГЁГ±Г«ГҐГ­Г  Г§Г Г°Г ГЎГ®ГІГ­Г Гї ГЇГ«Г ГІГ ','ГЏГЅГ©Г„ГЅГ©','ГЏГҐГ©Г„ГҐГ©'})do
         if s:find(DSP.lower(header),1,true)==1 then hit=true;break end
     end
     if not hit then return false end
@@ -785,19 +790,19 @@ function L.check_payday_message(text)
     if DSP.craglog and DSP.craglog.log_payday then
         pcall(DSP.craglog.log_payday, summary, text)
     end
-    DSP.add_log(string.format('PayDay: %d сделок, %s%s',
+    DSP.add_log(string.format('PayDay: %d Г±Г¤ГҐГ«Г®ГЄ, %s%s',
         summary.count,
         summary.profit >= 0 and '+' or '',
         DSP.money(summary.profit)))
     -- Telegram notification (UTF-8 over HTTP)
     if DSP.settings.tg_payday_enabled and DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
         local msg = '[palatka ai] PayDay ' .. os.date('%H:%M') .. '\n'
-            .. 'Сделок за день: ' .. summary.count .. '\n'
-            .. 'Прибыль: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit) .. '\n'
-            .. 'Получено: ' .. DSP.money(summary.total_get) .. '\n'
-            .. 'Отдано: ' .. DSP.money(summary.total_give) .. '\n'
+            .. 'Г‘Г¤ГҐГ«Г®ГЄ Г§Г  Г¤ГҐГ­Гј: ' .. summary.count .. '\n'
+            .. 'ГЏГ°ГЁГЎГ»Г«Гј: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit) .. '\n'
+            .. 'ГЏГ®Г«ГіГ·ГҐГ­Г®: ' .. DSP.money(summary.total_get) .. '\n'
+            .. 'ГЋГІГ¤Г Г­Г®: ' .. DSP.money(summary.total_give) .. '\n'
             .. 'ROI: ' .. string.format('%.1f%%', summary.roi) .. '\n'
-            .. 'Средняя сделка: ' .. DSP.money(summary.avg_profit)
+            .. 'Г‘Г°ГҐГ¤Г­ГїГї Г±Г¤ГҐГ«ГЄГ : ' .. DSP.money(summary.avg_profit)
         if DSP.logs and DSP.logs.send_telegram then
             pcall(DSP.logs.send_telegram, msg)
         end
