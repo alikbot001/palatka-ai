@@ -23,6 +23,16 @@ function V.storage_probe_panel(width)
         if button('Закончить сбор и проверить','stop',w) then P.stop() end
     end
     V.muted('Кандидатов: '..#state.order..' · пакетов: '..state.observed..' · багажник исключён: '..state.ignored_trunk..' · лавка исключена: '..(state.ignored_stall or 0))
+    if not state.armed and state.status=='review' then
+        if button('Создать безопасный отчёт','export',w) then
+            local ok,path=P.export_report()
+            if ok then V.probe_report_path=path;V.probe_error=nil
+            else V.probe_error=tostring(path) end
+        end
+        if V.probe_report_path then
+            V.muted(V.fit('Отчёт: '..V.probe_report_path,width))
+        end
+    end
     if #state.order==0 then
         V.muted('Нет подходящих данных. Нативный экран мог использовать другой формат.')
         return
