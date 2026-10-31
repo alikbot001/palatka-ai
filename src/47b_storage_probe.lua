@@ -126,12 +126,12 @@ function P.save(index)
         rows=view.rows,count_known=view.known,occupied_slots=view.occupied}
     local previous=S.snapshots
     local previous_saved=DSP.settings and DSP.settings.storage_snapshots
+    -- Keep explicitly saved observations (including their chosen names).
+    -- They are history, never proof that the same cabinet was opened again.
     local replacement={snap}
-    for _,s in ipairs(previous or {})do
-        if not (s.source=='packet220_probe' and s.kind==P.kind) then
-            replacement[#replacement+1]=s
-            if #replacement>=8 then break end
-        end
+    for _,old in ipairs(previous or {})do
+        replacement[#replacement+1]=old
+        if #replacement>=8 then break end
     end
     S.snapshots=replacement
     if DSP.settings then DSP.settings.storage_snapshots=replacement end
