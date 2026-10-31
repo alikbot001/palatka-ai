@@ -17,6 +17,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y luajit
       - name: Verify original shell fallback
         run: luajit tests/test_mcr_classic_shell.lua
+      - name: Test persistent multi-deal arb agent
+        run: luajit tests/test_arbitrage_session.lua
       - name: Build standalone CP1251 Lua candidate
         run: python3 build.py
       - name: Upload Android test candidate (not a production release)
