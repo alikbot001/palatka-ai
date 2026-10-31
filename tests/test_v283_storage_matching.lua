@@ -35,6 +35,13 @@ local suggestions=S.match_saved_trunks(two)
 assert(#suggestions==1 and suggestions[1].id==boxA.id)
 assert(suggestions[1].shared==1 and suggestions[1].similarity==33)
 assert(boxA.count_known==15,'never auto update a saved trunk')
+-- Moving one item inside an opened trunk must not discard the completed
+-- scan or prevent the next return-to-menu matching prompt.
+payload={type=8,items={{slot=2,item=111,amount=499}}}
+assert(not S.on_inventory_packet(0,'delta'))
+assert(S.trunk_state().status=='saved')
+assert(S.trunk_state().review_needed)
+assert(#S.match_saved_trunks(S.trunk_state().snapshot)==1)
 local ok2,boxB=S.save_named_trunk(two,'Такси')
 assert(ok2 and boxB.count_known==506)
 local three=scan({[4]={id=111,qty=1},[5]={id=333,qty=7}})
