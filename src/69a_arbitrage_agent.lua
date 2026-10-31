@@ -110,6 +110,9 @@ local function record_snapshot(route,sid)
     local row=route.row
     local sell=route.sell_offer
     local buy=route.buy_offer
+    local cut=cycle_start(os.time())
+    -- Do not requeue a previous server-day quote after the expected 05:00 restart.
+    if (num(sell.ts,1)and sell.ts<cut)or(num(buy.ts,1)and buy.ts<cut)then return nil end
     local sk=key(sid,row,'sell',sell)
     local bk=key(sid,row,'buy',buy)
     local ts=os.time()
@@ -160,6 +163,10 @@ function A.start(routes)
             tax_bp=num(DSP.settings.tax_bp,0,10000)or 200}
     end
     local n=append_routes(routes,24)
+    if n==0 and #A.data.session.routes==0 then
+        A.data.session=nil
+        return false,'Новых пригодных маршрутов пока нет'
+    end
     A.show(true)
     return true,n
 end
