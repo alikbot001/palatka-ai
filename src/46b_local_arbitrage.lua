@@ -68,17 +68,25 @@ function A.routes(timestamp)
     local shops=DSP.shop_store and DSP.shop_store.active and DSP.shop_store.active(sid(),timestamp) or {}
     for _,shop in ipairs(shops) do
         if num(shop.num,1) and not (market and market.is_shop_missing and market.is_shop_missing(shop.num,timestamp)) then
-            for _,pair in ipairs({{shop.sell,sellers},{shop.buy,buyers}}) do
+            for _,pair in ipairs({{shop.sell,sellers,'sell'},{shop.buy,buyers,'buy'}}) do
                 for _,offer in ipairs(pair[1] or {}) do
                     local id=num(offer.id,1)
                     local ench=num(offer.ench or 0,0,10000)
                     local price=num(offer.price,1)
                     if id and ench and price then
                         local k=tostring(id)..':'..tostring(ench)
-                        local bucket=pair[2][k]
-                        if not bucket then bucket={};pair[2][k]=bucket end
-                        bucket[#bucket+1]={num=shop.num,owner=shop.owner,at=shop.at,id=id,ench=ench,
-                            name=offer.name,price=price,qty=num(offer.qty,1,1000000000)}
+                        local available=num(offer.qty,1,1000000000)
+                        if available and DSP.arb_agent and DSP.arb_agent.remaining then
+                            available=DSP.arb_agent.remaining({key=k},pair[3],
+                                {shop=shop.num,owner=shop.owner,price=price,ts=shop.at},
+                                available,{source='recent_scan',at=shop.at})
+                        end
+                        if available==nil or available>0 then
+                            local bucket=pair[2][k]
+                            if not bucket then bucket={};pair[2][k]=bucket end
+                            bucket[#bucket+1]={num=shop.num,owner=shop.owner,at=shop.at,id=id,ench=ench,
+                                name=offer.name,price=price,qty=available}
+                        end
                     end
                 end
             end
