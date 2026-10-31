@@ -46,7 +46,7 @@ assert(A.active().routes[1].skipped)
 assert(A.restore_unavailable(1))
 -- A new confirmed shop owner blocks stale matching plan, but not other stalls.
 DSP.live={shop={server=102,num='20',owner='Different',scan_complete=true,items_updated=os.time()}}
-assert(A.confirm(1,'buy',4))
+assert(A.confirm(1,'buy',10))
 assert(A.observe_live_shop())
 assert(A.active().routes[1].unavailable_reason=='owner_changed')
 assert(A.active().routes[2].unavailable_reason==nil)
