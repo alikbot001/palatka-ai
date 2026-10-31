@@ -3,7 +3,7 @@
   "version": "2.9.1",
   "mode": "overlay",
   "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua",
-  "size": 496691,
+  "size": 337474,
   "published_at": "2026-10-31",
   "changelog": [
     "Мини-агент арбитража переработан под оригинальные цвета, шрифты и кнопки Palatka, с чистым русским текстом.",
