@@ -194,27 +194,57 @@ function V.storage_screen()
             V.reset_list('storage_scan_panel')
             return
         end
-        if #library==0 then
-            V.muted('Пока ничего не сохранено.')
-            V.muted('Просканируй багажник и выбери «Сохранить как новое».')
+        V.muted('ПОИСК: по названию хранилища или предмета')
+        local query=V.search and V.search('storage_all','Название или предмет...',math.min(380,width)) or ''
+        query=DSP.lower(DSP.trim(query or ''))
+        local filtered={}
+        local grand,missing=0,0
+        for _,entry in ipairs(library)do
+            local snap=entry.snapshot
+            local found=query=='' or DSP.lower(tostring(snap.title or '')):find(query,1,true)~=nil
+            if not found then
+                for _,it in ipairs(snap.rows or {})do
+                    if DSP.lower(tostring(it.name or '')):find(query,1,true)then found=true;break end
+                end
+            end
+            if found then filtered[#filtered+1]=entry end
+            local value=S.evaluate(snap)
+            if value.cross_server then missing=missing+1
+            else grand=grand+(value.sell_to_buyers or 0) end
+        end
+        V.text('Хранилищ: '..#library..' | найдено: '..#filtered)
+        V.green('Сумма оценок: '..DSP.money(grand))
+        if missing>0 then V.muted('Без оценки: '..missing..' (другой сервер)') end
+        V.muted('Это сумма оценок снимков, не реальная прибыль.')
+        if #filtered==0 then
+            V.muted(query=='' and 'Пока нет сохранённых хранилищ.' or 'Ничего не найдено.')
             return
         end
-        V.list_rows('storage_library',library,88,function(entry,i)
+        V.list_rows('storage_library',filtered,95,function(entry,i)
             local snap=entry.snapshot
             local kind=snap.kind=='trunk'and'Багажник' or snap.kind=='cabinet'and'Шкаф'
                 or snap.kind=='warehouse'and'Склад' or'Хранилище'
-            V.row('storage_library_'..i,88,function(rw,x,y)
+            V.row('storage_library_'..i,95,function(rw,x,y)
                 V.at(x,y)
-                V.apply_font((V.font_pixels or 18)*1.16)
-                if V.text_button(V.fit(tostring(snap.title or kind),rw),'storage_library_open_'..i,rw,false,36)then
+                V.apply_font((V.font_pixels or 18)*1.12)
+                V.text(V.fit(tostring(snap.title or kind),rw))
+                V.apply_font()
+                V.at(x,y+43)
+                local value=S.evaluate(snap)
+                V.muted(V.fit(kind..' · '..tostring(snap.count_known or 0)..' шт. · '..
+                    DSP.money(value.sell_to_buyers),rw))
+                V.at(x,y)
+                local hit
+                if imgui.InvisibleButton then
+                    hit=imgui.InvisibleButton('##open_storage_card',imgui.ImVec2(rw,84))
+                else
+                    hit=V.text_button(tostring(snap.title or kind),'storage_open_fallback',rw,false,84)
+                end
+                if hit and not V.dragged then
                     V.storage_selected=entry.index
                     V.storage_library_page='detail'
                     V.reset_list('storage_items')
                 end
-                V.apply_font()
-                V.at(x,y+43)
-                local info=S.evaluate(snap)
-                V.muted(V.fit(kind..' · '..tostring(snap.count_known or 0)..' шт. · '..DSP.money(info.sell_to_buyers),rw))
             end)
         end,{footer=function()V.muted('Сохранено: '..#library..' / '..tostring(S.max_saved or 20))end})
         return
@@ -250,7 +280,7 @@ function V.storage_screen()
         V.storage_label_buf=imgui.new.char[128]()
         ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
         V.storage_label_error=nil
-        V.open_popup('Название снимка','storage_rename')
+        V.open_popup('Название снимка','storage_rename_v283')
     end
     if b('УДАЛИТЬ','delete_one',math.min(150,width))then
         V.storage_delete_target=current
@@ -406,7 +436,7 @@ function V.popups()
         V.inline();if b('Отмена','price_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_price_error then V.red(V.storage_price_error)end
     end,{w=460,h=260})
-    V.popup('Название снимка','storage_rename',function()
+    V.popup('Название снимка','storage_rename_v283',function()
         local target=V.storage_label_target
         if not target then return end
         V.muted('Это имя только для снимка. ID машины автоматически не определяется.')
@@ -428,7 +458,7 @@ function V.popups()
         end
         V.inline();if b('Отмена','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
-    end,{w=460,h=240})
+    end,{w=640,h=300})
     V.popup('Удалить хранилище','storage_delete_one',function()
         local target=V.storage_delete_target
         if not target then V.muted('Хранилище уже не выбрано.');return end
