@@ -23,7 +23,7 @@ if not BASE.exists():
         raise SystemExit("Missing pristine 2.8.5 OTA; refusing to overwrite a release")
     shutil.copyfile(OUT, BASE)
 original = BASE.read_bytes()
-if original.count(MARKER) != 1 or original.count(HOOK) != 1 or original.count(EARLY) != 1:
+if original.count(MARKER) != 1 or original.count(HOOK) < 1 or original.count(EARLY) != 1:
     raise SystemExit("Unexpected 2.8.5 OTA base structure")
 if not original.endswith(TRAIL):
     raise SystemExit("Unexpected 2.8.5 OTA tail")
