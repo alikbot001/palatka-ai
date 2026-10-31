@@ -56,6 +56,22 @@ function V.storage_screen()
             end
 
             local t=(S.trunk_state and S.trunk_state()) or S.trunk or {}
+            -- A review appears once per NEW completed 180-slot scan, and only
+            -- when existing saved trunks share at least one item ID/enchant.
+            if t.review_needed and t.review_generation
+                and V.storage_match_generation~=t.review_generation
+                and t.snapshot and t.status=='saved' and S.match_saved_trunks then
+                V.storage_match_generation=t.review_generation
+                local matches=S.match_saved_trunks(t.snapshot)
+                if #matches>0 then
+                    V.storage_match_review={
+                        generation=t.review_generation, matches=matches, selected=1
+                    }
+                    V.open_popup('Похожий багажник','storage_match_confirm')
+                else
+                    t.review_needed=false
+                end
+            end
             local active=t.requested_at~=nil or t.status=='waiting_open' or
                 t.status=='receiving' or t.status=='need_reopen'
 
@@ -111,6 +127,12 @@ function V.storage_screen()
                     V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
                 end
 
+                if t.review_needed and V.storage_match_review
+                    and V.storage_match_review.generation==t.review_generation then
+                    if b('ПОХОЖИЕ БАГАЖНИКИ','show_matches',math.min(w,290),false,true)then
+                        V.open_popup('Похожий багажник','storage_match_confirm')
+                    end
+                end
                 local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
                 if update_target then
                     V.text('Обновить: '..tostring(update_target.title))
@@ -276,6 +298,72 @@ function V.popups()
         if b('Отмена','beta_rollback_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_rollback_error then V.red(V.fit(V.storage_rollback_error,imgui.GetContentRegionAvail().x))end
     end,{w=480,h=260})
+    V.popup('Похожий багажник','storage_match_confirm',function()
+        local review=V.storage_match_review
+        local t=S.trunk_state()
+        if not review or not t.snapshot or not t.review_needed
+            or review.generation~=t.review_generation then
+            V.muted('Этот скан уже обработан или заменён новым.')
+            if b('Закрыть','match_stale',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        local matches=review.matches or {}
+        if #matches==0 then
+            V.muted('Сохранённых похожих багажников нет.')
+            if b('Закрыть','match_empty',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        review.selected=math.max(1,math.min(#matches,review.selected or 1))
+        local match=matches[review.selected]
+        local saved=S.find_snapshot(match.id)
+        if not saved then
+            V.red('Эта сохранённая запись удалена.')
+            if b('Закрыть','match_deleted',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        V.apply_font((V.font_pixels or 18)*1.22)
+        V.text(V.fit(tostring(saved.title or 'Багажник'),imgui.GetContentRegionAvail().x))
+        V.apply_font()
+        V.text('Это тот же багажник?')
+        V.green('Совпадает типов предметов: '..match.shared)
+        V.muted('Похожесть состава: '..match.similarity..'% · это НЕ вероятность и не ID машины.')
+        V.muted('Подтвердить, какая машина открыта, можешь только ты.')
+        if #matches>1 then
+            V.muted('Вариант '..review.selected..' из '..#matches)
+            if b('ДРУГОЙ ПОХОЖИЙ','match_next',math.min(230,imgui.GetContentRegionAvail().x))then
+                review.selected=review.selected%#matches+1
+            end
+        end
+        imgui.Separator()
+        if b('ДА, ЭТО '..tostring(saved.title),'match_yes',math.min(310,imgui.GetContentRegionAvail().x),false,true)then
+            local ok,updated=S.apply_latest_to_saved(saved.id)
+            if ok then
+                local _,idx=S.find_snapshot(updated.id)
+                V.storage_selected=idx or 1
+                V.storage_library_page='detail'
+                V.storage_tab='library'
+                V.storage_match_error=nil
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_match_error=tostring(updated)
+            end
+        end
+        if b('НЕТ, ЭТО НОВЫЙ','match_no_new',math.min(280,imgui.GetContentRegionAvail().x))then
+            local snap=t.snapshot
+            V.storage_name_target=snap
+            V.storage_name_buf=imgui.new.char[128]()
+            V.storage_name_error=nil
+            t.review_needed=false
+            imgui.CloseCurrentPopup()
+            V.open_popup('Сохранить багажник','storage_trunk_name')
+        end
+        if b('НЕ УВЕРЕН · ПОЗЖЕ','match_later',math.min(240,imgui.GetContentRegionAvail().x))then
+            imgui.CloseCurrentPopup()
+        end
+        if V.storage_match_error then
+            V.red(V.fit(V.storage_match_error,imgui.GetContentRegionAvail().x))
+        end
+    end,{w=495,h=410})
     V.popup('Сохранить багажник','storage_trunk_name',function()
         local target=V.storage_name_target
         if not target then V.red('Нет полного снимка багажника.');return end
