@@ -1,6 +1,8 @@
 -- Market Helper style template controls over Palatka's safe per-command queue.
 -- Existing templates remain untouched until the user saves new options.
 local P=DSP.promo
+if P._mh_options_installed then return true end
+P._mh_options_installed=true
 local function int(v,min,max)
     v=tonumber(v)
     if not v or v~=v then return nil end
