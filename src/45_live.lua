@@ -463,6 +463,11 @@ function L.handle_shop_owner(raw)
 end
 
 function L.handle(iface, sub, raw)
+    -- Passive pawnshop packet observation; never consumes existing game events.
+    if DSP.lombard and DSP.lombard.on_packet then
+        local ok,err=pcall(DSP.lombard.on_packet,iface,sub,raw)
+        if not ok and DSP.flog then DSP.flog('LOMBARD probe: '..tostring(err)) end
+    end
     -- Passive discovery subscriber. Never consumes the packet or changes trade logic.
     if iface==52 and DSP.storage_probe and DSP.storage_probe.on_packet then
         local ok,err=pcall(DSP.storage_probe.on_packet,sub,raw)
