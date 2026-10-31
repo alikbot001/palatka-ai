@@ -43,7 +43,7 @@ function S.observe_textdraw(id,value)
     return true
 end
 function S.finish_textdraw()
-    if T.state~='armed' and T.state~='expired' then return false,'Нет активного сбора' end
+    if T.state~='armed' and T.state~='expired' then return false,'РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ СЃР±РѕСЂР°' end
     T.state='done'
     local lines={}
     local kind,title=T.kind,T.title
@@ -59,11 +59,11 @@ function S.finish_textdraw()
         if r and r.quantity_confirmed and not k then lines[#lines+1]=line end
     end
     if not kind then
-        T.last_error='Не обнаружен заголовок хранилища: событий '..tostring(T.events or 0)..', текстовых '..tostring(T.seen)..'. Возможно, интерфейс нативный.'
+        T.last_error='РќРµ РѕР±РЅР°СЂСѓР¶РµРЅ Р·Р°РіРѕР»РѕРІРѕРє С…СЂР°РЅРёР»РёС‰Р°: СЃРѕР±С‹С‚РёР№ '..tostring(T.events or 0)..', С‚РµРєСЃС‚РѕРІС‹С… '..tostring(T.seen)..'. Р’РѕР·РјРѕР¶РЅРѕ, РёРЅС‚РµСЂС„РµР№СЃ РЅР°С‚РёРІРЅС‹Р№.'
         return false,T.last_error
     end
     if #lines==0 then
-        T.last_error='Заголовок '..tostring(title)..' есть, но количество не распознано ('..tostring(T.unique or 0)..' TextDraw). Нужен формат клиента.'
+        T.last_error='Р—Р°РіРѕР»РѕРІРѕРє '..tostring(title)..' РµСЃС‚СЊ, РЅРѕ РєРѕР»РёС‡РµСЃС‚РІРѕ РЅРµ СЂР°СЃРїРѕР·РЅР°РЅРѕ ('..tostring(T.unique or 0)..' TextDraw). РќСѓР¶РµРЅ С„РѕСЂРјР°С‚ РєР»РёРµРЅС‚Р°.'
         return false,T.last_error
     end
     local ok,r=S.accept(kind,title,table.concat(lines,'\n'),now(),'textdraw')

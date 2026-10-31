@@ -20,9 +20,9 @@ local function int(s)
 end
 local function kind_of(title)
     local s=DSP.lower(normal(title))
-    if s:find('багажник',1,true) or s:find('Багажник',1,true) then return 'trunk' end
-    if s:find('шкаф',1,true) or s:find('Шкаф',1,true) then return 'cabinet' end
-    if s:find('склад',1,true) or s:find('Склад',1,true) or s:find('хранилище',1,true) or s:find('Хранилище',1,true) then return 'warehouse' end
+    if s:find('Р±Р°РіР°Р¶РЅРёРє',1,true) or s:find('Р‘Р°РіР°Р¶РЅРёРє',1,true) then return 'trunk' end
+    if s:find('С€РєР°С„',1,true) or s:find('РЁРєР°С„',1,true) then return 'cabinet' end
+    if s:find('СЃРєР»Р°Рґ',1,true) or s:find('РЎРєР»Р°Рґ',1,true) or s:find('С…СЂР°РЅРёР»РёС‰Рµ',1,true) or s:find('РҐСЂР°РЅРёР»РёС‰Рµ',1,true) then return 'warehouse' end
     return nil
 end
 S.kind_of = kind_of
@@ -33,17 +33,17 @@ function S.parse_line(raw)
     if s=='' or #s>320 then return nil end
     local name,qty
     -- An explicit unit is mandatory: 'slot #1' is NOT one item.
-    name,qty=s:match('^(.-)%s*%(%s*([%d%., ]+)%s*шт%.?%s*%)%s*$')
-    if not name then name,qty=s:match('^(.-)%s*%[%s*([%d%., ]+)%s*шт%.?%s*%]%s*$') end
-    if not name then name,qty=s:match('^(.-)%s*[%-%—:]%s*([%d%., ]+)%s*шт%.?%s*$')end
-    if not name then name,qty=s:match('^(.-)%s+[xхXХ]%s*([%d%., ]+)%s*$')end
-    if not name then name,qty=s:match('^(.-)%s*%([xхXХ]%s*([%d%., ]+)%)%s*$')end
+    name,qty=s:match('^(.-)%s*%(%s*([%d%., ]+)%s*С€С‚%.?%s*%)%s*$')
+    if not name then name,qty=s:match('^(.-)%s*%[%s*([%d%., ]+)%s*С€С‚%.?%s*%]%s*$') end
+    if not name then name,qty=s:match('^(.-)%s*[%-%вЂ”:]%s*([%d%., ]+)%s*С€С‚%.?%s*$')end
+    if not name then name,qty=s:match('^(.-)%s+[xС…XРҐ]%s*([%d%., ]+)%s*$')end
+    if not name then name,qty=s:match('^(.-)%s*%([xС…XРҐ]%s*([%d%., ]+)%)%s*$')end
     if not name then
         -- Legitimate unlabeled line: show unknown count, never silently x1.
-        if s:find('%$',1,true) or s:find('Выберите',1,true) or s:find('Назад',1,true)
-            or DSP.lower(s):find('вместимость',1,true) or s:match('^[-=]+$')
-            or s:find('Открыть',1,true) or s:find('Закрыть',1,true)
-            or s:find('Забрать',1,true) or s:find('Положить',1,true) then return nil end
+        if s:find('%$',1,true) or s:find('Р’С‹Р±РµСЂРёС‚Рµ',1,true) or s:find('РќР°Р·Р°Рґ',1,true)
+            or DSP.lower(s):find('РІРјРµСЃС‚РёРјРѕСЃС‚СЊ',1,true) or s:match('^[-=]+$')
+            or s:find('РћС‚РєСЂС‹С‚СЊ',1,true) or s:find('Р—Р°РєСЂС‹С‚СЊ',1,true)
+            or s:find('Р—Р°Р±СЂР°С‚СЊ',1,true) or s:find('РџРѕР»РѕР¶РёС‚СЊ',1,true) then return nil end
         name=s
     end
     name=DSP.trim(name or '')
@@ -95,7 +95,7 @@ function S.accept(kind,title,text,ts,source)
     if DSP.settings and DSP.save_settings then
         DSP.settings.storage_snapshots=S.snapshots
         local ok,err=DSP.save_settings()
-        if not ok then S.last_error='Не удалось сохранить снимок: '..tostring(err) end
+        if not ok then S.last_error='РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СЃРЅРёРјРѕРє: '..tostring(err) end
     end
     return true,snap
 end
@@ -222,10 +222,10 @@ function S.sorted(snapshot,mode,lookup)
         if mode=='category' then
             local function cat(n)
                 n=DSP.lower(tostring(n or ''))
-                if n:find('дров',1,true) or n:find('металл',1,true) or n:find('камень',1,true)
-                    or n:find('лен',1,true) or n:find('хлоп',1,true) then return 1 end
-                if n:find('ларец',1,true) or n:find('кейс',1,true) then return 2 end
-                if n:find('деталь тюнинга',1,true) then return 3 end
+                if n:find('РґСЂРѕРІ',1,true) or n:find('РјРµС‚Р°Р»Р»',1,true) or n:find('РєР°РјРµРЅСЊ',1,true)
+                    or n:find('Р»РµРЅ',1,true) or n:find('С…Р»РѕРї',1,true) then return 1 end
+                if n:find('Р»Р°СЂРµС†',1,true) or n:find('РєРµР№СЃ',1,true) then return 2 end
+                if n:find('РґРµС‚Р°Р»СЊ С‚СЋРЅРёРЅРіР°',1,true) then return 3 end
                 return 4
             end
             if cat(a.name)~=cat(b.name)then return cat(a.name)<cat(b.name)end
@@ -330,7 +330,7 @@ local function save_snapshot(slots, source_reason)
         id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
         kind='trunk',
         -- No persistent vehicle identity in observed packet. This is ALWAYS the last opened trunk.
-        title=DSP.to_cp and DSP.to_cp('РџРѕСЃР»РµРґРЅРёР№ РѕС‚РєСЂС‹С‚С‹Р№ Р±Р°РіР°Р¶РЅРёРє') or 'Last opened trunk',
+        title=DSP.to_cp and DSP.to_cp('Р ЕёР ВѕРЎВЃР В»Р ВµР ВґР ВЅР С‘Р в„– Р ВѕРЎвЂљР ВєРЎв‚¬РЎвЂ№РЎвЂљРЎвЂ№Р в„– Р В±Р В°Р ВіР В°Р В¶Р ВЅР С‘Р Вє') or 'Last opened trunk',
         source='packet220_trunk', identity_verified=false,
         observed_at=ts, updated_at=ts, server=DSP.market and DSP.market.state and DSP.market.state.sid or nil,
         slots_count=TRUNK_SLOTS, occupied_slots=occupied,count_known=total,
@@ -413,7 +413,7 @@ function S.on_inventory_packet(sub, raw)
     -- Leave the last complete 180-slot snapshot untouched.
     if #items<=5 and T.snapshot then
         T.status='unverified_delta'
-        T.last_error='Частичное изменение пропущено: ID машины неизвестен. Открой багажник заново.'
+        T.last_error='Р§Р°СЃС‚РёС‡РЅРѕРµ РёР·РјРµРЅРµРЅРёРµ РїСЂРѕРїСѓС‰РµРЅРѕ: ID РјР°С€РёРЅС‹ РЅРµРёР·РІРµСЃС‚РµРЅ. РћС‚РєСЂРѕР№ Р±Р°РіР°Р¶РЅРёРє Р·Р°РЅРѕРІРѕ.'
         return false
     end
     T.status='unknown_partial'

@@ -90,33 +90,33 @@ local function inventory_counts()
     return counts
 end
 function T.add_from_inventory(kind,it)
-    if busy() then return false,'остановите выставление' end
-    if type(it)~='table' then return false,'нет предмета' end
+    if busy() then return false,'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ РІС‹СЃС‚Р°РІР»РµРЅРёРµ' end
+    if type(it)~='table' then return false,'РЅРµС‚ РїСЂРµРґРјРµС‚Р°' end
     local base,ench,key=safe_key(it)
     local count=quantity(it.count or it.qty)
-    if not count then return false,'нет доступного количества' end
+    if not count then return false,'РЅРµС‚ РґРѕСЃС‚СѓРїРЅРѕРіРѕ РєРѕР»РёС‡РµСЃС‚РІР°' end
     if kind=='sell' then
         for _,owned in ipairs(DSP.auto.inv or {}) do
             if owned==it then count=inventory_counts()[key] or count;break end
         end
     end
-    if not quantity(count) then return false,'некорректное количество' end
+    if not quantity(count) then return false,'РЅРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ' end
     local index,exists=DSP.presets.find(kind,key)
     if exists then
         -- Re-tapping updates quantity; it MUST NOT overwrite the user's price.
         if kind=='sell' then exists.qty=count end
         M.refresh_buffer(exists,'qty')
         M.defer_save()
-        return true,'количество обновлено'
+        return true,'РєРѕР»РёС‡РµСЃС‚РІРѕ РѕР±РЅРѕРІР»РµРЅРѕ'
     end
     local ok,err=DSP.presets.add_manual(kind,{name=base,ench=ench,qty=kind=='sell' and count or 1,
         price=0,enabled=false,needs_price=true})
     return ok,err
 end
 function T.add_from_catalog(kind,it)
-    if busy() then return false,'остановите выставление' end
+    if busy() then return false,'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ РІС‹СЃС‚Р°РІР»РµРЅРёРµ' end
     local base,ench,key=safe_key(it)
-    if DSP.presets.find(kind,key) then return true,'уже в пресете' end
+    if DSP.presets.find(kind,key) then return true,'СѓР¶Рµ РІ РїСЂРµСЃРµС‚Рµ' end
     return DSP.presets.add_manual(kind,{name=base,ench=ench,qty=1,price=0,
         enabled=false,needs_price=true})
 end
@@ -199,18 +199,18 @@ local function pager(count,per)
     return (U.v16_page-1)*per+1,math.min(U.v16_page*per,count)
 end
 local function inventory_list(kind)
-    if control('Инвентарь','source_inventory',200,U.v16_source=='inventory') then U.v16_source='inventory';U.v16_page=1 end
+    if control('РРЅРІРµРЅС‚Р°СЂСЊ','source_inventory',200,U.v16_source=='inventory') then U.v16_source='inventory';U.v16_page=1 end
     M.inline()
-    if control('Каталог','source_catalog',160,U.v16_source=='catalog') then U.v16_source='catalog';U.v16_page=1 end
+    if control('РљР°С‚Р°Р»РѕРі','source_catalog',160,U.v16_source=='catalog') then U.v16_source='catalog';U.v16_page=1 end
     local entries={}
     if U.v16_source=='inventory' then
-        if control('Сканировать','scan',220) then DSP.auto.scan_inventory() end
-        M.inline();M.text(tostring(DSP.auto.inv_status or 'Нет данных'))
+        if control('РЎРєР°РЅРёСЂРѕРІР°С‚СЊ','scan',220) then DSP.auto.scan_inventory() end
+        M.inline();M.text(tostring(DSP.auto.inv_status or 'РќРµС‚ РґР°РЅРЅС‹С…'))
         entries=DSP.auto.inv or {}
     else
         U.catalog_search=U.catalog_search or imgui.new.char[128]()
         imgui.SetNextItemWidth(math.min(500,imgui.GetContentRegionAvail().x))
-        if imgui.InputTextWithHint('##v16_search',DSP.utf8('Поиск предмета'),U.catalog_search,128) then U.v16_page=1 end
+        if imgui.InputTextWithHint('##v16_search',DSP.utf8('РџРѕРёСЃРє РїСЂРµРґРјРµС‚Р°'),U.catalog_search,128) then U.v16_page=1 end
         local query=DSP.to_cp(ffi.string(U.catalog_search))
         if query~='' then
             local revision=tostring(DSP.market.state.version or 0)..':'..DSP.lower(query)
@@ -221,7 +221,7 @@ local function inventory_list(kind)
             entries=U.v16_catalog_rows or {}
         end
     end
-    M.text('Предметов: '..#entries)
+    M.text('РџСЂРµРґРјРµС‚РѕРІ: '..#entries)
     local from,to=pager(#entries,7)
     for i=from,to do
         local it=entries[i]
@@ -235,25 +235,25 @@ local function inventory_list(kind)
                 local ok,msg
                 if U.v16_source=='inventory' then ok,msg=T.add_from_inventory(kind,it)
                 else ok,msg=T.add_from_catalog(kind,it) end
-                DSP.notify(ok and 'В пресете: '..name or tostring(msg))
+                DSP.notify(ok and 'Р’ РїСЂРµСЃРµС‚Рµ: '..name or tostring(msg))
             end
         end
     end
-    if #entries==0 then M.text('Нет предметов. Откройте инвентарь или используйте поиск.') end
-    if control(U.v16_manual and 'Скрыть ручной ввод' or '+ Ввести название вручную','manual_toggle',300) then
+    if #entries==0 then M.text('РќРµС‚ РїСЂРµРґРјРµС‚РѕРІ. РћС‚РєСЂРѕР№С‚Рµ РёРЅРІРµРЅС‚Р°СЂСЊ РёР»Рё РёСЃРїРѕР»СЊР·СѓР№С‚Рµ РїРѕРёСЃРє.') end
+    if control(U.v16_manual and 'РЎРєСЂС‹С‚СЊ СЂСѓС‡РЅРѕР№ РІРІРѕРґ' or '+ Р’РІРµСЃС‚Рё РЅР°Р·РІР°РЅРёРµ РІСЂСѓС‡РЅСѓСЋ','manual_toggle',300) then
         U.v16_manual=not U.v16_manual
     end
     if U.v16_manual then
         U.v16_manual_name=U.v16_manual_name or imgui.new.char[256]()
         imgui.SetNextItemWidth(math.min(450,imgui.GetContentRegionAvail().x))
-        imgui.InputTextWithHint('##v16_manual_name',DSP.utf8('Название предмета как в игре'),U.v16_manual_name,256)
-        if control('Добавить без цены','manual_add',220) then
+        imgui.InputTextWithHint('##v16_manual_name',DSP.utf8('РќР°Р·РІР°РЅРёРµ РїСЂРµРґРјРµС‚Р° РєР°Рє РІ РёРіСЂРµ'),U.v16_manual_name,256)
+        if control('Р”РѕР±Р°РІРёС‚СЊ Р±РµР· С†РµРЅС‹','manual_add',220) then
             local name=DSP.to_cp(ffi.string(U.v16_manual_name))
             local ok,msg=T.add_from_catalog(kind,{name=name})
-            DSP.notify(ok and 'Добавлено. Цена вводится в пресете.' or tostring(msg))
+            DSP.notify(ok and 'Р”РѕР±Р°РІР»РµРЅРѕ. Р¦РµРЅР° РІРІРѕРґРёС‚СЃСЏ РІ РїСЂРµСЃРµС‚Рµ.' or tostring(msg))
         end
     end
-    M.text('Цена вводится в «Мой пресет»; рыночная не подставляется.')
+    M.text('Р¦РµРЅР° РІРІРѕРґРёС‚СЃСЏ РІ В«РњРѕР№ РїСЂРµСЃРµС‚В»; СЂС‹РЅРѕС‡РЅР°СЏ РЅРµ РїРѕРґСЃС‚Р°РІР»СЏРµС‚СЃСЏ.')
 end
 local function preset_row(kind,it,i)
     local width=imgui.GetContentRegionAvail().x
@@ -265,14 +265,14 @@ local function preset_row(kind,it,i)
     M.inline();M.thumbnail(it,24);M.inline()
     M.text(tostring(it.name or '?'))
     local n=math.max(90,math.min(180,math.floor(width*.27)))
-    imgui.TextDisabled(DSP.utf8('Цена'))
+    imgui.TextDisabled(DSP.utf8('Р¦РµРЅР°'))
     imgui.SetNextItemWidth(n)
     if M.compact_number(it,'price','v16_price_'..kind..i,n,0) then
         it.needs_price=(it.price==0) or nil
         it.enabled=it.price>0
     end
     M.inline()
-    imgui.TextDisabled(DSP.utf8('Штук'))
+    imgui.TextDisabled(DSP.utf8('РЁС‚СѓРє'))
     imgui.SetNextItemWidth(n)
     M.compact_number(it,'qty','v16_qty_'..kind..i,n,1)
     if kind=='buy' then
@@ -282,27 +282,27 @@ local function preset_row(kind,it,i)
             end
             M.inline()
         end
-        if control('Макс','qty_max_'..i,95) then
+        if control('РњР°РєСЃ','qty_max_'..i,95) then
             -- Server-specific max cannot be guessed. Use an explicit per-item cap.
             U.v16_max_item=it
-            if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('Макс. количество')..'##v16_max') end
+            if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('РњР°РєСЃ. РєРѕР»РёС‡РµСЃС‚РІРѕ')..'##v16_max') end
         end
     end
-    if control('Удалить','remove_'..i,150) then
+    if control('РЈРґР°Р»РёС‚СЊ','remove_'..i,150) then
         U.v16_remove_pending={kind=kind,index=i,name=it.name}
-        if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('Удалить позицию')..'##v16_remove') end
+        if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('РЈРґР°Р»РёС‚СЊ РїРѕР·РёС†РёСЋ')..'##v16_remove') end
     end
 end
 local function dialogs()
     if not imgui.BeginPopupModal then return end
-    local max_popup=DSP.utf8('Макс. количество')..'##v16_max'
+    local max_popup=DSP.utf8('РњР°РєСЃ. РєРѕР»РёС‡РµСЃС‚РІРѕ')..'##v16_max'
     if imgui.BeginPopupModal(max_popup,nil,imgui.WindowFlags.AlwaysAutoResize) then
         local it=U.v16_max_item
         if it then
             it._v16_max=it._v16_max or {count=it.max_qty or it.qty or 1}
-            M.text('Укажите точный лимит для этого предмета.')
-            M.number('Максимум, шт.','max_amount',it._v16_max,'count',1,190)
-            if control('Применить','max_apply',160) then
+            M.text('РЈРєР°Р¶РёС‚Рµ С‚РѕС‡РЅС‹Р№ Р»РёРјРёС‚ РґР»СЏ СЌС‚РѕРіРѕ РїСЂРµРґРјРµС‚Р°.')
+            M.number('РњР°РєСЃРёРјСѓРј, С€С‚.','max_amount',it._v16_max,'count',1,190)
+            if control('РџСЂРёРјРµРЅРёС‚СЊ','max_apply',160) then
                 it.max_qty=it._v16_max.count
                 it.qty=it.max_qty
                 M.refresh_buffer(it,'qty')
@@ -311,15 +311,15 @@ local function dialogs()
             end
         end
         M.inline()
-        if control('Отмена','max_cancel',145) then imgui.CloseCurrentPopup() end
+        if control('РћС‚РјРµРЅР°','max_cancel',145) then imgui.CloseCurrentPopup() end
         imgui.EndPopup()
     end
-    local id=DSP.utf8('Удалить позицию')..'##v16_remove'
+    local id=DSP.utf8('РЈРґР°Р»РёС‚СЊ РїРѕР·РёС†РёСЋ')..'##v16_remove'
     if imgui.BeginPopupModal(id,nil,imgui.WindowFlags.AlwaysAutoResize) then
-        M.text('Убрать '..tostring(U.v16_remove_pending and U.v16_remove_pending.name or 'предмет')..' из пресета?')
-        if control('Отмена','remove_cancel',140) then imgui.CloseCurrentPopup() end
+        M.text('РЈР±СЂР°С‚СЊ '..tostring(U.v16_remove_pending and U.v16_remove_pending.name or 'РїСЂРµРґРјРµС‚')..' РёР· РїСЂРµСЃРµС‚Р°?')
+        if control('РћС‚РјРµРЅР°','remove_cancel',140) then imgui.CloseCurrentPopup() end
         M.inline()
-        if control('Удалить','remove_confirm',160) then
+        if control('РЈРґР°Р»РёС‚СЊ','remove_confirm',160) then
             local p=U.v16_remove_pending
             if p then DSP.presets.remove(p.kind,p.index) end
             U.v16_remove_pending=nil
@@ -332,41 +332,41 @@ local function library_controls(kind)
     local list=DSP.presets.list(kind)
     local i=DSP.presets.selected(kind)
     local p=current(kind)
-    M.text('Пресет: '..tostring(p.name))
+    M.text('РџСЂРµСЃРµС‚: '..tostring(p.name))
     if control('<','preset_prev',70) and not busy() then DSP.presets.select(kind,i>1 and i-1 or #list) end
     M.inline()
     if control('>','preset_next',70) and not busy() then DSP.presets.select(kind,i<#list and i+1 or 1) end
     M.inline()
-    if control('Пресеты','preset_manage',160) then U.v16_library=not U.v16_library end
+    if control('РџСЂРµСЃРµС‚С‹','preset_manage',160) then U.v16_library=not U.v16_library end
     if not U.v16_library then return end
     U.v16_name=U.v16_name or imgui.new.char[128]()
     imgui.SetNextItemWidth(math.min(320,imgui.GetContentRegionAvail().x))
-    imgui.InputTextWithHint('##v16_preset_name',DSP.utf8('Название пресета'),U.v16_name,128)
+    imgui.InputTextWithHint('##v16_preset_name',DSP.utf8('РќР°Р·РІР°РЅРёРµ РїСЂРµСЃРµС‚Р°'),U.v16_name,128)
     local name=DSP.to_cp(ffi.string(U.v16_name))
-    if control('Создать','preset_create',146) then DSP.presets.create(kind,name) end
+    if control('РЎРѕР·РґР°С‚СЊ','preset_create',146) then DSP.presets.create(kind,name) end
     M.inline()
-    if control('Переименовать','preset_rename',200) then DSP.presets.rename(kind,DSP.presets.selected(kind),name) end
+    if control('РџРµСЂРµРёРјРµРЅРѕРІР°С‚СЊ','preset_rename',200) then DSP.presets.rename(kind,DSP.presets.selected(kind),name) end
     M.inline()
-    if control('Экспорт','preset_export',130) then local ok,msg=DSP.presets.export_file(kind);DSP.notify(tostring(msg or ok)) end
-    if control('Импорт Market Helper','preset_import_mh',270) then
-        local ok,msg=DSP.presets.import_mh();DSP.notify(ok and 'Импортировано' or tostring(msg))
+    if control('Р­РєСЃРїРѕСЂС‚','preset_export',130) then local ok,msg=DSP.presets.export_file(kind);DSP.notify(tostring(msg or ok)) end
+    if control('РРјРїРѕСЂС‚ Market Helper','preset_import_mh',270) then
+        local ok,msg=DSP.presets.import_mh();DSP.notify(ok and 'РРјРїРѕСЂС‚РёСЂРѕРІР°РЅРѕ' or tostring(msg))
     end
     U.v16_import=U.v16_import or imgui.new.char[384]()
     imgui.SetNextItemWidth(math.min(420,imgui.GetContentRegionAvail().x))
-    imgui.InputTextWithHint('##v16_import_path',DSP.utf8('Путь к JSON пресета'),U.v16_import,384)
-    if control('Импорт JSON','preset_import_json',195) then
+    imgui.InputTextWithHint('##v16_import_path',DSP.utf8('РџСѓС‚СЊ Рє JSON РїСЂРµСЃРµС‚Р°'),U.v16_import,384)
+    if control('РРјРїРѕСЂС‚ JSON','preset_import_json',195) then
         local ok,msg=DSP.presets.import_file(DSP.to_cp(ffi.string(U.v16_import)),kind)
-        DSP.notify(ok and 'Импортировано' or tostring(msg))
+        DSP.notify(ok and 'РРјРїРѕСЂС‚РёСЂРѕРІР°РЅРѕ' or tostring(msg))
     end
-    if control('Удалить пресет','preset_remove',220) then
-        if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('Удалить пресет')..'##v16_preset') end
+    if control('РЈРґР°Р»РёС‚СЊ РїСЂРµСЃРµС‚','preset_remove',220) then
+        if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('РЈРґР°Р»РёС‚СЊ РїСЂРµСЃРµС‚')..'##v16_preset') end
     end
-    local popup=DSP.utf8('Удалить пресет')..'##v16_preset'
+    local popup=DSP.utf8('РЈРґР°Р»РёС‚СЊ РїСЂРµСЃРµС‚')..'##v16_preset'
     if imgui.BeginPopupModal and imgui.BeginPopupModal(popup,nil,imgui.WindowFlags.AlwaysAutoResize) then
-        M.text('Безвозвратно удалить выбранный пресет?')
-        if control('Отмена','preset_cancel',150) then imgui.CloseCurrentPopup() end
+        M.text('Р‘РµР·РІРѕР·РІСЂР°С‚РЅРѕ СѓРґР°Р»РёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ РїСЂРµСЃРµС‚?')
+        if control('РћС‚РјРµРЅР°','preset_cancel',150) then imgui.CloseCurrentPopup() end
         M.inline()
-        if control('Удалить','preset_confirm',160) then
+        if control('РЈРґР°Р»РёС‚СЊ','preset_confirm',160) then
             local ok,err=DSP.presets.delete(kind,DSP.presets.selected(kind))
             if not ok then DSP.notify(err) end
             imgui.CloseCurrentPopup()
@@ -375,26 +375,26 @@ local function library_controls(kind)
     end
 end
 local function review(kind)
-    local popup=DSP.utf8('Проверка выставления')..'##v16_review'
+    local popup=DSP.utf8('РџСЂРѕРІРµСЂРєР° РІС‹СЃС‚Р°РІР»РµРЅРёСЏ')..'##v16_review'
     if imgui.BeginPopupModal and imgui.BeginPopupModal(popup,nil,imgui.WindowFlags.AlwaysAutoResize) then
-        M.title('Проверить список')
+        M.title('РџСЂРѕРІРµСЂРёС‚СЊ СЃРїРёСЃРѕРє')
         local ok,issues,total=T.validate(kind)
         local shown=0
         for _,it in ipairs(current(kind).items or {}) do
             if it.enabled~=false then
                 M.text(tostring(it.name)..'  x'..tostring(it.qty)..'  '..DSP.money(it.price))
                 shown=shown+1
-                if shown>=12 then M.text('Остальные позиции: '..(DSP.presets.active_count(kind)-shown));break end
+                if shown>=12 then M.text('РћСЃС‚Р°Р»СЊРЅС‹Рµ РїРѕР·РёС†РёРё: '..(DSP.presets.active_count(kind)-shown));break end
             end
         end
-        M.text('Итого: '..DSP.money(total))
+        M.text('РС‚РѕРіРѕ: '..DSP.money(total))
         for _,problem in ipairs(issues) do
             imgui.TextColored(DSP.theme.col('bad',1),DSP.utf8(problem))
         end
-        if control('Отмена','review_cancel',160) then imgui.CloseCurrentPopup() end
+        if control('РћС‚РјРµРЅР°','review_cancel',160) then imgui.CloseCurrentPopup() end
         M.inline()
-        if control('Выставить','review_confirm',200,ok,'primary') then
-            if ok then start(kind);imgui.CloseCurrentPopup() else DSP.notify('Исправьте ошибки выше') end
+        if control('Р’С‹СЃС‚Р°РІРёС‚СЊ','review_confirm',200,ok,'primary') then
+            if ok then start(kind);imgui.CloseCurrentPopup() else DSP.notify('РСЃРїСЂР°РІСЊС‚Рµ РѕС€РёР±РєРё РІС‹С€Рµ') end
         end
         imgui.EndPopup()
     end
@@ -402,20 +402,20 @@ end
 local function my_preset(kind)
     library_controls(kind)
     local items=current(kind).items or {}
-    M.text('Позиций: '..#items..'  |  Включено: '..DSP.presets.active_count(kind))
+    M.text('РџРѕР·РёС†РёР№: '..#items..'  |  Р’РєР»СЋС‡РµРЅРѕ: '..DSP.presets.active_count(kind))
     local from,to=pager(#items,5)
     for i=from,to do preset_row(kind,items[i],i) end
-    if #items==0 then M.text('Пресет пуст. Добавьте предметы во вкладке «Предметы».') end
+    if #items==0 then M.text('РџСЂРµСЃРµС‚ РїСѓСЃС‚. Р”РѕР±Р°РІСЊС‚Рµ РїСЂРµРґРјРµС‚С‹ РІРѕ РІРєР»Р°РґРєРµ В«РџСЂРµРґРјРµС‚С‹В».') end
 end
 function U.trade_tab()
     local kind=U.v16_side
-    if control('ПРОДАЖА','sell',210,kind=='sell') then U.v16_side='sell';kind='sell';U.v16_page=1 end
+    if control('РџР РћР”РђР–Рђ','sell',210,kind=='sell') then U.v16_side='sell';kind='sell';U.v16_page=1 end
     M.inline()
-    if control('СКУПКА','buy',200,kind=='buy') then U.v16_side='buy';kind='buy';U.v16_page=1 end
+    if control('РЎРљРЈРџРљРђ','buy',200,kind=='buy') then U.v16_side='buy';kind='buy';U.v16_page=1 end
     local tab=U.v16_tab
-    if control('Предметы','items',200,tab=='items') then U.v16_tab='items';tab='items';U.v16_page=1 end
+    if control('РџСЂРµРґРјРµС‚С‹','items',200,tab=='items') then U.v16_tab='items';tab='items';U.v16_page=1 end
     M.inline()
-    if control('Мой пресет','preset',200,tab=='preset') then U.v16_tab='preset';tab='preset';U.v16_page=1 end
+    if control('РњРѕР№ РїСЂРµСЃРµС‚','preset',200,tab=='preset') then U.v16_tab='preset';tab='preset';U.v16_page=1 end
     imgui.Separator()
     local h=math.max(150,(imgui.GetContentRegionAvail().y or 450)-145)
     M.child('v16_trade_'..tab,0,h,function()
@@ -423,19 +423,19 @@ function U.trade_tab()
     end)
     if busy() then
         M.text(DSP.auto.status_text())
-        if control('ОСТАНОВИТЬ','stop',240,true,'primary') then
+        if control('РћРЎРўРђРќРћР’РРўР¬','stop',240,true,'primary') then
             if DSP.auto.buy_running then DSP.auto.stop_buy() else DSP.auto.stop_sell() end
         end
     else
-        M.text('Выставление: '..(DSP.settings.dry_run and 'тест' or 'реальное'))
-        if control('Тест / Реально','dry_toggle',205) then
+        M.text('Р’С‹СЃС‚Р°РІР»РµРЅРёРµ: '..(DSP.settings.dry_run and 'С‚РµСЃС‚' or 'СЂРµР°Р»СЊРЅРѕРµ'))
+        if control('РўРµСЃС‚ / Р РµР°Р»СЊРЅРѕ','dry_toggle',205) then
             DSP.settings.dry_run=not DSP.settings.dry_run;M.defer_save()
         end
         M.inline()
-        if control('Быстро выставить','fast',250,true,'primary') then start(kind) end
+        if control('Р‘С‹СЃС‚СЂРѕ РІС‹СЃС‚Р°РІРёС‚СЊ','fast',250,true,'primary') then start(kind) end
         M.inline()
-        if control('Проверить список','review',245) then
-            if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('Проверка выставления')..'##v16_review') end
+        if control('РџСЂРѕРІРµСЂРёС‚СЊ СЃРїРёСЃРѕРє','review',245) then
+            if imgui.OpenPopup then imgui.OpenPopup(DSP.utf8('РџСЂРѕРІРµСЂРєР° РІС‹СЃС‚Р°РІР»РµРЅРёСЏ')..'##v16_review') end
         end
     end
     dialogs()

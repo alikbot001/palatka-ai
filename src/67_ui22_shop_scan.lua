@@ -37,14 +37,14 @@ local function synchronize(scan)
     end
 end
 local function choose_operation(action)
-    if count(S.side)==0 then DSP.notify('Выберите позиции лавки');return end
+    if count(S.side)==0 then DSP.notify('Р’С‹Р±РµСЂРёС‚Рµ РїРѕР·РёС†РёРё Р»Р°РІРєРё');return end
     local scan=snapshot()
     S.modal={action=action,side=S.side,target_side=S.side,index=DSP.presets.selected(S.side),
         selected=picked(S.side),mode='existing',identity=S.identity,revision=S.revision,
         generation=scan.generation,server=scan.server}
     S.markup=imgui.new.char[64]();ffi.copy(S.markup,'0',1)
     S.name=imgui.new.char[128]();S.error=nil
-    V.open_popup(action=='prices'and'Обновить цены'or'Перенести в пресет','scan_preset')
+    V.open_popup(action=='prices'and'РћР±РЅРѕРІРёС‚СЊ С†РµРЅС‹'or'РџРµСЂРµРЅРµСЃС‚Рё РІ РїСЂРµСЃРµС‚','scan_preset')
 end
 -- The stall content must remain usable when the main window is resized.
 -- For narrow widths, name, count and unit price take separate lines.
@@ -128,37 +128,37 @@ local function scan_summary(scan)
     if confirmed and saved_state then
         local mapped=tonumber((saved_row and saved_row.num) or scan.num)
         if mapped then
-            V.green(V.fit('Скан сохранён · лавка #'..tostring(mapped)
-                ..' · ID: '..tostring((saved_row and saved_row.number_source) or scan.num_source or 'packet'),w))
+            V.green(V.fit('РЎРєР°РЅ СЃРѕС…СЂР°РЅС‘РЅ В· Р»Р°РІРєР° #'..tostring(mapped)
+                ..' В· ID: '..tostring((saved_row and saved_row.number_source) or scan.num_source or 'packet'),w))
         else
-            V.green(V.fit('Скан сохранён · номер лавки пока не определён',w))
+            V.green(V.fit('РЎРєР°РЅ СЃРѕС…СЂР°РЅС‘РЅ В· РЅРѕРјРµСЂ Р»Р°РІРєРё РїРѕРєР° РЅРµ РѕРїСЂРµРґРµР»С‘РЅ',w))
         end
     elseif scan_state=='pending' then
-        V.muted(V.fit('Автоскан: получаю данные лавки...',w))
+        V.muted(V.fit('РђРІС‚РѕСЃРєР°РЅ: РїРѕР»СѓС‡Р°СЋ РґР°РЅРЅС‹Рµ Р»Р°РІРєРё...',w))
     elseif scan_state=='disabled' then
-        V.muted(V.fit('Автоскан выключен',w))
+        V.muted(V.fit('РђРІС‚РѕСЃРєР°РЅ РІС‹РєР»СЋС‡РµРЅ',w))
     elseif scan_state=='empty' then
-        V.muted(V.fit('В открытой лавке пока не распознаны товары',w))
+        V.muted(V.fit('Р’ РѕС‚РєСЂС‹С‚РѕР№ Р»Р°РІРєРµ РїРѕРєР° РЅРµ СЂР°СЃРїРѕР·РЅР°РЅС‹ С‚РѕРІР°СЂС‹',w))
     elseif scan_state=='server' then
-        V.muted(V.fit('Скан не сохранён: сервер не определён',w))
+        V.muted(V.fit('РЎРєР°РЅ РЅРµ СЃРѕС…СЂР°РЅС‘РЅ: СЃРµСЂРІРµСЂ РЅРµ РѕРїСЂРµРґРµР»С‘РЅ',w))
     elseif scan_state=='error' then
-        V.muted(V.fit('Ошибка сохранения скана · см. standalone.log',w))
+        V.muted(V.fit('РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ СЃРєР°РЅР° В· СЃРј. standalone.log',w))
     else
-        V.muted(V.fit('Скан получен, сохранение ещё не подтверждено',w))
+        V.muted(V.fit('РЎРєР°РЅ РїРѕР»СѓС‡РµРЅ, СЃРѕС…СЂР°РЅРµРЅРёРµ РµС‰С‘ РЅРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ',w))
     end
 
-    V.muted(V.fit('В базе: '..tostring(stats.shops or 0)..' лавок · '
-        ..tostring(stats.offers or 0)..' предложений · с ID: '..tostring(stats.mapped or 0)
-        ..' · без ID: '..tostring(stats.unmapped or 0),w))
-    V.muted(V.fit('Текущая лавка: '..#(scan.sell or {})..' продажа · '..#(scan.buy or {})..' скупка',w))
+    V.muted(V.fit('Р’ Р±Р°Р·Рµ: '..tostring(stats.shops or 0)..' Р»Р°РІРѕРє В· '
+        ..tostring(stats.offers or 0)..' РїСЂРµРґР»РѕР¶РµРЅРёР№ В· СЃ ID: '..tostring(stats.mapped or 0)
+        ..' В· Р±РµР· ID: '..tostring(stats.unmapped or 0),w))
+    V.muted(V.fit('РўРµРєСѓС‰Р°СЏ Р»Р°РІРєР°: '..#(scan.sell or {})..' РїСЂРѕРґР°Р¶Р° В· '..#(scan.buy or {})..' СЃРєСѓРїРєР°',w))
 
     if not saved_state then
-        if (observed or 0)>0 then V.muted(V.fit('Получено позиций: '..tostring(observed)..' · ожидаю запись в базу',w)) end
+        if (observed or 0)>0 then V.muted(V.fit('РџРѕР»СѓС‡РµРЅРѕ РїРѕР·РёС†РёР№: '..tostring(observed)..' В· РѕР¶РёРґР°СЋ Р·Р°РїРёСЃСЊ РІ Р±Р°Р·Сѓ',w)) end
         return
     end
     local current_num=tonumber((saved_row and saved_row.num) or scan.num)
     if not current_num then
-        V.muted(V.fit('Локальная база обновлена. Для GPS и маршрута нужен номер лавки; скрипт продолжит искать его по диалогу, TextDraw и 3D-надписи.',w))
+        V.muted(V.fit('Р›РѕРєР°Р»СЊРЅР°СЏ Р±Р°Р·Р° РѕР±РЅРѕРІР»РµРЅР°. Р”Р»СЏ GPS Рё РјР°СЂС€СЂСѓС‚Р° РЅСѓР¶РµРЅ РЅРѕРјРµСЂ Р»Р°РІРєРё; СЃРєСЂРёРїС‚ РїСЂРѕРґРѕР»Р¶РёС‚ РёСЃРєР°С‚СЊ РµРіРѕ РїРѕ РґРёР°Р»РѕРіСѓ, TextDraw Рё 3D-РЅР°РґРїРёСЃРё.',w))
         return
     end
 
@@ -176,16 +176,16 @@ local function scan_summary(scan)
         return found
     end)
     local function advice(kind,r)
-        if not r then return (kind=='buy' and 'Лучше купить' or 'Лучше продать')..': пока нет пары' end
+        if not r then return (kind=='buy' and 'Р›СѓС‡С€Рµ РєСѓРїРёС‚СЊ' or 'Р›СѓС‡С€Рµ РїСЂРѕРґР°С‚СЊ')..': РїРѕРєР° РЅРµС‚ РїР°СЂС‹' end
         local destination=kind=='buy' and r.buyer_shop or r.seller_shop
         local price=kind=='buy' and r.buy_price or r.sell_price
-        return (kind=='buy' and 'Лучше купить' or 'Лучше продать')..': '..tostring(r.name or 'ID:'..r.id)
-            ..' · '..DSP.money(price)..'/шт. · -> #'..tostring(destination)
-            ..' · ~ +'..DSP.money(r.profit_unit)..'/шт.'
+        return (kind=='buy' and 'Р›СѓС‡С€Рµ РєСѓРїРёС‚СЊ' or 'Р›СѓС‡С€Рµ РїСЂРѕРґР°С‚СЊ')..': '..tostring(r.name or 'ID:'..r.id)
+            ..' В· '..DSP.money(price)..'/С€С‚. В· -> #'..tostring(destination)
+            ..' В· ~ +'..DSP.money(r.profit_unit)..'/С€С‚.'
     end
     V.green(V.fit(advice('buy',best.buy),w))
     V.green(V.fit(advice('sell',best.sell),w))
-    V.muted(V.fit('Подсказки рассчитаны по твоим локальным сканам; цены могли измениться после просмотра лавок.',w))
+    V.muted(V.fit('РџРѕРґСЃРєР°Р·РєРё СЂР°СЃСЃС‡РёС‚Р°РЅС‹ РїРѕ С‚РІРѕРёРј Р»РѕРєР°Р»СЊРЅС‹Рј СЃРєР°РЅР°Рј; С†РµРЅС‹ РјРѕРіР»Рё РёР·РјРµРЅРёС‚СЊСЃСЏ РїРѕСЃР»Рµ РїСЂРѕСЃРјРѕС‚СЂР° Р»Р°РІРѕРє.',w))
 end
 function V.shop_scan_view()
     local scan=snapshot();synchronize(scan)
@@ -224,38 +224,38 @@ function V.shop_scan_view()
 end
 local function library_body(modal)
     if modal.action=='copy'then
-        if b('В продажу','target_sell',132,modal.target_side=='sell')then
+        if b('Р’ РїСЂРѕРґР°Р¶Сѓ','target_sell',132,modal.target_side=='sell')then
             modal.target_side='sell';modal.index=DSP.presets.selected('sell')
         end
-        V.inline();if b('В скупку','target_buy',132,modal.target_side=='buy')then
+        V.inline();if b('Р’ СЃРєСѓРїРєСѓ','target_buy',132,modal.target_side=='buy')then
             modal.target_side='buy';modal.index=DSP.presets.selected('buy')
         end
-        if b('Существующий','existing',170,modal.mode=='existing')then modal.mode='existing'end
-        V.inline();if b('Новый набор','new',148,modal.mode=='new')then modal.mode='new'end
+        if b('РЎСѓС‰РµСЃС‚РІСѓСЋС‰РёР№','existing',170,modal.mode=='existing')then modal.mode='existing'end
+        V.inline();if b('РќРѕРІС‹Р№ РЅР°Р±РѕСЂ','new',148,modal.mode=='new')then modal.mode='new'end
     end
     if modal.mode=='new'then
         imgui.SetNextItemWidth(-1)
-        imgui.InputTextWithHint('##v22_scan_preset_name',DSP.utf8('Название нового набора'),S.name,128)
+        imgui.InputTextWithHint('##v22_scan_preset_name',DSP.utf8('РќР°Р·РІР°РЅРёРµ РЅРѕРІРѕРіРѕ РЅР°Р±РѕСЂР°'),S.name,128)
     else
         local list=DSP.presets.list(modal.target_side)or{}
         V.list_rows('scan_preset_library_'..modal.target_side,list,46,function(p,i)
-            if b(p.name or('Набор '..i),'preset_'..i,-1,modal.index==i)then modal.index=i end
+            if b(p.name or('РќР°Р±РѕСЂ '..i),'preset_'..i,-1,modal.index==i)then modal.index=i end
         end,{height=96,footer=false})
     end
     if modal.action=='copy'then
         local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
-        V.muted('Надбавка, $/шт.');V.at(x+164,y-3)
+        V.muted('РќР°РґР±Р°РІРєР°, $/С€С‚.');V.at(x+164,y-3)
         imgui.SetNextItemWidth(112);imgui.InputText('##v22_scan_markup',S.markup,64)
         V.at(x,y+40)
-        imgui.TextWrapped(DSP.utf8('Существующие цены сохраняются. Неизвестное количество: лимит 1. Продажа выключена до проверки инвентаря.'))
-    else imgui.TextWrapped(DSP.utf8('Только цены совпавших выбранных предметов. Количество, себестоимость и остальные поля сохраняются.'))end
+        imgui.TextWrapped(DSP.utf8('РЎСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ С†РµРЅС‹ СЃРѕС…СЂР°РЅСЏСЋС‚СЃСЏ. РќРµРёР·РІРµСЃС‚РЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ: Р»РёРјРёС‚ 1. РџСЂРѕРґР°Р¶Р° РІС‹РєР»СЋС‡РµРЅР° РґРѕ РїСЂРѕРІРµСЂРєРё РёРЅРІРµРЅС‚Р°СЂСЏ.'))
+    else imgui.TextWrapped(DSP.utf8('РўРѕР»СЊРєРѕ С†РµРЅС‹ СЃРѕРІРїР°РІС€РёС… РІС‹Р±СЂР°РЅРЅС‹С… РїСЂРµРґРјРµС‚РѕРІ. РљРѕР»РёС‡РµСЃС‚РІРѕ, СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚СЊ Рё РѕСЃС‚Р°Р»СЊРЅС‹Рµ РїРѕР»СЏ СЃРѕС…СЂР°РЅСЏСЋС‚СЃСЏ.'))end
 end
 local function confirm(modal)
     local domain=DSP.shop_scan
-    if not domain then S.error='Скан лавки пока недоступен';return end
+    if not domain then S.error='РЎРєР°РЅ Р»Р°РІРєРё РїРѕРєР° РЅРµРґРѕСЃС‚СѓРїРµРЅ';return end
     local current=snapshot()
     if identity(current)~=modal.identity or current.revision~=modal.revision then
-        S.error='Снимок изменился. Закройте окно и выберите позиции снова.';return
+        S.error='РЎРЅРёРјРѕРє РёР·РјРµРЅРёР»СЃСЏ. Р—Р°РєСЂРѕР№С‚Рµ РѕРєРЅРѕ Рё РІС‹Р±РµСЂРёС‚Рµ РїРѕР·РёС†РёРё СЃРЅРѕРІР°.';return
     end
     local result
     local options={selected=modal.selected,expected_revision=modal.revision,
@@ -266,7 +266,7 @@ local function confirm(modal)
         local raw=ffi.string(S.markup)
         local markup=tonumber(raw)
         if not raw:match('^[+-]?%d+$')or not markup or math.abs(markup)>9007199254740991 then
-            S.error='Надбавка должна быть целым числом долларов';return
+            S.error='РќР°РґР±Р°РІРєР° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ С†РµР»С‹Рј С‡РёСЃР»РѕРј РґРѕР»Р»Р°СЂРѕРІ';return
         end
         options.target_side=modal.target_side;options.markup=markup
         if modal.mode=='new'then options.name=DSP.trim(DSP.to_cp(ffi.string(S.name)))
@@ -274,9 +274,9 @@ local function confirm(modal)
         result=domain.copy_to_preset(modal.side,options)
     end
     if type(result)~='table'or not result.ok then
-        S.error=type(result)=='table'and result.error or'Не удалось сохранить пресет';return
+        S.error=type(result)=='table'and result.error or'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїСЂРµСЃРµС‚';return
     end
-    DSP.notify((modal.action=='prices'and'Обновлено цен: 'or'Добавлено позиций: ')..tostring(result.count or 0))
+    DSP.notify((modal.action=='prices'and'РћР±РЅРѕРІР»РµРЅРѕ С†РµРЅ: 'or'Р”РѕР±Р°РІР»РµРЅРѕ РїРѕР·РёС†РёР№: ')..tostring(result.count or 0))
     S.manager_side=modal.target_side
     S.modal=nil;S.error=nil;imgui.CloseCurrentPopup()
 end
@@ -285,12 +285,12 @@ function V.popups()
     if previous then previous()end
     local modal=S.modal
     if not modal then return end
-    V.popup(modal.action=='prices'and'Обновить цены'or'Перенести в пресет','scan_preset',function()
+    V.popup(modal.action=='prices'and'РћР±РЅРѕРІРёС‚СЊ С†РµРЅС‹'or'РџРµСЂРµРЅРµСЃС‚Рё РІ РїСЂРµСЃРµС‚','scan_preset',function()
         local height=math.max(36,imgui.GetContentRegionAvail().y-78)
         V.list('scan_preset_body',function()library_body(modal)end,{height=height,footer=false})
         if S.error then V.red(V.fit(S.error,imgui.GetContentRegionAvail().x))
-        else V.muted('Только выбранные позиции текущего снимка')end
+        else V.muted('РўРѕР»СЊРєРѕ РІС‹Р±СЂР°РЅРЅС‹Рµ РїРѕР·РёС†РёРё С‚РµРєСѓС‰РµРіРѕ СЃРЅРёРјРєР°')end
         V.cancel('scan_preset');V.inline()
-        if b(modal.action=='prices'and'Обновить цены'or'Перенести','confirm',184)then confirm(modal)end
+        if b(modal.action=='prices'and'РћР±РЅРѕРІРёС‚СЊ С†РµРЅС‹'or'РџРµСЂРµРЅРµСЃС‚Рё','confirm',184)then confirm(modal)end
     end,{w=620,h=450})
 end

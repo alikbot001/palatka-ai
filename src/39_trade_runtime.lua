@@ -35,7 +35,7 @@ function R.spawn(kind, fn)
             if not ok then
                 R.transition(kind,'failed',tostring(err))
                 DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                DSP.auto.status = 'ошибка: ' .. tostring(err)
+                DSP.auto.status = 'РѕС€РёР±РєР°: ' .. tostring(err)
                 if sampIsDialogActive() then
                     local closed, close_err = pcall(sampSendDialogResponse, sampGetCurrentDialogId(), 0, 0, '')
                     if not closed then DSP.add_log(tostring(close_err), 'error') end
@@ -60,10 +60,10 @@ function R.matches(text, name)
         if not a then return false end
         local before, after = text:sub(a - 1, a - 1), text:sub(b + 1, b + 1)
         local tail = text:sub(b + 1):match('^%s*(.-)%s*$')
-        local field = tail == '' or tail:find('^Количество') or tail:find('^количество')
-            or tail:find('^Цена') or tail:find('^цена') or tail:find('^quantity') or tail:find('^price')
-        local suffix = after == '' or after:match('[:»".,\t\r\n]') or (after:match('%s') and field)
-        if (a == 1 or before:match('[%s:«"\t]')) and
+        local field = tail == '' or tail:find('^РљРѕР»РёС‡РµСЃС‚РІРѕ') or tail:find('^РєРѕР»РёС‡РµСЃС‚РІРѕ')
+            or tail:find('^Р¦РµРЅР°') or tail:find('^С†РµРЅР°') or tail:find('^quantity') or tail:find('^price')
+        local suffix = after == '' or after:match('[:В»".,\t\r\n]') or (after:match('%s') and field)
+        if (a == 1 or before:match('[%s:В«"\t]')) and
             suffix then return true end
         start = b + 1
     end

@@ -1,6 +1,6 @@
 -- Compact on-demand drawer + independent touch calculator.
 local M,U=DSP.mobile,DSP.ui
-DSP.screens.list[#DSP.screens.list+1]={id='calculator',label='КАЛЬКУЛЯТОР'}
+DSP.screens.list[#DSP.screens.list+1]={id='calculator',label='РљРђР›Р¬РљРЈР›РЇРўРћР '}
 -- Keep old numbered screens stable; new calculator is appended as #9.
 local base_set=DSP.screens.set
 function DSP.screens.set(id)
@@ -10,10 +10,10 @@ end
 function DSP.screens.topbar()
     M.title('PALATKA AI')
     imgui.Separator()
-    for _,p in ipairs({{'palatka','Торговля'},{'arbitrage','Арбитраж'},
-        {'search','Поиск'},{'lavki','Лавки'},{'logs','Журнал'},
-        {'calculator','Калькулятор'},{'stats','Статистика'},
-        {'notes','Заметки'},{'settings','Настройки'}}) do
+    for _,p in ipairs({{'palatka','РўРѕСЂРіРѕРІР»СЏ'},{'arbitrage','РђСЂР±РёС‚СЂР°Р¶'},
+        {'search','РџРѕРёСЃРє'},{'lavki','Р›Р°РІРєРё'},{'logs','Р–СѓСЂРЅР°Р»'},
+        {'calculator','РљР°Р»СЊРєСѓР»СЏС‚РѕСЂ'},{'stats','РЎС‚Р°С‚РёСЃС‚РёРєР°'},
+        {'notes','Р—Р°РјРµС‚РєРё'},{'settings','РќР°СЃС‚СЂРѕР№РєРё'}}) do
         if M.button(p[2],'drawer_'..p[1],-1,U.screen==p[1],'nav') then
             DSP.screens.set(p[1])
         end
@@ -27,7 +27,7 @@ end
 local C={display='0',stored=nil,op=nil,fresh=true,history={},mode='standard',memory=0}
 DSP.calc_v16=C
 local function fmt(n)
-    if n==math.huge or n==-math.huge or n~=n then return 'Ошибка' end
+    if n==math.huge or n==-math.huge or n~=n then return 'РћС€РёР±РєР°' end
     if math.abs(n)<0.000000001 then n=0 end
     -- Avoid scientific notation for ordinary integer money amounts.
     if n == math.floor(n) and math.abs(n) < 1e15 then
@@ -52,16 +52,16 @@ local function evaluate(a,op,b)
     return b
 end
 local function record(a,op,b,n)
-    C.history[#C.history+1]={text=fmt(a)..' '..op..' '..fmt(b)..' = '..(n and fmt(n) or 'Ошибка'),result=n}
+    C.history[#C.history+1]={text=fmt(a)..' '..op..' '..fmt(b)..' = '..(n and fmt(n) or 'РћС€РёР±РєР°'),result=n}
     if #C.history>50 then table.remove(C.history,1) end
 end
 function C.press(k)
     if k:match('^%d$') then
-        if C.fresh or C.display=='0' or C.display=='Ошибка' then C.display=k
+        if C.fresh or C.display=='0' or C.display=='РћС€РёР±РєР°' then C.display=k
         elseif #C.display<18 then C.display=C.display..k end
         C.fresh=false
     elseif k=='.' then
-        if C.fresh or C.display=='Ошибка' then C.display='0';C.fresh=false end
+        if C.fresh or C.display=='РћС€РёР±РєР°' then C.display='0';C.fresh=false end
         if not C.display:find('.',1,true) then C.display=C.display..'.' end
     elseif k=='AC' then
         C.display='0';C.stored=nil;C.op=nil;C.fresh=true;C.last_op=nil;C.last_rhs=nil
@@ -78,14 +78,14 @@ function C.press(k)
         if op and b then
             local n=evaluate(a,op,b)
             record(a,op,b,n)
-            C.display=n and fmt(n) or 'Ошибка'
+            C.display=n and fmt(n) or 'РћС€РёР±РєР°'
             C.last_op=n and op or nil;C.last_rhs=n and b or nil
             C.stored=nil;C.op=nil;C.fresh=true
         end
     elseif k=='+' or k=='-' or k=='*' or k=='/' then
         if C.op and C.stored and not C.fresh then
             local n=evaluate(C.stored,C.op,value())
-            C.display=n and fmt(n) or 'Ошибка'
+            C.display=n and fmt(n) or 'РћС€РёР±РєР°'
             if not n then C.stored=nil;C.op=nil;C.fresh=true;return C.display end
         end
         C.stored=value();C.op=k;C.fresh=true;C.last_op=nil
@@ -106,19 +106,19 @@ end
 local F={buy=0,sell=0,qty=1,commission=2,extra=0}
 function U.calculator_v16()
     local w=imgui.GetContentRegionAvail().x
-    if M.button('Обычный','calc_standard',190,C.mode=='standard') then C.mode='standard' end
+    if M.button('РћР±С‹С‡РЅС‹Р№','calc_standard',190,C.mode=='standard') then C.mode='standard' end
     M.inline()
-    if M.button('Прибыль / %','calc_profit',205,C.mode=='profit') then C.mode='profit' end
+    if M.button('РџСЂРёР±С‹Р»СЊ / %','calc_profit',205,C.mode=='profit') then C.mode='profit' end
     if C.mode=='profit' then
-        M.number('Цена покупки','finance_buy',F,'buy',0,190)
-        M.number('Цена продажи','finance_sell',F,'sell',0,190)
-        M.number('Количество','finance_qty',F,'qty',1,190)
-        M.number('Комиссия %','finance_tax',F,'commission',0,190)
-        M.number('Дополнительные расходы','finance_extra',F,'extra',0,190)
+        M.number('Р¦РµРЅР° РїРѕРєСѓРїРєРё','finance_buy',F,'buy',0,190)
+        M.number('Р¦РµРЅР° РїСЂРѕРґР°Р¶Рё','finance_sell',F,'sell',0,190)
+        M.number('РљРѕР»РёС‡РµСЃС‚РІРѕ','finance_qty',F,'qty',1,190)
+        M.number('РљРѕРјРёСЃСЃРёСЏ %','finance_tax',F,'commission',0,190)
+        M.number('Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ СЂР°СЃС…РѕРґС‹','finance_extra',F,'extra',0,190)
         local r=C.finance(F.buy,F.sell,F.qty,F.commission,F.extra)
-        M.text('Затраты: '..DSP.money(r.spent)..' | Выручка: '..DSP.money(r.received))
-        M.title('Прибыль: '..DSP.money(r.profit))
-        M.text('ROI: '..fmt(r.roi)..'% | Наценка: '..fmt(r.markup)..'%')
+        M.text('Р—Р°С‚СЂР°С‚С‹: '..DSP.money(r.spent)..' | Р’С‹СЂСѓС‡РєР°: '..DSP.money(r.received))
+        M.title('РџСЂРёР±С‹Р»СЊ: '..DSP.money(r.profit))
+        M.text('ROI: '..fmt(r.roi)..'% | РќР°С†РµРЅРєР°: '..fmt(r.markup)..'%')
         return
     end
     imgui.TextColored(DSP.theme.col('accent',1),DSP.utf8(C.pretty_display()))
@@ -131,7 +131,7 @@ function U.calculator_v16()
             if i<4 then M.inline() end
         end
     end
-    if M.button('История  '..#C.history,'calc_history',270) then C.history_open=not C.history_open end
+    if M.button('РСЃС‚РѕСЂРёСЏ  '..#C.history,'calc_history',270) then C.history_open=not C.history_open end
     if C.history_open then
         local first=math.max(1,#C.history-8)
         for i=#C.history,first,-1 do

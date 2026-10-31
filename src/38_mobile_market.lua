@@ -4,65 +4,65 @@ local M=DSP.mobile
 local U=DSP.ui
 local function add(row,kind)
     local ok,err=DSP.presets.add(row,kind)
-    DSP.notify(ok and 'Добавлено в набор' or tostring(err))
+    DSP.notify(ok and 'Р”РѕР±Р°РІР»РµРЅРѕ РІ РЅР°Р±РѕСЂ' or tostring(err))
 end
 local function mark(offer,id)
-    if M.button('Отметить #'..tostring(offer.shop),'mark_'..id,210) then
+    if M.button('РћС‚РјРµС‚РёС‚СЊ #'..tostring(offer.shop),'mark_'..id,210) then
         DSP.market.mark_shop(offer.shop)
     end
 end
 local function offer_list(row,kind)
     local side=kind=='sell' and row.sell or row.buy
-    M.title(kind=='sell' and 'ПРОДАЮТ ВАМ' or 'СКУПАЮТ У ВАС')
-    if #(side.offers or {})==0 then M.text('Нет предложений') end
+    M.title(kind=='sell' and 'РџР РћР”РђР®Рў Р’РђРњ' or 'РЎРљРЈРџРђР®Рў РЈ Р’РђРЎ')
+    if #(side.offers or {})==0 then M.text('РќРµС‚ РїСЂРµРґР»РѕР¶РµРЅРёР№') end
     for i,o in ipairs(side.offers or {}) do
-        M.text('#'..tostring(o.shop)..'  '..tostring(o.owner or '?')..'    '..DSP.money(o.price)..' / шт.')
+        M.text('#'..tostring(o.shop)..'  '..tostring(o.owner or '?')..'    '..DSP.money(o.price)..' / С€С‚.')
         local status=DSP.market.offer_freshness(o.ts)
-        M.text('Количество по снимку: '..tostring(o.qty)..' шт.  |  '..tostring(status))
+        M.text('РљРѕР»РёС‡РµСЃС‚РІРѕ РїРѕ СЃРЅРёРјРєСѓ: '..tostring(o.qty)..' С€С‚.  |  '..tostring(status))
         mark(o,row.key..kind..i)
         imgui.Separator()
     end
 end
 function U.detail(row)
-    M.title('ПРЕДМЕТ')
+    M.title('РџР Р•Р”РњР•Рў')
     M.thumbnail({name=row.display,id=row.id},48)
     M.text(row.display)
     M.text(DSP.market.market_label_for(row) or '')
-    if M.button('+ В скупку','detail_add_buy',200) then add(row,'buy') end
+    if M.button('+ Р’ СЃРєСѓРїРєСѓ','detail_add_buy',200) then add(row,'buy') end
     M.inline()
-    if M.button('+ В продажу','detail_add_sell',230) then add(row,'sell') end
+    if M.button('+ Р’ РїСЂРѕРґР°Р¶Сѓ','detail_add_sell',230) then add(row,'sell') end
     offer_list(row,'sell')
     offer_list(row,'buy')
 end
 function U.finder_tab()
     U.header()
     imgui.SetNextItemWidth(math.min(740,imgui.GetContentRegionAvail().x))
-    if imgui.InputTextWithHint('##mobile_search',DSP.utf8('Найти предмет...'),U.finder_search_buf,128) then
+    if imgui.InputTextWithHint('##mobile_search',DSP.utf8('РќР°Р№С‚Рё РїСЂРµРґРјРµС‚...'),U.finder_search_buf,128) then
         U.finder_query=DSP.to_cp(ffi.string(U.finder_search_buf))
         DSP.screens.set_page('search',1)
     end
     if U.selected then
-        if M.button('< К списку','back_search',210) then U.selected=nil end
+        if M.button('< Рљ СЃРїРёСЃРєСѓ','back_search',210) then U.selected=nil end
         local row=DSP.market.state.by_key[U.selected]
         if row then U.detail(row) end
         return
     end
     local matches=DSP.market.find_item(U.finder_query)
-    M.text('Предметов: '..#matches)
+    M.text('РџСЂРµРґРјРµС‚РѕРІ: '..#matches)
     local first,last=DSP.screens.pager(#matches,7,'search')
-    if #matches==0 then M.text('Нет предложений. Проверьте название или обновите рынок.') end
+    if #matches==0 then M.text('РќРµС‚ РїСЂРµРґР»РѕР¶РµРЅРёР№. РџСЂРѕРІРµСЂСЊС‚Рµ РЅР°Р·РІР°РЅРёРµ РёР»Рё РѕР±РЅРѕРІРёС‚Рµ СЂС‹РЅРѕРє.') end
     for i=first,last do
         local row=matches[i]
         imgui.Separator()
         M.thumbnail({name=row.display,id=row.id},44)
         M.text(row.display)
-        M.text('Купить: '..(row.sell.count>0 and DSP.money(row.sell.best) or 'нет')..
-            '   |   Продать: '..(row.buy.count>0 and DSP.money(row.buy.best) or 'нет'))
-        if M.button('Смотреть лавки','open_item'..i,215) then U.selected=row.key end
+        M.text('РљСѓРїРёС‚СЊ: '..(row.sell.count>0 and DSP.money(row.sell.best) or 'РЅРµС‚')..
+            '   |   РџСЂРѕРґР°С‚СЊ: '..(row.buy.count>0 and DSP.money(row.buy.best) or 'РЅРµС‚'))
+        if M.button('РЎРјРѕС‚СЂРµС‚СЊ Р»Р°РІРєРё','open_item'..i,215) then U.selected=row.key end
         M.inline()
-        if M.button('+ В скупку','search_buy'..i,180) then add(row,'buy') end
+        if M.button('+ Р’ СЃРєСѓРїРєСѓ','search_buy'..i,180) then add(row,'buy') end
         M.inline()
-        if M.button('+ В продажу','search_sell'..i,210) then add(row,'sell') end
+        if M.button('+ Р’ РїСЂРѕРґР°Р¶Сѓ','search_sell'..i,210) then add(row,'sell') end
     end
 end
 
@@ -89,16 +89,16 @@ end
 local function offer_card(g,o,kind,i)
     local shop=tostring(o.shop or '?')
     local age=DSP.market.offer_freshness(o.ts)
-    M.text('#'..shop..'  '..tostring(o.owner or '?')..'    '..DSP.money(o.price)..' / шт.')
+    M.text('#'..shop..'  '..tostring(o.owner or '?')..'    '..DSP.money(o.price)..' / С€С‚.')
     if o.snapshot_qty~=nil then
-        M.text('Снимок API: '..tostring(o.snapshot_qty)..' шт. | Проверено вами: '..tostring(o.qty)..' шт.')
+        M.text('РЎРЅРёРјРѕРє API: '..tostring(o.snapshot_qty)..' С€С‚. | РџСЂРѕРІРµСЂРµРЅРѕ РІР°РјРё: '..tostring(o.qty)..' С€С‚.')
     else
-        M.text('По снимку: '..tostring(o.qty or 0)..' шт. | '..tostring(age))
+        M.text('РџРѕ СЃРЅРёРјРєСѓ: '..tostring(o.qty or 0)..' С€С‚. | '..tostring(age))
     end
     mark(o,'group'..g.key..kind..i)
     if kind=='buy' then
         local id='verify_'..tostring(g.key)..'_'..tostring(o.shop)..'_'..i
-        if M.button('Проверил в игре: исправить число','verify_open_'..id,365) then
+        if M.button('РџСЂРѕРІРµСЂРёР» РІ РёРіСЂРµ: РёСЃРїСЂР°РІРёС‚СЊ С‡РёСЃР»Рѕ','verify_open_'..id,365) then
             U.arb_qty_editor_key=id
             U.arb_qty_buf=imgui.new.char[32]()
             local value=tostring(o.qty or 0)
@@ -106,39 +106,39 @@ local function offer_card(g,o,kind,i)
         end
         if U.arb_qty_editor_key==id and U.arb_qty_buf then
             imgui.SetNextItemWidth(math.min(250,imgui.GetContentRegionAvail().x))
-            imgui.InputTextWithHint('##verify_qty_'..id,DSP.utf8('Сколько скупает в игре?'),U.arb_qty_buf,32)
-            if M.button('Подтвердить шт.','verify_save_'..id,230) then
+            imgui.InputTextWithHint('##verify_qty_'..id,DSP.utf8('РЎРєРѕР»СЊРєРѕ СЃРєСѓРїР°РµС‚ РІ РёРіСЂРµ?'),U.arb_qty_buf,32)
+            if M.button('РџРѕРґС‚РІРµСЂРґРёС‚СЊ С€С‚.','verify_save_'..id,230) then
                 local raw=ffi.string(U.arb_qty_buf)
                 local ok,err=DSP.market.confirm_offer_quantity(g.row,'buy',o,raw:match('^%d+$') and tonumber(raw) or -1)
-                if ok then U.arb_qty_editor_key=nil; DSP.notify('Количество уточнено. План пересчитан.')
+                if ok then U.arb_qty_editor_key=nil; DSP.notify('РљРѕР»РёС‡РµСЃС‚РІРѕ СѓС‚РѕС‡РЅРµРЅРѕ. РџР»Р°РЅ РїРµСЂРµСЃС‡РёС‚Р°РЅ.')
                 else DSP.notify(tostring(err)) end
             end
             M.inline()
-            if M.button('Отмена','verify_cancel_'..id,150) then U.arb_qty_editor_key=nil end
+            if M.button('РћС‚РјРµРЅР°','verify_cancel_'..id,150) then U.arb_qty_editor_key=nil end
         end
     end
 end
 local function route_card(g,e,i)
     local key=route_key(g,e)
     local v=imgui.new.bool(U.arb_selected[key] and true or false)
-    if imgui.Checkbox(DSP.utf8('В мой план##route_'..key),v) then
+    if imgui.Checkbox(DSP.utf8('Р’ РјРѕР№ РїР»Р°РЅ##route_'..key),v) then
         U.arb_selected[key]=v[0] or nil
     end
-    M.text('КУПИТЬ   #'..tostring(e.sell_offer.shop)..'  ->  ПРОДАТЬ   #'..tostring(e.buy_offer.shop))
-    M.text('Эта связка: '..tostring(e.tradable_qty)..' шт. | Цена: '..DSP.money(e.p_buy)..' -> '..DSP.money(e.p_sell))
+    M.text('РљРЈРџРРўР¬   #'..tostring(e.sell_offer.shop)..'  ->  РџР РћР”РђРўР¬   #'..tostring(e.buy_offer.shop))
+    M.text('Р­С‚Р° СЃРІСЏР·РєР°: '..tostring(e.tradable_qty)..' С€С‚. | Р¦РµРЅР°: '..DSP.money(e.p_buy)..' -> '..DSP.money(e.p_sell))
     local gross=(e.tradable_qty or 0)*(e.p_sell or 0)
-    M.text('Расход: '..DSP.money(e.total_cost or 0)..' | Выручка после комиссии: '..DSP.money(e.net_revenue or 0))
-    M.text('Комиссия: '..DSP.money(gross-(e.net_revenue or 0)))
-    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('Прибыль: +'..DSP.money(e.net_profit)))
-    M.text('Продавец: '..tostring(e.qty_seller)..' шт. | Скупщик: '..tostring(e.qty_buyer)..' шт.')
+    M.text('Р Р°СЃС…РѕРґ: '..DSP.money(e.total_cost or 0)..' | Р’С‹СЂСѓС‡РєР° РїРѕСЃР»Рµ РєРѕРјРёСЃСЃРёРё: '..DSP.money(e.net_revenue or 0))
+    M.text('РљРѕРјРёСЃСЃРёСЏ: '..DSP.money(gross-(e.net_revenue or 0)))
+    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('РџСЂРёР±С‹Р»СЊ: +'..DSP.money(e.net_profit)))
+    M.text('РџСЂРѕРґР°РІРµС†: '..tostring(e.qty_seller)..' С€С‚. | РЎРєСѓРїС‰РёРє: '..tostring(e.qty_buyer)..' С€С‚.')
     if (e.tradable_qty or 0)<(e.available_qty or 0) then
-        M.text('Меньше максимума: бюджет или объём уже распределён в другие сделки.')
+        M.text('РњРµРЅСЊС€Рµ РјР°РєСЃРёРјСѓРјР°: Р±СЋРґР¶РµС‚ РёР»Рё РѕР±СЉС‘Рј СѓР¶Рµ СЂР°СЃРїСЂРµРґРµР»С‘РЅ РІ РґСЂСѓРіРёРµ СЃРґРµР»РєРё.')
     end
-    if M.button('К продавцу #'..tostring(e.sell_offer.shop),'route_sell'..key,220) then
+    if M.button('Рљ РїСЂРѕРґР°РІС†Сѓ #'..tostring(e.sell_offer.shop),'route_sell'..key,220) then
         DSP.market.mark_shop(e.sell_offer.shop)
     end
     M.inline()
-    if M.button('К скупщику #'..tostring(e.buy_offer.shop),'route_buy'..key,220) then
+    if M.button('Рљ СЃРєСѓРїС‰РёРєСѓ #'..tostring(e.buy_offer.shop),'route_buy'..key,220) then
         DSP.market.mark_shop(e.buy_offer.shop)
     end
 end
@@ -146,29 +146,29 @@ local function render_group(g,idx)
     imgui.Separator()
     M.thumbnail({name=g.name,id=g.row.id},46)
     M.title(tostring(idx)..'. '..g.name)
-    M.text('ПРОДАЮТ  '..g.supply..' шт. / '..g.seller_count..' предлож.   |   СКУПАЮТ  '..g.demand..' шт. / '..g.buyer_count..' предлож.')
+    M.text('РџР РћР”РђР®Рў  '..g.supply..' С€С‚. / '..g.seller_count..' РїСЂРµРґР»РѕР¶.   |   РЎРљРЈРџРђР®Рў  '..g.demand..' С€С‚. / '..g.buyer_count..' РїСЂРµРґР»РѕР¶.')
     imgui.TextColored(DSP.theme.col('good',1),
-        DSP.utf8('План: '..g.planned..' шт.     Прибыль: +'..DSP.money(g.profit)))
+        DSP.utf8('РџР»Р°РЅ: '..g.planned..' С€С‚.     РџСЂРёР±С‹Р»СЊ: +'..DSP.money(g.profit)))
     local expanded=U.arb_expanded[g.key]
-    if M.button(expanded and 'Скрыть подробности' or 'Все продавцы, скупщики и маршруты',
+    if M.button(expanded and 'РЎРєСЂС‹С‚СЊ РїРѕРґСЂРѕР±РЅРѕСЃС‚Рё' or 'Р’СЃРµ РїСЂРѕРґР°РІС†С‹, СЃРєСѓРїС‰РёРєРё Рё РјР°СЂС€СЂСѓС‚С‹',
         'expand_group'..g.key,440,expanded) then
         U.arb_expanded[g.key]=not expanded
         expanded=not expanded
     end
     if not expanded then return end
-    M.text('Источник: снимок рынка. Объёмы в игре могли измениться.')
-    M.title('КТО ПРОДАЁТ — '..g.supply..' ШТ. ВСЕГО')
+    M.text('РСЃС‚РѕС‡РЅРёРє: СЃРЅРёРјРѕРє СЂС‹РЅРєР°. РћР±СЉС‘РјС‹ РІ РёРіСЂРµ РјРѕРіР»Рё РёР·РјРµРЅРёС‚СЊСЃСЏ.')
+    M.title('РљРўРћ РџР РћР”РђРЃРў вЂ” '..g.supply..' РЁРў. Р’РЎР•Р“Рћ')
     for i,o in ipairs(g.sellers) do offer_card(g,o,'sell',i); imgui.Separator() end
-    M.title('КТО СКУПАЕТ — '..g.demand..' ШТ. ВСЕГО')
+    M.title('РљРўРћ РЎРљРЈРџРђР•Рў вЂ” '..g.demand..' РЁРў. Р’РЎР•Р“Рћ')
     for i,o in ipairs(g.buyers) do offer_card(g,o,'buy',i); imgui.Separator() end
-    M.title('РЕАЛЬНЫЙ ПЛАН / '..#g.routes..' СВЯЗОК')
-    M.text('Только выгодные пары, без повторного расходования остатков.')
+    M.title('Р Р•РђР›Р¬РќР«Р™ РџР›РђРќ / '..#g.routes..' РЎР’РЇР—РћРљ')
+    M.text('РўРѕР»СЊРєРѕ РІС‹РіРѕРґРЅС‹Рµ РїР°СЂС‹, Р±РµР· РїРѕРІС‚РѕСЂРЅРѕРіРѕ СЂР°СЃС…РѕРґРѕРІР°РЅРёСЏ РѕСЃС‚Р°С‚РєРѕРІ.')
     for i,e in ipairs(g.routes) do route_card(g,e,i); imgui.Separator() end
-    if M.button('Выбрать все связки предмета','select_item'..g.key,310) then
+    if M.button('Р’С‹Р±СЂР°С‚СЊ РІСЃРµ СЃРІСЏР·РєРё РїСЂРµРґРјРµС‚Р°','select_item'..g.key,310) then
         for _,e in ipairs(g.routes) do U.arb_selected[route_key(g,e)]=true end
     end
     M.inline()
-    if M.button('Снять выбор','unselect_item'..g.key,175) then
+    if M.button('РЎРЅСЏС‚СЊ РІС‹Р±РѕСЂ','unselect_item'..g.key,175) then
         for _,e in ipairs(g.routes) do U.arb_selected[route_key(g,e)]=nil end
     end
 end
@@ -183,79 +183,79 @@ function U.arbitrage_tab()
     if signature~=U.arb_selection_signature then
         U.arb_selected={}; U.arb_selection_signature=signature
     end
-    M.title('АРБИТРАЖ')
-    M.text('По предметам — несколько продавцов объединены в одну карточку.')
+    M.title('РђР Р‘РРўР РђР–')
+    M.text('РџРѕ РїСЂРµРґРјРµС‚Р°Рј вЂ” РЅРµСЃРєРѕР»СЊРєРѕ РїСЂРѕРґР°РІС†РѕРІ РѕР±СЉРµРґРёРЅРµРЅС‹ РІ РѕРґРЅСѓ РєР°СЂС‚РѕС‡РєСѓ.')
     if st.status~='live' then
         imgui.TextColored(DSP.theme.col('warn',1),DSP.utf8(
-            'Внимание: источник не подтверждён как LIVE. Проверьте актуальность лавок.'))
+            'Р’РЅРёРјР°РЅРёРµ: РёСЃС‚РѕС‡РЅРёРє РЅРµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ РєР°Рє LIVE. РџСЂРѕРІРµСЂСЊС‚Рµ Р°РєС‚СѓР°Р»СЊРЅРѕСЃС‚СЊ Р»Р°РІРѕРє.'))
     end
     imgui.SetNextItemWidth(math.min(610,imgui.GetContentRegionAvail().x))
     U.arb_search_buf=U.arb_search_buf or imgui.new.char[128]()
-    if imgui.InputTextWithHint('##arb_search',DSP.utf8('Поиск предмета...'),U.arb_search_buf,128) then
+    if imgui.InputTextWithHint('##arb_search',DSP.utf8('РџРѕРёСЃРє РїСЂРµРґРјРµС‚Р°...'),U.arb_search_buf,128) then
         DSP.screens.set_page('arbitrage',1)
     end
-    if M.button(U.arb_controls and 'Скрыть фильтры' or 'Фильтры',
+    if M.button(U.arb_controls and 'РЎРєСЂС‹С‚СЊ С„РёР»СЊС‚СЂС‹' or 'Р¤РёР»СЊС‚СЂС‹',
         'arb_controls',180,U.arb_controls) then U.arb_controls=not U.arb_controls end
     if U.arb_controls then
         local changed=false
-        changed=M.number('Бюджет на ВСЕ сделки ($). 0 = без лимита','arb_budget',f,'budget',0,290) or changed
-        changed=M.number('Лимит на маршрут (шт.). 0 = без лимита','arb_maxqty',f,'max_qty',0,290) or changed
-        changed=M.number('Мин. прибыль за маршрут ($)','arb_profit',f,'min_profit',0,290) or changed
-        changed=M.number('Мин. ROI (%)','arb_roi',f,'min_roi',0,290) or changed
-        changed=M.number('Макс. возраст снимка (сек.)','arb_age',f,'max_age',0,290) or changed
-        changed=M.toggle('Разрешить частичные сделки',f,'allow_partial',true) or changed
-        changed=M.toggle('Включать записи без времени',f,'include_unknown',true) or changed
+        changed=M.number('Р‘СЋРґР¶РµС‚ РЅР° Р’РЎР• СЃРґРµР»РєРё ($). 0 = Р±РµР· Р»РёРјРёС‚Р°','arb_budget',f,'budget',0,290) or changed
+        changed=M.number('Р›РёРјРёС‚ РЅР° РјР°СЂС€СЂСѓС‚ (С€С‚.). 0 = Р±РµР· Р»РёРјРёС‚Р°','arb_maxqty',f,'max_qty',0,290) or changed
+        changed=M.number('РњРёРЅ. РїСЂРёР±С‹Р»СЊ Р·Р° РјР°СЂС€СЂСѓС‚ ($)','arb_profit',f,'min_profit',0,290) or changed
+        changed=M.number('РњРёРЅ. ROI (%)','arb_roi',f,'min_roi',0,290) or changed
+        changed=M.number('РњР°РєСЃ. РІРѕР·СЂР°СЃС‚ СЃРЅРёРјРєР° (СЃРµРє.)','arb_age',f,'max_age',0,290) or changed
+        changed=M.toggle('Р Р°Р·СЂРµС€РёС‚СЊ С‡Р°СЃС‚РёС‡РЅС‹Рµ СЃРґРµР»РєРё',f,'allow_partial',true) or changed
+        changed=M.toggle('Р’РєР»СЋС‡Р°С‚СЊ Р·Р°РїРёСЃРё Р±РµР· РІСЂРµРјРµРЅРё',f,'include_unknown',true) or changed
         if changed then DSP.market.invalidate_arbitrage(); DSP.save_settings(); DSP.screens.set_page('arbitrage',1) end
     end
     local groups=DSP.market.arbitrage_grouped()
     local totals=DSP.market.arbitrage_group_totals(groups)
-    M.text(tostring(totals.items)..' предметов | '..tostring(totals.routes)..' маршрутов | '..tostring(totals.planned)..' шт. в плане')
-    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('Ожидаемая прибыль: +'..DSP.money(totals.profit)))
-    M.text('Важно: «Скупают» = спрос по снимку, «План» = сколько рассчитано для сделок.')
-    M.text('Фактическое количество проверяйте в игре: рынок может устареть.')
+    M.text(tostring(totals.items)..' РїСЂРµРґРјРµС‚РѕРІ | '..tostring(totals.routes)..' РјР°СЂС€СЂСѓС‚РѕРІ | '..tostring(totals.planned)..' С€С‚. РІ РїР»Р°РЅРµ')
+    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('РћР¶РёРґР°РµРјР°СЏ РїСЂРёР±С‹Р»СЊ: +'..DSP.money(totals.profit)))
+    M.text('Р’Р°Р¶РЅРѕ: В«РЎРєСѓРїР°СЋС‚В» = СЃРїСЂРѕСЃ РїРѕ СЃРЅРёРјРєСѓ, В«РџР»Р°РЅВ» = СЃРєРѕР»СЊРєРѕ СЂР°СЃСЃС‡РёС‚Р°РЅРѕ РґР»СЏ СЃРґРµР»РѕРє.')
+    M.text('Р¤Р°РєС‚РёС‡РµСЃРєРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ РїСЂРѕРІРµСЂСЏР№С‚Рµ РІ РёРіСЂРµ: СЂС‹РЅРѕРє РјРѕР¶РµС‚ СѓСЃС‚Р°СЂРµС‚СЊ.')
     local query=DSP.lower(DSP.trim(DSP.to_cp(ffi.string(U.arb_search_buf))))
     local visible={}
     for _,g in ipairs(groups) do
         if query=='' or DSP.lower(g.name):find(query,1,true) then visible[#visible+1]=g end
     end
-    if #visible==0 then M.text('Совпадений нет. Обновите рынок или ослабьте фильтры.') end
+    if #visible==0 then M.text('РЎРѕРІРїР°РґРµРЅРёР№ РЅРµС‚. РћР±РЅРѕРІРёС‚Рµ СЂС‹РЅРѕРє РёР»Рё РѕСЃР»Р°Р±СЊС‚Рµ С„РёР»СЊС‚СЂС‹.') end
     local first,last=DSP.screens.pager(#visible,4,'arbitrage')
     for i=first,last do render_group(visible[i],i) end
     imgui.Separator()
     local chosen=summarize_selection(groups)
-    M.title('МОЙ ПЛАН  /  '..chosen.count..' СВЯЗОК')
-    M.text('Выбрано: '..chosen.qty..' шт. | Нужно денег: '..DSP.money(chosen.cost))
-    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('Прибыль: +'..DSP.money(chosen.profit)))
-    M.text('Выбор — чеклист для похода по лавкам; покупки не выполняются автоматически.')
+    M.title('РњРћР™ РџР›РђРќ  /  '..chosen.count..' РЎР’РЇР—РћРљ')
+    M.text('Р’С‹Р±СЂР°РЅРѕ: '..chosen.qty..' С€С‚. | РќСѓР¶РЅРѕ РґРµРЅРµРі: '..DSP.money(chosen.cost))
+    imgui.TextColored(DSP.theme.col('good',1),DSP.utf8('РџСЂРёР±С‹Р»СЊ: +'..DSP.money(chosen.profit)))
+    M.text('Р’С‹Р±РѕСЂ вЂ” С‡РµРєР»РёСЃС‚ РґР»СЏ РїРѕС…РѕРґР° РїРѕ Р»Р°РІРєР°Рј; РїРѕРєСѓРїРєРё РЅРµ РІС‹РїРѕР»РЅСЏСЋС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.')
 end
 U.market_tab=U.arbitrage_tab
 function U.lavki_tab()
     U.header()
     local shops=DSP.market.shops_list()
     local first,last=DSP.screens.pager(#shops,7,'lavki')
-    if #shops==0 then M.text('Лавки не загружены. Обновите рынок.') end
+    if #shops==0 then M.text('Р›Р°РІРєРё РЅРµ Р·Р°РіСЂСѓР¶РµРЅС‹. РћР±РЅРѕРІРёС‚Рµ СЂС‹РЅРѕРє.') end
     for i=first,last do
         local shop=shops[i]
         local number=shop.num or '?'
         imgui.Separator()
-        M.title('ЛАВКА #'..tostring(number)..'  |  '..tostring(shop.owner or '?'))
+        M.title('Р›РђР’РљРђ #'..tostring(number)..'  |  '..tostring(shop.owner or '?'))
         local fresh=DSP.market.offer_freshness(shop.ts or shop.updated_at)
-        M.text('Данные: '..tostring(fresh)..'  |  Продаёт: '..tostring(shop.sell_count or 0)..'  |  Скупает: '..tostring(shop.buy_count or 0))
-        if M.button('Отметить на карте','shop_mark'..i,225) then DSP.market.mark_shop(number) end
+        M.text('Р”Р°РЅРЅС‹Рµ: '..tostring(fresh)..'  |  РџСЂРѕРґР°С‘С‚: '..tostring(shop.sell_count or 0)..'  |  РЎРєСѓРїР°РµС‚: '..tostring(shop.buy_count or 0))
+        if M.button('РћС‚РјРµС‚РёС‚СЊ РЅР° РєР°СЂС‚Рµ','shop_mark'..i,225) then DSP.market.mark_shop(number) end
         M.inline()
-        if M.button(U.lavki_expanded[number] and 'Свернуть' or 'Товары','expand_shop'..i,195) then
+        if M.button(U.lavki_expanded[number] and 'РЎРІРµСЂРЅСѓС‚СЊ' or 'РўРѕРІР°СЂС‹','expand_shop'..i,195) then
             U.lavki_expanded[number]=not U.lavki_expanded[number]
         end
-        if (shop.buy_count or 0)>0 and M.button('Копировать скупку +1$','copy_shop'..i,320) then
+        if (shop.buy_count or 0)>0 and M.button('РљРѕРїРёСЂРѕРІР°С‚СЊ СЃРєСѓРїРєСѓ +1$','copy_shop'..i,320) then
             local n,err=DSP.market.copy_shop_skupka(number,nil,1)
-            DSP.notify(n and ('Скопировано позиций: '..n) or tostring(err))
+            DSP.notify(n and ('РЎРєРѕРїРёСЂРѕРІР°РЅРѕ РїРѕР·РёС†РёР№: '..n) or tostring(err))
         end
         if U.lavki_expanded[number] then
             for _,side in ipairs({'sell','buy'}) do
-                M.title(side=='sell' and 'Продаёт вам:' or 'Скупает у вас:')
+                M.title(side=='sell' and 'РџСЂРѕРґР°С‘С‚ РІР°Рј:' or 'РЎРєСѓРїР°РµС‚ Сѓ РІР°СЃ:')
                 for _,entry in ipairs(shop[side..'_offers'] or {}) do
                     local it=entry.offer
-                    M.text(entry.row.display..'  |  '..DSP.money(it.price or 0)..' за шт. | '..tostring(it.qty or 0)..' шт.')
+                    M.text(entry.row.display..'  |  '..DSP.money(it.price or 0)..' Р·Р° С€С‚. | '..tostring(it.qty or 0)..' С€С‚.')
                 end
             end
         end

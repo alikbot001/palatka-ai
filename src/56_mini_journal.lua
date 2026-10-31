@@ -12,7 +12,7 @@ local function inline() imgui.SameLine(0,8) end
 local function state() return DSP.settings.craglog end
 local function header(g)
     local s=state()
-    local handle=s.pinned and 'ЖУРНАЛ / ЗАКРЕПЛЁН' or 'ЖУРНАЛ / ПЕРЕТАЩИТЬ'
+    local handle=s.pinned and 'Р–РЈР РќРђР› / Р—РђРљР Р•РџР›РЃРќ' or 'Р–РЈР РќРђР› / РџР•Р Р•РўРђР©РРўР¬'
     button(handle,'handle',g.w-300,false)
     if not s.pinned and imgui.IsItemActive() and imgui.IsMouseDragging(0) then
         local delta=imgui.GetIO().MouseDelta
@@ -20,7 +20,7 @@ local function header(g)
     end
     if not imgui.IsMouseDown(0) then C.end_drag() end
     inline()
-    if button(s.pinned and 'PIN: ДА' or 'PIN: НЕТ','pin',120,s.pinned) then C.set_pinned(not s.pinned) end
+    if button(s.pinned and 'PIN: Р”Рђ' or 'PIN: РќР•Рў','pin',120,s.pinned) then C.set_pinned(not s.pinned) end
     inline()
     if button(s.minimized and '+' or '-','collapse',60) then C.set_minimized(not s.minimized) end
     inline()
@@ -28,8 +28,8 @@ local function header(g)
 end
 local function filters(g)
     local s=state()
-    for i,pair in ipairs({{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
-                           {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}) do
+    for i,pair in ipairs({{'all','Р’СЃРµ'},{'loot','РўР°Р№РЅРёРєРё'},{'payday','PayDay'},
+                           {'sales','РџСЂРѕРґР°Р¶Рё'},{'buys','РЎРєСѓРїРєР°'},{'income','Р”РѕС…РѕРґС‹'}}) do
         if button(pair[2],'filter_'..pair[1],(g.w-42)/3,s.filter==pair[1]) then
             s.filter=pair[1]; C.scroll=0; DSP.save_settings()
         end
@@ -38,12 +38,12 @@ local function filters(g)
 end
 local function row_card(entry)
     local kind=entry.kind or entry.type
-    local tag=kind=='item' and 'НАГРАДА' or kind=='cash' and 'ДЕНЬГИ' or kind=='opening' and 'ТАЙНИК'
-        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'ДОХОД' or 'СДЕЛКА'
+    local tag=kind=='item' and 'РќРђР“Р РђР”Рђ' or kind=='cash' and 'Р”Р•РќР¬Р“Р' or kind=='opening' and 'РўРђР™РќРРљ'
+        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'Р”РћРҐРћР”' or 'РЎР”Р•Р›РљРђ'
     imgui.TextColored(DSP.theme.col('accent',1),cp(os.date('%H:%M:%S',entry.ts or 0)..'  '..tag))
     text(C.describe(entry))
     if entry.source then
-        text('Источник: '..entry.source..(entry.association=='inferred' and ' (по чату)' or ''))
+        text('РСЃС‚РѕС‡РЅРёРє: '..entry.source..(entry.association=='inferred' and ' (РїРѕ С‡Р°С‚Сѓ)' or ''))
     end
     imgui.Separator()
 end
@@ -76,19 +76,19 @@ function C.draw()
             local per=3
             C.scroll=math.max(0,math.min(C.scroll,math.max(0,#events-per)))
             local start=#events-C.scroll
-            text('Последние события: '..#events..' / '..C.ring_cap..'   |   PIN фиксирует положение')
-            if button('ВВЕРХ / НОВЕЕ','up',(g.w-40)/2,C.scroll>0) then C.scroll=math.max(0,C.scroll-per) end
+            text('РџРѕСЃР»РµРґРЅРёРµ СЃРѕР±С‹С‚РёСЏ: '..#events..' / '..C.ring_cap..'   |   PIN С„РёРєСЃРёСЂСѓРµС‚ РїРѕР»РѕР¶РµРЅРёРµ')
+            if button('Р’Р’Р•Р РҐ / РќРћР’Р•Р•','up',(g.w-40)/2,C.scroll>0) then C.scroll=math.max(0,C.scroll-per) end
             inline()
-            if button('ВНИЗ / СТАРШЕ','down',(g.w-40)/2,start>per) then C.scroll=math.min(math.max(0,#events-per),C.scroll+per) end
+            if button('Р’РќРР— / РЎРўРђР РЁР•','down',(g.w-40)/2,start>per) then C.scroll=math.min(math.max(0,#events-per),C.scroll+per) end
             start=#events-C.scroll
             local shown=imgui.BeginChild('##mini_cards',imgui.ImVec2(0,0),false)
             if shown then
                 if #events==0 then
-                    text('Здесь появятся сделки, деньги и награды из игрового чата.')
-                    text('Полная история доступна в главном меню.')
+                    text('Р—РґРµСЃСЊ РїРѕСЏРІСЏС‚СЃСЏ СЃРґРµР»РєРё, РґРµРЅСЊРіРё Рё РЅР°РіСЂР°РґС‹ РёР· РёРіСЂРѕРІРѕРіРѕ С‡Р°С‚Р°.')
+                    text('РџРѕР»РЅР°СЏ РёСЃС‚РѕСЂРёСЏ РґРѕСЃС‚СѓРїРЅР° РІ РіР»Р°РІРЅРѕРј РјРµРЅСЋ.')
                 end
                 for i=start,math.max(1,start-per+1),-1 do if events[i] then row_card(events[i]) end end
-                if C.last_error then text('Ошибка записи: '..C.last_error) end
+                if C.last_error then text('РћС€РёР±РєР° Р·Р°РїРёСЃРё: '..C.last_error) end
             end
             imgui.EndChild()
         end

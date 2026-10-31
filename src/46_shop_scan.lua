@@ -41,8 +41,8 @@ end
 function S.learn(options)
     options=options or {}
     local snap=S.snapshot()
-    if snap.closed then return fail('Лавка закрыта') end
-    if snap.server~=current_server() then return fail('Снимок лавки другого сервера') end
+    if snap.closed then return fail('Р›Р°РІРєР° Р·Р°РєСЂС‹С‚Р°') end
+    if snap.server~=current_server() then return fail('РЎРЅРёРјРѕРє Р»Р°РІРєРё РґСЂСѓРіРѕРіРѕ СЃРµСЂРІРµСЂР°') end
     local current=DSP.live.shop
     if current~=learned_shop then learned_shop,learned=current,{} end
     local count=0
@@ -69,24 +69,24 @@ function S.learn(options)
     return{ok=true,count=count}
 end
 local function offers(side,options)
-    if not side_ok(side) then return nil,'Укажите сторону лавки' end
+    if not side_ok(side) then return nil,'РЈРєР°Р¶РёС‚Рµ СЃС‚РѕСЂРѕРЅСѓ Р»Р°РІРєРё' end
     local snap=S.snapshot()
-    if snap.server~=current_server() then return nil,'Снимок лавки другого сервера' end
+    if snap.server~=current_server() then return nil,'РЎРЅРёРјРѕРє Р»Р°РІРєРё РґСЂСѓРіРѕРіРѕ СЃРµСЂРІРµСЂР°' end
     for _,field in ipairs({'revision','generation','server'}) do
         local expected=options['expected_'..field]
-        if expected~=nil and expected~=snap[field] then return nil,'Снимок лавки изменился; откройте выбор заново' end
+        if expected~=nil and expected~=snap[field] then return nil,'РЎРЅРёРјРѕРє Р»Р°РІРєРё РёР·РјРµРЅРёР»СЃСЏ; РѕС‚РєСЂРѕР№С‚Рµ РІС‹Р±РѕСЂ Р·Р°РЅРѕРІРѕ' end
     end
-    if options.selected~=nil and type(options.selected)~='table' then return nil,'Неверный выбор позиций' end
+    if options.selected~=nil and type(options.selected)~='table' then return nil,'РќРµРІРµСЂРЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР·РёС†РёР№' end
     local rows,seen,conflicts={},{},0
     for _,row in ipairs(snap[side]) do
         if not options.selected or options.selected[row.key]==true then
-            if not integer(row.price,1) then return nil,'Неверная наблюдаемая цена' end
+            if not integer(row.price,1) then return nil,'РќРµРІРµСЂРЅР°СЏ РЅР°Р±Р»СЋРґР°РµРјР°СЏ С†РµРЅР°' end
             local key=item_key(row)
             if not seen[key] then seen[key]=row;rows[#rows+1]=row
             elseif seen[key].price~=row.price then conflicts=conflicts+1 end
         end
     end
-    if #rows==0 then return nil,'Нет выбранных позиций' end
+    if #rows==0 then return nil,'РќРµС‚ РІС‹Р±СЂР°РЅРЅС‹С… РїРѕР·РёС†РёР№' end
     return rows,nil,conflicts
 end
 local function library_keys(kind)
@@ -94,23 +94,23 @@ local function library_keys(kind)
 end
 function S.copy_to_preset(side,options)
     options=options or {}
-    if type(options)~='table' then return fail('Неверные параметры копирования') end
-    if busy() then return fail('Остановите выставление') end
+    if type(options)~='table' then return fail('РќРµРІРµСЂРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РєРѕРїРёСЂРѕРІР°РЅРёСЏ') end
+    if busy() then return fail('РћСЃС‚Р°РЅРѕРІРёС‚Рµ РІС‹СЃС‚Р°РІР»РµРЅРёРµ') end
     local kind=options.target_side or side
-    if not side_ok(kind) then return fail('Неверная сторона пресета') end
+    if not side_ok(kind) then return fail('РќРµРІРµСЂРЅР°СЏ СЃС‚РѕСЂРѕРЅР° РїСЂРµСЃРµС‚Р°') end
     local rows,err,conflicts=offers(side,options)
     if not rows then return fail(err) end
     local markup=tonumber(options.markup or 0)
-    if not markup or markup~=markup or markup%1~=0 or math.abs(markup)>max_integer then return fail('Неверная надбавка в долларах') end
-    if options.name~=nil and type(options.name)~='string' then return fail('Неверное имя набора') end
+    if not markup or markup~=markup or markup%1~=0 or math.abs(markup)>max_integer then return fail('РќРµРІРµСЂРЅР°СЏ РЅР°РґР±Р°РІРєР° РІ РґРѕР»Р»Р°СЂР°С…') end
+    if options.name~=nil and type(options.name)~='string' then return fail('РќРµРІРµСЂРЅРѕРµ РёРјСЏ РЅР°Р±РѕСЂР°') end
     local name=options.name and DSP.text_cp(options.name):match('^%s*(.-)%s*$')
     local index=options.index and integer(options.index,1)
-    if (options.index and not index) or (name and name=='') or (name and index) or (not name and not index) then return fail('Выберите набор или задайте новое имя') end
+    if (options.index and not index) or (name and name=='') or (name and index) or (not name and not index) then return fail('Р’С‹Р±РµСЂРёС‚Рµ РЅР°Р±РѕСЂ РёР»Рё Р·Р°РґР°Р№С‚Рµ РЅРѕРІРѕРµ РёРјСЏ') end
     local pending={}
     for _,row in ipairs(rows) do
-        if markup>max_integer-row.price or markup<1-row.price then return fail('Надбавка даёт неверную цену') end
+        if markup>max_integer-row.price or markup<1-row.price then return fail('РќР°РґР±Р°РІРєР° РґР°С‘С‚ РЅРµРІРµСЂРЅСѓСЋ С†РµРЅСѓ') end
         local price=row.price+markup;local qty=row.qty_known and integer(row.qty,1) or 1
-        if not qty or price>max_integer/qty then return fail('Сумма превышает точный диапазон') end
+        if not qty or price>max_integer/qty then return fail('РЎСѓРјРјР° РїСЂРµРІС‹С€Р°РµС‚ С‚РѕС‡РЅС‹Р№ РґРёР°РїР°Р·РѕРЅ') end
         pending[#pending+1]={name=DSP.item_name(row.name,row.ench or 0),key=item_key(row),ench=row.ench or 0,
             item_id=row.item_id or row.id,price=price,qty=qty,enabled=kind=='buy',source_qty_unknown=not row.qty_known or nil}
     end
@@ -118,11 +118,11 @@ function S.copy_to_preset(side,options)
     local ok,why=DSP.presets._transaction(function()
         local list=DSP.presets.list(kind)
         if name then
-            for _,p in ipairs(list) do if p.name==name then return false,'Набор с таким именем уже существует' end end
+            for _,p in ipairs(list) do if p.name==name then return false,'РќР°Р±РѕСЂ СЃ С‚Р°РєРёРј РёРјРµРЅРµРј СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚' end end
             list[#list+1]={name=name,items={}};index=#list;result.index=index
         end
         local target=list[index]
-        if not target then return false,'Набор не найден' end
+        if not target then return false,'РќР°Р±РѕСЂ РЅРµ РЅР°Р№РґРµРЅ' end
         local existing={};for _,it in ipairs(target.items or {}) do existing[item_key(it)]=true end
         target.items=target.items or {}
         for _,it in ipairs(pending) do
@@ -140,18 +140,18 @@ function S.copy_to_preset(side,options)
     return result
 end
 function S.apply_prices(side,index,options)
-    if busy() then return fail('Остановите выставление') end
+    if busy() then return fail('РћСЃС‚Р°РЅРѕРІРёС‚Рµ РІС‹СЃС‚Р°РІР»РµРЅРёРµ') end
     options=options or {}
-    if type(options)~='table' then return fail('Неверные параметры коррекции') end
+    if type(options)~='table' then return fail('РќРµРІРµСЂРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РєРѕСЂСЂРµРєС†РёРё') end
     local kind=options.target_side or side;index=integer(index,1)
-    if not side_ok(kind) or not index then return fail('Выберите набор') end
+    if not side_ok(kind) or not index then return fail('Р’С‹Р±РµСЂРёС‚Рµ РЅР°Р±РѕСЂ') end
     local rows,err,conflicts=offers(side,options)
     if not rows then return fail(err) end
     local prices={};for _,row in ipairs(rows) do prices[item_key(row)]=row.price end
     local result={ok=true,count=0,index=index,conflicts=conflicts,target_side=kind};local touched={}
     local ok,why=DSP.presets._transaction(function()
         local target=DSP.presets.list(kind)[index]
-        if not target then return false,'Набор не найден' end
+        if not target then return false,'РќР°Р±РѕСЂ РЅРµ РЅР°Р№РґРµРЅ' end
         local matches=0
         for _,it in ipairs(target.items or {}) do
             local price=prices[item_key(it)]
@@ -163,7 +163,7 @@ function S.apply_prices(side,index,options)
                 end
             end
         end
-        if matches==0 then return false,'В наборе нет совпадающих предметов' end
+        if matches==0 then return false,'Р’ РЅР°Р±РѕСЂРµ РЅРµС‚ СЃРѕРІРїР°РґР°СЋС‰РёС… РїСЂРµРґРјРµС‚РѕРІ' end
         return true
     end)
     if not ok then return fail(why) end

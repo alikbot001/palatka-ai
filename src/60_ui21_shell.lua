@@ -173,7 +173,7 @@ function V.list(key,draw,options)
         if o.toolbar then o.toolbar(key)else
             V.scroll_buttons(key)
             if type(o.footer)=='function'then V.inline();o.footer()
-            elseif o.count then V.inline();V.muted(tostring(o.count)..' записей')end
+            elseif o.count then V.inline();V.muted(tostring(o.count)..' Р·Р°РїРёСЃРµР№')end
         end
     end
 end
@@ -188,7 +188,7 @@ function V.list_rows(key,rows,row_height,draw,options)
         end
         imgui.SetCursorPosY(start+#rows*row_height)
         imgui.Dummy(imgui.ImVec2(1,1))
-        if #rows==0 then imgui.SetCursorPosY(start);V.muted('Нет записей')end
+        if #rows==0 then imgui.SetCursorPosY(start);V.muted('РќРµС‚ Р·Р°РїРёСЃРµР№')end
     end,options)
 end
 function V.row(id,height,draw)
@@ -278,7 +278,7 @@ function V.popup(title,id,draw,size)
                     y=DSP.clamp(pos.y+d.y,0,math.max(0,sz.y-wh.y))}
             end
         end
-        -- Position independent of the previous widgets; old 'Закрыть' buttons remain
+        -- Position independent of the previous widgets; old 'Р—Р°РєСЂС‹С‚СЊ' buttons remain
         -- for compatibility, but every modal gets exactly the same close affordance.
         V.at(x+math.max(0,avail-42),y)
         local close=V.button('X','modal_x_'..id,40,false,false,34)
@@ -299,7 +299,7 @@ function V.open_popup(title,id)
     V.popup_pending={title=title,id=id}
 end
 function V.cancel(id)
-    if V.button('Отмена','cancel_'..id,120)then imgui.CloseCurrentPopup()end
+    if V.button('РћС‚РјРµРЅР°','cancel_'..id,120)then imgui.CloseCurrentPopup()end
 end
 function V.geometry(sw,sh)
     local p=DSP.settings.mobile_window or {}
@@ -308,11 +308,12 @@ function V.geometry(sw,sh)
     return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or (sw-w)*.5,0,math.max(0,sw-w)),
         y=DSP.clamp(tonumber(p.y)or (sh-h)*.35,0,math.max(0,sh-h))}
 end
-local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'arbitrage','Арбитраж'},
- {'resale','Перепродажа'},{'promo','Авто-пиар'},{'scan','Скан лавки'},
- {'search','Поиск товара'},{'calculator','Калькулятор'},{'logs','Журнал'},
- {'stats','Статистика'},{'notes','Заметки'},{'storage','Хранилища'},
- {'market','Рынок'},{'history','История'},{'settings','Настройки'}}
+-- Prioritize frequently used tasks; keep advanced modules accessible.
+local nav={{'palatka','РџСЂРѕРґР°Р¶Р° Рё СЃРєСѓРїРєР°'},{'lavki','РњРѕСЏ Р»Р°РІРєР°'},{'arbitrage','РђСЂР±РёС‚СЂР°Р¶'},
+ {'storage','РҐСЂР°РЅРёР»РёС‰Р°'},{'logs','Р–СѓСЂРЅР°Р»'},{'market','Р С‹РЅРѕРє API'},
+ {'scan','РЎРєР°РЅ Р»Р°РІРєРё'},{'search','РџРѕРёСЃРє С‚РѕРІР°СЂР°'},{'resale','РџРµСЂРµРїСЂРѕРґР°Р¶Р°'},
+ {'calculator','РљР°Р»СЊРєСѓР»СЏС‚РѕСЂ'},{'history','РСЃС‚РѕСЂРёСЏ'},{'stats','РЎС‚Р°С‚РёСЃС‚РёРєР°'},
+ {'promo','РђРІС‚РѕРїРёР°СЂ'},{'notes','Р—Р°РјРµС‚РєРё'},{'settings','РќР°СЃС‚СЂРѕР№РєРё'}}
 function V.set_screen(id)
     if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
     V.screen=id;V.nav=false
@@ -339,10 +340,10 @@ local function header(g,io)
     if g.w>=630 then V.at(x0+207,y0+11);V.muted('v'..tostring(DSP.version or '2.2'))end
     if g.w>850 then
         V.at(math.max(x0+240,menu_x-244),y0+11)
-        V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' · '..DSP.market.freshness(),230))
+        V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' В· '..DSP.market.freshness(),230))
     end
     V.at(menu_x,y0)
-    if V.button('Меню','menu',78,V.nav,false,36)then V.nav=not V.nav end
+    if V.button('РњРµРЅСЋ','menu',78,V.nav,false,36)then V.nav=not V.nav end
     V.at(close_x,y0)
     if V.button('X','close',40,false,false,36)then
         U.set_open(false)
@@ -388,7 +389,7 @@ function V.track_touch(io)
     V.was_down=down
 end
 function V.font_scale_for(base,width,dpi)
-    return 18*(tonumber(dpi)or 1.25)/1.25*math.min(1.35,math.max(.80,width/850))/math.max(1,base)
+    return 20*(tonumber(dpi)or 1.25)/1.25*math.min(1.40,math.max(.90,width/850))/math.max(1,base)
 end
 function U.draw()
     if DSP.carbon_draw then DSP.carbon_draw.begin_frame() end
@@ -422,16 +423,16 @@ function U.draw()
         local drawer_only=V.nav and not wide
         if show_side then
             local h=math.max(30,imgui.GetContentRegionAvail().y-48)
-            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(182,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
+            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(226,g.w*.29),h),true,imgui.WindowFlags.NoScrollbar)then
                 V.apply_font()
-                V.muted('НАВИГАЦИЯ')
-                if V.button('Главная','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
+                V.muted('Р РђР—Р”Р•Р›Р«')
+                if V.button('Р“Р»Р°РІРЅР°СЏ','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
                 V.list_rows('navigation',nav,44,function(e,i)
                     local symbols={palatka='= ',lavki='# ',arbitrage='> ',resale='* ',promo='@ ',scan='[] ',
                         search='? ',calculator='+ ',logs='| ',stats='% ',notes='- ',storage='[] ',market='$ ',history=': ',settings=': '}
                     if V.button((symbols[e[1]] or ' ')..e[2],'nav_'..i,-1,V.screen==e[1],V.screen==e[1],42)then V.set_screen(e[1])end
                 end,{height=math.max(70,imgui.GetContentRegionAvail().y-85),footer=true})
-                if imgui.GetContentRegionAvail().y>25 then V.muted('  PALATKA AI · LIVE')end
+                if imgui.GetContentRegionAvail().y>25 then V.muted('  PALATKA AI В· LIVE')end
             end
             imgui.EndChild()
             if not drawer_only then V.inline(4)end
@@ -459,15 +460,15 @@ function U.draw()
                 if not ok then
                     V.last_error=err
                     if V.errors[V.screen]~=err then DSP.flog('UI22 '..err)end
-                    V.errors[V.screen]=err;V.red('Ошибка экрана. Подробности в standalone.log')
+                    V.errors[V.screen]=err;V.red('РћС€РёР±РєР° СЌРєСЂР°РЅР°. РџРѕРґСЂРѕР±РЅРѕСЃС‚Рё РІ standalone.log')
                 end
             end
             imgui.EndChild()
             imgui.Separator()
-            if V.button('Окна','carbon_windows',100,false,true,38)then V.nav=not V.nav end
+            if V.button('РћРєРЅР°','carbon_windows',100,false,true,38)then V.nav=not V.nav end
             V.inline()
             local remain=imgui.GetContentRegionAvail().x
-            V.muted(V.fit('Palatka AI · '..tostring(DSP.market.state.status or 'offline')..' · без автоматических сделок',math.max(40,remain-6)))
+            V.muted(V.fit('Palatka AI В· '..tostring(DSP.market.state.status or 'offline')..' В· Р±РµР· Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРёС… СЃРґРµР»РѕРє',math.max(40,remain-6)))
         end
         if V.popup_pending then
             local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(u(p.title)..'##v22_'..p.id)

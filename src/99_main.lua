@@ -55,7 +55,7 @@ local function broadcast_version()
         pcall(DSP.flog, '--- BROADCAST ' .. msg .. ' ---')
     end
     if sampAddChatMessage then
-        pcall(sampAddChatMessage, '{FFAA00}[palatka ai] {FFFFFF}v' .. tostring(DSP.version) .. ' {00FF00}активирован{FFFFFF}. Открыть: {FFAA00}/crr', 0xFFAA00)
+        pcall(sampAddChatMessage, '{FFAA00}[palatka ai] {FFFFFF}v' .. tostring(DSP.version) .. ' {00FF00}Р°РєС‚РёРІРёСЂРѕРІР°РЅ{FFFFFF}. РћС‚РєСЂС‹С‚СЊ: {FFAA00}/crr', 0xFFAA00)
     end
 end
 safe('broadcast_version', broadcast_version)

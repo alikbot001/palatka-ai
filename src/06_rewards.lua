@@ -1,7 +1,7 @@
 -- Append-only reward journal. Associations are evidence-backed inferences, never edits.
 DSP.rewards = {pending = {}, sequence = 0, corrupt_lines = 0}
 local R = DSP.rewards
-local TEMP_WORDS={'временн','аренд','на время','temporary','rental','rented'}
+local TEMP_WORDS={'РІСЂРµРјРµРЅРЅ','Р°СЂРµРЅРґ','РЅР° РІСЂРµРјСЏ','temporary','rental','rented'}
 function R.is_temporary(row)
     if type(row)~='table' then return false end
     if row.temporary==true then return true end
@@ -10,8 +10,8 @@ function R.is_temporary(row)
     for _,needle in ipairs(TEMP_WORDS)do
         if lower:find(needle,1,true)then return true end
     end
-    if lower:find('на%s+%d+%s+д') or lower:find('на%s+%d+%s+час')
-        or lower:find('срок%s+действ',1) then return true end
+    if lower:find('РЅР°%s+%d+%s+Рґ') or lower:find('РЅР°%s+%d+%s+С‡Р°СЃ')
+        or lower:find('СЃСЂРѕРє%s+РґРµР№СЃС‚РІ',1) then return true end
     return false
 end
 local path = DSP.dir .. '/rewards.jsonl'
@@ -104,7 +104,7 @@ function R.load()
             local price = tonumber(entry.price)
             local known = price and price > 0
             local saved=R.record({legacy_id=id, ts=entry.ts, kind='item', item_name=entry.item_name or entry.item,
-                qty=entry.qty or entry.count or 1, ench=entry.ench or 0, source=entry.source or entry.crate_type or 'неизвестный источник',
+                qty=entry.qty or entry.count or 1, ench=entry.ench or 0, source=entry.source or entry.crate_type or 'РЅРµРёР·РІРµСЃС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє',
                 association='legacy', price_known=not not known, unit_price=known and price or nil,
                 estimated_value=known and price * (tonumber(entry.qty or entry.count) or 1) or nil,
                 price_source=known and 'legacy' or nil, raw=entry.raw, legacy=true})
@@ -113,41 +113,41 @@ function R.load()
     end
 end
 local function item_parts(s)
-    local qty = s:match('%((%d+)%s*шт%.?%)%s*$')
-    if qty then s = s:gsub('%s*%(%d+%s*шт%.?%)%s*$', '') end
+    local qty = s:match('%((%d+)%s*С€С‚%.?%)%s*$')
+    if qty then s = s:gsub('%s*%(%d+%s*С€С‚%.?%)%s*$', '') end
     local base, ench = s:match('^(.-)%s*%(%+(%d+)%)$')
     return DSP.clean_text(base or s), tonumber(ench) or 0, tonumber(qty) or 1
 end
 function R.parse(raw)
     local s = DSP.clean_text(raw or ''):gsub('^%[%d%d:%d%d:%d%d%]%s*', '')
-    local name, tail = s:match("^Вам был добавлен предмет '([^']+)'(.*)$")
+    local name, tail = s:match("^Р’Р°Рј Р±С‹Р» РґРѕР±Р°РІР»РµРЅ РїСЂРµРґРјРµС‚ '([^']+)'(.*)$")
     if name then
         local base, ench = item_parts(name)
-        return {kind='item',item_name=base,ench=ench,qty=tonumber(tail:match('^%s*%((%d+)%s*шт')) or 1,source='неизвестный источник',association='unknown',pending=true}
+        return {kind='item',item_name=base,ench=ench,qty=tonumber(tail:match('^%s*%((%d+)%s*С€С‚')) or 1,source='РЅРµРёР·РІРµСЃС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє',association='unknown',pending=true}
     end
-    local source = s:match('^Вы открыли (.+)!$')
-    if source and not s:find(' и получили ',1,true) then return {kind='opening',source=source,association='explicit'} end
-    local amount, origin = s:match('^Вы получили %+?%$([%d%., ]+)%s*(.*)$')
-    if not amount then amount, origin = s:match('^Вам начислено %+?%$([%d%., ]+)%s*(.*)$') end
+    local source = s:match('^Р’С‹ РѕС‚РєСЂС‹Р»Рё (.+)!$')
+    if source and not s:find(' Рё РїРѕР»СѓС‡РёР»Рё ',1,true) then return {kind='opening',source=source,association='explicit'} end
+    local amount, origin = s:match('^Р’С‹ РїРѕР»СѓС‡РёР»Рё %+?%$([%d%., ]+)%s*(.*)$')
+    if not amount then amount, origin = s:match('^Р’Р°Рј РЅР°С‡РёСЃР»РµРЅРѕ %+?%$([%d%., ]+)%s*(.*)$') end
     if amount then return {kind='cash',cash=tonumber((amount:gsub('[^%d]', ''))),source=origin,association='explicit'} end
-    local item, accessory = s:match('^Вы получили (.+) от хар%-ки надетого аксессуара (.+)$')
+    local item, accessory = s:match('^Р’С‹ РїРѕР»СѓС‡РёР»Рё (.+) РѕС‚ С…Р°СЂ%-РєРё РЅР°РґРµС‚РѕРіРѕ Р°РєСЃРµСЃСЃСѓР°СЂР° (.+)$')
     if item then
         local base, ench, qty = item_parts(item)
         return {kind='item',item_name=base,ench=ench,qty=qty,source=accessory,association='explicit'}
     end
-    local generic = s:match('^Вы получили (.+%(%d+%s*шт%.?%))%.?$')
+    local generic = s:match('^Р’С‹ РїРѕР»СѓС‡РёР»Рё (.+%(%d+%s*С€С‚%.?%))%.?$')
     if generic then
         local base, ench, qty = item_parts(generic)
-        return {kind='item',item_name=base,ench=ench,qty=qty,source='неизвестный источник',association='unknown'}
+        return {kind='item',item_name=base,ench=ench,qty=qty,source='РЅРµРёР·РІРµСЃС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє',association='unknown'}
     end
     local drop = DSP.logs.parse_chat_drop((s:gsub('!$', '')))
     if drop then return {kind='item',item_name=drop.name,ench=drop.ench,qty=drop.qty,source=drop.source,
-        association=drop.source=='неизвестный источник' and 'unknown' or 'explicit'} end
+        association=drop.source=='РЅРµРёР·РІРµСЃС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє' and 'unknown' or 'explicit'} end
     -- Preserve evidence for reward messages whose concrete payload is not recognised.
     local lower=DSP.lower or string.lower
-    local salary=lower(s):find(lower('зарплат'),1,true) or lower(s):find(lower('заработная плата'),1,true)
-    if not salary and (s:match('^Вы получили ') or s:match('^Вам выдана награда') or s:match('^Вам начислена награда')) then
-        return {kind='unknown',source='неизвестный источник',association='unknown'}
+    local salary=lower(s):find(lower('Р·Р°СЂРїР»Р°С‚'),1,true) or lower(s):find(lower('Р·Р°СЂР°Р±РѕС‚РЅР°СЏ РїР»Р°С‚Р°'),1,true)
+    if not salary and (s:match('^Р’С‹ РїРѕР»СѓС‡РёР»Рё ') or s:match('^Р’Р°Рј РІС‹РґР°РЅР° РЅР°РіСЂР°РґР°') or s:match('^Р’Р°Рј РЅР°С‡РёСЃР»РµРЅР° РЅР°РіСЂР°РґР°')) then
+        return {kind='unknown',source='РЅРµРёР·РІРµСЃС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє',association='unknown'}
     end
 end
 function R.ingest(raw, ts)

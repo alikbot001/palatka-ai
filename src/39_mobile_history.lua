@@ -26,20 +26,20 @@ for name,kinds in pairs({record_trade={'trades'},stall_dropped={'stalls'},clear_
     end
 end
 function U.crate_log()
-    if not DSP.rewards then M.text('История наград недоступна'); return end
+    if not DSP.rewards then M.text('РСЃС‚РѕСЂРёСЏ РЅР°РіСЂР°Рґ РЅРµРґРѕСЃС‚СѓРїРЅР°'); return end
     U.reward_filter=U.reward_filter or {search=''}
     U.reward_search=U.reward_search or imgui.new.char[256]()
     local filter=U.reward_filter
     imgui.SetNextItemWidth(math.min(700,imgui.GetContentRegionAvail().x))
-    if imgui.InputTextWithHint('##reward_search',DSP.utf8('Найти предмет или источник'),U.reward_search,256) then
+    if imgui.InputTextWithHint('##reward_search',DSP.utf8('РќР°Р№С‚Рё РїСЂРµРґРјРµС‚ РёР»Рё РёСЃС‚РѕС‡РЅРёРє'),U.reward_search,256) then
         filter.search=DSP.to_cp(ffi.string(U.reward_search)); DSP.screens.set_page('rewards',1)
     end
     U.reward_source=U.reward_source or imgui.new.char[256]()
     imgui.SetNextItemWidth(math.min(700,imgui.GetContentRegionAvail().x))
-    if imgui.InputTextWithHint('##reward_source',DSP.utf8('Источник содержит (например: Vice City)'),U.reward_source,256) then
+    if imgui.InputTextWithHint('##reward_source',DSP.utf8('РСЃС‚РѕС‡РЅРёРє СЃРѕРґРµСЂР¶РёС‚ (РЅР°РїСЂРёРјРµСЂ: Vice City)'),U.reward_source,256) then
         filter.source_contains=DSP.to_cp(ffi.string(U.reward_source)); DSP.screens.set_page('rewards',1)
     end
-    for _,period in ipairs({{0,'Все даты'},{86400,'24 часа'},{604800,'7 дней'}}) do
+    for _,period in ipairs({{0,'Р’СЃРµ РґР°С‚С‹'},{86400,'24 С‡Р°СЃР°'},{604800,'7 РґРЅРµР№'}}) do
         if M.button(period[2],'reward_period'..period[1],260,(U.reward_period or 0)==period[1]) then
             U.reward_period=period[1]
             filter.from_ts=period[1]>0 and os.time()-period[1] or nil
@@ -47,45 +47,45 @@ function U.crate_log()
         end
         if period[1]~=604800 then M.inline() end
     end
-    for _,pair in ipairs({{'all','Все'},{'item','Предметы'},{'cash','Деньги'},{'opening','Открытия'}}) do
+    for _,pair in ipairs({{'all','Р’СЃРµ'},{'item','РџСЂРµРґРјРµС‚С‹'},{'cash','Р”РµРЅСЊРіРё'},{'opening','РћС‚РєСЂС‹С‚РёСЏ'}}) do
         if M.button(pair[2],'reward_kind'..pair[1],220,(filter.kind or 'all')==pair[1]) then
             filter.kind=pair[1]~='all' and pair[1] or nil; DSP.screens.set_page('rewards',1)
         end
         if pair[1]~='opening' then M.inline() end
     end
     local summary=DSP.rewards.summary(filter)
-    M.text('Открытий: '..tostring(summary.openings)..' | Предметов: '..tostring(summary.items)
-        ..' | Деньги: '..DSP.money(summary.cash or 0))
-    M.text('Рыночная оценка: '..DSP.money(summary.estimated_value or 0)
-        ..' | Без цены: '..tostring(summary.unknown_items)..' записей')
+    M.text('РћС‚РєСЂС‹С‚РёР№: '..tostring(summary.openings)..' | РџСЂРµРґРјРµС‚РѕРІ: '..tostring(summary.items)
+        ..' | Р”РµРЅСЊРіРё: '..DSP.money(summary.cash or 0))
+    M.text('Р С‹РЅРѕС‡РЅР°СЏ РѕС†РµРЅРєР°: '..DSP.money(summary.estimated_value or 0)
+        ..' | Р‘РµР· С†РµРЅС‹: '..tostring(summary.unknown_items)..' Р·Р°РїРёСЃРµР№')
     filter.page=DSP.screens.page_of('rewards'); filter.page_size=10
     local result=DSP.rewards.query(filter)
     local first=DSP.screens.pager(result.total or 0,10,'rewards')
     local current=math.floor((first-1)/10)+1
     if current~=filter.page then filter.page=current; result=DSP.rewards.query(filter) end
-    if result.error then M.text('Ошибка истории: '..tostring(result.error)) end
-    if (result.corrupt_lines or 0)>0 then M.text('Повреждённых строк: '..result.corrupt_lines) end
-    if (result.total or 0)==0 then M.text('Наград пока нет. История пополняется из сообщений игрового чата.') end
+    if result.error then M.text('РћС€РёР±РєР° РёСЃС‚РѕСЂРёРё: '..tostring(result.error)) end
+    if (result.corrupt_lines or 0)>0 then M.text('РџРѕРІСЂРµР¶РґС‘РЅРЅС‹С… СЃС‚СЂРѕРє: '..result.corrupt_lines) end
+    if (result.total or 0)==0 then M.text('РќР°РіСЂР°Рґ РїРѕРєР° РЅРµС‚. РСЃС‚РѕСЂРёСЏ РїРѕРїРѕР»РЅСЏРµС‚СЃСЏ РёР· СЃРѕРѕР±С‰РµРЅРёР№ РёРіСЂРѕРІРѕРіРѕ С‡Р°С‚Р°.') end
     for _,e in ipairs(result.entries or {}) do
-        M.title(date(e.ts)..' / '..tostring(e.source or 'Источник неизвестен'))
-        if e.kind=='opening' then M.text('Открыт тайник / ларец')
-        elseif e.kind=='cash' then M.text('Получено денег: '..DSP.money(e.cash or 0))
+        M.title(date(e.ts)..' / '..tostring(e.source or 'РСЃС‚РѕС‡РЅРёРє РЅРµРёР·РІРµСЃС‚РµРЅ'))
+        if e.kind=='opening' then M.text('РћС‚РєСЂС‹С‚ С‚Р°Р№РЅРёРє / Р»Р°СЂРµС†')
+        elseif e.kind=='cash' then M.text('РџРѕР»СѓС‡РµРЅРѕ РґРµРЅРµРі: '..DSP.money(e.cash or 0))
         else
             M.text(tostring(e.item_name or '?')..' x'..tostring(e.qty or 1)..((e.ench or 0)>0 and (' (+'..e.ench..')') or ''))
             if e.price_known and not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e)) then
-                M.text('Оценка: '..DSP.money(e.estimated_value or 0)..' | За шт.: '..DSP.money(e.unit_price or 0))
-                M.text('База: '..tostring(e.price_source or '?')..' | Метка цены: '..(e.price_ts and date(e.price_ts) or 'время неизвестно'))
-            else M.text('Цена неизвестна. Оценка не включена в сумму.') end
+                M.text('РћС†РµРЅРєР°: '..DSP.money(e.estimated_value or 0)..' | Р—Р° С€С‚.: '..DSP.money(e.unit_price or 0))
+                M.text('Р‘Р°Р·Р°: '..tostring(e.price_source or '?')..' | РњРµС‚РєР° С†РµРЅС‹: '..(e.price_ts and date(e.price_ts) or 'РІСЂРµРјСЏ РЅРµРёР·РІРµСЃС‚РЅРѕ'))
+            else M.text('Р¦РµРЅР° РЅРµРёР·РІРµСЃС‚РЅР°. РћС†РµРЅРєР° РЅРµ РІРєР»СЋС‡РµРЅР° РІ СЃСѓРјРјСѓ.') end
         end
-        if e.association=='inferred' then M.text('Источник определён по соседнему сообщению чата') end
-        if e.association=='unknown' then M.text('Источник награды не определён') end
+        if e.association=='inferred' then M.text('РСЃС‚РѕС‡РЅРёРє РѕРїСЂРµРґРµР»С‘РЅ РїРѕ СЃРѕСЃРµРґРЅРµРјСѓ СЃРѕРѕР±С‰РµРЅРёСЋ С‡Р°С‚Р°') end
+        if e.association=='unknown' then M.text('РСЃС‚РѕС‡РЅРёРє РЅР°РіСЂР°РґС‹ РЅРµ РѕРїСЂРµРґРµР»С‘РЅ') end
         M.text(e.raw or '')
         imgui.Separator()
     end
 end
 function U.log_tab()
-    M.title('ИСТОРИЯ')
-    for _,v in ipairs({{'crates','Награды / тайники'},{'trades','Сделки'},{'chat','Чат'}}) do
+    M.title('РРЎРўРћР РРЇ')
+    for _,v in ipairs({{'crates','РќР°РіСЂР°РґС‹ / С‚Р°Р№РЅРёРєРё'},{'trades','РЎРґРµР»РєРё'},{'chat','Р§Р°С‚'}}) do
         if M.button(v[2],'history_'..v[1],330,U.tab_detail==v[1]) then U.tab_detail=v[1] end
         if v[1]~='chat' then M.inline() end
     end
@@ -100,32 +100,32 @@ function U.log_tab()
         end
     else
         local trades=M.history_rows('trades')
-        M.title('СДЕЛКИ / '..#trades)
+        M.title('РЎР”Р•Р›РљР / '..#trades)
         local first,last=DSP.screens.pager(#trades,8,'trade_history')
         for i=first,last do
             local e=trades[i]
             M.title(date(e.ts)..' | '..tostring(e.partner or '?'))
             M.text(e.item_summary or '')
-            M.text('Получено '..DSP.money(e.total_get or 0)..' | Отдано '..DSP.money(e.total_give or 0)
-                ..' | Прибыль '..DSP.money(e.profit or 0)); imgui.Separator()
+            M.text('РџРѕР»СѓС‡РµРЅРѕ '..DSP.money(e.total_get or 0)..' | РћС‚РґР°РЅРѕ '..DSP.money(e.total_give or 0)
+                ..' | РџСЂРёР±С‹Р»СЊ '..DSP.money(e.profit or 0)); imgui.Separator()
         end
         local stalls=M.history_rows('stalls')
-        M.title('ЛАВКИ / '..#stalls)
+        M.title('Р›РђР’РљР / '..#stalls)
         first,last=DSP.screens.pager(#stalls,8,'stall_history')
         for i=first,last do
             local e=stalls[i]
-            M.text(date(e.ts)..' | Лавка #'..tostring(e.shop_num or '?')..' '..tostring(e.owner or '')..' '..tostring(e.action or ''))
+            M.text(date(e.ts)..' | Р›Р°РІРєР° #'..tostring(e.shop_num or '?')..' '..tostring(e.owner or '')..' '..tostring(e.action or ''))
         end
     end
 end
 -- v1.4 unified event timeline, with independent event/payday/income filters.
 function U.log_tab()
     local C=DSP.craglog
-    M.title('ЖУРНАЛ СОБЫТИЙ')
-    M.text('Сделки, деньги, открытия и PayDay в одном месте.')
+    M.title('Р–РЈР РќРђР› РЎРћР‘Р«РўРР™')
+    M.text('РЎРґРµР»РєРё, РґРµРЅСЊРіРё, РѕС‚РєСЂС‹С‚РёСЏ Рё PayDay РІ РѕРґРЅРѕРј РјРµСЃС‚Рµ.')
     U.journal_filter=U.journal_filter or 'all'
-    local tabs={{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
-                {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}
+    local tabs={{'all','Р’СЃРµ'},{'loot','РўР°Р№РЅРёРєРё'},{'payday','PayDay'},
+                {'sales','РџСЂРѕРґР°Р¶Рё'},{'buys','РЎРєСѓРїРєР°'},{'income','Р”РѕС…РѕРґС‹'}}
     for i,pair in ipairs(tabs) do
         if M.button(pair[2],'journal_'..pair[1],190,U.journal_filter==pair[1]) then
             U.journal_filter=pair[1]
@@ -134,7 +134,7 @@ function U.log_tab()
         if i%3~=0 then M.inline() end
     end
     imgui.Separator()
-    if not C then M.text('Журнал ещё не загружен'); return end
+    if not C then M.text('Р–СѓСЂРЅР°Р» РµС‰С‘ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ'); return end
     local all=C.filtered('all')
     local since=os.time()-86400
     local sales,buys,paydays,crates,income,profit=0,0,0,0,0,0
@@ -153,36 +153,36 @@ function U.log_tab()
             end
         end
     end
-    M.text('За 24 ч | Продажи: '..sales..' | Скупки: '..buys..' | Тайники: '..crates..' | PayDay: '..paydays)
-    M.text('Торговый итог (оценка): '..DSP.money(profit)..' | Полученные деньги: '..DSP.money(income))
-    M.text('Торговый итог может включать рыночную стоимость вещей, а не наличные.')
+    M.text('Р—Р° 24 С‡ | РџСЂРѕРґР°Р¶Рё: '..sales..' | РЎРєСѓРїРєРё: '..buys..' | РўР°Р№РЅРёРєРё: '..crates..' | PayDay: '..paydays)
+    M.text('РўРѕСЂРіРѕРІС‹Р№ РёС‚РѕРі (РѕС†РµРЅРєР°): '..DSP.money(profit)..' | РџРѕР»СѓС‡РµРЅРЅС‹Рµ РґРµРЅСЊРіРё: '..DSP.money(income))
+    M.text('РўРѕСЂРіРѕРІС‹Р№ РёС‚РѕРі РјРѕР¶РµС‚ РІРєР»СЋС‡Р°С‚СЊ СЂС‹РЅРѕС‡РЅСѓСЋ СЃС‚РѕРёРјРѕСЃС‚СЊ РІРµС‰РµР№, Р° РЅРµ РЅР°Р»РёС‡РЅС‹Рµ.')
     imgui.Separator()
     local events=C.filtered(U.journal_filter)
     table.sort(events,function(a,b) return (tonumber(a.ts) or 0)>(tonumber(b.ts) or 0) end)
     local first,last=DSP.screens.pager(#events,7,'journal_events')
-    if #events==0 then M.text('Пока нет записей этого типа. Новые события появятся после сообщений сервера.') end
+    if #events==0 then M.text('РџРѕРєР° РЅРµС‚ Р·Р°РїРёСЃРµР№ СЌС‚РѕРіРѕ С‚РёРїР°. РќРѕРІС‹Рµ СЃРѕР±С‹С‚РёСЏ РїРѕСЏРІСЏС‚СЃСЏ РїРѕСЃР»Рµ СЃРѕРѕР±С‰РµРЅРёР№ СЃРµСЂРІРµСЂР°.') end
     for i=first,last do
         local e=events[i]
         if e then
             local kind=e.kind or e.type
-            local heading=e.type=='payday' and 'PAYDAY' or e.type=='income' and 'ДОХОД'
-                or kind=='opening' and 'ТАЙНИК' or kind=='item' and 'ПРЕДМЕТ'
-                or kind=='cash' and 'ДЕНЬГИ' or e.type=='market' and (e.direction=='sell' and 'ПРОДАЖА' or 'СКУПКА') or 'СДЕЛКА'
+            local heading=e.type=='payday' and 'PAYDAY' or e.type=='income' and 'Р”РћРҐРћР”'
+                or kind=='opening' and 'РўРђР™РќРРљ' or kind=='item' and 'РџР Р•Р”РњР•Рў'
+                or kind=='cash' and 'Р”Р•РќР¬Р“Р' or e.type=='market' and (e.direction=='sell' and 'РџР РћР”РђР–Рђ' or 'РЎРљРЈРџРљРђ') or 'РЎР”Р•Р›РљРђ'
             M.title(date(e.ts)..'    '..heading)
             M.text(C.describe(e))
-            if e.source and e.source~='' then M.text('Источник: '..tostring(e.source)) end
+            if e.source and e.source~='' then M.text('РСЃС‚РѕС‡РЅРёРє: '..tostring(e.source)) end
             imgui.Separator()
         end
     end
-    if M.button('Подробно: тайники и награды','journal_details',430) then
+    if M.button('РџРѕРґСЂРѕР±РЅРѕ: С‚Р°Р№РЅРёРєРё Рё РЅР°РіСЂР°РґС‹','journal_details',430) then
         U.journal_details=not U.journal_details
     end
     if U.journal_details then U.crate_log() end
-    if M.button(U.legacy_trade_open and 'Скрыть старые сделки' or 'История старых сделок',
+    if M.button(U.legacy_trade_open and 'РЎРєСЂС‹С‚СЊ СЃС‚Р°СЂС‹Рµ СЃРґРµР»РєРё' or 'РСЃС‚РѕСЂРёСЏ СЃС‚Р°СЂС‹С… СЃРґРµР»РѕРє',
             'journal_legacy',340,U.legacy_trade_open) then
         U.legacy_trade_open=not U.legacy_trade_open
     end
-    if M.button(U.journal_chat_open and 'Скрыть сообщения чата' or 'Сообщения чата (диагностика)',
+    if M.button(U.journal_chat_open and 'РЎРєСЂС‹С‚СЊ СЃРѕРѕР±С‰РµРЅРёСЏ С‡Р°С‚Р°' or 'РЎРѕРѕР±С‰РµРЅРёСЏ С‡Р°С‚Р° (РґРёР°РіРЅРѕСЃС‚РёРєР°)',
             'journal_raw_chat',400,U.journal_chat_open) then
         U.journal_chat_open=not U.journal_chat_open
     end
@@ -196,33 +196,33 @@ function U.log_tab()
     end
     if U.legacy_trade_open then
         local trades=M.history_rows('trades')
-        M.title('СТАРЫЕ СДЕЛКИ / '..#trades)
+        M.title('РЎРўРђР Р«Р• РЎР”Р•Р›РљР / '..#trades)
         local left,right=DSP.screens.pager(#trades,7,'legacy_trade_history')
         for i=left,right do
             local trade=trades[i]
             M.text(date(trade.ts)..' | '..tostring(trade.partner or '?'))
             M.text(trade.item_summary or '')
-            M.text('Получено: '..DSP.money(trade.total_get or 0)..'  |  Отдано: '..DSP.money(trade.total_give or 0))
+            M.text('РџРѕР»СѓС‡РµРЅРѕ: '..DSP.money(trade.total_get or 0)..'  |  РћС‚РґР°РЅРѕ: '..DSP.money(trade.total_give or 0))
             imgui.Separator()
         end
     end
-    if C.last_error then M.text('Ошибка файла журнала: '..tostring(C.last_error)) end
+    if C.last_error then M.text('РћС€РёР±РєР° С„Р°Р№Р»Р° Р¶СѓСЂРЅР°Р»Р°: '..tostring(C.last_error)) end
 end
 local function save_notes()
     local f,err=io.open(DSP.notes_path,'w')
-    if not f then DSP.notify('Не удалось сохранить заметки: '..tostring(err)); return false end
+    if not f then DSP.notify('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р·Р°РјРµС‚РєРё: '..tostring(err)); return false end
     local ok,write_err=f:write(ffi.string(U.notes_buf))
     local closed,close_err=f:close()
-    if not ok or not closed then DSP.notify('Ошибка сохранения заметок: '..tostring(write_err or close_err)); return false end
+    if not ok or not closed then DSP.notify('РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ Р·Р°РјРµС‚РѕРє: '..tostring(write_err or close_err)); return false end
     U._notes_dirty=false
     return true
 end
 M.save_notes=save_notes
 function U.notes_tab()
-    M.title('ЗАМЕТКИ')
-    M.text(U._notes_dirty and 'Есть несохранённые изменения' or 'Сохранено')
-    if M.button('Сохранить заметку','save_notes',340) then save_notes() end
-    M.text('Ваш список закупок, планы и цены. Автосохранение после паузы во вводе.')
+    M.title('Р—РђРњР•РўРљР')
+    M.text(U._notes_dirty and 'Р•СЃС‚СЊ РЅРµСЃРѕС…СЂР°РЅС‘РЅРЅС‹Рµ РёР·РјРµРЅРµРЅРёСЏ' or 'РЎРѕС…СЂР°РЅРµРЅРѕ')
+    if M.button('РЎРѕС…СЂР°РЅРёС‚СЊ Р·Р°РјРµС‚РєСѓ','save_notes',340) then save_notes() end
+    M.text('Р’Р°С€ СЃРїРёСЃРѕРє Р·Р°РєСѓРїРѕРє, РїР»Р°РЅС‹ Рё С†РµРЅС‹. РђРІС‚РѕСЃРѕС…СЂР°РЅРµРЅРёРµ РїРѕСЃР»Рµ РїР°СѓР·С‹ РІРѕ РІРІРѕРґРµ.')
     local avail=imgui.GetContentRegionAvail()
     if imgui.InputTextMultiline('##mobile_notes',U.notes_buf,8192,imgui.ImVec2(avail.x,math.max(160,avail.y-20)),0) then
         U._notes_dirty=true; U._notes_last_edit=os.clock()
@@ -235,74 +235,74 @@ function U.set_open(value)
     set_open(value)
 end
 function U.settings_tab()
-    M.title('НАСТРОЙКИ')
+    M.title('РќРђРЎРўР РћР™РљР')
     U.settings_section=U.settings_section or 'appearance'
-    for _,v in ipairs({{'appearance','Вид'},{'trade','Торговля'},{'data','Данные'},{'tools','Инструменты'}}) do
+    for _,v in ipairs({{'appearance','Р’РёРґ'},{'trade','РўРѕСЂРіРѕРІР»СЏ'},{'data','Р”Р°РЅРЅС‹Рµ'},{'tools','РРЅСЃС‚СЂСѓРјРµРЅС‚С‹'}}) do
         if M.button(v[2],'settings_'..v[1],270,U.settings_section==v[1]) then U.settings_section=v[1] end
         if v[1]~='tools' then M.inline() end
     end
     imgui.Separator()
     local section=U.settings_section
     if section=='appearance' then
-        M.text('Цветовая тема')
+        M.text('Р¦РІРµС‚РѕРІР°СЏ С‚РµРјР°')
         for _,id in ipairs({'ocean_blue','dark_amber','amoled','cyberpunk','purple','emerald'}) do
             local theme=DSP.theme.list[id]
             if M.button(theme.name,'theme_'..id,400,DSP.theme.current==id) then DSP.theme.set(id) end
         end
-        M.text('Прозрачность')
+        M.text('РџСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ')
         for _,v in ipairs({.8,.9,.97,1}) do
             if M.button(tostring(math.floor(v*100))..'%','opacity'..v,170,math.abs(DSP.theme.opacity-v)<.01) then DSP.theme.set_opacity(v) end
             if v~=1 then M.inline() end
         end
-        M.text('Размер текста')
+        M.text('Р Р°Р·РјРµСЂ С‚РµРєСЃС‚Р°')
         for _,v in ipairs({1,1.25,1.5}) do
             if M.button(tostring(v),'scale'..v,180,M.scale()==v) then U.d=v; DSP.settings.dpi=v; DSP.save_settings() end
             if v~=1.5 then M.inline() end
         end
-        M.toggle('Оценка трейда',DSP.settings,'overlay_trade',true)
-        M.toggle('Оценка лавки',DSP.settings,'overlay_shop',true)
-        M.toggle('Оверлей поверх окон',DSP.settings,'overlay_top',true)
+        M.toggle('РћС†РµРЅРєР° С‚СЂРµР№РґР°',DSP.settings,'overlay_trade',true)
+        M.toggle('РћС†РµРЅРєР° Р»Р°РІРєРё',DSP.settings,'overlay_shop',true)
+        M.toggle('РћРІРµСЂР»РµР№ РїРѕРІРµСЂС… РѕРєРѕРЅ',DSP.settings,'overlay_top',true)
         if DSP.settings.craglog then
-            M.toggle('Показывать мини-журнал',DSP.settings.craglog,'open',false)
-            if M.toggle('Закрепить мини-журнал',DSP.settings.craglog,'pinned',false) then
+            M.toggle('РџРѕРєР°Р·С‹РІР°С‚СЊ РјРёРЅРё-Р¶СѓСЂРЅР°Р»',DSP.settings.craglog,'open',false)
+            if M.toggle('Р—Р°РєСЂРµРїРёС‚СЊ РјРёРЅРё-Р¶СѓСЂРЅР°Р»',DSP.settings.craglog,'pinned',false) then
                 if DSP.craglog and DSP.craglog.set_pinned then DSP.craglog.set_pinned(DSP.settings.craglog.pinned) end
             end
         end
     elseif section=='trade' then
-        M.number('Комиссия в базисных пунктах (100 = 1%)','tax',DSP.settings,'tax_bp',0,300)
-        M.number('Маржа скупки (%)','margin',DSP.settings,'margin',0,300)
-        M.number('Снижение цены продажи (%)','undercut',DSP.settings,'undercut',0,300)
-        M.number('Количество скупки по умолчанию','default_qty',DSP.settings,'auto_buy_qty',1,300)
-        M.toggle('Тест выставления без отправки',DSP.settings,'dry_run',true)
-        M.text('Проверьте комиссию вашего аккаунта: расчёт арбитража использует это значение.')
+        M.number('РљРѕРјРёСЃСЃРёСЏ РІ Р±Р°Р·РёСЃРЅС‹С… РїСѓРЅРєС‚Р°С… (100 = 1%)','tax',DSP.settings,'tax_bp',0,300)
+        M.number('РњР°СЂР¶Р° СЃРєСѓРїРєРё (%)','margin',DSP.settings,'margin',0,300)
+        M.number('РЎРЅРёР¶РµРЅРёРµ С†РµРЅС‹ РїСЂРѕРґР°Р¶Рё (%)','undercut',DSP.settings,'undercut',0,300)
+        M.number('РљРѕР»РёС‡РµСЃС‚РІРѕ СЃРєСѓРїРєРё РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ','default_qty',DSP.settings,'auto_buy_qty',1,300)
+        M.toggle('РўРµСЃС‚ РІС‹СЃС‚Р°РІР»РµРЅРёСЏ Р±РµР· РѕС‚РїСЂР°РІРєРё',DSP.settings,'dry_run',true)
+        M.text('РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРјРёСЃСЃРёСЋ РІР°С€РµРіРѕ Р°РєРєР°СѓРЅС‚Р°: СЂР°СЃС‡С‘С‚ Р°СЂР±РёС‚СЂР°Р¶Р° РёСЃРїРѕР»СЊР·СѓРµС‚ СЌС‚Рѕ Р·РЅР°С‡РµРЅРёРµ.')
     elseif section=='data' then
-        M.text('Сервер рынка')
+        M.text('РЎРµСЂРІРµСЂ СЂС‹РЅРєР°')
         for _,server in ipairs(DSP.market.servers) do
             if M.button(server.name,'server'..server.id,400,DSP.market.state.sid==server.id) then
                 DSP.market.state.sid=server.id; DSP.settings.server=server.id
                 U.selected=nil; DSP.save_settings(); DSP.market.pull(server.id)
             end
         end
-        M.number('Обновление рынка (сек)','refresh_seconds',DSP.settings,'refresh_seconds',180,300)
-        M.toggle('Записывать награды и тайники',DSP.settings,'log_chat_drops',true)
-        M.text('Скан рыночной метки ЦР: '..tostring(DSP.market.cr_scan_state.status or 'не сканирован'))
+        M.number('РћР±РЅРѕРІР»РµРЅРёРµ СЂС‹РЅРєР° (СЃРµРє)','refresh_seconds',DSP.settings,'refresh_seconds',180,300)
+        M.toggle('Р—Р°РїРёСЃС‹РІР°С‚СЊ РЅР°РіСЂР°РґС‹ Рё С‚Р°Р№РЅРёРєРё',DSP.settings,'log_chat_drops',true)
+        M.text('РЎРєР°РЅ СЂС‹РЅРѕС‡РЅРѕР№ РјРµС‚РєРё Р¦Р : '..tostring(DSP.market.cr_scan_state.status or 'РЅРµ СЃРєР°РЅРёСЂРѕРІР°РЅ'))
         if DSP.market.cr_scan_state.active then
-            if M.button('Остановить скан ЦР','stop_cr',400) then
-                DSP.market.cr_scan_state.active=false; DSP.market.cr_scan_state.status='остановлено'
+            if M.button('РћСЃС‚Р°РЅРѕРІРёС‚СЊ СЃРєР°РЅ Р¦Р ','stop_cr',400) then
+                DSP.market.cr_scan_state.active=false; DSP.market.cr_scan_state.status='РѕСЃС‚Р°РЅРѕРІР»РµРЅРѕ'
             end
-        elseif M.button('Сканировать метку ЦР','scan_cr',450) then DSP.market.scan_cr_marker() end
-        M.text('Для скана подойдите к рыночной метке и откройте диалог цен.')
+        elseif M.button('РЎРєР°РЅРёСЂРѕРІР°С‚СЊ РјРµС‚РєСѓ Р¦Р ','scan_cr',450) then DSP.market.scan_cr_marker() end
+        M.text('Р”Р»СЏ СЃРєР°РЅР° РїРѕРґРѕР№РґРёС‚Рµ Рє СЂС‹РЅРѕС‡РЅРѕР№ РјРµС‚РєРµ Рё РѕС‚РєСЂРѕР№С‚Рµ РґРёР°Р»РѕРі С†РµРЅ.')
     else
-        if M.button('Калькулятор сделки','calculator',430) then U.settings_tool='calculator' end
+        if M.button('РљР°Р»СЊРєСѓР»СЏС‚РѕСЂ СЃРґРµР»РєРё','calculator',430) then U.settings_tool='calculator' end
         M.inline()
-        if M.button('Диагностика','diagnostics',360) then U.settings_tool='diagnostics' end
+        if M.button('Р”РёР°РіРЅРѕСЃС‚РёРєР°','diagnostics',360) then U.settings_tool='diagnostics' end
         if U.settings_tool=='calculator' then U.calculator_tab()
         else
-            M.text('Версия '..tostring(DSP.version)..' | Данные: '..DSP.dir)
-            M.text('Источник рынка: '..tostring(DSP.market.api))
+            M.text('Р’РµСЂСЃРёСЏ '..tostring(DSP.version)..' | Р”Р°РЅРЅС‹Рµ: '..DSP.dir)
+            M.text('РСЃС‚РѕС‡РЅРёРє СЂС‹РЅРєР°: '..tostring(DSP.market.api))
             for i=1,math.min(20,#DSP.log) do M.text((DSP.log[i].t or '')..' '..tostring(DSP.log[i].text)) end
         end
     end
     imgui.Separator()
-    if M.button('Сохранить настройки','save_settings',420) then DSP.save_settings(); DSP.save_ui_state(); DSP.notify('Настройки сохранены') end
+    if M.button('РЎРѕС…СЂР°РЅРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё','save_settings',420) then DSP.save_settings(); DSP.save_ui_state(); DSP.notify('РќР°СЃС‚СЂРѕР№РєРё СЃРѕС…СЂР°РЅРµРЅС‹') end
 end

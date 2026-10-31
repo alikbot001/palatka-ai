@@ -5,14 +5,14 @@ function DSP.payday_part(text)
     if text:find('%[%d+%]:')or text:match('^%s*%[')then return nil end
     local s=lower(text)
     local function has(word)return s:find(lower(word),1,true)end
-    local metric=has('сумма в банке')and'bank'or has('сумма на депозите')and'deposit'
+    local metric=has('СЃСѓРјРјР° РІ Р±Р°РЅРєРµ')and'bank'or has('СЃСѓРјРјР° РЅР° РґРµРїРѕР·РёС‚Рµ')and'deposit'
     if metric then
         local gain=text:match('%(%+%$?([%d%., ]+)%)')
         return{raw=text,amount=0,direction='meta',metric=metric,
             reported_gain=gain and tonumber((gain:gsub('[^%d]','')))or nil}
     end
-    local expense=has('налог')or has('списано')or has('удержано')
-    local income=has('зарплат')or has('заработная плата')or has('премия')or has('пенсия')or has('начислено')
+    local expense=has('РЅР°Р»РѕРі')or has('СЃРїРёСЃР°РЅРѕ')or has('СѓРґРµСЂР¶Р°РЅРѕ')
+    local income=has('Р·Р°СЂРїР»Р°С‚')or has('Р·Р°СЂР°Р±РѕС‚РЅР°СЏ РїР»Р°С‚Р°')or has('РїСЂРµРјРёСЏ')or has('РїРµРЅСЃРёСЏ')or has('РЅР°С‡РёСЃР»РµРЅРѕ')
     if not expense and not income then return nil end
     local raw=text:match('%$%s*([%d%., ]+)')or text:match('([%d][%d%., ]*)%s*%$')
     local amount=raw and tonumber((raw:gsub('[^%d]','')))

@@ -94,11 +94,11 @@ function M.scroll_rail(height)
     local h=math.max(48,(height-80)/2)
     imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(8,5))
     M.paint_button('rail',false)
-    if imgui.Button(DSP.utf8('ВВЕРХ')..'##mobile_rail_up',imgui.ImVec2(-1,h)) then M.queue_scroll(-1) end
-    if imgui.Button(DSP.utf8('ВНИЗ')..'##mobile_rail_down',imgui.ImVec2(-1,h)) then M.queue_scroll(1) end
+    if imgui.Button(DSP.utf8('Р’Р’Р•Р РҐ')..'##mobile_rail_up',imgui.ImVec2(-1,h)) then M.queue_scroll(-1) end
+    if imgui.Button(DSP.utf8('Р’РќРР—')..'##mobile_rail_down',imgui.ImVec2(-1,h)) then M.queue_scroll(1) end
     local step=tonumber(DSP.settings.scroll_step) or 300
-    local name=step<=150 and 'короткий' or step<=300 and 'средний' or 'длинный'
-    if imgui.Button(DSP.utf8('Шаг\n'..name)..'##scroll_step',imgui.ImVec2(-1,60)) then
+    local name=step<=150 and 'РєРѕСЂРѕС‚РєРёР№' or step<=300 and 'СЃСЂРµРґРЅРёР№' or 'РґР»РёРЅРЅС‹Р№'
+    if imgui.Button(DSP.utf8('РЁР°Рі\n'..name)..'##scroll_step',imgui.ImVec2(-1,60)) then
         DSP.settings.scroll_step=step<=150 and 300 or step<=300 and 600 or 150
         DSP.save_settings()
     end
@@ -115,13 +115,13 @@ M.icon_usage={}
 M.icon_clock=0
 local function icon_kind(it)
     local n=DSP.lower(DSP.clean_text(tostring(it.name or '')))
-    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then return 'medical' end
-    if n:find('патрон',1,true) or n:find('пистолет',1,true) or n:find('deagle',1,true) then return 'ammo' end
-    if n:find('рюкзак',1,true) or n:find('сумка',1,true) then return 'bag' end
-    if n:find('металл',1,true) or n:find('слиток',1,true) then return 'metal' end
-    if n:find('пластик',1,true) or n:find('провод',1,true) or n:find('микросхем',1,true) then return 'electronics' end
-    if n:find('бронежилет',1,true) then return 'armor' end
-    if n:find('ключ',1,true) or n:find('отмычк',1,true) then return 'tool' end
+    if n:find('Р°РїС‚РµС‡',1,true) or n:find('Р±РёРЅС‚',1,true) or n:find('РјРµРґРёС†РёРЅ',1,true) then return 'medical' end
+    if n:find('РїР°С‚СЂРѕРЅ',1,true) or n:find('РїРёСЃС‚РѕР»РµС‚',1,true) or n:find('deagle',1,true) then return 'ammo' end
+    if n:find('СЂСЋРєР·Р°Рє',1,true) or n:find('СЃСѓРјРєР°',1,true) then return 'bag' end
+    if n:find('РјРµС‚Р°Р»Р»',1,true) or n:find('СЃР»РёС‚РѕРє',1,true) then return 'metal' end
+    if n:find('РїР»Р°СЃС‚РёРє',1,true) or n:find('РїСЂРѕРІРѕРґ',1,true) or n:find('РјРёРєСЂРѕСЃС…РµРј',1,true) then return 'electronics' end
+    if n:find('Р±СЂРѕРЅРµР¶РёР»РµС‚',1,true) then return 'armor' end
+    if n:find('РєР»СЋС‡',1,true) or n:find('РѕС‚РјС‹С‡Рє',1,true) then return 'tool' end
     return 'other'
 end
 M.icon_descriptors={};M.icon_descriptor_count=0
@@ -335,7 +335,7 @@ function M.number(label,id,item,key,minimum,width)
         if M.apply_number(item,key,buf,minimum) then M.defer_save(); return true end
     end
     if not ffi.string(buf):match('^%d+$') then
-        imgui.TextColored(DSP.theme.col('bad',1), DSP.utf8('Введите целое положительное число'))
+        imgui.TextColored(DSP.theme.col('bad',1), DSP.utf8('Р’РІРµРґРёС‚Рµ С†РµР»РѕРµ РїРѕР»РѕР¶РёС‚РµР»СЊРЅРѕРµ С‡РёСЃР»Рѕ'))
     end
     return false
 end
@@ -350,34 +350,34 @@ function DSP.screens.set(id)
     set_screen(found and id or 'palatka')
     M.reset_scroll=true
 end
-DSP.screens.list[1].label='ПАЛАТКА'
-DSP.screens.list[2].label='ЛАВКИ'
-DSP.screens.list[6].label='СТАТИСТИКА'
-DSP.screens.list[5].label='ИСТОРИЯ'
+DSP.screens.list[1].label='РџРђР›РђРўРљРђ'
+DSP.screens.list[2].label='Р›РђР’РљР'
+DSP.screens.list[6].label='РЎРўРђРўРРЎРўРРљРђ'
+DSP.screens.list[5].label='РРЎРўРћР РРЇ'
 -- Four primary actions; less-used utilities remain under "More".
 -- The original screen ids and routing remain unchanged for compatibility.
 function DSP.screens.topbar()
     M.title('PALATKA  /  v'..tostring(DSP.version))
     imgui.Separator()
     local primary={
-        {'palatka','Моя лавка'},
-        {'arbitrage','Арбитраж'},
-        {'logs','Журнал'},
-        {'search','Поиск товара'},
+        {'palatka','РњРѕСЏ Р»Р°РІРєР°'},
+        {'arbitrage','РђСЂР±РёС‚СЂР°Р¶'},
+        {'logs','Р–СѓСЂРЅР°Р»'},
+        {'search','РџРѕРёСЃРє С‚РѕРІР°СЂР°'},
     }
     for i,e in ipairs(primary) do
         if M.button(e[2],'nav_main_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
     end
     imgui.Separator()
-    if M.button(M.more_open and 'Скрыть остальное' or 'Ещё', 'nav_more',-1,M.more_open,'nav') then
+    if M.button(M.more_open and 'РЎРєСЂС‹С‚СЊ РѕСЃС‚Р°Р»СЊРЅРѕРµ' or 'Р•С‰С‘', 'nav_more',-1,M.more_open,'nav') then
         M.more_open=not M.more_open
     end
     if M.more_open then
         for i,e in ipairs({
-            {'lavki','Все лавки'},
-            {'stats','Статистика'},
-            {'notes','Заметки'},
-            {'settings','Настройки'},
+            {'lavki','Р’СЃРµ Р»Р°РІРєРё'},
+            {'stats','РЎС‚Р°С‚РёСЃС‚РёРєР°'},
+            {'notes','Р—Р°РјРµС‚РєРё'},
+            {'settings','РќР°СЃС‚СЂРѕР№РєРё'},
         }) do
             if M.button(e[2],'nav_extra_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
         end
@@ -389,12 +389,12 @@ function M.draw_pager(total,per,id)
     local pages=math.max(1, math.ceil(total/per))
     local page=math.min(pages,DSP.screens.page_of(id))
     local width=math.min(230,(imgui.GetContentRegionAvail().x-24)/3)
-    if M.button('< Назад','prev'..id,width) then page=math.max(1,page-1) end
+    if M.button('< РќР°Р·Р°Рґ','prev'..id,width) then page=math.max(1,page-1) end
     M.inline()
-    local prefix=id=='trade_history' and 'Сделки ' or id=='stall_history' and 'Лавки ' or ''
+    local prefix=id=='trade_history' and 'РЎРґРµР»РєРё ' or id=='stall_history' and 'Р›Р°РІРєРё ' or ''
     if M.button(prefix..page..' / '..pages,'page'..id,width) then page=1 end
     M.inline()
-    if M.button('Вперёд >','next'..id,width) then page=math.min(pages,page+1) end
+    if M.button('Р’РїРµСЂС‘Рґ >','next'..id,width) then page=math.min(pages,page+1) end
     DSP.screens.set_page(id,page)
     return (page-1)*per+1, math.min(total,page*per)
 end
@@ -416,7 +416,7 @@ local function workspace()
     local screen=DSP.ui.screen
     local entry=DSP.screens.list[DSP.screens.index_by_id(screen)]
     -- One compact header; the previous UI spent 150 px on a redundant scroll rail.
-    if M.button(M.nav_open and 'Скрыть меню' or 'Меню','nav_toggle',158) then M.nav_open=not M.nav_open end
+    if M.button(M.nav_open and 'РЎРєСЂС‹С‚СЊ РјРµРЅСЋ' or 'РњРµРЅСЋ','nav_toggle',158) then M.nav_open=not M.nav_open end
     M.inline()
     imgui.TextColored(DSP.theme.col('text',1),DSP.utf8(entry.label))
     M.inline()
@@ -446,19 +446,19 @@ local function workspace()
             M.draw_pager(entry.total,entry.per,entry.id)
         end
     else
-        if M.button('ВВЕРХ','content_page_up',160) then M.queue_scroll(-1) end
+        if M.button('Р’Р’Р•Р РҐ','content_page_up',160) then M.queue_scroll(-1) end
         M.inline()
-        if M.button('ВНИЗ','content_page_down',160) then M.queue_scroll(1) end
+        if M.button('Р’РќРР—','content_page_down',160) then M.queue_scroll(1) end
     end
 end
 function DSP.ui.header()
     local st=DSP.market.state
-    M.title('РЫНОК / '..tostring(st.sid))
-    M.text(string.format('%s | %d лавок | %d предложений | %s',
-        st.status=='loading' and 'Загрузка' or st.status=='error' and 'Ошибка обновления' or 'База рынка',
+    M.title('Р Р«РќРћРљ / '..tostring(st.sid))
+    M.text(string.format('%s | %d Р»Р°РІРѕРє | %d РїСЂРµРґР»РѕР¶РµРЅРёР№ | %s',
+        st.status=='loading' and 'Р—Р°РіСЂСѓР·РєР°' or st.status=='error' and 'РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ' or 'Р‘Р°Р·Р° СЂС‹РЅРєР°',
         st.shops or 0,st.offers or 0,DSP.market.freshness()))
     if st.status=='error' then M.text(st.error or '') end
-    if M.button('Обновить рынок','refresh',260) then DSP.market.pull(st.sid) end
+    if M.button('РћР±РЅРѕРІРёС‚СЊ СЂС‹РЅРѕРє','refresh',260) then DSP.market.pull(st.sid) end
     imgui.Separator()
 end
 function DSP.ui.draw()
@@ -486,7 +486,7 @@ function DSP.ui.draw()
     if imgui.Begin('##palatka_mobile',DSP.ui.open_ref,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.05 * M.scale() / 1.25) end
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('PALATKA AI   /   ДВИГАТЬ ОКНО'),imgui.ImVec2(-1,32))
+        imgui.Button(DSP.utf8('PALATKA AI   /   Р”Р’РР“РђРўР¬ РћРљРќРћ'),imgui.ImVec2(-1,32))
         imgui.PopStyleColor(4)
         local handle_active=false
         if imgui.IsItemActive and imgui.IsItemActive() then
@@ -512,7 +512,7 @@ function DSP.ui.draw()
         end
         M.child('content_'..DSP.ui.screen,0,content_height,workspace)
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('/  Размер окна'),imgui.ImVec2(160,30))
+        imgui.Button(DSP.utf8('/  Р Р°Р·РјРµСЂ РѕРєРЅР°'),imgui.ImVec2(160,30))
         imgui.PopStyleColor(4)
         if imgui.IsItemActive and imgui.IsItemActive() then
             handle_active=true

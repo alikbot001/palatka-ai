@@ -43,11 +43,11 @@ end
 local function append(path,line)
     DSP.mkdir_p(DSP.dir..'/logs')
     local f,err=io.open(path,'a')
-    if not f then C.last_error=err; DSP.add_log('Журнал: '..tostring(err),'error'); return false,err end
+    if not f then C.last_error=err; DSP.add_log('Р–СѓСЂРЅР°Р»: '..tostring(err),'error'); return false,err end
     local wrote,write_err=f:write(line..'\n')
     local closed,close_err=f:close()
     if not wrote or not closed then
-        C.last_error=write_err or close_err; DSP.add_log('Журнал: '..tostring(C.last_error),'error')
+        C.last_error=write_err or close_err; DSP.add_log('Р–СѓСЂРЅР°Р»: '..tostring(C.last_error),'error')
         return false,C.last_error
     end
     C.last_error=nil
@@ -55,22 +55,22 @@ local function append(path,line)
 end
 function C.describe(e)
     if e.kind=='item' or e.type=='crate' then
-        local value=(e.price_known and not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e))) and DSP.money(e.estimated_value or 0) or 'нет цены'
+        local value=(e.price_known and not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e))) and DSP.money(e.estimated_value or 0) or 'РЅРµС‚ С†РµРЅС‹'
         local name=tostring(e.item_name or e.item or '?')
         if (tonumber(e.ench) or 0)>0 and not name:find('%(%+%d+%)$') then name=name..' (+'..e.ench..')' end
-        return name..' x'..tostring(e.qty or e.count or 1)..' | Оценка: '..value
-    elseif e.kind=='cash' then return 'Деньги: +'..DSP.money(e.cash or 0)
-    elseif e.kind=='opening' then return 'Открытие: '..tostring(e.source or '?')
-    elseif e.kind=='unknown' then return 'Награда: неизвестный тип | '..tostring(e.raw or '')
-    elseif e.type=='payday' then return 'PayDay | '..(e.amount and ('Распознано: '..DSP.money(e.amount)) or 'Начисления не распознаны')
-    elseif e.type=='income' then return tostring(e.label or 'Доход')..': +'..DSP.money(e.amount or 0)
+        return name..' x'..tostring(e.qty or e.count or 1)..' | РћС†РµРЅРєР°: '..value
+    elseif e.kind=='cash' then return 'Р”РµРЅСЊРіРё: +'..DSP.money(e.cash or 0)
+    elseif e.kind=='opening' then return 'РћС‚РєСЂС‹С‚РёРµ: '..tostring(e.source or '?')
+    elseif e.kind=='unknown' then return 'РќР°РіСЂР°РґР°: РЅРµРёР·РІРµСЃС‚РЅС‹Р№ С‚РёРї | '..tostring(e.raw or '')
+    elseif e.type=='payday' then return 'PayDay | '..(e.amount and ('Р Р°СЃРїРѕР·РЅР°РЅРѕ: '..DSP.money(e.amount)) or 'РќР°С‡РёСЃР»РµРЅРёСЏ РЅРµ СЂР°СЃРїРѕР·РЅР°РЅС‹')
+    elseif e.type=='income' then return tostring(e.label or 'Р”РѕС…РѕРґ')..': +'..DSP.money(e.amount or 0)
     elseif e.type=='market' then
-        return (e.direction=='sell' and 'Продажа: ' or 'Покупка: ')..tostring(e.item_name or '?')..' | '..(e.direction=='sell' and 'Выручка: +' or 'Расход: -')..DSP.money(e.amount or 0) end
+        return (e.direction=='sell' and 'РџСЂРѕРґР°Р¶Р°: ' or 'РџРѕРєСѓРїРєР°: ')..tostring(e.item_name or '?')..' | '..(e.direction=='sell' and 'Р’С‹СЂСѓС‡РєР°: +' or 'Р Р°СЃС…РѕРґ: -')..DSP.money(e.amount or 0) end
     local parts={}
-    for _,side in ipairs({{'items_give','Отдано'},{'items_get','Получено'}}) do
+    for _,side in ipairs({{'items_give','РћС‚РґР°РЅРѕ'},{'items_get','РџРѕР»СѓС‡РµРЅРѕ'}}) do
         for _,it in ipairs(e[side[1]] or {}) do parts[#parts+1]=side[2]..': '..tostring(it.name)..' x'..tostring(it.qty or 1) end
     end
-    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..(e.profit_estimated==false and 'Денежный итог: ' or 'Оценка обмена: ')..DSP.money(e.profit or 0)
+    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..(e.profit_estimated==false and 'Р”РµРЅРµР¶РЅС‹Р№ РёС‚РѕРі: ' or 'РћС†РµРЅРєР° РѕР±РјРµРЅР°: ')..DSP.money(e.profit or 0)
 end
 local function store_event(e)
     if not e.id and e.type~='payday_detail' and C.new_event_id then e.id=C.new_event_id(e.ts) end
@@ -82,7 +82,7 @@ local function store_event(e)
     return saved,err
 end
 function C.log_trade(e)
-    if type(e)~='table' then return false,'нет записи' end
+    if type(e)~='table' then return false,'РЅРµС‚ Р·Р°РїРёСЃРё' end
     C.ring_push(e); C.counters.trades=C.counters.trades+1
     C.counters.profit=C.counters.profit+(tonumber(e.profit) or 0)
     local key=category(e); if C.counters[key] then C.counters[key]=C.counters[key]+1 end
@@ -92,7 +92,7 @@ function C.log_trade(e)
     return stored,store_err
 end
 function C.log_crate(e)
-    if type(e)~='table' then return false,'нет записи' end
+    if type(e)~='table' then return false,'РЅРµС‚ Р·Р°РїРёСЃРё' end
     if e.id then
         for _,row in ipairs(C.ring_recent(C.ring_count)) do if row.id==e.id then return true end end
     end
@@ -106,9 +106,9 @@ end
 local function payday_part(text)
     if DSP.payday_part then return DSP.payday_part(text)end
     local lower=DSP.lower or string.lower;local s=lower(text or '')
-    local expense=s:find(lower('налог'),1,true) or s:find(lower('списано'),1,true) or s:find(lower('удержано'),1,true)
-    local income=s:find(lower('зарплат'),1,true) or s:find(lower('заработная плата'),1,true) or s:find(lower('премия'),1,true)
-        or s:find(lower('пенсия'),1,true) or s:find(lower('начислено'),1,true)
+    local expense=s:find(lower('РЅР°Р»РѕРі'),1,true) or s:find(lower('СЃРїРёСЃР°РЅРѕ'),1,true) or s:find(lower('СѓРґРµСЂР¶Р°РЅРѕ'),1,true)
+    local income=s:find(lower('Р·Р°СЂРїР»Р°С‚'),1,true) or s:find(lower('Р·Р°СЂР°Р±РѕС‚РЅР°СЏ РїР»Р°С‚Р°'),1,true) or s:find(lower('РїСЂРµРјРёСЏ'),1,true)
+        or s:find(lower('РїРµРЅСЃРёСЏ'),1,true) or s:find(lower('РЅР°С‡РёСЃР»РµРЅРѕ'),1,true)
     if not expense and not income then return nil end
     local amount=s:match('%$%s*([%d%., ]+)') or s:match('([%d][%d%., ]*)%s*%$')
     amount=amount and tonumber((amount:gsub('[^%d]','')));if not amount then return nil end
@@ -142,15 +142,15 @@ function C.observe_payday(text)
 end
 function C.log_income(label,amount,raw)
     amount=math.floor(tonumber(amount) or 0)
-    if amount <= 0 then return false,'сумма должна быть положительной' end
-    local row={type='income',kind='income',ts=os.time(),amount=amount,label=label or 'Доход',raw=raw}
+    if amount <= 0 then return false,'СЃСѓРјРјР° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїРѕР»РѕР¶РёС‚РµР»СЊРЅРѕР№' end
+    local row={type='income',kind='income',ts=os.time(),amount=amount,label=label or 'Р”РѕС…РѕРґ',raw=raw}
     C.ring_push(row)
     return store_event(row)
 end
 function C.log_market(direction,item,amount,raw)
-    if direction~='sell' and direction~='buy' then return false,'сторона' end
+    if direction~='sell' and direction~='buy' then return false,'СЃС‚РѕСЂРѕРЅР°' end
     amount=math.floor(tonumber(amount) or 0)
-    if amount<=0 then return false,'сумма' end
+    if amount<=0 then return false,'СЃСѓРјРјР°' end
     local row={type='market',kind='market',ts=os.time(),direction=direction,
         item_name=item or '?',amount=amount,raw=raw}
     C.ring_push(row)

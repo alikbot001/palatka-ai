@@ -25,8 +25,8 @@ function M.active()
 end
 function M.observe_label(id,color,position,distance,test_los,player,vehicle,text)
     local clean=DSP.clean_text(tostring(text or ''))
-    if not DSP.lower(clean):find(DSP.lower('лавк'),1,true)then return end
-    local num=valid_number(clean:match('#%s*(%d+)')or clean:match('№%s*(%d+)'))
+    if not DSP.lower(clean):find(DSP.lower('Р»Р°РІРє'),1,true)then return end
+    local num=valid_number(clean:match('#%s*(%d+)')or clean:match('в„–%s*(%d+)'))
     local p=coordinate(position)
     if not num or not p then return end
     p.source='label';p.sid=DSP.market.state.sid
@@ -44,14 +44,14 @@ function M.observe_checkpoint(position)
     if p then t.unverified_checkpoint=p end
 end
 function M.status()
-    if not DSP.settings.marker_3d_enabled then return '3D: выключена' end
+    if not DSP.settings.marker_3d_enabled then return '3D: РІС‹РєР»СЋС‡РµРЅР°' end
     local t=M.target
-    if not t or t.sid~=DSP.market.state.sid then return '3D: лавка не выбрана' end
-    if t.position then return '3D: лавка #'..t.num..' · точная подпись' end
+    if not t or t.sid~=DSP.market.state.sid then return '3D: Р»Р°РІРєР° РЅРµ РІС‹Р±СЂР°РЅР°' end
+    if t.position then return '3D: Р»Р°РІРєР° #'..t.num..' В· С‚РѕС‡РЅР°СЏ РїРѕРґРїРёСЃСЊ' end
     if os.time()<=(t.pending_until or 0) then
-        return '3D: ищем подпись лавки #'..t.num..' (GPS не подтверждён)'
+        return '3D: РёС‰РµРј РїРѕРґРїРёСЃСЊ Р»Р°РІРєРё #'..t.num..' (GPS РЅРµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ)'
     end
-    return '3D: координаты лавки #'..t.num..' не подтверждены'
+    return '3D: РєРѕРѕСЂРґРёРЅР°С‚С‹ Р»Р°РІРєРё #'..t.num..' РЅРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅС‹'
 end
 local function find_streamed_labels(num)
     if not lua_thread or not wait or not sampIs3dTextDefined or not sampGet3dTextInfoById then return end
@@ -78,11 +78,11 @@ function M.draw()
     local io=imgui.GetIO();local t=M.target
     local p=M.project(convert3DCoordsToScreenEx,t.position,io.DisplaySize.x,io.DisplaySize.y)
     if not p then return end
-    local label='Лавка #'..t.num
+    local label='Р›Р°РІРєР° #'..t.num
     if getCharCoordinates and PLAYER_PED then
         local x,y,z=getCharCoordinates(PLAYER_PED)
         local d=math.sqrt((x-t.position.x)^2+(y-t.position.y)^2+(z-t.position.z)^2)
-        label=label..' · '..math.floor(d)..' м'
+        label=label..' В· '..math.floor(d)..' Рј'
     end
     label=DSP.utf8(label)
     local size=imgui.CalcTextSize(label);local dl=imgui.GetForegroundDrawList()

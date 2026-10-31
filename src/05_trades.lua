@@ -106,7 +106,7 @@ function DSP.logs.save_daily_log()
         if os.date('%Y-%m-%d', e.ts or 0) == today then
             local t = type(e) == 'table' and e
             if t and t.type == 'trade' then
-                table.insert(lines, string.format('[TRADE] %s | %s -> ïîëó÷åíî: %s, îòäàíî: %s, ïðèáûëü: %s (%+.1f%%) | %s',
+                table.insert(lines, string.format('[TRADE] %s | %s -> Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½Ð¾: %s, Ð¾Ñ‚Ð´Ð°Ð½Ð¾: %s, Ð¿Ñ€Ð¸Ð±Ñ‹Ð»ÑŒ: %s (%+.1f%%) | %s',
                     os.date('%H:%M:%S', t.ts or 0),
                     t.partner or '?',
                     DSP.money(t.total_get or 0),
@@ -174,15 +174,15 @@ function DSP.logs.record_trade(partner, items_give, items_get, money_give, money
     end
     -- Keep the completed trade state until the next explicit start packet.
     -- Resetting here made duplicate network confirmations appear as new trades.
-    DSP.notify((estimated and 'ÑÄÅËÊÀ, îöåíêà: ' or 'ÑÄÅËÊÀ, äåíåæíûé èòîã: ') .. DSP.money(profit) .. ' (' .. string.format('%+.1f%%', delta_pct) .. ')', kind == 'profit' and 'ok' or 'error')
-    DSP.add_log((estimated and 'Îöåíêà ñäåëêè ñ ' or 'Äåíåæíàÿ ñäåëêà ñ ') .. tostring(partner) .. ': ' .. DSP.money(profit) .. ' (' .. DSP.money(total_get) .. '/' .. DSP.money(total_give) .. ')',
+    DSP.notify((estimated and 'Ð¡Ð”Ð•Ð›ÐšÐ, Ð¾Ñ†ÐµÐ½ÐºÐ°: ' or 'Ð¡Ð”Ð•Ð›ÐšÐ, Ð´ÐµÐ½ÐµÐ¶Ð½Ñ‹Ð¹ Ð¸Ñ‚Ð¾Ð³: ') .. DSP.money(profit) .. ' (' .. string.format('%+.1f%%', delta_pct) .. ')', kind == 'profit' and 'ok' or 'error')
+    DSP.add_log((estimated and 'ÐžÑ†ÐµÐ½ÐºÐ° ÑÐ´ÐµÐ»ÐºÐ¸ Ñ ' or 'Ð”ÐµÐ½ÐµÐ¶Ð½Ð°Ñ ÑÐ´ÐµÐ»ÐºÐ° Ñ ') .. tostring(partner) .. ': ' .. DSP.money(profit) .. ' (' .. DSP.money(total_get) .. '/' .. DSP.money(total_give) .. ')',
         kind == 'profit' and 'ok' or 'error')
     -- Telegram notification for trade
     if DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
         local emoji = profit > 0 and '[+]' or (profit < 0 and '[-]' or '[=]')
-        local msg = '[palatka ai] Ñäåëêà ' .. emoji .. ' '
-            .. DSP.money(profit) .. ' ñ ' .. tostring(partner or '?')
-            .. ' (ïîëó÷åíî: ' .. DSP.money(total_get) .. ', îòäàíî: ' .. DSP.money(total_give) .. ')'
+        local msg = '[palatka ai] Ð¡Ð´ÐµÐ»ÐºÐ° ' .. emoji .. ' '
+            .. DSP.money(profit) .. ' Ñ ' .. tostring(partner or '?')
+            .. ' (Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½Ð¾: ' .. DSP.money(total_get) .. ', Ð¾Ñ‚Ð´Ð°Ð½Ð¾: ' .. DSP.money(total_give) .. ')'
         send_telegram(msg)
     end
 end
@@ -203,7 +203,7 @@ function DSP.logs.stall_dropped(owner, shop_num, item_name, price)
     DSP.logs.stall_logs[#DSP.logs.stall_logs + 1] = entry
     DSP.db.save_trades()
     DSP.logs.save_daily_log()
-    DSP.add_log('Ëàâêà ïàëà: ' .. tostring(owner) .. '#' .. tostring(shop_num)
+    DSP.add_log('Ð›Ð°Ð²ÐºÐ° Ð¿Ð°Ð»Ð°: ' .. tostring(owner) .. '#' .. tostring(shop_num)
         .. ' / ' .. tostring(item_name) .. ' @ ' .. DSP.money(entry.price), 'ok')
 end
 
@@ -216,8 +216,8 @@ function DSP.logs.crate_opened(item_name, price, count, source, ench)
         price = tonumber(price) or 0,
         count = tonumber(count) or 1,
         qty = tonumber(count) or 1,
-        crate_type = tostring(source or 'íåèçâåñòíûé èñòî÷íèê'),
-        source = tostring(source or 'íåèçâåñòíûé èñòî÷íèê'),
+        crate_type = tostring(source or 'Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº'),
+        source = tostring(source or 'Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº'),
         ench = tonumber(ench) or 0,
         server = DSP.settings.server or 102,
     }
@@ -234,11 +234,11 @@ function DSP.logs.crate_opened(item_name, price, count, source, ench)
             source=entry.source, association='explicit', price_known=not not known,
             unit_price=known and tonumber(entry.price) or nil, estimated_value=known and tonumber(entry.price)*entry.qty or nil,
             price_source=known and 'caller' or nil, legacy_id='crate:' .. key})
-        if reward then entry.id=reward.id else DSP.add_log('Èñòîðèÿ íàãðàä: '..tostring(err),'error') end
+        if reward then entry.id=reward.id else DSP.add_log('Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ Ð½Ð°Ð³Ñ€Ð°Ð´: '..tostring(err),'error') end
     end
     DSP.db.save_trades()
     DSP.logs.save_daily_log()
-    DSP.add_log('Òàéíèê (' .. entry.source .. '): +' .. tostring(entry.count) .. 'x ' .. tostring(item_name)
+    DSP.add_log('Ð¢Ð°Ð¹Ð½Ð¸Ðº (' .. entry.source .. '): +' .. tostring(entry.count) .. 'x ' .. tostring(item_name)
         .. ' @ ' .. DSP.money(entry.price), 'ok')
     -- v1.2 Stage 3: push to craglog ring buffer + crates.log file.
     if DSP.craglog and DSP.craglog.log_crate then
@@ -355,7 +355,7 @@ function DSP.logs.clear_trades()
     DSP.logs.stall_logs = {}
     DSP.logs.crate_logs = {}
     DSP.db.save_trades()
-    DSP.add_log('Âñå ëîãè ñäåëîê î÷èùåíû')
+    DSP.add_log('Ð’ÑÐµ Ð»Ð¾Ð³Ð¸ ÑÐ´ÐµÐ»Ð¾Ðº Ð¾Ñ‡Ð¸Ñ‰ÐµÐ½Ñ‹')
 end
 
 local function url_encode(s)
@@ -382,20 +382,20 @@ end
 
 function DSP.logs.parse_chat_drop(text)
     local s = DSP.clean_text(text or '')
-    local source, item, qty = s:match('^Âàì âûïàëî èç (.+): (.+) %((%d+) øò%.%)$')
-    if not item then item, qty = s:match('^Âàì âûïàëî: (.+) %((%d+) øò%.%)$') end
-    if not item then source, item = s:match('^Âû îòêðûëè (.+) è ïîëó÷èëè (.+)$') end
-    if not item then source, item = s:match('^Âû èñïîëüçîâàëè (.+) è ïîëó÷èëè (.+)$') end
-    if not item then source, item = s:match('^Âû óñïåøíî îòêðûëè (.+) è âàì âûïàëî (.+)$') end
-    if not item then item = s:match('^Âàì âûïàëî: (.+)$') or s:match('^Âàì âûïàëî (.+)$')
-        or s:match('^Âàì âûïàëà (.+)$') or s:match('^Âàì âûïàë (.+)$') end
+    local source, item, qty = s:match('^Ð’Ð°Ð¼ Ð²Ñ‹Ð¿Ð°Ð»Ð¾ Ð¸Ð· (.+): (.+) %((%d+) ÑˆÑ‚%.%)$')
+    if not item then item, qty = s:match('^Ð’Ð°Ð¼ Ð²Ñ‹Ð¿Ð°Ð»Ð¾: (.+) %((%d+) ÑˆÑ‚%.%)$') end
+    if not item then source, item = s:match('^Ð’Ñ‹ Ð¾Ñ‚ÐºÑ€Ñ‹Ð»Ð¸ (.+) Ð¸ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ð»Ð¸ (.+)$') end
+    if not item then source, item = s:match('^Ð’Ñ‹ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ð»Ð¸ (.+) Ð¸ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ð»Ð¸ (.+)$') end
+    if not item then source, item = s:match('^Ð’Ñ‹ ÑƒÑÐ¿ÐµÑˆÐ½Ð¾ Ð¾Ñ‚ÐºÑ€Ñ‹Ð»Ð¸ (.+) Ð¸ Ð²Ð°Ð¼ Ð²Ñ‹Ð¿Ð°Ð»Ð¾ (.+)$') end
+    if not item then item = s:match('^Ð’Ð°Ð¼ Ð²Ñ‹Ð¿Ð°Ð»Ð¾: (.+)$') or s:match('^Ð’Ð°Ð¼ Ð²Ñ‹Ð¿Ð°Ð»Ð¾ (.+)$')
+        or s:match('^Ð’Ð°Ð¼ Ð²Ñ‹Ð¿Ð°Ð»Ð° (.+)$') or s:match('^Ð’Ð°Ð¼ Ð²Ñ‹Ð¿Ð°Ð» (.+)$') end
     if not item then return nil end
     if not qty then
-        local base, count = item:match('^(.-) %((%d+)%s*øò%.?%)$')
+        local base, count = item:match('^(.-) %((%d+)%s*ÑˆÑ‚%.?%)$')
         if base then item, qty = base, count end
     end
     local base, ench = name_ench(item)
-    return {name=base, ench=ench, qty=tonumber(qty) or 1, source=DSP.clean_text(source or 'íåèçâåñòíûé èñòî÷íèê')}
+    return {name=base, ench=ench, qty=tonumber(qty) or 1, source=DSP.clean_text(source or 'Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº')}
 end
 
 function DSP.logs.log_chat(text)
@@ -424,7 +424,7 @@ function DSP.logs.log_chat(text)
                 DSP.rewards.pending={};DSP.rewards.last_opening=nil
             else
                 local row,err=DSP.rewards.ingest(text)
-                if err then DSP.add_log('Èñòîðèÿ íàãðàä: '..tostring(err),'error')end
+                if err then DSP.add_log('Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ Ð½Ð°Ð³Ñ€Ð°Ð´: '..tostring(err),'error')end
             end
         else drop = DSP.logs.parse_chat_drop(s) end
     end
@@ -449,13 +449,13 @@ end
 
 function DSP.logs.export_logs()
     local today = DSP.logs.profit_summary('all')
-    local msg = '[palatka ai] Ñòàòèñòèêà:\n'
-        .. 'Ñäåëîê: ' .. today.count .. '\n'
-        .. 'Ïðèáûëü: ' .. DSP.money(today.profit) .. '\n'
-        .. 'Ïîëó÷åíî: ' .. DSP.money(today.total_get) .. '\n'
-        .. 'Îòäàíî: ' .. DSP.money(today.total_give) .. '\n'
+    local msg = '[palatka ai] Ð¡Ñ‚Ð°Ñ‚Ð¸ÑÑ‚Ð¸ÐºÐ°:\n'
+        .. 'Ð¡Ð´ÐµÐ»Ð¾Ðº: ' .. today.count .. '\n'
+        .. 'ÐŸÑ€Ð¸Ð±Ñ‹Ð»ÑŒ: ' .. DSP.money(today.profit) .. '\n'
+        .. 'ÐŸÐ¾Ð»ÑƒÑ‡ÐµÐ½Ð¾: ' .. DSP.money(today.total_get) .. '\n'
+        .. 'ÐžÑ‚Ð´Ð°Ð½Ð¾: ' .. DSP.money(today.total_give) .. '\n'
         .. 'ROI: ' .. string.format('%.1f%%', today.roi) .. '\n'
-        .. 'Ñðåäíÿÿ ñäåëêà: ' .. DSP.money(today.avg_profit)
+        .. 'Ð¡Ñ€ÐµÐ´Ð½ÑÑ ÑÐ´ÐµÐ»ÐºÐ°: ' .. DSP.money(today.avg_profit)
     DSP.logs.send_telegram(msg)
 end
 

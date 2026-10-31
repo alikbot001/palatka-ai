@@ -25,7 +25,7 @@ function DSP.presets._transaction(change)
     end
     local called,saved,err=pcall(DSP.save_settings)
     if not called or saved==false or (saved==nil and err~=nil) then
-        rollback();return false,called and (err or 'не удалось сохранить настройки') or tostring(saved)
+        rollback();return false,called and (err or 'РЅРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё') or tostring(saved)
     end
     -- Older embedders expose a void saver; the bundled saver returns true/false.
     return result,detail
@@ -48,8 +48,8 @@ function DSP.presets.find(kind, key)
 end
 
 function DSP.presets.add(row, kind)
-    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'остановите автоматизацию' end
-    if not row then return false, 'нет выбранного товара' end
+    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
+    if not row then return false, 'РЅРµС‚ РІС‹Р±СЂР°РЅРЅРѕРіРѕ С‚РѕРІР°СЂР°' end
     kind = kind == 'sell' and 'sell' or 'buy'
     local p = preset(kind)
     local price
@@ -58,7 +58,7 @@ function DSP.presets.add(row, kind)
     else
         price = DSP.market.sell_target(row)
     end
-    if price <= 0 then return false, 'нет цены для расчёта' end
+    if price <= 0 then return false, 'РЅРµС‚ С†РµРЅС‹ РґР»СЏ СЂР°СЃС‡С‘С‚Р°' end
     local idx, it = DSP.presets.find(kind, row.key)
     if it then
         local ok,err=DSP.presets._transaction(function()
@@ -69,7 +69,7 @@ function DSP.presets.add(row, kind)
             return true
         end)
         if not ok then return false,err end
-        DSP.add_log('Обновлено в ' .. p.name .. ': ' .. row.display)
+        DSP.add_log('РћР±РЅРѕРІР»РµРЅРѕ РІ ' .. p.name .. ': ' .. row.display)
         return true
     end
     local ok,err=DSP.presets._transaction(function()
@@ -84,34 +84,34 @@ function DSP.presets.add(row, kind)
         return true
     end)
     if not ok then return false,err end
-    DSP.add_log('Добавлено в ' .. p.name .. ': ' .. row.display .. ' по ' .. DSP.money(price))
+    DSP.add_log('Р”РѕР±Р°РІР»РµРЅРѕ РІ ' .. p.name .. ': ' .. row.display .. ' РїРѕ ' .. DSP.money(price))
     return true
 end
 
 function DSP.presets.remove(kind, idx)
-    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'остановите автоматизацию' end
+    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
     local p = preset(kind)
     local it=p.items[idx]
-    if not it then return false,'нет позиции' end
+    if not it then return false,'РЅРµС‚ РїРѕР·РёС†РёРё' end
     local ok,err=DSP.presets._transaction(function()
         table.remove(p.items,idx);return true
     end)
     if not ok then return false,err end
-    DSP.add_log('Удалено из ' .. p.name .. ': ' .. it.name)
+    DSP.add_log('РЈРґР°Р»РµРЅРѕ РёР· ' .. p.name .. ': ' .. it.name)
     return true
 end
 
 function DSP.presets.clear(kind)
-    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'остановите автоматизацию' end
+    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
     local p = preset(kind)
     local ok,err=DSP.presets._transaction(function() p.items={};return true end)
     if not ok then return false,err end
-    DSP.add_log(p.name .. ': список очищен')
+    DSP.add_log(p.name .. ': СЃРїРёСЃРѕРє РѕС‡РёС‰РµРЅ')
     return true
 end
 
 function DSP.presets.recalc(kind)
-    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'остановите автоматизацию' end
+    if DSP.auto and (DSP.auto.buy_running or DSP.auto.sell_running) then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
     local p = preset(kind)
     local changed, missing = 0, 0
     local ok,err=DSP.presets._transaction(function()
@@ -142,7 +142,7 @@ function DSP.presets.recalc(kind)
       return true
     end)
     if not ok then return false,err end
-    DSP.add_log(string.format('%s: пересчитано %d, без данных %d', p.name, changed, missing))
+    DSP.add_log(string.format('%s: РїРµСЂРµСЃС‡РёС‚Р°РЅРѕ %d, Р±РµР· РґР°РЅРЅС‹С… %d', p.name, changed, missing))
     return changed, missing
 end
 

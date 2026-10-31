@@ -16,7 +16,7 @@ function C.summarize_loot(entries,lookup)
     local map={}
     for _,e in ipairs(entries or{})do
         if e.kind=='item'or e.type=='crate'then
-            local name=tostring(e.item_name or e.item or 'Неизвестный предмет')
+            local name=tostring(e.item_name or e.item or 'РќРµРёР·РІРµСЃС‚РЅС‹Р№ РїСЂРµРґРјРµС‚')
             local ench=math.floor(number(e.ench));local qty=math.floor(number(e.qty or e.count or 1))
             local key=DSP.item_key(name,ench)
             if qty>0 then
@@ -28,13 +28,13 @@ function C.summarize_loot(entries,lookup)
                 if unit<=0 and e.price_known and not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e)) then
                     unit=number(e.unit_price or e.price)
                     if unit<=0 and e.estimated_value then unit=number(e.estimated_value)/qty end
-                    origin='Оценка при получении';stamp=e.price_ts or e.ts
+                    origin='РћС†РµРЅРєР° РїСЂРё РїРѕР»СѓС‡РµРЅРёРё';stamp=e.price_ts or e.ts
                 end
                 if unit>0 then
-                    row.estimated=row.estimated+unit*qty;row.price_source=origin or 'Рынок';row.price_ts=tonumber(stamp)
+                    row.estimated=row.estimated+unit*qty;row.price_source=origin or 'Р С‹РЅРѕРє';row.price_ts=tonumber(stamp)
                 else row.unpriced_qty=row.unpriced_qty+qty end
                 row.qty=row.qty+qty;row.receipts=row.receipts+1;row.events[#row.events+1]=e
-                local source=tostring(e.source or 'Источник неизвестен')
+                local source=tostring(e.source or 'РСЃС‚РѕС‡РЅРёРє РЅРµРёР·РІРµСЃС‚РµРЅ')
                 row.sources[source]=(row.sources[source]or 0)+qty
                 out.qty=out.qty+qty;out.receipts=out.receipts+1
             end
@@ -67,8 +67,8 @@ function C.loot_summary(period,query)
         if quotes[key]==nil then
             local row=DSP.db and DSP.db.get and DSP.db.get(name,ench)
             local unit=row and row.buy and tonumber(row.buy.max)
-            local origin='Скупка рынка (снимок)'
-            if not unit or unit<=0 then unit=row and row.sell and tonumber(row.sell.min);origin='Продажа рынка (объявления)'end
+            local origin='РЎРєСѓРїРєР° СЂС‹РЅРєР° (СЃРЅРёРјРѕРє)'
+            if not unit or unit<=0 then unit=row and row.sell and tonumber(row.sell.min);origin='РџСЂРѕРґР°Р¶Р° СЂС‹РЅРєР° (РѕР±СЉСЏРІР»РµРЅРёСЏ)'end
             quotes[key]=unit and unit>0 and{unit=unit,ts=row.updated,origin=origin}or false
         end
         local quote=quotes[key]

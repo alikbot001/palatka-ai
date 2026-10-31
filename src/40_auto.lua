@@ -4,13 +4,13 @@ DSP.auto.buy_running = false
 DSP.auto.sell_running = false
 DSP.auto.scanning = false
 DSP.auto.inv = {}
-DSP.auto.inv_status = 'не сканирован'
+DSP.auto.inv_status = 'РЅРµ СЃРєР°РЅРёСЂРѕРІР°РЅ'
 DSP.auto.sell_confirmed = false
 DSP.auto.sell_forbidden = false
 DSP.auto.sell_no_slots = false
 DSP.auto.stall_inventory_ready = false
 DSP.auto.stall_inventory_seen_at = 0
-DSP.auto.status = 'готов'
+DSP.auto.status = 'РіРѕС‚РѕРІ'
 DSP.auto._prev_dialog = nil
 
 local runtime = DSP.trade_runtime
@@ -18,7 +18,7 @@ local function trade_wait(ms) runtime.pause(ms) end
 local function log(s, kind) DSP.add_log(s, kind) end
 
 function DSP.auto.status_text()
-    return DSP.auto.status .. '  |  инвентарь: ' .. DSP.auto.inv_status
+    return DSP.auto.status .. '  |  РёРЅРІРµРЅС‚Р°СЂСЊ: ' .. DSP.auto.inv_status
 end
 
 local function clean(s)
@@ -103,14 +103,14 @@ function DSP.auto.prepare_stall_inventory()
     DSP.auto.stall_inventory_ready=false
     DSP.auto.stall_inventory_seen_at=0
     close_dialog()
-    if type(_G.dsp_click_slot)~='function' then return false,'нет RakNet click helper' end
+    if type(_G.dsp_click_slot)~='function' then return false,'РЅРµС‚ RakNet click helper' end
     _G.dsp_click_slot(8,7,-1,'')
     runtime.transition('sell','wait_shop','dialogs 3040/15072')
     local menu=wait_dialog({3040,15072},3000)
-    if not menu then return false,'меню лавки не открылось' end
+    if not menu then return false,'РјРµРЅСЋ Р»Р°РІРєРё РЅРµ РѕС‚РєСЂС‹Р»РѕСЃСЊ' end
     wait_text(menu,450)
     if not sampIsDialogActive() or sampGetCurrentDialogId()~=menu then
-        return false,'меню лавки закрылось'
+        return false,'РјРµРЅСЋ Р»Р°РІРєРё Р·Р°РєСЂС‹Р»РѕСЃСЊ'
     end
     -- The first row opens the stall inventory; the server then sends iface52/type1.
     runtime.transition('sell','open_inventory','menu='..tostring(menu))
@@ -121,7 +121,7 @@ function DSP.auto.prepare_stall_inventory()
         trade_wait(50);elapsed=elapsed+50
         if DSP.auto.stall_inventory_ready then runtime.transition('sell','inventory_ready','iface52/type1');return true end
     end
-    return false,'инвентарь лавки не загрузился'
+    return false,'РёРЅРІРµРЅС‚Р°СЂСЊ Р»Р°РІРєРё РЅРµ Р·Р°РіСЂСѓР·РёР»СЃСЏ'
 end
 
 function _G.dsp_click_slot(interfaceid, id, subid, json_str)
@@ -219,7 +219,7 @@ local function parse_inventory(text)
         end
         if slot_s and name and cnt_s then
             name = name:match('^%s*(.-)%s*$') or name
-            if name ~= '' and name ~= 'Пусто' then
+            if name ~= '' and name ~= 'РџСѓСЃС‚Рѕ' then
                 table.insert(raw, { slot = tonumber(slot_s), name = name, count = tonumber(cnt_s) or 1 })
             end
         end
@@ -244,8 +244,8 @@ function DSP.auto.scan_inventory()
     DSP.auto.scan_generation = (DSP.auto.scan_generation or 0) + 1
     local generation = DSP.auto.scan_generation
     DSP.auto.inv = {}
-    DSP.auto.inv_status = 'сканирование...'
-    log('Инвентарь: открываю /mm...')
+    DSP.auto.inv_status = 'СЃРєР°РЅРёСЂРѕРІР°РЅРёРµ...'
+    log('РРЅРІРµРЅС‚Р°СЂСЊ: РѕС‚РєСЂС‹РІР°СЋ /mm...')
     sampSendChat('/mm')
     lua_thread.create(function()
         for _ = 1, 500 do
@@ -254,8 +254,8 @@ function DSP.auto.scan_inventory()
         end
         if DSP.auto.scanning and generation == DSP.auto.scan_generation then
             DSP.auto.scanning = false
-            DSP.auto.inv_status = 'таймаут'
-            log('Инвентарь: таймаут. Откройте инвентарь через /mm вручную и повторите.', 'error')
+            DSP.auto.inv_status = 'С‚Р°Р№РјР°СѓС‚'
+            log('РРЅРІРµРЅС‚Р°СЂСЊ: С‚Р°Р№РјР°СѓС‚. РћС‚РєСЂРѕР№С‚Рµ РёРЅРІРµРЅС‚Р°СЂСЊ С‡РµСЂРµР· /mm РІСЂСѓС‡РЅСѓСЋ Рё РїРѕРІС‚РѕСЂРёС‚Рµ.', 'error')
         end
     end)
 end
@@ -263,9 +263,9 @@ end
 local function inventory_dialog(id, text)
     if id == 25494 or id == 25493 then return true end
     local t = clean(text)
-    return (t:find('%[%d+%]') ~= nil and (t:find('%[%d+ шт%]') ~= nil or t:find('Инвентарь:') ~= nil))
-        or t:find('Следующая страница', 1, true) ~= nil
-        or t:find('Предыдущая страница', 1, true) ~= nil
+    return (t:find('%[%d+%]') ~= nil and (t:find('%[%d+ С€С‚%]') ~= nil or t:find('РРЅРІРµРЅС‚Р°СЂСЊ:') ~= nil))
+        or t:find('РЎР»РµРґСѓСЋС‰Р°СЏ СЃС‚СЂР°РЅРёС†Р°', 1, true) ~= nil
+        or t:find('РџСЂРµРґС‹РґСѓС‰Р°СЏ СЃС‚СЂР°РЅРёС†Р°', 1, true) ~= nil
 end
 
 function DSP.auto.on_dialog(id, style, title, b1, b2, text)
@@ -275,7 +275,7 @@ function DSP.auto.on_dialog(id, style, title, b1, b2, text)
         if id == 15073 and DSP.market.mark_cr_dialog then DSP.market.mark_cr_dialog() end
         if DSP.market.observe_cr_detail then
             local ok,err=pcall(DSP.market.observe_cr_detail,title,text)
-            if not ok then log('ЦР: ошибка разбора истории: '..tostring(err),'error') end
+            if not ok then log('Р¦Р : РѕС€РёР±РєР° СЂР°Р·Р±РѕСЂР° РёСЃС‚РѕСЂРёРё: '..tostring(err),'error') end
         end
     end
     -- v1.2 Stage 3 hotfix: CR marker scan (dialog 15073).
@@ -316,20 +316,20 @@ function DSP.auto.on_dialog(id, style, title, b1, b2, text)
                     end
                 end
             end
-            DSP.auto.inv_status = #DSP.auto.inv .. ' поз. (' ..
-                (function() local n = 0; for _, x in ipairs(DSP.auto.inv) do n = n + x.count end; return n end)() .. ' шт)'
+            DSP.auto.inv_status = #DSP.auto.inv .. ' РїРѕР·. (' ..
+                (function() local n = 0; for _, x in ipairs(DSP.auto.inv) do n = n + x.count end; return n end)() .. ' С€С‚)'
             local next_idx
             local line_no = 0
             local header = style == 5 and 1 or 0
             for ln in tostring(text or ''):gmatch('[^\n]+') do
                 line_no = line_no + 1
-                if line_no > 1 and ln:find('Следующая страница', 1, true) then
+                if line_no > 1 and ln:find('РЎР»РµРґСѓСЋС‰Р°СЏ СЃС‚СЂР°РЅРёС†Р°', 1, true) then
                     next_idx = line_no - 1 - header
                     break
                 end
             end
             if next_idx then
-                log('Инвентарь: ' .. DSP.auto.inv_status .. ', дальше...')
+                log('РРЅРІРµРЅС‚Р°СЂСЊ: ' .. DSP.auto.inv_status .. ', РґР°Р»СЊС€Рµ...')
                 lua_thread.create(function()
                     trade_wait(140)
                     if not DSP.auto.scanning or generation ~= DSP.auto.scan_generation then return end
@@ -337,7 +337,7 @@ function DSP.auto.on_dialog(id, style, title, b1, b2, text)
                 end)
             else
                 DSP.auto.scanning = false
-                log('Инвентарь готов: ' .. DSP.auto.inv_status, 'ok')
+                log('РРЅРІРµРЅС‚Р°СЂСЊ РіРѕС‚РѕРІ: ' .. DSP.auto.inv_status, 'ok')
                 lua_thread.create(function()
                     trade_wait(100)
                     if generation ~= DSP.auto.scan_generation or DSP.auto.buy_running or DSP.auto.sell_running then return end
@@ -360,18 +360,18 @@ end
 function DSP.auto.on_trade_feedback(text)
     if not DSP.auto.sell_running then return end
     local t=clean(text)
-    if t:find('успешно выставлен на продажу',1,true)
-        or t:find('Успешно выставлено на продажу',1,true)
-        or t:find('Успешно выставлен на продажу',1,true) then
+    if t:find('СѓСЃРїРµС€РЅРѕ РІС‹СЃС‚Р°РІР»РµРЅ РЅР° РїСЂРѕРґР°Р¶Сѓ',1,true)
+        or t:find('РЈСЃРїРµС€РЅРѕ РІС‹СЃС‚Р°РІР»РµРЅРѕ РЅР° РїСЂРѕРґР°Р¶Сѓ',1,true)
+        or t:find('РЈСЃРїРµС€РЅРѕ РІС‹СЃС‚Р°РІР»РµРЅ РЅР° РїСЂРѕРґР°Р¶Сѓ',1,true) then
         DSP.auto.sell_confirmed=true
-    elseif t:find('Данные товары запрещено продавать',1,true)
-        or t:find('нельзя выставлять',1,true)
-        or t:find('Запрещено',1,true) then
+    elseif t:find('Р”Р°РЅРЅС‹Рµ С‚РѕРІР°СЂС‹ Р·Р°РїСЂРµС‰РµРЅРѕ РїСЂРѕРґР°РІР°С‚СЊ',1,true)
+        or t:find('РЅРµР»СЊР·СЏ РІС‹СЃС‚Р°РІР»СЏС‚СЊ',1,true)
+        or t:find('Р—Р°РїСЂРµС‰РµРЅРѕ',1,true) then
         DSP.auto.sell_forbidden=true;DSP.auto.sell_confirmed=true
-    elseif t:find('нет доступных ячеек',1,true)
-        or t:find('Нет доступных ячеек',1,true)
-        or t:find('нет свободных мест',1,true)
-        or t:find('Нет свободных мест',1,true) then
+    elseif t:find('РЅРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… СЏС‡РµРµРє',1,true)
+        or t:find('РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… СЏС‡РµРµРє',1,true)
+        or t:find('РЅРµС‚ СЃРІРѕР±РѕРґРЅС‹С… РјРµСЃС‚',1,true)
+        or t:find('РќРµС‚ СЃРІРѕР±РѕРґРЅС‹С… РјРµСЃС‚',1,true) then
         DSP.auto.sell_no_slots=true;DSP.auto.sell_confirmed=true
     end
 end
@@ -379,7 +379,7 @@ end
 function DSP.auto.install()
     local ok, sampev = pcall(require, 'samp.events')
     if not ok or not sampev then
-        log('Авто: samp.events недоступен', 'error')
+        log('РђРІС‚Рѕ: samp.events РЅРµРґРѕСЃС‚СѓРїРµРЅ', 'error')
         return
     end
     local prev_server=sampev.onServerMessage
@@ -391,7 +391,7 @@ function DSP.auto.install()
         end
         if DSP.auto.on_trade_feedback then
             local safe,err=pcall(DSP.auto.on_trade_feedback,text)
-            if not safe then log('Торговля: ошибка обработки ответа: '..tostring(err),'error') end
+            if not safe then log('РўРѕСЂРіРѕРІР»СЏ: РѕС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё РѕС‚РІРµС‚Р°: '..tostring(err),'error') end
         end
         if prev_server then return prev_server(color,text) end
     end

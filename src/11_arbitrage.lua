@@ -105,11 +105,11 @@ function M.on_shop_lookup_feedback(text, timestamp)
         return false
     end
     local cleaned=DSP.lower(DSP.clean_text(text or '')):gsub('%s+',' ')
-    local has_stall=cleaned:find('лавк' ,1,true) ~= nil
-    local no_stall=cleaned:find('не существует' ,1,true)
-        or cleaned:find('не найдена' ,1,true)
-        or cleaned:find('не найдено' ,1,true)
-        or cleaned:find('отсутствует' ,1,true)
+    local has_stall=cleaned:find('Р»Р°РІРє' ,1,true) ~= nil
+    local no_stall=cleaned:find('РЅРµ СЃСѓС‰РµСЃС‚РІСѓРµС‚' ,1,true)
+        or cleaned:find('РЅРµ РЅР°Р№РґРµРЅР°' ,1,true)
+        or cleaned:find('РЅРµ РЅР°Р№РґРµРЅРѕ' ,1,true)
+        or cleaned:find('РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚' ,1,true)
     if not has_stall or not no_stall then return false end
     -- Prefer an explicit number, if the server includes one. A different
     -- number means this response is not for our request.
@@ -118,7 +118,7 @@ function M.on_shop_lookup_feedback(text, timestamp)
     M.pending_find=nil
     if not M.mark_shop_missing_from_game(pending.shop,now) then return false end
     if DSP.shop_marker and DSP.shop_marker.clear then DSP.shop_marker.clear() end
-    if DSP.add_log then DSP.add_log('Игра: лавка #'..tostring(pending.shop)..' не существует. Удалена из API-маршрутов.','error') end
+    if DSP.add_log then DSP.add_log('РРіСЂР°: Р»Р°РІРєР° #'..tostring(pending.shop)..' РЅРµ СЃСѓС‰РµСЃС‚РІСѓРµС‚. РЈРґР°Р»РµРЅР° РёР· API-РјР°СЂС€СЂСѓС‚РѕРІ.','error') end
     if DSP.flog then DSP.flog('FINDILAVKA missing shop='..tostring(pending.shop)..' sid='..tostring(pending.sid)) end
     return true
 end
@@ -392,12 +392,12 @@ end
 
 function M.offer_freshness(ts)
     ts = tonumber(ts) or 0
-    if ts <= 0 then return 'время неизвестно', 'muted' end
+    if ts <= 0 then return 'РІСЂРµРјСЏ РЅРµРёР·РІРµСЃС‚РЅРѕ', 'muted' end
     local age = os.time() - ts
-    if age < -60 then return 'ошибка времени', 'warn' end
-    if age < 180 then return 'свежее', 'good' end
-    if age < 600 then return math.floor(age / 60) .. ' мин назад', 'warn' end
-    return math.floor(age / 60) .. ' мин назад', 'muted'
+    if age < -60 then return 'РѕС€РёР±РєР° РІСЂРµРјРµРЅРё', 'warn' end
+    if age < 180 then return 'СЃРІРµР¶РµРµ', 'good' end
+    if age < 600 then return math.floor(age / 60) .. ' РјРёРЅ РЅР°Р·Р°Рґ', 'warn' end
+    return math.floor(age / 60) .. ' РјРёРЅ РЅР°Р·Р°Рґ', 'muted'
 end
 
 -- Direct observations from a currently open mobile stall are independent of

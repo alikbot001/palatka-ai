@@ -7,7 +7,7 @@ local N=DSP.notes
 local function save()
     if not DSP.save_settings() then
         U._notes_dirty=true
-        DSP.notify('Не удалось сохранить заметки. Повторите сохранение.')
+        DSP.notify('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р·Р°РјРµС‚РєРё. РџРѕРІС‚РѕСЂРёС‚Рµ СЃРѕС…СЂР°РЅРµРЅРёРµ.')
         return false
     end
     U._notes_dirty=false
@@ -19,7 +19,7 @@ function N.all()
         DSP.settings.notes={}
         local legacy=U.notes_buf and DSP.to_cp(ffi.string(U.notes_buf)) or ''
         if legacy~='' then
-            DSP.settings.notes[1]={id='legacy',title='Мои заметки',text=legacy,pinned=false,updated_at=os.time()}
+            DSP.settings.notes[1]={id='legacy',title='РњРѕРё Р·Р°РјРµС‚РєРё',text=legacy,pinned=false,updated_at=os.time()}
         end
         save()
     end
@@ -41,7 +41,7 @@ function N.filtered(query)
 end
 function N.create(title)
     local notes=N.all()
-    local note={id=tostring(os.time())..'_'..tostring(#notes+1),title=title or 'Новая заметка',text='',updated_at=os.time()}
+    local note={id=tostring(os.time())..'_'..tostring(#notes+1),title=title or 'РќРѕРІР°СЏ Р·Р°РјРµС‚РєР°',text='',updated_at=os.time()}
     notes[#notes+1]=note
     if not save() then table.remove(notes,#notes);return nil end
     return note
@@ -78,32 +78,32 @@ local function changed()
     U._notes_dirty=true; U._notes_last_edit=os.time()
 end
 function U.notes_tab()
-    M.title('ЗАМЕТКИ')
+    M.title('Р—РђРњР•РўРљР')
     N.all()
     U.note_search=U.note_search or buffer('',256)
     if U.note_current then
         local note=U.note_current
-        if M.button('< Все заметки','notes_back',300) then
+        if M.button('< Р’СЃРµ Р·Р°РјРµС‚РєРё','notes_back',300) then
             if M.save_notes() then U.note_current=nil end
         end
         M.inline()
-        if M.button('Сохранить','notes_save',300) then M.save_notes() end
-        M.text(U._notes_dirty and 'Есть несохранённые изменения' or 'Сохранено')
-        M.text('Название')
+        if M.button('РЎРѕС…СЂР°РЅРёС‚СЊ','notes_save',300) then M.save_notes() end
+        M.text(U._notes_dirty and 'Р•СЃС‚СЊ РЅРµСЃРѕС…СЂР°РЅС‘РЅРЅС‹Рµ РёР·РјРµРЅРµРЅРёСЏ' or 'РЎРѕС…СЂР°РЅРµРЅРѕ')
+        M.text('РќР°Р·РІР°РЅРёРµ')
         imgui.SetNextItemWidth(math.min(900,imgui.GetContentRegionAvail().x))
         if imgui.InputText('##note_title',U.note_title,256) then changed() end
-        if M.toggle('Закрепить в начале списка',note,'pinned',false) then changed() end
-        M.text('Предмет (необязательно)')
+        if M.toggle('Р—Р°РєСЂРµРїРёС‚СЊ РІ РЅР°С‡Р°Р»Рµ СЃРїРёСЃРєР°',note,'pinned',false) then changed() end
+        M.text('РџСЂРµРґРјРµС‚ (РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅРѕ)')
         imgui.SetNextItemWidth(600)
         if imgui.InputText('##note_item',U.note_item,256) then changed() end
-        M.text('Номер лавки (необязательно)')
+        M.text('РќРѕРјРµСЂ Р»Р°РІРєРё (РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅРѕ)')
         imgui.SetNextItemWidth(300)
         if imgui.InputText('##note_shop',U.note_shop,64) then changed() end
-        if note.shop and note.shop:match('^%d+$') and M.button('Найти лавку #'..note.shop,'note_mark',380) then DSP.market.mark_shop(note.shop) end
-        M.text('Текст заметки')
+        if note.shop and note.shop:match('^%d+$') and M.button('РќР°Р№С‚Рё Р»Р°РІРєСѓ #'..note.shop,'note_mark',380) then DSP.market.mark_shop(note.shop) end
+        M.text('РўРµРєСЃС‚ Р·Р°РјРµС‚РєРё')
         if imgui.InputTextMultiline('##mobile_note_text',U.notes_buf,8192,imgui.ImVec2(-1,280),0) then changed() end
-        local popup_id=DSP.utf8('Удалить заметку?')..'##note_delete_modal'
-        if M.button('Удалить заметку','note_delete',350) then
+        local popup_id=DSP.utf8('РЈРґР°Р»РёС‚СЊ Р·Р°РјРµС‚РєСѓ?')..'##note_delete_modal'
+        if M.button('РЈРґР°Р»РёС‚СЊ Р·Р°РјРµС‚РєСѓ','note_delete',350) then
             U.note_delete_pending=true
             if imgui.OpenPopup then imgui.OpenPopup(popup_id) end
         end
@@ -117,14 +117,14 @@ function U.notes_tab()
         end
         if imgui.BeginPopupModal and imgui.BeginPopupModal(popup_id,nil,
             imgui.WindowFlags and imgui.WindowFlags.AlwaysAutoResize or 0) then
-            M.title('Удалить заметку?')
-            M.text('"'..tostring(note.title or '')..'" будет удалена безвозвратно.')
-            if M.button('Отмена','note_cancel_modal',190) then
+            M.title('РЈРґР°Р»РёС‚СЊ Р·Р°РјРµС‚РєСѓ?')
+            M.text('"'..tostring(note.title or '')..'" Р±СѓРґРµС‚ СѓРґР°Р»РµРЅР° Р±РµР·РІРѕР·РІСЂР°С‚РЅРѕ.')
+            if M.button('РћС‚РјРµРЅР°','note_cancel_modal',190) then
                 U.note_delete_pending=false
                 if imgui.CloseCurrentPopup then imgui.CloseCurrentPopup() end
             end
             M.inline()
-            if M.button('Да, удалить','note_delete_confirm',220) then
+            if M.button('Р”Р°, СѓРґР°Р»РёС‚СЊ','note_delete_confirm',220) then
                 local old_index
                 for i,v in ipairs(N.all()) do if v==note then old_index=i;table.remove(DSP.settings.notes,i);break end end
                 if save() then
@@ -139,15 +139,15 @@ function U.notes_tab()
         return
     end
     imgui.SetNextItemWidth(math.min(850,imgui.GetContentRegionAvail().x))
-    imgui.InputTextWithHint('##notes_search',DSP.utf8('Поиск по названию, тексту, предмету и лавке'),U.note_search,256)
-    if M.button('+ Новая заметка','notes_create',400) then N.open(N.create()) end
+    imgui.InputTextWithHint('##notes_search',DSP.utf8('РџРѕРёСЃРє РїРѕ РЅР°Р·РІР°РЅРёСЋ, С‚РµРєСЃС‚Сѓ, РїСЂРµРґРјРµС‚Сѓ Рё Р»Р°РІРєРµ'),U.note_search,256)
+    if M.button('+ РќРѕРІР°СЏ Р·Р°РјРµС‚РєР°','notes_create',400) then N.open(N.create()) end
     local notes=N.filtered(DSP.to_cp(ffi.string(U.note_search)))
-    M.text('Заметок: '..#notes)
+    M.text('Р—Р°РјРµС‚РѕРє: '..#notes)
     for i,note in ipairs(notes) do
         M.text((note.pinned and '[*] ' or '')..tostring(note.title))
-        if note.item and note.item~='' then M.text('Предмет: '..note.item) end
-        if note.shop and note.shop~='' then M.text('Лавка #'..note.shop) end
-        if M.button('Открыть','note_open'..i,300) then N.open(note) end
+        if note.item and note.item~='' then M.text('РџСЂРµРґРјРµС‚: '..note.item) end
+        if note.shop and note.shop~='' then M.text('Р›Р°РІРєР° #'..note.shop) end
+        if M.button('РћС‚РєСЂС‹С‚СЊ','note_open'..i,300) then N.open(note) end
         imgui.Separator()
     end
 end

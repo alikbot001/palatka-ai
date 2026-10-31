@@ -5,28 +5,28 @@ local function metrics()
     return ok and type(r)=='table'and r or {}
 end
 function V.home()
-    V.heading('Ãëàâíàÿ',function()
-        if V.button('Îáíîâèòü','carbon_refresh',126,false,true)then
+    V.heading('Ð“Ð»Ð°Ð²Ð½Ð°Ñ',function()
+        if V.button('ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ','carbon_refresh',126,false,true)then
             if DSP.market and DSP.market.state.status~='loading' then
                 DSP.market.pull(DSP.detect_server() or DSP.market.state.sid or DSP.settings.server)
             end
         end
     end,130)
     V.list('carbon_home',function(w)
-        V.muted('Îáçîð · äàííûå èãðû è ðûíêà; îòñóòñòâèå èñòî÷íèêà íå çàìåíÿåòñÿ äåìîíñòðàöèåé')
+        V.muted('ÐžÐ±Ð·Ð¾Ñ€ Â· Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¸Ð³Ñ€Ñ‹ Ð¸ Ñ€Ñ‹Ð½ÐºÐ°; Ð¾Ñ‚ÑÑƒÑ‚ÑÑ‚Ð²Ð¸Ðµ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸ÐºÐ° Ð½Ðµ Ð·Ð°Ð¼ÐµÐ½ÑÐµÑ‚ÑÑ Ð´ÐµÐ¼Ð¾Ð½ÑÑ‚Ñ€Ð°Ñ†Ð¸ÐµÐ¹')
         local cw=math.max(90,(w-8)/3)
-        if V.button('Íàéòè ñäåëêó','carbon_quick_arb',cw,false,true)then V.set_screen('arbitrage')end
+        if V.button('ÐÐ°Ð¹Ñ‚Ð¸ ÑÐ´ÐµÐ»ÐºÑƒ','carbon_quick_arb',cw,false,true)then V.set_screen('arbitrage')end
         V.inline(4)
-        if V.button('Ìîÿ ëàâêà','carbon_quick_shop',cw)then V.set_screen('lavki')end
+        if V.button('ÐœÐ¾Ñ Ð»Ð°Ð²ÐºÐ°','carbon_quick_shop',cw)then V.set_screen('lavki')end
         V.inline(4)
-        if V.button('Ñêàíèðîâàòü','carbon_quick_storage',cw)then V.set_screen('scan')end
+        if V.button('Ð¡ÐºÐ°Ð½Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ','carbon_quick_storage',cw)then V.set_screen('scan')end
         imgui.Separator()
         local r=metrics()
         local cards={
-            {'Äåíåæíûé èòîã ñåãîäíÿ',r.net and DSP.money(r.net)or'Íåò äàííûõ', 'èç æóðíàëà'},
-            {'Ïîëó÷åíî äåíåã',r.income and DSP.money(r.income)or'Íåò äàííûõ','ýòî íå ïðèáûëü'},
-            {'Ðàñõîäû',r.expense and DSP.money(r.expense)or'Íåò äàííûõ','ïî æóðíàëó'},
-            {'Ðûíî÷íûõ ïîçèöèé',tostring(#((DSP.market and DSP.market.state.rows)or{})),DSP.market.freshness()},
+            {'Ð”ÐµÐ½ÐµÐ¶Ð½Ñ‹Ð¹ Ð¸Ñ‚Ð¾Ð³ ÑÐµÐ³Ð¾Ð´Ð½Ñ',r.net and DSP.money(r.net)or'ÐÐµÑ‚ Ð´Ð°Ð½Ð½Ñ‹Ñ…', 'Ð¸Ð· Ð¶ÑƒÑ€Ð½Ð°Ð»Ð°'},
+            {'ÐŸÐ¾Ð»ÑƒÑ‡ÐµÐ½Ð¾ Ð´ÐµÐ½ÐµÐ³',r.income and DSP.money(r.income)or'ÐÐµÑ‚ Ð´Ð°Ð½Ð½Ñ‹Ñ…','ÑÑ‚Ð¾ Ð½Ðµ Ð¿Ñ€Ð¸Ð±Ñ‹Ð»ÑŒ'},
+            {'Ð Ð°ÑÑ…Ð¾Ð´Ñ‹',r.expense and DSP.money(r.expense)or'ÐÐµÑ‚ Ð´Ð°Ð½Ð½Ñ‹Ñ…','Ð¿Ð¾ Ð¶ÑƒÑ€Ð½Ð°Ð»Ñƒ'},
+            {'Ð Ñ‹Ð½Ð¾Ñ‡Ð½Ñ‹Ñ… Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹',tostring(#((DSP.market and DSP.market.state.rows)or{})),DSP.market.freshness()},
         }
         for i=1,4,2 do
             local cw2=math.max(90,(w-9)/2)
@@ -50,10 +50,10 @@ function V.home()
                 if n==0 then V.inline(8)end
             end
         end
-        V.text('Áûñòðûé äîñòóï')
-        local links={{'Àðáèòðàæ','arbitrage'},{'Ïðîäàæà / ñêóïêà','palatka'},
-            {'Ñêàí ëàâêè','scan'},{'Ïåðåïðîäàæà','resale'},
-            {'Àâòî-ïèàð','promo'},{'Æóðíàë','logs'}}
+        V.text('Ð‘Ñ‹ÑÑ‚Ñ€Ñ‹Ð¹ Ð´Ð¾ÑÑ‚ÑƒÐ¿')
+        local links={{'ÐÑ€Ð±Ð¸Ñ‚Ñ€Ð°Ð¶','arbitrage'},{'ÐŸÑ€Ð¾Ð´Ð°Ð¶Ð° / ÑÐºÑƒÐ¿ÐºÐ°','palatka'},
+            {'Ð¡ÐºÐ°Ð½ Ð»Ð°Ð²ÐºÐ¸','scan'},{'ÐŸÐµÑ€ÐµÐ¿Ñ€Ð¾Ð´Ð°Ð¶Ð°','resale'},
+            {'ÐÐ²Ñ‚Ð¾-Ð¿Ð¸Ð°Ñ€','promo'},{'Ð–ÑƒÑ€Ð½Ð°Ð»','logs'}}
         local cols=w>=560 and 3 or 2
         local cell=(w-8*(cols-1))/cols
         for i,entry in ipairs(links)do
@@ -61,23 +61,23 @@ function V.home()
             if i%cols~=0 and i<#links then V.inline(8)end
         end
         imgui.Separator()
-        V.text('Ïîñëåäíèå ñîáûòèÿ')
+        V.text('ÐŸÐ¾ÑÐ»ÐµÐ´Ð½Ð¸Ðµ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ')
         local recent=DSP.craglog and DSP.craglog.ring_recent and DSP.craglog.ring_recent(4) or {}
-        if #recent==0 then V.muted('Çàïèñåé çà ñåññèþ ïîêà íåò')end
+        if #recent==0 then V.muted('Ð—Ð°Ð¿Ð¸ÑÐµÐ¹ Ð·Ð° ÑÐµÑÑÐ¸ÑŽ Ð¿Ð¾ÐºÐ° Ð½ÐµÑ‚')end
         for j=#recent,1,-1 do
             local event=recent[j]
             if event then
                 V.row('carbon_recent_'..j,43,function(ww,x,y)
-                    V.at(x,y);V.muted(V.fit(os.date('%H:%M',event.ts or os.time())..' · '..
-                        tostring((DSP.craglog.describe and DSP.craglog.describe(event)) or event.kind or 'Ñîáûòèå'),ww-12))
+                    V.at(x,y);V.muted(V.fit(os.date('%H:%M',event.ts or os.time())..' Â· '..
+                        tostring((DSP.craglog.describe and DSP.craglog.describe(event)) or event.kind or 'Ð¡Ð¾Ð±Ñ‹Ñ‚Ð¸Ðµ'),ww-12))
                 end)
             end
         end
         imgui.Separator()
-        V.text('Ñîñòîÿíèå ñèñòåìû')
+        V.text('Ð¡Ð¾ÑÑ‚Ð¾ÑÐ½Ð¸Ðµ ÑÐ¸ÑÑ‚ÐµÐ¼Ñ‹')
         local st=DSP.market.state
-        V.muted('API: '..tostring(st.status or '?')..' · Ñåðâåð: '..tostring(st.sid or '?'))
-        V.muted('Äàííûå ìîãóò óñòàðåòü. Ðûíî÷íàÿ ñòîèìîñòü èìóùåñòâà íå ðàâíà çàðàáîòêó.')
-        if V.button('Öåíû / èñòî÷íèêè','carbon_link_prices',w)then V.set_screen('resale');V.flip_tab='prices'end
-    end,{footer=function() V.muted('Carbon Trade · Ãëàâíàÿ · äàííûå áåç âûìûñëà')end})
+        V.muted('API: '..tostring(st.status or '?')..' Â· Ð¡ÐµÑ€Ð²ÐµÑ€: '..tostring(st.sid or '?'))
+        V.muted('Ð”Ð°Ð½Ð½Ñ‹Ðµ Ð¼Ð¾Ð³ÑƒÑ‚ ÑƒÑÑ‚Ð°Ñ€ÐµÑ‚ÑŒ. Ð Ñ‹Ð½Ð¾Ñ‡Ð½Ð°Ñ ÑÑ‚Ð¾Ð¸Ð¼Ð¾ÑÑ‚ÑŒ Ð¸Ð¼ÑƒÑ‰ÐµÑÑ‚Ð²Ð° Ð½Ðµ Ñ€Ð°Ð²Ð½Ð° Ð·Ð°Ñ€Ð°Ð±Ð¾Ñ‚ÐºÑƒ.')
+        if V.button('Ð¦ÐµÐ½Ñ‹ / Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸ÐºÐ¸','carbon_link_prices',w)then V.set_screen('resale');V.flip_tab='prices'end
+    end,{footer=function() V.muted('Carbon Trade Â· Ð“Ð»Ð°Ð²Ð½Ð°Ñ Â· Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð±ÐµÐ· Ð²Ñ‹Ð¼Ñ‹ÑÐ»Ð°')end})
 end

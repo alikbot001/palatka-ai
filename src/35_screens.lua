@@ -2,8 +2,8 @@
 -- v1.2 Screen dispatcher: horizontal Top Bar + per-screen touch pager.
 --
 -- Responsibilities:
---   * Define the 8-tab Top Bar layout (ÏÀËÀÒÊÀ / ËÀÂÊÈ ÖĞ / ÀĞÁÈÒĞÀÆ / ÏÎÈÑÊ /
---     ËÎÃÈ / ÑÒÀÒÈÑÒÈÊÀ / ÇÀÌÅÒÊÈ / ÍÀÑÒĞÎÉÊÈ).
+--   * Define the 8-tab Top Bar layout (ĞŸĞĞ›ĞĞ¢ĞšĞ / Ğ›ĞĞ’ĞšĞ˜ Ğ¦Ğ  / ĞĞ Ğ‘Ğ˜Ğ¢Ğ ĞĞ– / ĞŸĞĞ˜Ğ¡Ğš /
+--     Ğ›ĞĞ“Ğ˜ / Ğ¡Ğ¢ĞĞ¢Ğ˜Ğ¡Ğ¢Ğ˜ĞšĞ / Ğ—ĞĞœĞ•Ğ¢ĞšĞ˜ / ĞĞĞ¡Ğ¢Ğ ĞĞ™ĞšĞ˜).
 --   * Maintain per-screen page state (DSP.ui.pages[id]).
 --   * Provide a touch-friendly pager (big buttons, ASCII arrows only).
 --   * Route the active screen id to its draw function in DSP.ui.*
@@ -18,14 +18,14 @@ DSP.screens = DSP.screens or {}
 -- id     -- stable string identifier, used by DSP.settings.screen and DSP.ui.pages
 -- label  -- short label shown in the Top Bar (ASCII safe; Cyrillic is fine for CP1251)
 DSP.screens.list = {
-    { id = 'palatka',  label = 'ÏÀËÀÒÊÀ' },
-    { id = 'lavki',    label = 'ËÀÂÊÈ ÖĞ' },
-    { id = 'arbitrage',label = 'ÀĞÁÈÒĞÀÆ' },
-    { id = 'search',   label = 'ÏÎÈÑÊ' },
-    { id = 'logs',     label = 'ËÎÃÈ' },
-    { id = 'stats',    label = 'ÑÒÀÒÈÑÒÈÊÀ' },
-    { id = 'notes',    label = 'ÇÀÌÅÒÊÈ' },
-    { id = 'settings', label = 'ÍÀÑÒĞÎÉÊÈ' },
+    { id = 'palatka',  label = 'ĞŸĞĞ›ĞĞ¢ĞšĞ' },
+    { id = 'lavki',    label = 'Ğ›ĞĞ’ĞšĞ˜ Ğ¦Ğ ' },
+    { id = 'arbitrage',label = 'ĞĞ Ğ‘Ğ˜Ğ¢Ğ ĞĞ–' },
+    { id = 'search',   label = 'ĞŸĞĞ˜Ğ¡Ğš' },
+    { id = 'logs',     label = 'Ğ›ĞĞ“Ğ˜' },
+    { id = 'stats',    label = 'Ğ¡Ğ¢ĞĞ¢Ğ˜Ğ¡Ğ¢Ğ˜ĞšĞ' },
+    { id = 'notes',    label = 'Ğ—ĞĞœĞ•Ğ¢ĞšĞ˜' },
+    { id = 'settings', label = 'ĞĞĞ¡Ğ¢Ğ ĞĞ™ĞšĞ˜' },
 }
 
 -- Backward compat: numeric tab id (1..8) maps to a screen id.
@@ -127,7 +127,7 @@ function DSP.screens.topbar()
 end
 
 -- =========================================================================
--- Touch pager: [< Ïğåäûäóùàÿ] [Ñòğ. X èç Y] [Ñëåäóşùàÿ >] [^ ÂÂÅĞÕ] [v ÂÍÈÇ]
+-- Touch pager: [< ĞŸÑ€ĞµĞ´Ñ‹Ğ´ÑƒÑ‰Ğ°Ñ] [Ğ¡Ñ‚Ñ€. X Ğ¸Ğ· Y] [Ğ¡Ğ»ĞµĞ´ÑƒÑÑ‰Ğ°Ñ >] [^ Ğ’Ğ’Ğ•Ğ Ğ¥] [v Ğ’ĞĞ˜Ğ—]
 -- All buttons are large (>= 36*dpi height) for finger tapping on Samsung A15.
 --
 -- Returns from, to (1-indexed inclusive) into the source rows array.
@@ -155,21 +155,21 @@ function DSP.screens.pager(total_rows, per_page, id)
     if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(6 * dpi, 6 * dpi)) then
         pushed_vars = pushed_vars + 1
     end
-    if imgui.Button(DSP.utf8('< Ïğåäûäóùàÿ'), imgui.ImVec2(bw_prev, bh)) then
+    if imgui.Button(DSP.utf8('< ĞŸÑ€ĞµĞ´Ñ‹Ğ´ÑƒÑ‰Ğ°Ñ'), imgui.ImVec2(bw_prev, bh)) then
         DSP.screens.set_page(id, page - 1)
     end
     imgui.SameLine(0, 6 * dpi)
-    imgui.TextDisabled(DSP.utf8(string.format('Ñòğ. %d èç %d', page, pages)))
+    imgui.TextDisabled(DSP.utf8(string.format('Ğ¡Ñ‚Ñ€. %d Ğ¸Ğ· %d', page, pages)))
     imgui.SameLine(0, 6 * dpi)
-    if imgui.Button(DSP.utf8('Ñëåäóşùàÿ >'), imgui.ImVec2(bw_next, bh)) then
+    if imgui.Button(DSP.utf8('Ğ¡Ğ»ĞµĞ´ÑƒÑÑ‰Ğ°Ñ >'), imgui.ImVec2(bw_next, bh)) then
         DSP.screens.set_page(id, page + 1)
     end
     imgui.SameLine(0, 14 * dpi)
-    if imgui.Button(DSP.utf8('^ ÂÂÅĞÕ'), imgui.ImVec2(bw_qx, bh)) then
+    if imgui.Button(DSP.utf8('^ Ğ’Ğ’Ğ•Ğ Ğ¥'), imgui.ImVec2(bw_qx, bh)) then
         DSP.screens.set_page(id, 1)
     end
     imgui.SameLine(0, 6 * dpi)
-    if imgui.Button(DSP.utf8('v ÂÍÈÇ'), imgui.ImVec2(bw_qx, bh)) then
+    if imgui.Button(DSP.utf8('v Ğ’ĞĞ˜Ğ—'), imgui.ImVec2(bw_qx, bh)) then
         DSP.screens.set_page(id, pages)
     end
     if pushed_vars > 0 then
@@ -179,7 +179,7 @@ function DSP.screens.pager(total_rows, per_page, id)
 end
 
 -- =========================================================================
--- Per-page size selector. Renders "[Ñòğîê íà ñòğàíèöå:] [-] N [+]" inline.
+-- Per-page size selector. Renders "[Ğ¡Ñ‚Ñ€Ğ¾Ğº Ğ½Ğ° ÑÑ‚Ñ€Ğ°Ğ½Ğ¸Ñ†Ğµ:] [-] N [+]" inline.
 -- =========================================================================
 function DSP.screens.per_page_selector()
     local dpi = d()
@@ -188,7 +188,7 @@ function DSP.screens.per_page_selector()
     if pcall(imgui.PushStyleVarVec2, imgui.StyleVar.ItemSpacing, imgui.ImVec2(4 * dpi, 4 * dpi)) then
         pushed_vars = pushed_vars + 1
     end
-    imgui.TextDisabled(DSP.utf8('Ñòğîê/ñòğ:'))
+    imgui.TextDisabled(DSP.utf8('Ğ¡Ñ‚Ñ€Ğ¾Ğº/ÑÑ‚Ñ€:'))
     imgui.SameLine(0, 6 * dpi)
     if imgui.Button(DSP.utf8('-##per_minus'), imgui.ImVec2(34 * dpi, 32 * dpi)) then
         DSP.settings.per_page = math.max(10, per - 5)
@@ -241,8 +241,8 @@ function DSP.screens.stub(stage)
     imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('[ ' .. stage .. ' ]'))
     imgui.Separator()
     imgui.Spacing()
-    imgui.TextDisabled(DSP.utf8('İêğàí áóäåò ğåàëèçîâàí â ' .. stage .. ' ìîäåğíèçàöèè Palatka AI v1.2.'))
+    imgui.TextDisabled(DSP.utf8('Ğ­ĞºÑ€Ğ°Ğ½ Ğ±ÑƒĞ´ĞµÑ‚ Ñ€ĞµĞ°Ğ»Ğ¸Ğ·Ğ¾Ğ²Ğ°Ğ½ Ğ² ' .. stage .. ' Ğ¼Ğ¾Ğ´ĞµÑ€Ğ½Ğ¸Ğ·Ğ°Ñ†Ğ¸Ğ¸ Palatka AI v1.2.'))
     imgui.Spacing()
-    imgui.TextDisabled(DSP.utf8('Ñåé÷àñ ğàáîòàåò â¸ğñòêà Top Bar, òåìû îôîğìëåíèÿ, ïåéäæåğ,'))
-    imgui.TextDisabled(DSP.utf8('ïğîçğà÷íîñòü îêíà è ïåğåòàñêèâàåìàÿ êíîïêà [CR].'))
+    imgui.TextDisabled(DSP.utf8('Ğ¡ĞµĞ¹Ñ‡Ğ°Ñ Ñ€Ğ°Ğ±Ğ¾Ñ‚Ğ°ĞµÑ‚ Ğ²Ñ‘Ñ€ÑÑ‚ĞºĞ° Top Bar, Ñ‚ĞµĞ¼Ñ‹ Ğ¾Ñ„Ğ¾Ñ€Ğ¼Ğ»ĞµĞ½Ğ¸Ñ, Ğ¿ĞµĞ¹Ğ´Ğ¶ĞµÑ€,'))
+    imgui.TextDisabled(DSP.utf8('Ğ¿Ñ€Ğ¾Ğ·Ñ€Ğ°Ñ‡Ğ½Ğ¾ÑÑ‚ÑŒ Ğ¾ĞºĞ½Ğ° Ğ¸ Ğ¿ĞµÑ€ĞµÑ‚Ğ°ÑĞºĞ¸Ğ²Ğ°ĞµĞ¼Ğ°Ñ ĞºĞ½Ğ¾Ğ¿ĞºĞ° [CR].'))
 end

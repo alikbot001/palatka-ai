@@ -32,14 +32,14 @@ local function risk_of(r,now,max_age)
         reasons[#reasons+1]=msg
     end
     for _,o in ipairs({a,b}) do
-        if integer(o.qty)==1 and not o.verified_at then flag('объём API=1 может быть одним слотом',3) end
+        if integer(o.qty)==1 and not o.verified_at then flag('РѕР±СЉС‘Рј API=1 РјРѕР¶РµС‚ Р±С‹С‚СЊ РѕРґРЅРёРј СЃР»РѕС‚РѕРј',3) end
         local ts=integer(o.ts)
-        if ts<=0 then flag('нет времени снимка',2)
-        elseif ts>now+60 or now-ts>max_age then flag('старые данные',3) end
-        if o.qty_source~='game' and o.qty_source~='manual' then flag('остаток не проверен в игре',1) end
+        if ts<=0 then flag('РЅРµС‚ РІСЂРµРјРµРЅРё СЃРЅРёРјРєР°',2)
+        elseif ts>now+60 or now-ts>max_age then flag('СЃС‚Р°СЂС‹Рµ РґР°РЅРЅС‹Рµ',3) end
+        if o.qty_source~='game' and o.qty_source~='manual' then flag('РѕСЃС‚Р°С‚РѕРє РЅРµ РїСЂРѕРІРµСЂРµРЅ РІ РёРіСЂРµ',1) end
     end
-    if tostring(a.shop)==tostring(b.shop) then flag('одна лавка с обеих сторон',3) end
-    if r.demand_verified==false then flag('скупка не гарантирована',2) end
+    if tostring(a.shop)==tostring(b.shop) then flag('РѕРґРЅР° Р»Р°РІРєР° СЃ РѕР±РµРёС… СЃС‚РѕСЂРѕРЅ',3) end
+    if r.demand_verified==false then flag('СЃРєСѓРїРєР° РЅРµ РіР°СЂР°РЅС‚РёСЂРѕРІР°РЅР°',2) end
     return risk,table.concat(reasons,'; ')
 end
 function F.score_route(route,opts,now)
@@ -181,18 +181,18 @@ function F.price_evidence(row)
 end
 function F.market_interest(row)
     local n=integer(row and row.buy and row.buy.shop_n)
-    if n>=5 then return 'много скупщиков ('..n..')'
-    elseif n>=2 then return 'несколько скупщиков ('..n..')'
-    elseif n==1 then return 'один скупщик'
+    if n>=5 then return 'РјРЅРѕРіРѕ СЃРєСѓРїС‰РёРєРѕРІ ('..n..')'
+    elseif n>=2 then return 'РЅРµСЃРєРѕР»СЊРєРѕ СЃРєСѓРїС‰РёРєРѕРІ ('..n..')'
+    elseif n==1 then return 'РѕРґРёРЅ СЃРєСѓРїС‰РёРє'
     end
-    return 'нет наблюдаемой скупки'
+    return 'РЅРµС‚ РЅР°Р±Р»СЋРґР°РµРјРѕР№ СЃРєСѓРїРєРё'
 end
 
 -- SELL recommendations from asking prices only. They are not completed sales.
 function F.suggest_price(row,mode,cost,tax)
-    if not row or not row.sell then return nil,'нет рынка' end
+    if not row or not row.sell then return nil,'РЅРµС‚ СЂС‹РЅРєР°' end
     local sell=row.sell
-    if integer(sell.count)==0 then return nil,'нет цен предложений' end
+    if integer(sell.count)==0 then return nil,'РЅРµС‚ С†РµРЅ РїСЂРµРґР»РѕР¶РµРЅРёР№' end
     local reference=mode=='fast' and (sell.p25>0 and sell.p25 or sell.min)
         or mode=='premium' and (sell.p75>0 and sell.p75 or sell.med)
         or sell.med
@@ -200,30 +200,30 @@ function F.suggest_price(row,mode,cost,tax)
     local price=math.max(1,math.floor(reference*rate))
     if cost~=nil then
         local paid=num(cost,-1)
-        if paid<0 then return nil,'неверная себестоимость' end
+        if paid<0 then return nil,'РЅРµРІРµСЂРЅР°СЏ СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚СЊ' end
         local fee=math.min(10000,integer(tax,integer(DSP.settings.tax_bp,200)))
-        if fee>=10000 then return nil,'комиссия 100%' end
+        if fee>=10000 then return nil,'РєРѕРјРёСЃСЃРёСЏ 100%' end
         local floor_price=math.ceil(paid*10000/(10000-fee))
         price=math.max(price,floor_price)
     end
-    return price,'по объявлениям; не подтверждённая цена сделки'
+    return price,'РїРѕ РѕР±СЉСЏРІР»РµРЅРёСЏРј; РЅРµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅР°СЏ С†РµРЅР° СЃРґРµР»РєРё'
 end
 function F.watch_set(key,name,limit)
     local s=F.settings();key=tostring(key or '')
     local p=integer(limit)
-    if key=='' or p==0 or p>MAX_SAFE then return false,'нужен предмет и цена выше нуля' end
+    if key=='' or p==0 or p>MAX_SAFE then return false,'РЅСѓР¶РµРЅ РїСЂРµРґРјРµС‚ Рё С†РµРЅР° РІС‹С€Рµ РЅСѓР»СЏ' end
     if not s.watch[key] then
         local n=0;for _ in pairs(s.watch)do n=n+1 end
-        if n>=30 then return false,'максимум 30 наблюдений' end
+        if n>=30 then return false,'РјР°РєСЃРёРјСѓРј 30 РЅР°Р±Р»СЋРґРµРЅРёР№' end
     end
     local previous=s.watch[key]
     s.watch[key]={name=tostring(name or key),max_price=p,server=tonumber((DSP.market.state or{}).sid)or DSP.settings.server}
-    if not DSP.save_settings() then s.watch[key]=previous;return false,'не удалось записать настройки' end
+    if not DSP.save_settings() then s.watch[key]=previous;return false,'РЅРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїРёСЃР°С‚СЊ РЅР°СЃС‚СЂРѕР№РєРё' end
     return true
 end
 function F.watch_remove(key)
     local s=F.settings();local previous=s.watch[key];s.watch[key]=nil
-    if not DSP.save_settings() then s.watch[key]=previous;return false,'не удалось записать настройки' end
+    if not DSP.save_settings() then s.watch[key]=previous;return false,'РЅРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїРёСЃР°С‚СЊ РЅР°СЃС‚СЂРѕР№РєРё' end
     return true
 end
 F.last_alert=0;F.alerted={}
@@ -238,7 +238,7 @@ function F.check_alerts(now,notify)
             local signature=tostring(st.sid)..':'..tostring(st.version)..':'..key
             if not F.alerted[signature] then
                 F.alerted[signature]=true;F.last_alert=now
-                if type(notify)=='function' then notify('Наблюдение: '..tostring(rule.name)..' по '..DSP.money(r.sell.min)..' (API, проверьте лавку)')end
+                if type(notify)=='function' then notify('РќР°Р±Р»СЋРґРµРЅРёРµ: '..tostring(rule.name)..' РїРѕ '..DSP.money(r.sell.min)..' (API, РїСЂРѕРІРµСЂСЊС‚Рµ Р»Р°РІРєСѓ)')end
                 count=count+1;break
             end
         end

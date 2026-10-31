@@ -45,7 +45,7 @@ local function queue_sell()
                     end
                 end
             end
-            if left > 0 then return nil, p.name .. ': недостаточно в инвентаре' end
+            if left > 0 then return nil, p.name .. ': РЅРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РІ РёРЅРІРµРЅС‚Р°СЂРµ' end
         end
     end
     return queue
@@ -62,9 +62,9 @@ function DSP.auto.start_sell()
         if type(it)~='table' then DSP.notify('Invalid preset row');return false end
         if it.enabled ~= false then n = n + 1 end
     end
-    if n == 0 then DSP.notify('Продажа: пресет пуст'); return end
+    if n == 0 then DSP.notify('РџСЂРѕРґР°Р¶Р°: РїСЂРµСЃРµС‚ РїСѓСЃС‚'); return end
     if #DSP.auto.inv == 0 then
-        DSP.notify('Продажа: сначала просканируйте инвентарь')
+        DSP.notify('РџСЂРѕРґР°Р¶Р°: СЃРЅР°С‡Р°Р»Р° РїСЂРѕСЃРєР°РЅРёСЂСѓР№С‚Рµ РёРЅРІРµРЅС‚Р°СЂСЊ')
         return
     end
     local q_ok,queue,err=pcall(queue_sell)
@@ -74,17 +74,17 @@ function DSP.auto.start_sell()
         return false
     end
     if not queue then DSP.notify('Sale: '..tostring(err)); return false end
-    if #queue == 0 then DSP.notify('Продажа: в инвентаре нет позиций из пресета'); return end
+    if #queue == 0 then DSP.notify('РџСЂРѕРґР°Р¶Р°: РІ РёРЅРІРµРЅС‚Р°СЂРµ РЅРµС‚ РїРѕР·РёС†РёР№ РёР· РїСЂРµСЃРµС‚Р°'); return end
     local dry_run = DSP.settings.dry_run
     DSP.auto.sell_running = true
     DSP.auto.sell_confirmed = false
     DSP.auto.sell_forbidden = false
     DSP.auto.sell_no_slots = false
-    DSP.auto.status = 'продажа...'
+    DSP.auto.status = 'РїСЂРѕРґР°Р¶Р°...'
     DSP.flog('PRESET sale accepted: '..#queue..' stacks, dry_run='..tostring(dry_run))
-    log('Продажа: ' .. #queue .. ' стек(ов)')
+    log('РџСЂРѕРґР°Р¶Р°: ' .. #queue .. ' СЃС‚РµРє(РѕРІ)')
     if dry_run then
-        DSP.notify('ТЕСТ: игровые окна не открываются. Для действий нужен режим РЕАЛЬНО.')
+        DSP.notify('РўР•РЎРў: РёРіСЂРѕРІС‹Рµ РѕРєРЅР° РЅРµ РѕС‚РєСЂС‹РІР°СЋС‚СЃСЏ. Р”Р»СЏ РґРµР№СЃС‚РІРёР№ РЅСѓР¶РµРЅ СЂРµР¶РёРј Р Р•РђР›Р¬РќРћ.')
         -- A preview must NEVER send RakNet clicks or dialog responses.
         DSP.auto.sell_running=true
         DSP.auto.status='sale preview...'
@@ -109,16 +109,16 @@ function DSP.auto.start_sell()
             local ok,why=DSP.auto.prepare_stall_inventory()
             if not ok then
                 DSP.auto.sell_running=false
-                DSP.auto.status='продажа: лавка не готова'
-                log('Продажа: '..tostring(why or 'не удалось открыть инвентарь лавки'),'error')
-                DSP.notify('Продажа: '..tostring(why or 'лавка не готова'))
+                DSP.auto.status='РїСЂРѕРґР°Р¶Р°: Р»Р°РІРєР° РЅРµ РіРѕС‚РѕРІР°'
+                log('РџСЂРѕРґР°Р¶Р°: '..tostring(why or 'РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ РёРЅРІРµРЅС‚Р°СЂСЊ Р»Р°РІРєРё'),'error')
+                DSP.notify('РџСЂРѕРґР°Р¶Р°: '..tostring(why or 'Р»Р°РІРєР° РЅРµ РіРѕС‚РѕРІР°'))
                 return
             end
             trade_wait(120)
         end
         for _, it in ipairs(queue) do
             if not DSP.auto.sell_running then break end
-            DSP.auto.status = 'продажа: ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
+            DSP.auto.status = 'РїСЂРѕРґР°Р¶Р°: ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
             local json = '{"amount":' .. it.qty .. ',"id":0,"slot":' .. it.slot .. ',"type":1}'
             local got, id, dialog_text = false, nil, nil
             for attempt = 1, 3 do
@@ -133,13 +133,13 @@ function DSP.auto.start_sell()
                 DSP.flog('PRESET sale packet: item='..tostring(it.name)..' slot='..it.slot..' qty='..tostring(it.qty))
                 _G.dsp_click_slot(60, -1, 2, json)
                 runtime.transition('sell','wait_item_dialog',tostring(it.name))
-                -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile выставление dialogs).
+                -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile РІС‹СЃС‚Р°РІР»РµРЅРёРµ dialogs).
                 id,dialog_text,dialog_title = wait_item({ 26547, 15068, 15069, 15070, 15071 }, it.name, 2600, 'sell')
                 if id then
                     got = true
                     break
                 end
-                log('Продажа: диалог предмета не готов ('..attempt..'): '..tostring(dialog_text or ''):sub(1,90),'error')
+                log('РџСЂРѕРґР°Р¶Р°: РґРёР°Р»РѕРі РїСЂРµРґРјРµС‚Р° РЅРµ РіРѕС‚РѕРІ ('..attempt..'): '..tostring(dialog_text or ''):sub(1,90),'error')
                 close_dialog()
                 trade_wait(180)
             end
@@ -170,7 +170,7 @@ function DSP.auto.start_sell()
                     ' mode='..(combined and 'qty_price' or 'price_only')..' resp_len='..tostring(#resp))
                 if dry_run then
                     DSP.auto.progress.dry = DSP.auto.progress.dry + 1
-                    log('dry-run: продал бы ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price))
+                    log('dry-run: РїСЂРѕРґР°Р» Р±С‹ ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price))
                     close_dialog()
                 else
                     DSP.auto.sell_confirmed = false
@@ -188,35 +188,35 @@ function DSP.auto.start_sell()
                     end
                     if DSP.auto.sell_no_slots then
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                        log('Продажа: нет свободных мест', 'error')
+                        log('РџСЂРѕРґР°Р¶Р°: РЅРµС‚ СЃРІРѕР±РѕРґРЅС‹С… РјРµСЃС‚', 'error')
                         DSP.auto.sell_running = false
                         break
                     end
                     if DSP.auto.sell_forbidden then
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                        log('Продажа: запрещено для ' .. it.name, 'error')
+                        log('РџСЂРѕРґР°Р¶Р°: Р·Р°РїСЂРµС‰РµРЅРѕ РґР»СЏ ' .. it.name, 'error')
                     elseif DSP.auto.sell_confirmed then
                         done = done + 1
                         DSP.auto.progress.done = done
-                        log('Выставлено: ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price), 'ok')
+                        log('Р’С‹СЃС‚Р°РІР»РµРЅРѕ: ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price), 'ok')
                     else
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                        log('Продажа: нет подтверждения для ' .. it.name, 'error')
+                        log('РџСЂРѕРґР°Р¶Р°: РЅРµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РґР»СЏ ' .. it.name, 'error')
                     end
                 end
                 trade_wait(260)
             else
                 DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                log('Продажа: не открылся диалог для ' .. it.name .. ' (slot ' .. it.slot .. ')', 'error')
+                log('РџСЂРѕРґР°Р¶Р°: РЅРµ РѕС‚РєСЂС‹Р»СЃСЏ РґРёР°Р»РѕРі РґР»СЏ ' .. it.name .. ' (slot ' .. it.slot .. ')', 'error')
                 close_dialog()
             end
         end
         DSP.auto.sell_running = false
-        DSP.auto.status = 'продажа: ' .. done .. '/' .. #queue
-        log('Продажа завершена: ' .. done .. '/' .. #queue, 'ok')
+        DSP.auto.status = 'РїСЂРѕРґР°Р¶Р°: ' .. done .. '/' .. #queue
+        log('РџСЂРѕРґР°Р¶Р° Р·Р°РІРµСЂС€РµРЅР°: ' .. done .. '/' .. #queue, 'ok')
         -- Inventory is now stale; refresh explicitly before another sale.
         DSP.auto.inv = {}
-        DSP.auto.inv_status = 'нужно обновить'
+        DSP.auto.inv_status = 'РЅСѓР¶РЅРѕ РѕР±РЅРѕРІРёС‚СЊ'
     end)
     return true
 end
@@ -225,7 +225,7 @@ function DSP.auto.stop_sell()
     if not DSP.auto.sell_running then return false end
     runtime.cancel()
     DSP.auto.sell_running = false
-    DSP.auto.status = 'продажа остановлена'
+    DSP.auto.status = 'РїСЂРѕРґР°Р¶Р° РѕСЃС‚Р°РЅРѕРІР»РµРЅР°'
     close_dialog()
-    log('Продажа остановлена')
+    log('РџСЂРѕРґР°Р¶Р° РѕСЃС‚Р°РЅРѕРІР»РµРЅР°')
 end
