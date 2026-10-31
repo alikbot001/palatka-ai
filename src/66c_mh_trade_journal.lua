@@ -18,7 +18,7 @@ local function items(e,k)return k=='sell'and(e.items_give or{})or(e.items_get or
 local function raw_qty(raw)
     local s=tostring(raw or'')
     return tonumber(s:match('[xX]%s*(%d+)')or s:match('(%d+)%s*[xX]')
-        or s:match('(%d+)%s*шт')or s:match('(%d+)%s*øò'))
+        or s:match('(%d+)%s*шт'))
 end
 local function quantity(e,k)
     local q=tonumber(e.qty or e.count)

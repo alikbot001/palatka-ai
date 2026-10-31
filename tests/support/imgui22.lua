@@ -12,7 +12,7 @@ function H.new(sw,sh)
         clicks={},edits={},opened={},ids={},colors=0,color_stack={},palette_events={},windows={},vars={},repeats=0,frame=0,
         style={padding={x=10,y=8},spacing={x=6,y=4},frame={x=8,y=10}},font=1}
     local im={}
-    im.WindowFlags=enum({'NoTitleBar','NoResize','NoMove','NoSavedSettings','NoScrollbar','AlwaysAutoResize','NoCollapse'})
+    im.WindowFlags=enum({'NoTitleBar','NoResize','NoMove','NoSavedSettings','NoScrollbar','NoScrollWithMouse','AlwaysAutoResize','NoCollapse'})
     local color_names={'Text','TextDisabled','WindowBg','ChildBg','PopupBg','Border','BorderShadow',
         'FrameBg','FrameBgHovered','FrameBgActive','TitleBg','TitleBgActive','TitleBgCollapsed','MenuBarBg',
         'ScrollbarBg','ScrollbarGrab','ScrollbarGrabHovered','ScrollbarGrabActive','CheckMark','SliderGrab',

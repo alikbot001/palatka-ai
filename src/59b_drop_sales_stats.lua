@@ -42,7 +42,7 @@ end
 local function raw_qty(raw)
     local s=tostring(raw or'')
     local q=s:match('[xX]%s*(%d+)') or s:match('(%d+)%s*[xX]')
-        or s:match('(%d+)%s*шт') or s:match('(%d+)%s*øò')
+        or s:match('(%d+)%s*шт')
     q=positive(q)
     return q>0 and q or nil
 end
