@@ -30,6 +30,12 @@ jobs:
           persist-credentials: true
       - name: Install LuaJIT
         run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Compile new modules individually
+        run: |
+          for file in src/49a_promo_universal.lua src/68b_promo_universal_ui.lua src/69a_arbitrage_agent.lua src/69b_arbitrage_agent_ui.lua src/69c_arbitrage_status.lua; do
+            echo "Compiling $file"
+            luajit -b "$file" /dev/null
+          done
       - name: Check arbitrage agent accounting
         run: luajit tests/test_arbitrage_session.lua
       - name: Check missing shop and item handling
