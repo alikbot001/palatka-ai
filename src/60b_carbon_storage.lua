@@ -46,10 +46,21 @@ function V.storage_screen()
                     saved='Последний багажник сохранён',saved_from_disk='Есть старый снимок',
                     incomplete='Недостаточно слотов',unknown_partial='Получена лишь часть',
                     unverified_delta='Непроверенное изменение',save_error='Ошибка сохранения'}
-                V.text('БАГАЖНИК · автоматическое наблюдение')
-                V.muted('1. Закрой Palatka AI. 2. Открой багажник в игре.')
-                V.muted('3. Вернись сюда. Скрипт сохраняет полный снимок сам.')
-                V.text('Статус: '..(statuses[t.status] or tostring(t.status or 'ожидание')))
+                V.text('БАГАЖНИК · сканирование')
+                if b((t.autoscan_enabled and 'Автоскан: ВКЛ' or 'Автоскан: ВЫКЛ'),
+                     'toggle_trunk_auto',math.min(width,250),t.autoscan_enabled,t.autoscan_enabled) then
+                    local ok,err=S.set_trunk_autoscan(not t.autoscan_enabled)
+                    if not ok then V.storage_error=tostring(err) else V.storage_error=nil end
+                end
+                if b('ЗАПУСТИТЬ СКАН БАГАЖНИКА','start_trunk',math.min(width,330),false,true)then
+                    S.begin_trunk_scan()
+                    V.storage_error=nil
+                end
+                V.muted('1. Запусти скан, затем закрой окно Palatka AI.')
+                V.muted('2. Открой багажник в игре и вернись в это меню.')
+                V.muted('Автоскан может сохранять полные снимки без кнопки запуска.')
+                V.text('Статус: '..(statuses[t.status] or (t.status=='waiting' and 'Ожидаю открытия багажника') or
+                    t.status=='disabled' and 'Автоскан выключен' or tostring(t.status or 'ожидание')))
                 V.muted('Пакетов багажника: '..tostring(t.packet_events or 0))
                 V.muted('Слотов: '..tostring(t.received or 0)..' / 180')
                 if t.last_packet_at then
@@ -61,7 +72,32 @@ function V.storage_screen()
                     V.text('Занятых слотов: '..tostring(t.occupied)..' · предметов: '..tostring(t.total or 0))
                 end
                 if t.last_error then V.red(V.fit(tostring(t.last_error),width))end
+                if V.storage_error then V.red(V.fit(V.storage_error,width))end
                 if t.snapshot then
+                    local fresh=t.last_completed_request_at and t.last_completed_request_at >= (t.requested_at or 0)
+                    if fresh and t.status=='saved' then V.green('СКАН ЗАВЕРШЁН: 180 / 180 СЛОТОВ')end
+                    V.text('Последний багажник: '..tostring(t.snapshot.occupied_slots or 0)..' занятых слотов')
+                    V.text('Всего единиц предметов: '..tostring(t.snapshot.count_known or 0))
+                    local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
+                        tostring(t.packet_events or 0)..'/'..
+                        tostring(DSP.market and DSP.market.state and DSP.market.state.version or '')
+                    local info=V.memo('storage_trunk_summary',sig,function()return S.evaluate(t.snapshot)end)
+                    if info.cross_server then
+                        V.red('Снимок другого сервера: рыночная оценка не актуальна.')
+                    else
+                        V.green('По ценам скупки: '..DSP.money(info.sell_to_buyers))
+                        V.muted('По объявлениям: '..DSP.money(info.ask_value)..' (не доход и не прибыль)')
+                        if info.missing_prices>0 then
+                            V.muted('Нет цен для '..info.missing_prices..' строк.')
+                        end
+                    end
+                    if b('НАЗВАТЬ И СОХРАНИТЬ','name_trunk',math.min(width,310),false,true)then
+                        V.storage_name_target=t.snapshot
+                        V.storage_name_buf=imgui.new.char[128]()
+                        V.storage_name_error=nil
+                        V.open_popup('Сохранить багажник','storage_trunk_name')
+                    end
+                    V.muted('Название относится к этому снимку, не к ID автомобиля.')
                     if b('Посмотреть последний багажник','view_trunk',math.min(width,310),false,true)then
                         V.storage_tab='snapshots'
                         for i,snap in ipairs(S.snapshots or {})do
@@ -188,6 +224,32 @@ end
 local old_popups=V.popups
 function V.popups()
     if old_popups then old_popups()end
+    V.popup('Сохранить багажник','storage_trunk_name',function()
+        local target=V.storage_name_target
+        if not target then V.red('Нет полного снимка багажника.');return end
+        V.text('Введи своё название сохранённого снимка')
+        V.muted('Например: Моя машина с ларцами / Машина с ресурсами.')
+        V.muted('Следующее открытие другого багажника НЕ будет иметь это название автоматически.')
+        imgui.SetNextItemWidth(-1)
+        imgui.InputText('##storage_trunk_named_input',V.storage_name_buf,128)
+        if b('Сохранить под названием','save_named_trunk',math.min(240,imgui.GetContentRegionAvail().x),false,true)then
+            local name=DSP.to_cp(ffi.string(V.storage_name_buf))
+            local ok,snapshot=S.save_named_trunk(target,name)
+            if ok then
+                V.storage_name_target=nil
+                V.storage_name_error=nil
+                V.storage_tab='snapshots'
+                for i,saved in ipairs(S.snapshots or {})do
+                    if saved==snapshot then V.storage_selected=i;break end
+                end
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_name_error=tostring(snapshot)
+            end
+        end
+        if b('Отмена','cancel_named_trunk',120)then imgui.CloseCurrentPopup()end
+        if V.storage_name_error then V.red(V.fit(V.storage_name_error,imgui.GetContentRegionAvail().x))end
+    end,{w=460,h=330})
     V.popup('Своя цена','storage_price',function()
         local target,row=V.storage_price_target,V.storage_price_row
         if not target or not row then V.muted('Нет выбранного предмета');return end
