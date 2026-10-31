@@ -48,6 +48,11 @@ jobs:
           print('wrapped schedule syntax:',cp.returncode,cp.stderr)
           lines=Path('updates/palatka_update.lua').read_text().splitlines()
           for i in range(2088,2116): print(f'{i+1}: {lines[i]}')
+          run=subprocess.run(['python3','build.py'],capture_output=True,text=True)
+          print('standalone build:',run.returncode,run.stdout[-500:],run.stderr[-500:])
+          if Path('palatka_ai.lua').exists():
+              doc=Path('palatka_ai.lua').read_bytes().decode('cp1251').splitlines()
+              for j in range(39418,39433):print(f'bundle {j+1}: {doc[j][:140]}')
           PY
       - name: Check arbitrage agent accounting
         run: luajit tests/test_arbitrage_session.lua
