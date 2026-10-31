@@ -22,7 +22,7 @@ function V.storage_probe_panel(width)
         V.green('Сбор включён: '..math.max(0,state.until_ts-os.time())..' сек. Осталось')
         if button('Закончить сбор и проверить','stop',w) then P.stop() end
     end
-    V.muted('Кандидатов: '..#state.order..' · пакетов: '..state.observed..' · багажник исключён: '..state.ignored_trunk)
+    V.muted('Кандидатов: '..#state.order..' · пакетов: '..state.observed..' · багажник исключён: '..state.ignored_trunk..' · лавка исключена: '..(state.ignored_stall or 0))
     if #state.order==0 then
         V.muted('Нет подходящих данных. Нативный экран мог использовать другой формат.')
         return
