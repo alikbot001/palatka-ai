@@ -302,6 +302,24 @@ function L.command(param)
     local rows=L.search(param);if DSP.notify then DSP.notify('Lombard search "'..param..'": '..#rows) end
     for i=1,math.min(#rows,5) do local r=rows[i];if DSP.notify then DSP.notify((r.side or 'quote')..' '..r.name..' '..DSP.money(r.price)) end end
 end
+-- Store only an explicitly reviewed native observation, not an automatic trade.
+function L.save_observation(rows,source)
+    if type(rows)~='table' or #rows==0 or #rows>180 then return false,'no rows' end
+    local session=new_session(-1,'Lombard native observation')
+    session.page_count=1
+    for _,item in ipairs(rows) do
+        if type(item)=='table' and type(item.name)=='string'
+            and tonumber(item.price) and tonumber(item.price)>0 then
+            local key=tostring(item.key or item.name..':'..item.price)
+            if not session.items[key] then
+                session.items[key]=item
+                session.order[#session.order+1]=key
+            end
+        end
+    end
+    if #session.order==0 then return false,'no recognized items' end
+    return commit_session(session,source or 'packet_unverified')
+end
 function L.start_auto()
     if not sampIsDialogActive or not sampIsDialogActive() then if DSP.notify then DSP.notify('Lombard: open pawnshop dialog first') end;return false end
     local id=sampGetCurrentDialogId and sampGetCurrentDialogId() or -1
