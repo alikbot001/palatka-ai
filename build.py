@@ -70,7 +70,6 @@ MODULES = [
     "60a_carbon_home.lua",
     "60b_carbon_storage.lua",
     "60e_storage_probe_ui.lua",
-    "60f_lombard_ui.lua",
     "60c_carbon_draw.lua",
     "61_ui21_trade.lua",
     "62_ui21_shops.lua",
@@ -81,6 +80,7 @@ MODULES = [
     "66_ui22_journal.lua",
     "67_ui22_shop_scan.lua",
     "68_ui22_flip_promo.lua",
+    "60f_lombard_ui.lua",
     "99_main.lua",
 ]
 
