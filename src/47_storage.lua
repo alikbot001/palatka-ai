@@ -448,14 +448,24 @@ function S.on_inventory_packet(sub, raw)
         end
         return true
     end
-    -- Small updates cannot be assigned to the current vehicle reliably.
-    -- Leave the last complete 180-slot snapshot untouched.
-    if #items<=5 and T.snapshot then
-        T.status='unverified_delta'
-        T.last_error='Частичное изменение пропущено: ID машины неизвестен. Открой багажник заново.'
+    -- If the user started a new scan while the trunk was already open,
+    -- the game usually sends only tiny slot deltas when an item moves. Those
+    -- deltas are not a full second trunk and must never replace the old scan.
+    if #items<=5 then
+        if T.requested_at then
+            T.saw_delta_after_request=true
+            T.status='need_reopen'
+            T.last_error='Полный снимок не пришёл. Закрой багажник и открой его заново.'
+        elseif T.snapshot then
+            T.status='unverified_delta'
+            T.last_error='Частичное изменение пропущено: ID машины неизвестен.'
+        end
         return false
     end
-    T.status='unknown_partial'
+    T.status=T.requested_at and 'need_reopen' or 'unknown_partial'
+    if T.requested_at then
+        T.last_error='Получена только часть. Закрой багажник и открой заново.'
+    end
     return false
 end
 
@@ -495,7 +505,23 @@ function S.begin_trunk_scan(update_target_id)
     T.completed_update_target_id=nil
     T.update_target_id=update_target_id
     T.requested_at=os.time()
-    T.status='waiting'
+    T.scan_started_at=T.requested_at
+    T.scan_raw_start=T.raw_packet_events or 0
+    T.scan_packet_start=T.packet_events or 0
+    T.saw_delta_after_request=false
+    T.status='waiting_open'
+    return true
+end
+
+function S.cancel_trunk_scan()
+    T.pending=nil
+    T.received=0
+    T.requested_at=nil
+    T.update_target_id=nil
+    T.completed_update_target_id=nil
+    T.saw_delta_after_request=false
+    T.status=T.autoscan_enabled and 'idle' or 'disabled'
+    T.last_error=nil
     return true
 end
 
@@ -505,6 +531,60 @@ function S.find_snapshot(id)
         if tostring(saved.id)==tostring(id) then return saved,i end
     end
     return nil
+end
+
+function S.delete_snapshot(snapshot)
+    if type(snapshot)~='table' then return false,'Хранилище не выбрано' end
+    if snapshot.source=='packet220_trunk' then
+        return S.clear_live_snapshot()
+    end
+    local index=nil
+    for i,saved in ipairs(S.snapshots or {})do
+        if saved==snapshot then index=i;break end
+    end
+    if not index then return false,'Хранилище уже удалено' end
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={}
+    for i,saved in ipairs(prior)do if i~=index then fresh[#fresh+1]=saved end end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true
+end
+
+function S.clear_live_snapshot()
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={}
+    for _,saved in ipairs(prior or {})do
+        if saved.source~='packet220_trunk' then fresh[#fresh+1]=saved end
+    end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    local old_snapshot=T.snapshot
+    T.snapshot=nil;T.occupied=nil;T.total=nil;T.received=0
+    T.last_saved_at=nil;T.last_completed_request_at=nil
+    if not T.requested_at then T.status=T.autoscan_enabled and 'idle' or 'disabled' end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            T.snapshot=old_snapshot
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true
 end
 
 function S.library()
@@ -623,12 +703,12 @@ function S.trunk_state()
     if T.pending and now-T.pending.started>PENDING_TIMEOUT then
         T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
     end
-    if T.requested_at and now-T.requested_at>60 then
+    if T.requested_at and now-T.requested_at>45 then
         T.requested_at=nil
         T.update_target_id=nil
-        if T.status=='waiting' or T.status=='receiving' then
+        if T.status=='waiting_open' or T.status=='receiving' or T.status=='need_reopen' then
             T.status='no_packets'
-            T.last_error='No complete trunk snapshot within 60 seconds. Open the trunk normally.'
+            T.last_error='Полный снимок 180/180 не получен. Запусти скан и заново открой багажник.'
         end
     end
     return T
