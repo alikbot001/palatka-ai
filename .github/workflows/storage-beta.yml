@@ -5,6 +5,7 @@ on:
       - feat/storage-readonly-probe-v1
       - fix/storage-smart-library-v281
       - refactor/storage-simple-v282
+      - feat/storage-suggest-match-v283
   pull_request:
     paths:
       - 'src/**'
@@ -30,3 +31,7 @@ jobs:
           luajit tests/test_v250_storage_probe_ui.lua
           luajit tests/test_v250_storage_navigation.lua
           luajit tests/test_v250_trunk_named.lua
+          luajit tests/test_v283_storage_matching.lua
+          luajit tests/test_v283_storage_match_ui.lua
+          luajit tests/test_v283_settings_safety.lua
+          luajit tests/test_v283_trunk_capacity.lua

@@ -92,7 +92,7 @@ function S.accept(kind,title,text,ts,source)
     snap.id=tostring(ts or os.time())..'_'..tostring(#S.snapshots+1)
     snap.server=DSP.market and DSP.market.state and DSP.market.state.sid or nil
     table.insert(S.snapshots,1,snap)
-    while #S.snapshots>8 do table.remove(S.snapshots)end
+    while #S.snapshots>S.max_saved+1 do table.remove(S.snapshots)end
     S.last_signature=signature;S.last_snapshot=snap;S.last_ts=ts or os.time();S.last_error=nil
     if DSP.settings and DSP.save_settings then
         DSP.settings.storage_snapshots=S.snapshots
@@ -157,6 +157,11 @@ function S.set_snapshot_label(snapshot,label)
     if type(label)~='string' then return false,'invalid label' end
     label=DSP.trim(DSP.clean_text(label))
     if #label>66 or label=='' then return false,'name must be 1-66 bytes' end
+    -- Live scans are deliberately NOT in S.snapshots. Allow naming only the
+    -- current live result; stale objects from previous scans are rejected.
+    if snapshot.source=='packet220_trunk' and S.trunk and S.trunk.snapshot==snapshot then
+        return S.save_named_trunk(snapshot,label)
+    end
     local found=false
     for _,saved in ipairs(S.snapshots or{})do if saved==snapshot then found=true;break end end
     if not found then return false,'stale snapshot' end
@@ -261,6 +266,7 @@ end
 S.trunk = S.trunk or {status='idle', received=0, last_error=nil}
 local T = S.trunk
 local TRUNK_TYPE, TRUNK_SLOTS = 8, 180
+local VALID_CAPACITY = {[30]=true,[60]=true,[90]=true,[120]=true,[150]=true,[180]=true}
 local PENDING_TIMEOUT = 15       -- seconds to receive the 180-slot full snapshot
 -- Partial slot changes are intentionally not applied without vehicle identity.
 
@@ -301,7 +307,9 @@ local function parse_payload(raw)
         used[sl.slot] = true
         normalized[#normalized+1] = sl
     end
-    return normalized
+    local capacity=tonumber(obj.capacity or obj.slotCount or obj.totalSlots)
+    if not VALID_CAPACITY[capacity] then capacity=nil end
+    return normalized,capacity
 end
 
 local function active_snapshot()
@@ -311,9 +319,9 @@ local function active_snapshot()
     return nil
 end
 
-local function build_rows(slots)
+local function build_rows(slots, capacity)
     local rows, count, occupied = {}, 0, 0
-    for i=0,TRUNK_SLOTS-1 do
+    for i=0,(capacity or TRUNK_SLOTS)-1 do
         local v = slots[i+1]
         if v and v.item_id and v.item_id > 0 then
             local name = DSP.items and DSP.items.name and DSP.items.name(v.item_id)
@@ -330,40 +338,30 @@ local function build_rows(slots)
     return rows,count,occupied
 end
 
-local function save_snapshot(slots, source_reason)
+local function save_snapshot(slots, source_reason, capacity)
     local ts=os.time()
-    local rows, total, occupied = build_rows(slots)
-    local previous = active_snapshot()
+    capacity=capacity or TRUNK_SLOTS
+    local rows, total, occupied = build_rows(slots,capacity)
     local requested_at=T.requested_at
     local update_target_id=T.update_target_id
     local snap={
-        id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
+        id='trunk_live_'..tostring(ts)..'_'..tostring((T.scan_generation or 0)+1),
         kind='trunk',
         -- No persistent vehicle identity in observed packet. This is ALWAYS the last opened trunk.
         title='Последний открытый багажник',
         source='packet220_trunk', identity_verified=false,
         observed_at=ts, updated_at=ts, server=DSP.market and DSP.market.state and DSP.market.state.sid or nil,
-        slots_count=TRUNK_SLOTS, occupied_slots=occupied,count_known=total,
+        slots_count=capacity, occupied_slots=occupied,count_known=total,
         rows=rows, slots=slots, update_kind=source_reason,
     }
-    -- One latest trunk, not a fabricated history of unique cars. Preserve manual and legacy snapshots.
-    local new_list={snap}
-    for _, old in ipairs(S.snapshots or {}) do
-        if old.source ~= 'packet220_trunk' then
-            new_list[#new_list+1]=old
-            if #new_list >= 8 then break end
-        end
-    end
-    -- Keep the old verified snapshot until the new one is safely persisted.
-    local old_list=S.snapshots
-    local old_saved=DSP.settings and DSP.settings.storage_snapshots
-    local old_snap,old_updated=T.snapshot,T.last_update
-    local old_occ,old_total=T.occupied,T.total
-    local old_saved_at,old_completed_at=T.last_saved_at,T.last_completed_request_at
-    S.snapshots=new_list
-    if DSP.settings then DSP.settings.storage_snapshots=new_list end
-    T.snapshot=snap;T.last_update=ts;T.status='saved';T.received=TRUNK_SLOTS
-    T.occupied=occupied;T.total=total
+    -- A scan is IN MEMORY ONLY. A user-named copy is the sole path to the
+    -- persistent library. Never write an unnamed scan to storage_snapshots.
+    T.snapshot=snap
+    T.last_update=ts
+    T.status='saved'
+    T.received=capacity
+    T.occupied=occupied
+    T.total=total
     T.last_saved_at=ts
     if requested_at then
         T.last_completed_request_at=ts
@@ -371,26 +369,12 @@ local function save_snapshot(slots, source_reason)
         T.completed_update_target_id=update_target_id
         T.update_target_id=nil
     end
-    if DSP.save_settings then
-        local called,ok,err=pcall(DSP.save_settings)
-        if not called or not ok then
-            S.snapshots=old_list
-            if DSP.settings then DSP.settings.storage_snapshots=old_saved end
-            T.snapshot=old_snap;T.last_update=old_updated
-            T.occupied=old_occ;T.total=old_total
-            T.last_saved_at=old_saved_at
-            T.last_completed_request_at=old_completed_at
-            T.requested_at=requested_at
-            T.update_target_id=update_target_id
-            T.completed_update_target_id=nil
-            T.status='save_error'
-            T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
-            if DSP.flog then DSP.flog('TRUNK save failed: '..T.last_error) end
-            return false
-        end
-    end
     T.last_error=nil
-    if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots=180 occupied='..occupied..' count='..total) end
+    T.last_warning=nil
+    T.scan_generation=(T.scan_generation or 0)+1
+    T.review_generation=T.scan_generation
+    T.review_needed=true
+    if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots='..capacity..' occupied='..occupied..' count='..total) end
     return true
 end
 
@@ -406,7 +390,7 @@ function S.on_inventory_packet(sub, raw)
     T.raw_packet_events=(T.raw_packet_events or 0)+1
     T.last_raw_packet_at=os.time()
     if not (T.autoscan_enabled or T.requested_at) then return false end
-    local items=parse_payload(raw)
+    local items,declared_capacity=parse_payload(raw)
     if not items or #items == 0 then
         T.invalid_packet_events=(T.invalid_packet_events or 0)+1
         T.last_error='type 8 received; payload could not be decoded'
@@ -426,24 +410,35 @@ function S.on_inventory_packet(sub, raw)
     local explicit_restart=(T.pending and #items>5 and items[1] and items[1].slot==0 and T.pending.seen[0])
     local stale_restart=(T.pending and #items>5 and T.pending.last_at and (ts-T.pending.last_at)>3)
     if starts_capture or explicit_restart or stale_restart then
-        T.pending={slots={},seen={},count=0,started=ts,last_at=ts}
+        T.pending={slots={},seen={},count=0,started=ts,last_at=ts,
+            capacity=declared_capacity or T.selected_capacity or TRUNK_SLOTS}
         T.status='receiving';T.received=0;T.last_error=nil
     end
     if T.pending then
         local p=T.pending
         p.last_at=ts
+        if declared_capacity then p.capacity=declared_capacity end
+        -- Never finalize a user-selected 30-slot scan if the packet explicitly
+        -- includes slots outside its capacity: the observed layout is larger.
+        for _,v in ipairs(items) do
+            if v.slot>=p.capacity then
+                p.capacity=TRUNK_SLOTS
+            end
+        end
         for _,v in ipairs(items) do
             if not p.seen[v.slot] then p.seen[v.slot]=true;p.count=p.count+1 end
             p.slots[v.slot+1]=v
         end
         T.received=p.count
-        if p.count==TRUNK_SLOTS then
-            -- Full snapshot is committed only after ALL slots 0..179 were seen.
+        if p.count>=p.capacity then
+            -- Full means all expected slots in THIS layout were seen. If the
+            -- server does not declare capacity, the player explicitly chooses
+            -- their car's capacity (30/180), not automatic guessing.
             local complete=true
-            for i=1,TRUNK_SLOTS do if not p.slots[i] then complete=false;break end end
+            for i=1,p.capacity do if not p.slots[i] then complete=false;break end end
             if complete then
                 T.pending=nil
-                save_snapshot(p.slots,'full')
+                save_snapshot(p.slots,'full',p.capacity)
             end
         end
         return true
@@ -457,8 +452,9 @@ function S.on_inventory_packet(sub, raw)
             T.status='need_reopen'
             T.last_error='Полный снимок не пришёл. Закрой багажник и открой его заново.'
         elseif T.snapshot then
-            T.status='unverified_delta'
-            T.last_error='Частичное изменение пропущено: ID машины неизвестен.'
+            -- Do not hide a previously valid full scan just because a single
+            -- slot changed while the player was inside the trunk.
+            T.last_warning='Изменение отдельных слотов не применено. Для новых данных открой багажник заново.'
         end
         return false
     end
@@ -470,9 +466,30 @@ function S.on_inventory_packet(sub, raw)
 end
 
 -- Load the most recently persisted trunk as read-only history after restart.
-T.snapshot=active_snapshot()
+-- Old versions may have stored a nameless live scan. Do not resurrect it
+-- in the new unsaved session; named library entries remain untouched.
+T.snapshot=nil
 T.autoscan_enabled=not (DSP.settings and DSP.settings.storage_trunk_autoscan==false)
-if T.snapshot then T.status='saved_from_disk';T.occupied=T.snapshot.occupied_slots;T.total=T.snapshot.count_known end
+T.selected_capacity=VALID_CAPACITY[tonumber(DSP.settings and DSP.settings.storage_trunk_capacity)]
+    and tonumber(DSP.settings.storage_trunk_capacity) or 180
+
+function S.set_trunk_capacity(cap)
+    cap=tonumber(cap)
+    if not VALID_CAPACITY[cap] then return false,'Недопустимая вместимость' end
+    if T.requested_at then return false,'Сначала останови текущий скан' end
+    local previous=T.selected_capacity
+    T.selected_capacity=cap
+    if DSP.settings then DSP.settings.storage_trunk_capacity=cap end
+    if DSP.save_settings then
+        local ok,saved,err=pcall(DSP.save_settings)
+        if not ok or not saved then
+            T.selected_capacity=previous
+            if DSP.settings then DSP.settings.storage_trunk_capacity=previous end
+            return false,tostring(err or saved or 'Ошибка сохранения')
+        end
+    end
+    return true
+end
 
 -- The normal UI uses these methods; no additional game commands are needed.
 function S.set_trunk_autoscan(enabled)
@@ -503,6 +520,7 @@ function S.begin_trunk_scan(update_target_id)
     T.last_error=nil
     T.last_completed_request_at=nil
     T.completed_update_target_id=nil
+    T.review_needed=false
     T.update_target_id=update_target_id
     T.requested_at=os.time()
     T.scan_started_at=T.requested_at
@@ -599,6 +617,59 @@ function S.library()
     return rows
 end
 
+-- Candidate detection is only a suggestion, never a vehicle identifier.
+-- Compare item IDs and enchantments across slots, not slot positions or amounts.
+-- Only fully saved, named type-8 trunk snapshots are eligible.
+local function trunk_types(snapshot)
+    local keys, count={},0
+    for _,row in ipairs(snapshot and snapshot.rows or {}) do
+        local id=tonumber(row.id)
+        if id and id>0 and id%1==0 then
+            local enchant=tonumber(row.ench) or 0
+            local key=tostring(id)..':'..tostring(enchant)
+            if not keys[key] then keys[key]=true;count=count+1 end
+        end
+    end
+    return keys,count
+end
+
+function S.match_saved_trunks(snapshot)
+    if type(snapshot)~='table' or snapshot.kind~='trunk'
+        or snapshot.source~='packet220_trunk' or not VALID_CAPACITY[snapshot.slots_count]
+        or type(snapshot.rows)~='table' then return {} end
+    local current,total=trunk_types(snapshot)
+    if total==0 then return {} end
+    local matches={}
+    for _,saved in ipairs(S.snapshots or {}) do
+        if saved.source=='packet220_trunk_named' and saved.kind=='trunk'
+            and type(saved.rows)=='table'
+            and (snapshot.server==nil or saved.server==nil
+                 or tostring(snapshot.server)==tostring(saved.server)) then
+            local previous,count=trunk_types(saved)
+            if count>0 then
+                local common=0
+                for key in pairs(current)do if previous[key] then common=common+1 end end
+                if common>0 then
+                    local union=total+count-common
+                    matches[#matches+1]={
+                        id=saved.id,title=saved.title,shared=common,
+                        current_types=total,saved_types=count,
+                        similarity=math.floor(100*common/math.max(1,union)+.5),
+                        observed_at=tonumber(saved.observed_at) or 0
+                    }
+                end
+            end
+        end
+    end
+    table.sort(matches,function(a,b)
+        if a.similarity~=b.similarity then return a.similarity>b.similarity end
+        if a.shared~=b.shared then return a.shared>b.shared end
+        if a.observed_at~=b.observed_at then return a.observed_at>b.observed_at end
+        return tostring(a.id)<tostring(b.id)
+    end)
+    return matches
+end
+
 -- Keep manually named copies independent from the latest automatically opened
 -- vehicle. The packet has no trusted vehicle ID: do NOT auto-assign old labels
 -- when a different trunk is opened.
@@ -606,7 +677,7 @@ function S.save_named_trunk(snapshot,label)
     if type(snapshot)~='table' or snapshot.source~='packet220_trunk' then
         return false,'select a confirmed full trunk snapshot'
     end
-    if not snapshot.rows or snapshot.slots_count~=TRUNK_SLOTS then
+    if not snapshot.rows or not VALID_CAPACITY[snapshot.slots_count] then
         return false,'incomplete trunk snapshot'
     end
     local name=DSP.trim(DSP.clean_text(tostring(label or '')))
@@ -624,7 +695,7 @@ function S.save_named_trunk(snapshot,label)
         title=name,kind='trunk',source='packet220_trunk_named',
         identity_verified=false,complete_verified=true,
         observed_at=snapshot.observed_at,server=snapshot.server,
-        slots_count=TRUNK_SLOTS,occupied_slots=snapshot.occupied_slots,
+        slots_count=snapshot.slots_count,occupied_slots=snapshot.occupied_slots,
         count_known=snapshot.count_known,rows=rows}
     for _,existing in ipairs(S.snapshots or {}) do
         if existing.source~='packet220_trunk' and DSP.lower(tostring(existing.title or ''))==DSP.lower(name) then
@@ -633,15 +704,13 @@ function S.save_named_trunk(snapshot,label)
     end
     local prior=S.snapshots
     local prior_saved=DSP.settings and DSP.settings.storage_snapshots
-    local fresh={}
-    if prior[1] and prior[1].source=='packet220_trunk' then
-        fresh[#fresh+1]=prior[1]
-    end
-    fresh[#fresh+1]=named
+    local fresh={named}
     for _,existing in ipairs(prior) do
-        if existing~=named and existing~=fresh[1] then
+        -- Old releases wrote a nameless live scan into settings. Keep ONLY
+        -- deliberately saved user records in the persistent library.
+        if existing.source~='packet220_trunk' then
             fresh[#fresh+1]=existing
-            if #fresh>=S.max_saved+1 then break end
+            if #fresh>=S.max_saved then break end
         end
     end
     S.snapshots=fresh
@@ -655,6 +724,7 @@ function S.save_named_trunk(snapshot,label)
         end
     end
     T.completed_update_target_id=nil
+    T.review_needed=false
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,named
 end
@@ -662,7 +732,7 @@ end
 function S.apply_latest_to_saved(target_id)
     local live=T.snapshot
     local target=S.find_snapshot(target_id)
-    if not live or live.source~='packet220_trunk' or live.slots_count~=TRUNK_SLOTS then
+    if not live or live.source~='packet220_trunk' or not VALID_CAPACITY[live.slots_count] then
         return false,'Нет полного нового скана'
     end
     if not target or target.source~='packet220_trunk_named' then
@@ -684,7 +754,7 @@ function S.apply_latest_to_saved(target_id)
     target.server=live.server
     target.occupied_slots=live.occupied_slots
     target.count_known=live.count_known
-    target.slots_count=TRUNK_SLOTS
+    target.slots_count=live.slots_count
     if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
     if DSP.save_settings then
         local called,ok,err=pcall(DSP.save_settings)
@@ -695,6 +765,7 @@ function S.apply_latest_to_saved(target_id)
         end
     end
     T.completed_update_target_id=nil
+    T.review_needed=false
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,target
 end

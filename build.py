@@ -16,6 +16,7 @@ OUT = ROOT / "palatka_ai.lua"
 
 MODULES = [
     "00_core.lua",
+    "00a_settings_safety.lua",
     "05_items.lua",
     "08_icons.lua",
     "10_market.lua",

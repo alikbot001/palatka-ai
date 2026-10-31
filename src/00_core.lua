@@ -253,9 +253,10 @@ function DSP.load_settings()
     -- explicit REAL mode + automatic stall capture; after this migration the
     -- user's later toggles are preserved normally.
     if d.v230_migrated ~= true then
-        DSP.settings.auto_shop_scan = true
-        DSP.settings.dry_run = false
-        DSP.settings.trade_mode = 'real'
+        -- Preserve the user's switches even when upgrading from old builds.
+        -- A migration may ADD fields, never silently switch live trading on.
+        if d.auto_shop_scan == nil then DSP.settings.auto_shop_scan=true end
+        if d.dry_run == nil and d.trade_mode=='preview' then DSP.settings.dry_run=true end
         DSP.settings.v230_migrated = true
         DSP.settings.safe_autoscan_migrated_22171 = true
         DSP.save_settings()
@@ -551,14 +552,14 @@ end
 
 DSP.load_settings()
 DSP.load_ui_state()
--- Migrate the stock 1.3.x amber look on first v1.4 launch. Respect custom themes.
+-- Never overwrite a personal theme during startup/migration.
 if not DSP.settings.ui_v14_migrated then
-    if DSP.settings.theme=='ocean_blue' then DSP.settings.theme='carbon_trade' end
     DSP.settings.ui_v14_migrated=true
     DSP.save_settings()
 end
 DSP.theme.current = DSP.settings.theme or 'carbon_trade'
-DSP.save_ui_state()
 DSP.theme.opacity = DSP.clamp(DSP.settings.opacity or 0.97, 0.65, 1.00)
+-- save_ui_state intentionally NOT called on startup: the saved UI position,
+-- theme and opacity belong to the user, not to a fresh script instance.
 DSP.flog('--- load v' .. DSP.version .. ' theme=' .. DSP.theme.current .. ' opacity=' .. tostring(DSP.theme.opacity) .. ' ---')
 DSP.enc_selftest()

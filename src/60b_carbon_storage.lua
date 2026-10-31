@@ -56,6 +56,22 @@ function V.storage_screen()
             end
 
             local t=(S.trunk_state and S.trunk_state()) or S.trunk or {}
+            -- A review appears once per NEW completed 180-slot scan, and only
+            -- when existing saved trunks share at least one item ID/enchant.
+            if t.review_needed and t.review_generation
+                and V.storage_match_generation~=t.review_generation
+                and t.snapshot and t.status=='saved' and S.match_saved_trunks then
+                V.storage_match_generation=t.review_generation
+                local matches=S.match_saved_trunks(t.snapshot)
+                if #matches>0 then
+                    V.storage_match_review={
+                        generation=t.review_generation, matches=matches, selected=1
+                    }
+                    V.open_popup('Похожий багажник','storage_match_confirm')
+                else
+                    t.review_needed=false
+                end
+            end
             local active=t.requested_at~=nil or t.status=='waiting_open' or
                 t.status=='receiving' or t.status=='need_reopen'
 
@@ -102,6 +118,7 @@ function V.storage_screen()
             if t.snapshot and t.status=='saved' then
                 imgui.Separator()
                 V.green('ГОТОВО · 180 / 180')
+                if t.last_warning then V.muted(V.fit(t.last_warning,w)) end
                 V.text('Занято слотов: '..tostring(t.snapshot.occupied_slots or 0))
                 V.text('Всего предметов: '..tostring(t.snapshot.count_known or 0))
                 local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
@@ -111,6 +128,12 @@ function V.storage_screen()
                     V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
                 end
 
+                if t.review_needed and V.storage_match_review
+                    and V.storage_match_review.generation==t.review_generation then
+                    if b('ПОХОЖИЕ БАГАЖНИКИ','show_matches',math.min(w,290),false,true)then
+                        V.open_popup('Похожий багажник','storage_match_confirm')
+                    end
+                end
                 local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
                 if update_target then
                     V.text('Обновить: '..tostring(update_target.title))
@@ -171,27 +194,57 @@ function V.storage_screen()
             V.reset_list('storage_scan_panel')
             return
         end
-        if #library==0 then
-            V.muted('Пока ничего не сохранено.')
-            V.muted('Просканируй багажник и выбери «Сохранить как новое».')
+        V.muted('ПОИСК: по названию хранилища или предмета')
+        local query=V.search and V.search('storage_all','Название или предмет...',math.min(380,width)) or ''
+        query=DSP.lower(DSP.trim(query or ''))
+        local filtered={}
+        local grand,missing=0,0
+        for _,entry in ipairs(library)do
+            local snap=entry.snapshot
+            local found=query=='' or DSP.lower(tostring(snap.title or '')):find(query,1,true)~=nil
+            if not found then
+                for _,it in ipairs(snap.rows or {})do
+                    if DSP.lower(tostring(it.name or '')):find(query,1,true)then found=true;break end
+                end
+            end
+            if found then filtered[#filtered+1]=entry end
+            local value=S.evaluate(snap)
+            if value.cross_server then missing=missing+1
+            else grand=grand+(value.sell_to_buyers or 0) end
+        end
+        V.text('Хранилищ: '..#library..' | найдено: '..#filtered)
+        V.green('Сумма оценок: '..DSP.money(grand))
+        if missing>0 then V.muted('Без оценки: '..missing..' (другой сервер)') end
+        V.muted('Это сумма оценок снимков, не реальная прибыль.')
+        if #filtered==0 then
+            V.muted(query=='' and 'Пока нет сохранённых хранилищ.' or 'Ничего не найдено.')
             return
         end
-        V.list_rows('storage_library',library,88,function(entry,i)
+        V.list_rows('storage_library',filtered,95,function(entry,i)
             local snap=entry.snapshot
             local kind=snap.kind=='trunk'and'Багажник' or snap.kind=='cabinet'and'Шкаф'
                 or snap.kind=='warehouse'and'Склад' or'Хранилище'
-            V.row('storage_library_'..i,88,function(rw,x,y)
+            V.row('storage_library_'..i,95,function(rw,x,y)
                 V.at(x,y)
-                V.apply_font((V.font_pixels or 18)*1.16)
-                if V.text_button(V.fit(tostring(snap.title or kind),rw),'storage_library_open_'..i,rw,false,36)then
+                V.apply_font((V.font_pixels or 18)*1.12)
+                V.text(V.fit(tostring(snap.title or kind),rw))
+                V.apply_font()
+                V.at(x,y+43)
+                local value=S.evaluate(snap)
+                V.muted(V.fit(kind..' · '..tostring(snap.count_known or 0)..' шт. · '..
+                    DSP.money(value.sell_to_buyers),rw))
+                V.at(x,y)
+                local hit
+                if imgui.InvisibleButton then
+                    hit=imgui.InvisibleButton('##open_storage_card',imgui.ImVec2(rw,84))
+                else
+                    hit=V.text_button(tostring(snap.title or kind),'storage_open_fallback',rw,false,84)
+                end
+                if hit and not V.dragged then
                     V.storage_selected=entry.index
                     V.storage_library_page='detail'
                     V.reset_list('storage_items')
                 end
-                V.apply_font()
-                V.at(x,y+43)
-                local info=S.evaluate(snap)
-                V.muted(V.fit(kind..' · '..tostring(snap.count_known or 0)..' шт. · '..DSP.money(info.sell_to_buyers),rw))
             end)
         end,{footer=function()V.muted('Сохранено: '..#library..' / '..tostring(S.max_saved or 20))end})
         return
@@ -227,7 +280,7 @@ function V.storage_screen()
         V.storage_label_buf=imgui.new.char[128]()
         ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
         V.storage_label_error=nil
-        V.open_popup('Название снимка','storage_rename')
+        V.open_popup('Название снимка','storage_rename_v283')
     end
     if b('УДАЛИТЬ','delete_one',math.min(150,width))then
         V.storage_delete_target=current
@@ -276,6 +329,72 @@ function V.popups()
         if b('Отмена','beta_rollback_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_rollback_error then V.red(V.fit(V.storage_rollback_error,imgui.GetContentRegionAvail().x))end
     end,{w=480,h=260})
+    V.popup('Похожий багажник','storage_match_confirm',function()
+        local review=V.storage_match_review
+        local t=S.trunk_state()
+        if not review or not t.snapshot or not t.review_needed
+            or review.generation~=t.review_generation then
+            V.muted('Этот скан уже обработан или заменён новым.')
+            if b('Закрыть','match_stale',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        local matches=review.matches or {}
+        if #matches==0 then
+            V.muted('Сохранённых похожих багажников нет.')
+            if b('Закрыть','match_empty',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        review.selected=math.max(1,math.min(#matches,review.selected or 1))
+        local match=matches[review.selected]
+        local saved=S.find_snapshot(match.id)
+        if not saved then
+            V.red('Эта сохранённая запись удалена.')
+            if b('Закрыть','match_deleted',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        V.apply_font((V.font_pixels or 18)*1.22)
+        V.text(V.fit(tostring(saved.title or 'Багажник'),imgui.GetContentRegionAvail().x))
+        V.apply_font()
+        V.text('Это тот же багажник?')
+        V.green('Совпадает типов предметов: '..match.shared)
+        V.muted('Похожесть состава: '..match.similarity..'% · это НЕ вероятность и не ID машины.')
+        V.muted('Подтвердить, какая машина открыта, можешь только ты.')
+        if #matches>1 then
+            V.muted('Вариант '..review.selected..' из '..#matches)
+            if b('ДРУГОЙ ПОХОЖИЙ','match_next',math.min(230,imgui.GetContentRegionAvail().x))then
+                review.selected=review.selected%#matches+1
+            end
+        end
+        imgui.Separator()
+        if b('ДА, ЭТО '..tostring(saved.title),'match_yes',math.min(310,imgui.GetContentRegionAvail().x),false,true)then
+            local ok,updated=S.apply_latest_to_saved(saved.id)
+            if ok then
+                local _,idx=S.find_snapshot(updated.id)
+                V.storage_selected=idx or 1
+                V.storage_library_page='detail'
+                V.storage_tab='library'
+                V.storage_match_error=nil
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_match_error=tostring(updated)
+            end
+        end
+        if b('НЕТ, ЭТО НОВЫЙ','match_no_new',math.min(280,imgui.GetContentRegionAvail().x))then
+            local snap=t.snapshot
+            V.storage_name_target=snap
+            V.storage_name_buf=imgui.new.char[128]()
+            V.storage_name_error=nil
+            t.review_needed=false
+            imgui.CloseCurrentPopup()
+            V.open_popup('Сохранить багажник','storage_trunk_name')
+        end
+        if b('НЕ УВЕРЕН · ПОЗЖЕ','match_later',math.min(240,imgui.GetContentRegionAvail().x))then
+            imgui.CloseCurrentPopup()
+        end
+        if V.storage_match_error then
+            V.red(V.fit(V.storage_match_error,imgui.GetContentRegionAvail().x))
+        end
+    end,{w=495,h=410})
     V.popup('Сохранить багажник','storage_trunk_name',function()
         local target=V.storage_name_target
         if not target then V.red('Нет полного снимка багажника.');return end
@@ -317,7 +436,7 @@ function V.popups()
         V.inline();if b('Отмена','price_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_price_error then V.red(V.storage_price_error)end
     end,{w=460,h=260})
-    V.popup('Название снимка','storage_rename',function()
+    V.popup('Название снимка','storage_rename_v283',function()
         local target=V.storage_label_target
         if not target then return end
         V.muted('Это имя только для снимка. ID машины автоматически не определяется.')
@@ -339,7 +458,7 @@ function V.popups()
         end
         V.inline();if b('Отмена','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
-    end,{w=460,h=240})
+    end,{w=640,h=300})
     V.popup('Удалить хранилище','storage_delete_one',function()
         local target=V.storage_delete_target
         if not target then V.muted('Хранилище уже не выбрано.');return end
