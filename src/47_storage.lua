@@ -330,7 +330,7 @@ local function save_snapshot(slots, source_reason)
         id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
         kind='trunk',
         -- No persistent vehicle identity in observed packet. This is ALWAYS the last opened trunk.
-        title=DSP.to_cp and DSP.to_cp('РŸР¾СР»РµР´Р½РёР№ Р¾С‚РºС€С‹С‚С‹Р№ Р±Р°Р³Р°Р¶Р½РёРº') or 'Last opened trunk',
+        title=DSP.to_cp and DSP.to_cp('Последний открытый багажник') or 'Last opened trunk',
         source='packet220_trunk', identity_verified=false,
         observed_at=ts, updated_at=ts, server=DSP.market and DSP.market.state and DSP.market.state.sid or nil,
         slots_count=TRUNK_SLOTS, occupied_slots=occupied,count_known=total,
