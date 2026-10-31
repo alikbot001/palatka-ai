@@ -70,23 +70,25 @@ local function summary(s)
     muted('API: '..(M.freshness and M.freshness()or'нет данных')..' | обзор каждые 60 с')
 end
 local function queue(s)
-    local visible={}
-    for i,e in ipairs(s.routes)do
-        if not e.skipped and e.sold<e.qty then visible[#visible+1]=i end
-    end
-    if #visible==0 then
-        good('Активных маршрутов нет. Новые появятся при обновлении.')
-        return
-    end
-    local take=math.min(6,#visible)
-    for j=1,take do
-        local i=visible[j]
+    local total=#s.routes
+    if total==0 then muted('Маршрутов пока нет');return end
+    A.queue_page=math.max(1,math.min(tonumber(A.queue_page)or 1,math.ceil(total/5)))
+    local pages=math.ceil(total/5)
+    muted('Все маршруты, включая завершённые: '..total)
+    local first=(A.queue_page-1)*5+1
+    for i=first,math.min(total,first+4)do
         local e=s.routes[i]
         local label=(i==s.focus and '* 'or'')..tostring(i)..'. '..e.name..
-            '  '..(e.sold>0 and('сдано '..e.sold..'/'..e.qty)or flag(e))
+            ' | '..flag(e)..' '..e.sold..'/'..e.qty
         if btn(label,'route_'..i,-1,30)then A.focus(i);A.qty_key=nil end
     end
-    if #visible>take then muted('Ещё маршрутов: '..(#visible-take)..' | переключай стрелками')end
+    if pages>1 then
+        if btn('<','queue_prev',52,28)then A.queue_page=math.max(1,A.queue_page-1)end
+        imgui.SameLine(0,5)
+        muted('Страница '..A.queue_page..'/'..pages)
+        imgui.SameLine(0,5)
+        if btn('>','queue_next',52,28)then A.queue_page=math.min(pages,A.queue_page+1)end
+    end
 end
 -- Normal ImGui input is used intentionally: unavailable native exotic widgets
 -- must not make the floating assistant impossible to close.
@@ -165,6 +167,7 @@ function A.draw()
             end
         end
         imgui.EndChild()
+        if A.save_error then bad('Запись не сохранена: '..tostring(A.save_error))end
         if A.ui_message then muted(V.fit(A.ui_message,math.max(80,g.w-32)))end
         if btn('<','previous',47,30)then A.next(-1);A.qty_key=nil end
         imgui.SameLine(0,5)
