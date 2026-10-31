@@ -1,6 +1,6 @@
 -- Model the menu and popup confirmation with no Android UI dependencies.
 package.loaded['ffi']={string=function(x)return tostring(x)end,copy=function()end}
-local pressed,opened='',nil
+local pressed,opened,pending='',nil,nil
 local old={id='saved_1',title='LRC',source='packet220_trunk_named',kind='trunk'}
 local newest={source='packet220_trunk',kind='trunk',slots_count=180,
  rows={{id=111,name='Item111',qty=2}},count_known=2,occupied_slots=1,observed_at=os.time()}
@@ -39,7 +39,7 @@ function V.apply_font()end
 function V.memo(key,sig,cb)return cb()end
 function V.list(key,cb)cb(360)end
 function V.list_rows()end
-function V.open_popup(title,id)opened=id end
+function V.open_popup(title,id)pending=id end
 function V.popup(title,id,cb) if opened==id then cb() end end
 imgui={Separator=function()end,
  GetContentRegionAvail=function()return{x=360}end,
@@ -48,9 +48,10 @@ imgui={Separator=function()end,
 dofile('src/60b_carbon_storage.lua')
 
 V.storage_screen()
-assert(opened=='storage_match_confirm','auto prompt must open after successful new scan')
+assert(pending=='storage_match_confirm','auto prompt must open after successful new scan')
 assert(V.storage_match_review.matches[1].id=='saved_1')
 pressed='storage_match_yes'
+opened=pending;pending=nil
 V.popups()
 assert(trunk.review_needed==false,'confirmation must finalize review')
 assert(V.storage_tab=='library' and V.storage_library_page=='detail')
@@ -60,9 +61,10 @@ assert(V.storage_selected==2 and opened==nil)
 trunk.review_needed=true;trunk.review_generation=23
 V.storage_tab='scan';V.storage_library_page='list';pressed=''
 V.storage_screen()
-assert(opened=='storage_match_confirm')
+assert(pending=='storage_match_confirm')
+opened=pending;pending=nil
 pressed='storage_match_no_new';V.popups()
 assert(V.storage_name_target==newest)
-assert(opened=='storage_trunk_name','No means save as new, not overwriting')
+assert(pending=='storage_trunk_name' and opened==nil,'No means schedule naming dialog, not overwriting')
 assert(trunk.review_needed==false)
 print('PASS storage matching modal: yes applies, no opens naming dialog')
