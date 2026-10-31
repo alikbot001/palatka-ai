@@ -4,7 +4,7 @@ local S = DSP.storage
 local P = {armed=false, status='idle', entries={}, order={}, observed=0, ignored_trunk=0, ignored_stall=0}
 DSP.storage_probe = P
 local MAX_SECONDS, MAX_SLOTS, MAX_SAMPLES, MAX_BYTES = 60, 180, 8, 100000
-local allowed = {inventory=true, cabinet=true, warehouse=true}
+local allowed = {cabinet=true, warehouse=true}
 
 local function integer(value, maximum, minimum)
     local n=tonumber(value)
@@ -115,7 +115,7 @@ function P.save(index)
     if not view then return false,err end
     if #view.rows==0 then return false,'no occupied items observed' end
     if not allowed[P.kind] then return false,'unknown kind' end
-    local titles={inventory='Личный инвентарь',cabinet='Шкаф',warehouse='Склад'}
+    local titles={cabinet='Шкаф',warehouse='Склад'}
     local now=os.time()
     local snap={id='probe_'..tostring(now)..'_'..tostring(index),
         kind=P.kind,title=titles[P.kind]..' (наблюдение; не проверено)',
@@ -131,7 +131,7 @@ function P.save(index)
     local replacement={snap}
     for _,old in ipairs(previous or {})do
         replacement[#replacement+1]=old
-        if #replacement>=8 then break end
+        if #replacement>=(S.max_saved or 20)+1 then break end
     end
     S.snapshots=replacement
     if DSP.settings then DSP.settings.storage_snapshots=replacement end

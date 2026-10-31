@@ -1,16 +1,22 @@
--- Smoke test for native storage navigation and the smart library home.
+-- Smoke test for the simplified two-page storage UI.
 package.loaded['ffi']={string=function(x)return tostring(x)end,copy=function()end}
-local pressed,last_kind,last_title,last_probe = '','','',''
+local pressed,last_probe='', ''
+local labels={}
 DSP={ui21={},mobile={},to_cp=function(x)return x end,utf8=function(x)return tostring(x or '') end,
  money=tostring,storage={snapshots={},
-    textdraw_state=function()return 'idle' end,
-    trunk_state=function()return {status='idle',received=0}end,
-    accept=function(kind,title,text)last_kind=kind;last_title=title;return true end,
+    trunk_state=function()return {status='idle',received=0,autoscan_enabled=true}end,
     library=function()return{}end,
-    begin_trunk_scan=function()return true end}}
+    begin_trunk_scan=function()return true end,
+    cancel_trunk_scan=function()return true end,
+    set_trunk_autoscan=function()return true end,
+    clear_live_snapshot=function()return true end,
+    evaluate=function()return{sell_to_buyers=0,ask_value=0,total_qty=0,rows={}}end}}
 local V=DSP.ui21
 V.font_pixels=18
-function V.button(label,id,w,on,primary)return id==pressed end
+function V.button(label,id,w,on,primary)
+ labels[#labels+1]=label
+ return id==pressed
+end
 function V.text_button(label,id,w,on,h)return id==pressed end
 function V.heading(title,fn,w)if fn then fn()end end
 function V.text()end
@@ -30,24 +36,19 @@ function V.list_rows(key,rows,height,draw,options)
 end
 function V.storage_probe_panel(w,kind)last_probe=kind end
 imgui={new={char=setmetatable({},{__index=function(_,n)return function()return '' end end})},
-    Separator=function()end,
-    GetContentRegionAvail=function()return{x=380,y=360}end,
-    ImVec2=function(x,y)return {x=x,y=y}end,
-    InputTextMultiline=function()end}
+ Separator=function()end,GetContentRegionAvail=function()return{x=380,y=360}end}
 dofile('src/60b_carbon_storage.lua')
 
 V.storage_screen()
-assert(V.storage_tab=='scan','must open scanner first')
+assert(V.storage_tab=='scan')
 pressed='storage_choose_cabinet';V.storage_screen()
 assert(V.storage_scan_mode=='cabinet' and last_probe=='cabinet')
-pressed='storage_manual_open';V.storage_screen()
-assert(V.storage_tab=='manual' and V.storage_manual_kind=='cabinet')
-pressed='storage_manual_inventory';V.storage_screen()
-assert(V.storage_manual_kind=='inventory')
-pressed='storage_manual_accept';V.storage_screen()
-assert(last_kind=='inventory' and last_title:find('Инвентарь',1,true))
-assert(V.storage_tab=='snapshots')
+pressed='storage_tab_library';V.storage_screen()
+assert(V.storage_tab=='library' and V.storage_library_page=='list')
 pressed='storage_library_new_scan';V.storage_screen()
 assert(V.storage_tab=='scan' and V.storage_scan_mode=='trunk')
-
-print('PASS storage navigation: scan, four selectors, manual entry, smart library -> new scan')
+for _,label in ipairs(labels)do
+ assert(label~='Инвентарь','inventory scan must not be visible')
+ assert(label~='Ввод','manual tab must not be visible')
+end
+print('PASS storage navigation: two pages, trunk/cabinet/warehouse only, no inventory/manual clutter')

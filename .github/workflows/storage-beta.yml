@@ -4,6 +4,7 @@ on:
     branches:
       - feat/storage-readonly-probe-v1
       - fix/storage-smart-library-v281
+      - refactor/storage-simple-v282
   pull_request:
     paths:
       - 'src/**'

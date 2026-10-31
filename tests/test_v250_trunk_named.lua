@@ -88,8 +88,35 @@ assert(renamed and new_saved.source=='packet220_trunk_named')
 assert(disposable.title==old_live_title,'live title must stay generic')
 assert(S.find_snapshot(new_saved.id)==new_saved)
 
+-- Starting a scan while the trunk is already open must not mistake a small
+-- item move for a full second trunk. It should ask for close/reopen instead.
+assert(S.begin_trunk_scan())
+payload={type=8,items={{slot=5,item=551,amount=31}}}
+assert(not S.on_inventory_packet(0,'delta'))
+assert(S.trunk_state().status=='need_reopen')
+assert(S.trunk_state().requested_at~=nil)
+-- Reopening the trunk can then finish the same scan request.
+use_full(make_slots(551,31,5))
+assert(S.trunk_state().status=='saved' and S.trunk_state().snapshot.count_known==31)
+
+-- Delete exactly one saved storage; the others stay untouched.
+local taxi_before=S.find_snapshot(taxi.id)
+assert(taxi_before)
+assert(S.delete_snapshot(taxi_before))
+assert(S.find_snapshot(taxi.id)==nil)
+assert(S.find_snapshot(lrc.id)~=nil)
+
+-- Clearing only the live scan must preserve named storages.
+assert(S.clear_live_snapshot())
+assert(S.trunk_state().snapshot==nil)
+assert(#S.library()>=2)
+
 -- Duplicate library names are rejected to keep update targets unambiguous.
-local duplicate,err=S.save_named_trunk(disposable,'LRC')
+local remaining_live
+assert(S.begin_trunk_scan())
+use_full(make_slots(552,60,9))
+remaining_live=S.trunk_state().snapshot
+local duplicate,err=S.save_named_trunk(remaining_live,'LRC')
 assert(not duplicate and tostring(err):find('название'))
 
-print('PASS smart trunk library: two vehicles, out-of-order chunks, explicit update, persistent names')
+print('PASS smart trunk library: second scan, need-reopen guidance, delete one, clear live, persistent names')

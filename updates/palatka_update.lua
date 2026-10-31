@@ -1,5 +1,5 @@
--- Palatka AI 2.8.1 smart storage library beta. Native mimgui only.
-PALATKA_UPDATE_VERSION = '2.8.1'
+-- Palatka AI 2.8.2 simplified storage scanner beta. Native mimgui only.
+PALATKA_UPDATE_VERSION = '2.8.2'
 return function(DSP)
   local function module_storage()
 -- Read-only inventory analysis for classic SA-MP cabinet/trunk dialogs.
@@ -452,14 +452,24 @@ function S.on_inventory_packet(sub, raw)
         end
         return true
     end
-    -- Small updates cannot be assigned to the current vehicle reliably.
-    -- Leave the last complete 180-slot snapshot untouched.
-    if #items<=5 and T.snapshot then
-        T.status='unverified_delta'
-        T.last_error='\215\224\241\242\232\247\237\238\229 \232\231\236\229\237\229\237\232\229 \239\240\238\239\243\249\229\237\238: ID \236\224\248\232\237\251 \237\229\232\231\226\229\241\242\229\237. \206\242\234\240\238\233 \225\224\227\224\230\237\232\234 \231\224\237\238\226\238.'
+    -- If the user started a new scan while the trunk was already open,
+    -- the game usually sends only tiny slot deltas when an item moves. Those
+    -- deltas are not a full second trunk and must never replace the old scan.
+    if #items<=5 then
+        if T.requested_at then
+            T.saw_delta_after_request=true
+            T.status='need_reopen'
+            T.last_error='\207\238\235\237\251\233 \241\237\232\236\238\234 \237\229 \239\240\232\248\184\235. \199\224\234\240\238\233 \225\224\227\224\230\237\232\234 \232 \238\242\234\240\238\233 \229\227\238 \231\224\237\238\226\238.'
+        elseif T.snapshot then
+            T.status='unverified_delta'
+            T.last_error='\215\224\241\242\232\247\237\238\229 \232\231\236\229\237\229\237\232\229 \239\240\238\239\243\249\229\237\238: ID \236\224\248\232\237\251 \237\229\232\231\226\229\241\242\229\237.'
+        end
         return false
     end
-    T.status='unknown_partial'
+    T.status=T.requested_at and 'need_reopen' or 'unknown_partial'
+    if T.requested_at then
+        T.last_error='\207\238\235\243\247\229\237\224 \242\238\235\252\234\238 \247\224\241\242\252. \199\224\234\240\238\233 \225\224\227\224\230\237\232\234 \232 \238\242\234\240\238\233 \231\224\237\238\226\238.'
+    end
     return false
 end
 
@@ -499,7 +509,23 @@ function S.begin_trunk_scan(update_target_id)
     T.completed_update_target_id=nil
     T.update_target_id=update_target_id
     T.requested_at=os.time()
-    T.status='waiting'
+    T.scan_started_at=T.requested_at
+    T.scan_raw_start=T.raw_packet_events or 0
+    T.scan_packet_start=T.packet_events or 0
+    T.saw_delta_after_request=false
+    T.status='waiting_open'
+    return true
+end
+
+function S.cancel_trunk_scan()
+    T.pending=nil
+    T.received=0
+    T.requested_at=nil
+    T.update_target_id=nil
+    T.completed_update_target_id=nil
+    T.saw_delta_after_request=false
+    T.status=T.autoscan_enabled and 'idle' or 'disabled'
+    T.last_error=nil
     return true
 end
 
@@ -509,6 +535,62 @@ function S.find_snapshot(id)
         if tostring(saved.id)==tostring(id) then return saved,i end
     end
     return nil
+end
+
+function S.delete_snapshot(snapshot)
+    if type(snapshot)~='table' then return false,'\213\240\224\237\232\235\232\249\229 \237\229 \226\251\225\240\224\237\238' end
+    if snapshot.source=='packet220_trunk' then
+        return S.clear_live_snapshot()
+    end
+    local index=nil
+    for i,saved in ipairs(S.snapshots or {})do
+        if saved==snapshot then index=i;break end
+    end
+    if not index then return false,'\213\240\224\237\232\235\232\249\229 \243\230\229 \243\228\224\235\229\237\238' end
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={}
+    for i,saved in ipairs(prior)do if i~=index then fresh[#fresh+1]=saved end end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true
+end
+
+function S.clear_live_snapshot()
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={}
+    for _,saved in ipairs(prior or {})do
+        if saved.source~='packet220_trunk' then fresh[#fresh+1]=saved end
+    end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    local old_state={snapshot=T.snapshot,occupied=T.occupied,total=T.total,received=T.received,
+        last_saved_at=T.last_saved_at,last_completed_request_at=T.last_completed_request_at,
+        status=T.status}
+    T.snapshot=nil;T.occupied=nil;T.total=nil;T.received=0
+    T.last_saved_at=nil;T.last_completed_request_at=nil
+    if not T.requested_at then T.status=T.autoscan_enabled and 'idle' or 'disabled' end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            for k,v in pairs(old_state)do T[k]=v end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true
 end
 
 function S.library()
@@ -627,12 +709,12 @@ function S.trunk_state()
     if T.pending and now-T.pending.started>PENDING_TIMEOUT then
         T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
     end
-    if T.requested_at and now-T.requested_at>60 then
+    if T.requested_at and now-T.requested_at>45 then
         T.requested_at=nil
         T.update_target_id=nil
-        if T.status=='waiting' or T.status=='receiving' then
+        if T.status=='waiting_open' or T.status=='receiving' or T.status=='need_reopen' then
             T.status='no_packets'
-            T.last_error='No complete trunk snapshot within 60 seconds. Open the trunk normally.'
+            T.last_error='\207\238\235\237\251\233 \241\237\232\236\238\234 180/180 \237\229 \239\238\235\243\247\229\237. \199\224\239\243\241\242\232 \241\234\224\237 \232 \231\224\237\238\226\238 \238\242\234\240\238\233 \225\224\227\224\230\237\232\234.'
         end
     end
     return T
@@ -648,7 +730,7 @@ local S = DSP.storage
 local P = {armed=false, status='idle', entries={}, order={}, observed=0, ignored_trunk=0, ignored_stall=0}
 DSP.storage_probe = P
 local MAX_SECONDS, MAX_SLOTS, MAX_SAMPLES, MAX_BYTES = 60, 180, 8, 100000
-local allowed = {inventory=true, cabinet=true, warehouse=true}
+local allowed = {cabinet=true, warehouse=true}
 
 local function integer(value, maximum, minimum)
     local n=tonumber(value)
@@ -759,7 +841,7 @@ function P.save(index)
     if not view then return false,err end
     if #view.rows==0 then return false,'no occupied items observed' end
     if not allowed[P.kind] then return false,'unknown kind' end
-    local titles={inventory='\203\232\247\237\251\233 \232\237\226\229\237\242\224\240\252',cabinet='\216\234\224\244',warehouse='\209\234\235\224\228'}
+    local titles={cabinet='\216\234\224\244',warehouse='\209\234\235\224\228'}
     local now=os.time()
     local snap={id='probe_'..tostring(now)..'_'..tostring(index),
         kind=P.kind,title=titles[P.kind]..' (\237\224\225\235\254\228\229\237\232\229; \237\229 \239\240\238\226\229\240\229\237\238)',
@@ -775,7 +857,7 @@ function P.save(index)
     local replacement={snap}
     for _,old in ipairs(previous or {})do
         replacement[#replacement+1]=old
-        if #replacement>=8 then break end
+        if #replacement>=(S.max_saved or 20)+1 then break end
     end
     S.snapshots=replacement
     if DSP.settings then DSP.settings.storage_snapshots=replacement end
@@ -822,103 +904,104 @@ end
   module_probe()
 
   local function module_probe_ui()
--- Contextual controls inside Storage > Scan (native mimgui).
--- The selector lives in 60b_carbon_storage.lua; never capture another kind silently.
+-- Simplified read-only cabinet / warehouse observer.
+-- Personal inventory scan intentionally removed from the UI.
 local V = DSP.ui21
 local P = DSP.storage_probe
-local labels={inventory='\200\205\194\197\205\210\192\208\220',cabinet='\216\202\192\212',warehouse='\209\202\203\192\196'}
-local function button(label,id,width,active)
-    return V.button(label,'probe_'..id,width,active)
+local labels={cabinet='\216\202\192\212',warehouse='\209\202\203\192\196'}
+local descriptions={cabinet='\248\234\224\244',warehouse='\241\234\235\224\228'}
+local function button(label,id,width,active,primary)
+    return V.button(label,'probe_'..id,width,active,primary)
 end
+
 function V.storage_probe_panel(width,kind)
     width=math.max(190,tonumber(width) or 300)
     local w=math.min(width,315)
-    if not P then V.red('\204\238\228\243\235\252 \241\234\224\237\232\240\238\226\224\237\232\255 \237\229 \243\241\242\224\237\238\226\235\229\237.');return end
-    kind=labels[kind] and kind or 'inventory'
+    if not P then V.red('\209\234\224\237\229\240 \253\242\238\227\238 \234\238\237\242\229\233\237\229\240\224 \237\229\228\238\241\242\243\239\229\237.');return end
+    if not labels[kind] then V.red('\205\229\232\231\226\229\241\242\237\251\233 \242\232\239 \245\240\224\237\232\235\232\249\224.');return end
     local state=P.state()
-    V.text(labels[kind]..' \183 \240\229\230\232\236 \237\224\225\235\254\228\229\237\232\255')
+
+    V.apply_font((V.font_pixels or 18)*1.15)
+    V.text(labels[kind])
+    V.apply_font()
+
     if state.armed and state.kind~=kind then
-        V.red('\209\237\224\247\224\235\224 \231\224\226\229\240\248\232 \241\234\224\237 \228\240\243\227\238\227\238 \234\238\237\242\229\233\237\229\240\224.')
-        if button('\206\241\242\224\237\238\226\232\242\252 \239\240\229\228\251\228\243\249\232\233 \241\234\224\237','stop_other',w)then P.stop()end
+        V.red('\209\229\233\247\224\241 \232\228\184\242 \241\234\224\237 \228\240\243\227\238\227\238 \245\240\224\237\232\235\232\249\224.')
+        if button('\206\241\242\224\237\238\226\232\242\252 \242\229\234\243\249\232\233 \241\234\224\237','stop_other',w,false,true)then P.stop()end
         return
     end
+
     if state.kind~=kind and not state.armed then
-        -- A previous capture must never be presented as the current container.
-        V.muted('\221\242\238 \238\242\228\229\235\252\237\251\233 \241\234\224\237. \205\224\230\236\232 \171\205\224\247\224\242\252\187, \231\224\242\229\236 \238\242\234\240\238\233 \226\251\225\240\224\237\237\251\233 \234\238\237\242\229\233\237\229\240.')
-        if button('\205\224\247\224\242\252 \241\234\224\237: '..labels[kind],'arm_'..kind,w,true)then
-            P.arm(kind,40);V.probe_selected=1;V.probe_error=nil;V.probe_report_path=nil
+        V.muted('\205\224\230\236\232 \171\205\224\247\224\242\252 \241\234\224\237\187, \231\224\242\229\236 \231\224\234\240\238\233 Palatka AI \232 \238\242\234\240\238\233 '..descriptions[kind]..' \226 \232\227\240\229.')
+        if button('\205\192\215\192\210\220 \209\202\192\205','arm_'..kind,w,false,true)then
+            P.arm(kind,40)
+            V.probe_selected=1
+            V.probe_error=nil
         end
         return
     end
+
     if state.armed then
-        V.green('\192\234\242\232\226\229\237 \183 \238\241\242\224\235\238\241\252 '..math.max(0,state.until_ts-os.time())..' \241\229\234.')
-        V.muted('\199\224\234\240\238\233 Palatka AI \232 \238\242\234\240\238\233 '..(kind=='inventory' and '\235\232\247\237\251\233 \232\237\226\229\237\242\224\240\252' or kind=='cabinet' and '\248\234\224\244' or '\241\234\235\224\228')..' \226 \232\227\240\229.')
-        if button('\199\224\226\229\240\248\232\242\252 \232 \239\238\234\224\231\224\242\252 \237\224\233\228\229\237\237\238\229','stop',w,true)then P.stop()end
-    else
-        V.muted('\209\234\224\237 \231\224\226\229\240\248\184\237. \196\224\237\237\251\229 \237\232\230\229 \239\240\229\228\226\224\240\232\242\229\235\252\237\251\229.')
-        if button('\207\238\226\242\238\240\232\242\252 \241\234\224\237','arm_'..kind,w)then
-            P.arm(kind,40);V.probe_selected=1;V.probe_error=nil;V.probe_report_path=nil
-            return
-        end
-    end
-    V.muted('\207\224\234\229\242\251: '..tostring(state.observed or 0)..' \183 \234\224\237\228\232\228\224\242\251: '..#state.order)
-    V.muted('\207\240\238\239\243\249\229\237\238: \225\224\227\224\230\237\232\234 '..tostring(state.ignored_trunk or 0)..
-        ', \235\224\226\234\224 '..tostring(state.ignored_stall or 0))
-    if not state.armed and state.status=='review' then
-        if button('\209\238\245\240\224\237\232\242\252 \242\229\245\237\232\247\229\241\234\232\233 \238\242\247\184\242','export',w)then
-            local ok,path=P.export_report()
-            if ok then V.probe_report_path=path;V.probe_error=nil
-            else V.probe_error=tostring(path)end
-        end
-        if V.probe_report_path then V.muted(V.fit(V.probe_report_path,width))end
-    end
-    if #state.order==0 then
-        if not state.armed then
-            V.red('\207\238\228\245\238\228\255\249\232\245 \239\224\234\229\242\238\226 \237\229\242. \200\237\226\229\237\242\224\240\252 \236\238\227 \239\240\232\233\242\232 \228\240\243\227\232\236 \244\238\240\236\224\242\238\236.')
-        end
-        if V.probe_error then V.red(V.fit(V.probe_error,width))end
+        V.green('\209\202\192\205 \199\192\207\211\217\197\205')
+        V.muted('\206\242\234\240\238\233 '..descriptions[kind]..' \226 \232\227\240\229. \207\238\241\235\229 \253\242\238\227\238 \226\229\240\237\232\241\252 \241\254\228\224.')
+        V.muted('\206\241\242\224\235\238\241\252: '..math.max(0,state.until_ts-os.time())..' \241\229\234.')
+        if button('\199\192\194\197\208\216\200\210\220 \200 \207\206\202\192\199\192\210\220','stop',w,false,true)then P.stop()end
         return
     end
+
+    if #state.order==0 then
+        V.red('\209\238\228\229\240\230\232\236\238\229 \237\229 \240\224\241\239\238\231\237\224\237\238.')
+        V.muted('\207\238\239\240\238\225\243\233 \231\224\239\243\241\242\232\242\252 \241\234\224\237 \229\249\184 \240\224\231 \232 \231\224\237\238\226\238 \238\242\234\240\251\242\252 '..descriptions[kind]..'.')
+        if button('\207\206\194\210\206\208\200\210\220 \209\202\192\205','arm_'..kind,w,false,true)then
+            P.arm(kind,40);V.probe_selected=1;V.probe_error=nil
+        end
+        return
+    end
+
     V.probe_selected=math.max(1,math.min(#state.order,V.probe_selected or 1))
     local selected=V.probe_selected
-    if button('\202\224\237\228\232\228\224\242 '..selected..' / '..#state.order..' >','next',w)then
-        selected=selected%#state.order+1;V.probe_selected=selected
+    if #state.order>1 then
+        V.muted('\205\224\233\228\229\237\238 \237\229\241\234\238\235\252\234\238 \226\224\240\232\224\237\242\238\226: '..selected..' / '..#state.order)
+        if button('\209\235\229\228\243\254\249\232\233 \226\224\240\232\224\237\242','next',w)then
+            selected=selected%#state.order+1
+            V.probe_selected=selected
+        end
     end
+
     local info,err=P.preview(selected)
     if not info then V.red(tostring(err));return end
-    local e=info.entry
-    V.text('type='..e.type..', sub='..e.sub..' \183 \241\235\238\242\238\226 \239\238\235\243\247\229\237\238 '..e.count)
-    V.muted('\206\225\237\224\240\243\230\229\237\238 \241\235\238\242\238\226: '..e.count..
-        (e.capacity and (' / '..e.capacity) or ' / \239\238\235\237\224\255 \184\236\234\238\241\242\252 \237\229\232\231\226\229\241\242\237\224'))
-    V.muted('\205\224\233\228\229\237\238 \239\240\229\228\236\229\242\237\251\245 \241\235\238\242\238\226: '..info.occupied)
-    V.muted('\207\238\228\242\226\229\240\230\228\229\237\238 \229\228\232\237\232\246: '..info.known..' \183 \225\229\231 \247\232\241\235\224: '..info.unknown_qty)
+
+    V.green('\205\192\201\196\197\205\206: '..tostring(info.occupied)..' \231\224\237\255\242\251\245 \241\235\238\242\238\226')
+    V.text('\207\238\228\242\226\229\240\230\228\229\237\238 \239\240\229\228\236\229\242\238\226: '..tostring(info.known))
+    if info.unknown_qty>0 then
+        V.muted('\193\229\231 \242\238\247\237\238\227\238 \234\238\235\232\247\229\241\242\226\224: '..tostring(info.unknown_qty)..' \241\242\240\238\234')
+    end
+
     if DSP.storage and DSP.storage.evaluate then
         local estimate=DSP.storage.evaluate({kind=kind,rows=info.rows,
             server=DSP.market and DSP.market.state and DSP.market.state.sid})
         if not estimate.cross_server then
-            V.green('\206\246\229\237\234\224 \241\234\243\239\234\232 \237\224\233\228\229\237\237\238\227\238: '..DSP.money(estimate.sell_to_buyers))
-            V.muted('\207\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(estimate.ask_value)..' (\237\229 \247\232\241\242\224\255 \239\240\232\225\251\235\252)')
+            V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(estimate.sell_to_buyers))
             if estimate.missing_prices>0 then
                 V.muted('\205\229\242 \246\229\237 \228\235\255 '..estimate.missing_prices..' \241\242\240\238\234')
             end
         end
     end
-    for i=1,math.min(4,#info.rows)do
-        local it=info.rows[i]
-        V.muted(V.fit(it.name..' \183 '..(it.qty and tostring(it.qty)..' \248\242.' or '\234\238\235\232\247\229\241\242\226\238 \237\229\232\231\226\229\241\242\237\238'),width))
-    end
-    if #info.rows>4 then V.muted('\206\241\242\224\235\252\237\251\229 \239\240\229\228\236\229\242\251 \239\238\255\226\255\242\241\255 \226 \241\239\232\241\234\229 \241\237\232\236\234\224.')end
-    if not state.armed then
-        if button('\209\238\245\240\224\237\232\242\252 \234\224\234 \237\229\239\240\238\226\229\240\229\237\237\251\233 \241\237\232\236\238\234','save',w,true)then
-            local ok,saved=P.save(selected)
-            if ok then
-                V.probe_error=nil;V.storage_tab='snapshots';V.storage_selected=1
-                -- Use the existing native rename dialog on the following frame.
-                V.storage_ask_name=true
-            else V.probe_error=tostring(saved)end
+
+    V.red('\207\238\234\224 \253\242\238 \239\240\229\228\226\224\240\232\242\229\235\252\237\251\233 \241\234\224\237: \239\238\235\237\251\233 \244\238\240\236\224\242 '..descriptions[kind]..' \229\249\184 \239\240\238\226\229\240\255\229\242\241\255.')
+    if button('\209\206\213\208\192\205\200\210\220 \208\197\199\211\203\220\210\192\210','save',w,false,true)then
+        local ok,saved=P.save(selected)
+        if ok then
+            V.probe_error=nil
+            V.storage_tab='library'
+            V.storage_library_page='list'
+        else
+            V.probe_error=tostring(saved)
         end
     end
-    V.red(V.fit('\221\242\238 \237\229 \239\238\235\237\251\233 \241\234\224\237: \242\232\239 \234\238\237\242\229\233\237\229\240\224 \226\251\225\240\224\237 \226\240\243\247\237\243\254, ID \226\235\224\228\229\235\252\246\224 \237\229\232\231\226\229\241\242\229\237.',width))
+    if button('\207\206\194\210\206\208\200\210\220 \209\202\192\205','arm_'..kind,w)then
+        P.arm(kind,40);V.probe_selected=1;V.probe_error=nil
+    end
     if V.probe_error then V.red(V.fit(V.probe_error,width))end
 end
 
@@ -1001,343 +1084,253 @@ local function b(s,id,w,on,primary)return V.button(s,'storage_'..id,w,on,primary
 -- previous giant fixed header which pushed the item list off small screens.
 function V.storage_screen()
     V.heading('\213\240\224\237\232\235\232\249\224',function()
-        if DSP.storage_beta_rollback then
-            if b('CRR \206\210\202\192\210','beta_rollback',145,false,true) then
-                V.open_popup('CRR \238\242\234\224\242','storage_beta_rollback')
-            end
-        elseif b('\209\234\224\237\229\240','quick_scan',105) then
-            V.storage_tab='scan'
+        if DSP.storage_beta_rollback and b('CRR \206\210\202\192\210','beta_rollback',145,false,true) then
+            V.open_popup('CRR \238\242\234\224\242','storage_beta_rollback')
+        end
+    end,DSP.storage_beta_rollback and 149 or 0)
+
+    -- Old versions used "snapshots/manual". Collapse them into the two-task UI.
+    if V.storage_tab=='snapshots' then V.storage_tab='library' end
+    if V.storage_tab=='manual' then V.storage_tab='scan' end
+    V.storage_tab=V.storage_tab or 'scan'
+    V.storage_scan_mode=(V.storage_scan_mode=='inventory') and 'trunk' or (V.storage_scan_mode or 'trunk')
+    V.storage_library_page=V.storage_library_page or 'list'
+
+    local width=imgui.GetContentRegionAvail().x
+    local tabw=math.max(120,(width-6)/2)
+    for i,tab in ipairs({{'scan','\209\202\192\205'},{'library','\204\206\200 \213\208\192\205\200\203\200\217\192'}})do
+        if b(tab[2],'tab_'..tab[1],tabw,V.storage_tab==tab[1],V.storage_tab==tab[1])then
+            V.storage_tab=tab[1]
+            if tab[1]=='library' then V.storage_library_page='list' end
             V.reset_list('storage_scan_panel')
         end
-    end,DSP.storage_beta_rollback and 149 or 109)
-    local capstate,capcount,caperr=S.textdraw_state()
-    V.storage_tab=V.storage_tab or 'scan'
-    V.storage_scan_mode=V.storage_scan_mode or 'trunk'
-    local w=imgui.GetContentRegionAvail().x
-    local compact_tabs=w<270
-    local tabw=compact_tabs and math.max(100,w) or math.max(78,(w-12)/3)
-    for i,tab in ipairs({{'scan','\209\234\224\237'}, {'snapshots','\209\237\232\236\234\232'}, {'manual','\194\226\238\228'}})do
-        if b(tab[2],'tab_'..tab[1],tabw,V.storage_tab==tab[1],V.storage_tab==tab[1])then
-            V.storage_tab=tab[1];V.reset_list('storage_scan_panel')
-        end
-        if i<3 and not compact_tabs then V.inline(5)end
+        if i==1 then V.inline(6)end
     end
     imgui.Separator()
+
     if V.storage_tab=='scan' then
-        V.list('storage_scan_panel',function(width)
-            local options={{'trunk','\193\224\227\224\230\237\232\234'},{'inventory','\200\237\226\229\237\242\224\240\252'},
-                           {'cabinet','\216\234\224\244'},{'warehouse','\209\234\235\224\228'}}
-            V.text('\215\242\238 \237\243\230\237\238 \239\240\238\226\229\240\232\242\252?')
-            local stack_buttons=width<230
-            local bw=stack_buttons and width or math.max(92,math.floor((width-12)/2))
+        V.list('storage_scan_panel',function(w)
+            local options={{'trunk','\193\224\227\224\230\237\232\234'},{'cabinet','\216\234\224\244'},{'warehouse','\209\234\235\224\228'}}
+            local bw=math.max(92,(w-12)/3)
             for i,item in ipairs(options)do
                 if b(item[2],'choose_'..item[1],bw,V.storage_scan_mode==item[1],V.storage_scan_mode==item[1])then
+                    if S.cancel_trunk_scan and V.storage_scan_mode=='trunk' and item[1]~='trunk' then
+                        S.cancel_trunk_scan()
+                    end
                     V.storage_scan_mode=item[1]
                     V.probe_error=nil
                     V.reset_list('storage_scan_panel')
                 end
-                if i%2==1 and not stack_buttons then V.inline(6)end
+                if i<3 then V.inline(6)end
             end
             imgui.Separator()
-            if V.storage_scan_mode=='trunk' then
-                local t=(S.trunk_state and S.trunk_state()) or S.trunk or {}
-                local statuses={idle='\206\230\232\228\224\229\242 \238\242\234\240\251\242\232\255',receiving='\207\238\235\243\247\229\237\232\229 \228\224\237\237\251\245',
-                    saved='\207\238\241\235\229\228\237\232\233 \225\224\227\224\230\237\232\234 \241\238\245\240\224\237\184\237',saved_from_disk='\197\241\242\252 \241\242\224\240\251\233 \241\237\232\236\238\234',
-                    incomplete='\205\229\228\238\241\242\224\242\238\247\237\238 \241\235\238\242\238\226',unknown_partial='\207\238\235\243\247\229\237\224 \235\232\248\252 \247\224\241\242\252',
-                    unverified_delta='\205\229\239\240\238\226\229\240\229\237\237\238\229 \232\231\236\229\237\229\237\232\229',save_error='\206\248\232\225\234\224 \241\238\245\240\224\237\229\237\232\255',
-                    no_packets='\207\238\235\237\251\233 \241\237\232\236\238\234 \237\229 \239\238\235\243\247\229\237'}
-                V.text('\193\192\195\192\198\205\200\202 \183 \241\234\224\237\232\240\238\226\224\237\232\229')
-                if b((t.autoscan_enabled and '\192\226\242\238\241\234\224\237: \194\202\203' or '\192\226\242\238\241\234\224\237: \194\219\202\203'),
-                     'toggle_trunk_auto',math.min(width,250),t.autoscan_enabled,t.autoscan_enabled) then
-                    local ok,err=S.set_trunk_autoscan(not t.autoscan_enabled)
-                    if not ok then V.storage_error=tostring(err) else V.storage_error=nil end
-                end
-                if b('\199\192\207\211\209\210\200\210\220 \209\202\192\205 \193\192\195\192\198\205\200\202\192','start_trunk',math.min(width,330),false,true)then
-                    S.begin_trunk_scan()
-                    V.storage_error=nil
-                end
-                V.muted('1. \199\224\239\243\241\242\232 \241\234\224\237, \231\224\242\229\236 \231\224\234\240\238\233 \238\234\237\238 Palatka AI.')
-                V.muted('2. \206\242\234\240\238\233 \225\224\227\224\230\237\232\234 \226 \232\227\240\229 \232 \226\229\240\237\232\241\252 \226 \253\242\238 \236\229\237\254.')
-                V.muted('\192\226\242\238\241\234\224\237 \236\238\230\229\242 \241\238\245\240\224\237\255\242\252 \239\238\235\237\251\229 \241\237\232\236\234\232 \225\229\231 \234\237\238\239\234\232 \231\224\239\243\241\234\224.')
-                V.text('\209\242\224\242\243\241: '..(statuses[t.status] or (t.status=='waiting' and '\206\230\232\228\224\254 \238\242\234\240\251\242\232\255 \225\224\227\224\230\237\232\234\224') or
-                    t.status=='disabled' and '\192\226\242\238\241\234\224\237 \226\251\234\235\254\247\229\237' or tostring(t.status or '\238\230\232\228\224\237\232\229')))
-                V.muted('\207\224\234\229\242\251 type 8: '..tostring(t.raw_packet_events or 0)..
-                    ' \183 \240\224\231\238\225\240\224\237\238: '..tostring(t.packet_events or 0))
-                if (t.invalid_packet_events or 0)>0 then
-                    V.red('\206\248\232\225\234\232 \244\238\240\236\224\242\224 \239\224\234\229\242\238\226: '..tostring(t.invalid_packet_events))
-                end
-                V.muted('\209\235\238\242\238\226: '..tostring(t.received or 0)..' / 180')
-                if t.last_packet_at then
-                    V.muted('\207\238\241\235\229\228\237\232\233 \239\224\234\229\242: '..os.date('%H:%M:%S',t.last_packet_at))
+
+            if V.storage_scan_mode~='trunk' then
+                if V.storage_probe_panel then V.storage_probe_panel(w,V.storage_scan_mode)
+                else V.red('\209\234\224\237\229\240 \253\242\238\227\238 \245\240\224\237\232\235\232\249\224 \237\229\228\238\241\242\243\239\229\237.') end
+                return
+            end
+
+            local t=(S.trunk_state and S.trunk_state()) or S.trunk or {}
+            local active=t.requested_at~=nil or t.status=='waiting_open' or
+                t.status=='receiving' or t.status=='need_reopen'
+
+            V.apply_font((V.font_pixels or 18)*1.18)
+            V.text('\205\206\194\219\201 \209\202\192\205 \193\192\195\192\198\205\200\202\192')
+            V.apply_font()
+
+            if active then
+                if t.status=='receiving' then
+                    V.green('\207\206\203\211\215\192\222 \196\192\205\205\219\197: '..tostring(t.received or 0)..' / 180')
+                    V.muted('\205\229 \231\224\234\240\251\226\224\233 \225\224\227\224\230\237\232\234, \239\238\234\224 \237\229 \225\243\228\229\242 180 / 180.')
+                elseif t.status=='need_reopen' then
+                    V.red('\205\211\198\205\206 \199\192\205\206\194\206 \206\210\202\208\219\210\220 \193\192\195\192\198\205\200\202')
+                    V.text('\199\224\234\240\238\233 \225\224\227\224\230\237\232\234 \239\238\235\237\238\241\242\252\254 \232 \238\242\234\240\238\233 \229\227\238 \229\249\184 \240\224\231.')
+                    V.muted('\207\229\240\229\236\229\249\229\237\232\229 \239\240\229\228\236\229\242\238\226 \226\237\243\242\240\232 \243\230\229 \238\242\234\240\251\242\238\227\238 \225\224\227\224\230\237\232\234\224 \228\224\184\242 \242\238\235\252\234\238 \247\224\241\242\232\247\237\251\229 \232\231\236\229\237\229\237\232\255.')
                 else
-                    V.muted('\207\238\234\224 \237\229 \238\225\237\224\240\243\230\229\237\238 \239\224\234\229\242\238\226 \225\224\227\224\230\237\232\234\224 \226 \253\242\238\233 \241\229\241\241\232\232.')
+                    V.green('\209\202\192\205 \199\192\207\211\217\197\205')
+                    V.text('\197\241\235\232 \225\224\227\224\230\237\232\234 \243\230\229 \238\242\234\240\251\242 \151 \231\224\234\240\238\233 \229\227\238.')
+                    V.text('\199\224\242\229\236 \238\242\234\240\238\233 \225\224\227\224\230\237\232\234 \231\224\237\238\226\238 \238\225\251\247\237\251\236 \241\239\238\241\238\225\238\236.')
+                    V.muted('\198\228\243 \239\238\235\237\251\233 \241\237\232\236\238\234 180 / 180 \241\235\238\242\238\226.')
                 end
-                if t.occupied then
-                    V.text('\199\224\237\255\242\251\245 \241\235\238\242\238\226: '..tostring(t.occupied)..' \183 \239\240\229\228\236\229\242\238\226: '..tostring(t.total or 0))
+                V.muted('\207\238\235\243\247\229\237\238: '..tostring(t.received or 0)..' / 180')
+                if b('\206\210\204\197\205\200\210\220 \209\202\192\205','cancel_trunk',math.min(w,240))then
+                    S.cancel_trunk_scan()
                 end
-                if t.last_error then V.red(V.fit(tostring(t.last_error),width))end
-                if V.storage_error then V.red(V.fit(V.storage_error,width))end
-                if t.snapshot then
-                    if t.status=='saved' then
-                        V.green('\209\202\192\205 \199\192\194\197\208\216\168\205: 180 / 180 \209\203\206\210\206\194')
-                    elseif t.requested_at then
-                        V.red('\205\238\226\251\233 \241\234\224\237 \229\249\184 \237\229 \231\224\226\229\240\248\184\237. \205\232\230\229 \239\240\229\228\251\228\243\249\232\233 \241\237\232\236\238\234.')
+                V.muted('\207\240\229\228\251\228\243\249\232\233 \240\229\231\243\235\252\242\224\242 \226\238 \226\240\229\236\255 \237\238\226\238\227\238 \241\234\224\237\224 \237\229 \239\238\234\224\231\251\226\224\229\242\241\255.')
+                return
+            end
+
+            if t.status=='no_packets' or t.status=='incomplete' then
+                V.red('\205\206\194\219\201 \209\202\192\205 \205\197 \207\206\203\211\215\197\205')
+                V.text('\199\224\234\240\238\233 \225\224\227\224\230\237\232\234, \237\224\230\236\232 \171\205\224\247\224\242\252 \237\238\226\251\233 \241\234\224\237\187 \232 \238\242\234\240\238\233 \229\227\238 \231\224\237\238\226\238.')
+            elseif t.last_error and t.status~='saved' then
+                V.red(V.fit(tostring(t.last_error),w))
+            end
+
+            if b('\205\192\215\192\210\220 \205\206\194\219\201 \209\202\192\205','start_trunk',math.min(w,320),false,true)then
+                S.begin_trunk_scan()
+                V.storage_error=nil
+                return
+            end
+            V.muted('\194\224\230\237\238: \241\234\224\237 \231\224\239\243\241\234\224\229\242\241\255 \196\206 \239\238\226\242\238\240\237\238\227\238 \238\242\234\240\251\242\232\255 \225\224\227\224\230\237\232\234\224.')
+
+            if t.snapshot and t.status=='saved' then
+                imgui.Separator()
+                V.green('\195\206\210\206\194\206 \183 180 / 180')
+                V.text('\199\224\237\255\242\238 \241\235\238\242\238\226: '..tostring(t.snapshot.occupied_slots or 0))
+                V.text('\194\241\229\227\238 \239\240\229\228\236\229\242\238\226: '..tostring(t.snapshot.count_known or 0))
+                local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
+                    tostring(DSP.market and DSP.market.state and DSP.market.state.version or '')
+                local info=V.memo('storage_trunk_summary',sig,function()return S.evaluate(t.snapshot)end)
+                if not info.cross_server then
+                    V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
+                end
+
+                local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
+                if update_target then
+                    V.text('\206\225\237\238\226\232\242\252: '..tostring(update_target.title))
+                    if b('\207\208\200\204\197\205\200\210\220 \202 '..tostring(update_target.title),'apply_update',math.min(w,320),false,true)then
+                        local ok,updated=S.apply_latest_to_saved(update_target.id)
+                        if ok then
+                            local _,idx=S.find_snapshot(updated.id)
+                            V.storage_selected=idx or 1
+                            V.storage_library_page='detail'
+                            V.storage_tab='library'
+                            return
+                        else V.storage_error=tostring(updated) end
                     end
-                    V.muted('\194\240\229\236\255 \241\237\232\236\234\224: '..os.date('%d.%m %H:%M:%S',t.snapshot.observed_at))
-                    V.text('\207\238\241\235\229\228\237\232\233 \225\224\227\224\230\237\232\234: '..tostring(t.snapshot.occupied_slots or 0)..' \231\224\237\255\242\251\245 \241\235\238\242\238\226')
-                    V.text('\194\241\229\227\238 \229\228\232\237\232\246 \239\240\229\228\236\229\242\238\226: '..tostring(t.snapshot.count_known or 0))
-                    local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
-                        tostring(t.packet_events or 0)..'/'..
-                        tostring(DSP.market and DSP.market.state and DSP.market.state.version or '')
-                    local info=V.memo('storage_trunk_summary',sig,function()return S.evaluate(t.snapshot)end)
-                    if info.cross_server then
-                        V.red('\209\237\232\236\238\234 \228\240\243\227\238\227\238 \241\229\240\226\229\240\224: \240\251\237\238\247\237\224\255 \238\246\229\237\234\224 \237\229 \224\234\242\243\224\235\252\237\224.')
-                    else
-                        V.green('\207\238 \246\229\237\224\236 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
-                        V.muted('\207\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(info.ask_value)..' (\237\229 \228\238\245\238\228 \232 \237\229 \239\240\232\225\251\235\252)')
-                        if info.missing_prices>0 then
-                            V.muted('\205\229\242 \246\229\237 \228\235\255 '..info.missing_prices..' \241\242\240\238\234.')
-                        end
+                    if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','save_update_new',math.min(w,290))then
+                        V.storage_name_target=t.snapshot
+                        V.storage_name_buf=imgui.new.char[128]()
+                        V.storage_name_error=nil
+                        V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
                     end
-                    local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
-                    if update_target then
-                        V.green('\195\206\210\206\194\206 \196\203\223 \206\193\205\206\194\203\197\205\200\223: '..tostring(update_target.title))
-                        V.muted('\205\238\226\251\233 \241\234\224\237 \229\249\184 \205\197 \231\224\239\232\241\224\237 \239\238\226\229\240\245 \241\238\245\240\224\237\184\237\237\238\227\238 \245\240\224\237\232\235\232\249\224.')
-                        if b('\207\208\200\204\197\205\200\210\220 \202 '..tostring(update_target.title),'apply_update',math.min(width,330),false,true)then
-                            local ok,updated=S.apply_latest_to_saved(update_target.id)
-                            if ok then
-                                local _,idx=S.find_snapshot(updated.id)
-                                V.storage_selected=idx or 1
-                                V.storage_library_page='detail'
-                                V.storage_tab='snapshots'
-                                V.storage_error=nil
-                                return
-                            else
-                                V.storage_error=tostring(updated)
-                            end
-                        end
-                        if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','save_update_as_new',math.min(width,300))then
-                            V.storage_name_target=t.snapshot
-                            V.storage_name_buf=imgui.new.char[128]()
-                            V.storage_name_error=nil
-                            V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
-                        end
-                    else
-                        if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','name_trunk',math.min(width,300),false,true)then
-                            V.storage_name_target=t.snapshot
-                            V.storage_name_buf=imgui.new.char[128]()
-                            V.storage_name_error=nil
-                            V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
-                        end
-                    end
-                    V.muted('\205\224\231\226\224\237\232\229 \231\224\234\240\229\239\235\255\229\242\241\255 \231\224 \241\238\245\240\224\237\184\237\237\238\233 \231\224\239\232\241\252\254, \237\229 \231\224 \239\238\241\235\229\228\237\232\236 \241\234\224\237\238\236.')
-                    if b('\206\242\234\240\251\242\252 \239\238\241\235\229\228\237\232\233 \241\234\224\237','view_trunk',math.min(width,280))then
-                        V.storage_tab='snapshots'
-                        V.storage_library_page='detail'
-                        for i,snap in ipairs(S.snapshots or {})do
-                            if snap==t.snapshot or (snap.source=='packet220_trunk' and snap.kind=='trunk') then
-                                V.storage_selected=i;break
-                            end
-                        end
+                else
+                    if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','save_new',math.min(w,290),false,true)then
+                        V.storage_name_target=t.snapshot
+                        V.storage_name_buf=imgui.new.char[128]()
+                        V.storage_name_error=nil
+                        V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
                     end
                 end
-                V.muted('\207\238\241\224\228\234\224 \226 \224\226\242\238\236\238\225\232\235\252 \237\229 \238\231\237\224\247\224\229\242 \238\242\234\240\251\242\232\229 \225\224\227\224\230\237\232\234\224.')
-            elseif V.storage_probe_panel then
-                V.storage_probe_panel(width,V.storage_scan_mode)
-            else
-                V.red('\196\232\224\227\237\238\241\242\232\234\224 \253\242\238\227\238 \234\238\237\242\229\233\237\229\240\224 \237\229\228\238\241\242\243\239\237\224 \226 \228\224\237\237\238\233 \241\225\238\240\234\229.')
+                if b('\206\215\200\209\210\200\210\220 \207\206\209\203\197\196\205\200\201 \209\202\192\205','clear_live',math.min(w,290))then
+                    local ok,err=S.clear_live_snapshot()
+                    if not ok then V.storage_error=tostring(err) end
+                end
             end
-            if b('\204\206\200 \213\208\192\205\200\203\200\217\192','show_snapshots',math.min(width,260),false,true)then
-                V.storage_tab='snapshots';V.storage_library_page='list'
+
+            if V.storage_error then V.red(V.fit(V.storage_error,w)) end
+            imgui.Separator()
+            if b((t.autoscan_enabled and '\192\226\242\238\241\234\224\237: \194\202\203' or '\192\226\242\238\241\234\224\237: \194\219\202\203'),
+                 'toggle_auto',math.min(w,210),t.autoscan_enabled)then
+                local ok,err=S.set_trunk_autoscan(not t.autoscan_enabled)
+                if not ok then V.storage_error=tostring(err) end
             end
-            if b('\194\226\229\241\242\232 \241\239\232\241\238\234 \226\240\243\247\237\243\254','manual_open',math.min(width,250))then
-                V.storage_tab='manual'
-                V.storage_manual_kind=V.storage_scan_mode
-            end
-        end,{footer=function()
-            V.muted('\202\237\238\239\234\232 \237\232\230\229: \235\232\241\242\224\242\252 \241\239\232\241\238\234. \205\232\234\224\234\232\245 \232\227\240\238\226\251\245 \234\235\232\234\238\226 \241\234\224\237\229\240 \237\229 \238\242\239\240\224\226\235\255\229\242.')
-        end})
-        return
-    end
-    if V.storage_tab=='manual' then
-        V.list('storage_manual_panel',function(width)
-            V.muted('\197\241\235\232 \232\227\240\238\226\238\233 \232\237\242\229\240\244\229\233\241 \237\229 \226\251\228\224\184\242 \241\238\228\229\240\230\232\236\238\229 \247\229\240\229\231 \241\238\225\251\242\232\255,')
-            V.muted('\236\238\230\237\238 \226\241\242\224\226\232\242\252 \241\239\232\241\238\234 \226\240\243\247\237\243\254 \151 \253\242\238 \237\229 \232\227\240\238\226\238\233 \241\234\224\237.')
-            V.storage_manual_kind=V.storage_manual_kind or 'trunk'
-            local stack_buttons=width<230
-            local bw=stack_buttons and width or math.max(90,math.floor((width-12)/2))
-            for i,t in ipairs({{'trunk','\193\224\227\224\230\237\232\234'},{'inventory','\200\237\226\229\237\242\224\240\252'},
-                               {'cabinet','\216\234\224\244'},{'warehouse','\209\234\235\224\228'}})do
-                if b(t[2],'manual_'..t[1],bw,V.storage_manual_kind==t[1],V.storage_manual_kind==t[1])then V.storage_manual_kind=t[1]end
-                if i%2==1 and not stack_buttons then V.inline(6)end
-            end
-            V.storage_input=V.storage_input or imgui.new.char[8192]()
-            V.muted('\212\238\240\236\224\242: \196\240\238\226\224 x45000  \232\235\232  \196\240\238\226\224 (45000 \248\242.)')
-            imgui.InputTextMultiline('##storage_text',V.storage_input,8192,imgui.ImVec2(-1,100))
-            if b('\209\238\245\240\224\237\232\242\252 \241\237\232\236\238\234','manual_accept',math.min(width,220),false,true)then
-                local kind=V.storage_manual_kind
-                local title=kind=='trunk'and'\193\224\227\224\230\237\232\234 (\240\243\247\237\238\233 \241\239\232\241\238\234)' or kind=='inventory'and'\200\237\226\229\237\242\224\240\252 (\240\243\247\237\238\233 \241\239\232\241\238\234)'
-                    or kind=='cabinet'and'\216\234\224\244 (\240\243\247\237\238\233 \241\239\232\241\238\234)' or '\209\234\235\224\228 (\240\243\247\237\238\233 \241\239\232\241\238\234)'
-                local ok,err=S.accept(kind,title,DSP.to_cp(ffi.string(V.storage_input)),nil,'manual')
-                if ok then V.storage_tab='snapshots';V.storage_selected=1;V.storage_error=nil
-                else V.storage_error=err end
-            end
-            if V.storage_error then V.red(tostring(V.storage_error))end
+            V.muted('\192\226\242\238\241\234\224\237 \235\238\226\232\242 \239\238\235\237\251\233 \241\237\232\236\238\234 \239\240\232 \238\242\234\240\251\242\232\232 \225\224\227\224\230\237\232\234\224. \206\237 \237\229 \243\227\224\228\251\226\224\229\242 \236\224\248\232\237\243 \239\238 \239\238\241\224\228\234\229 \226 \224\226\242\238.')
         end,{footer=false})
         return
     end
-    local snapshots=S.snapshots
-    V.storage_library_page=V.storage_library_page or 'list'
+
+    local snapshots=S.snapshots or {}
     local library=S.library and S.library() or {}
-    local live=nil
-    local live_index=nil
-    for i,snap in ipairs(snapshots)do
-        if snap.source=='packet220_trunk' then live=snap;live_index=i;break end
-    end
+
     if V.storage_library_page=='list' then
-        if b('+ \209\202\192\205\200\208\206\194\192\210\220 \205\206\194\206\197','library_new_scan',math.min(290,imgui.GetContentRegionAvail().x),false,true)then
+        V.apply_font((V.font_pixels or 18)*1.24)
+        V.text('\204\206\200 \213\208\192\205\200\203\200\217\192')
+        V.apply_font()
+        V.muted('\210\238\235\252\234\238 \241\238\245\240\224\237\184\237\237\251\229 \231\224\239\232\241\232. \207\238\241\235\229\228\237\232\233 \241\234\224\237 \241\254\228\224 \237\229 \239\238\228\236\229\248\232\226\224\229\242\241\255.')
+        if b('+ \205\206\194\219\201 \209\202\192\205','library_new_scan',math.min(230,width),false,true)then
             V.storage_tab='scan'
             V.storage_scan_mode='trunk'
             S.begin_trunk_scan()
             V.reset_list('storage_scan_panel')
             return
         end
-        V.apply_font((V.font_pixels or 18)*1.24)
-        V.text('\204\206\200 \213\208\192\205\200\203\200\217\192')
-        V.apply_font()
-        V.muted('\207\238\241\235\229\228\237\232\233 \241\234\224\237 \238\242\228\229\235\252\237\238. \209\238\245\240\224\237\184\237\237\251\229 \237\224\231\226\224\237\232\255 \237\229 \239\229\240\229\231\224\239\232\241\251\226\224\254\242\241\255.')
-        if live then
-            local info=S.evaluate(live)
-            V.text('\207\206\209\203\197\196\205\200\201 \209\202\192\205 \183 \205\197 \209\206\213\208\192\205\168\205')
-            V.muted(os.date('%d.%m %H:%M',live.observed_at)..' \183 '..tostring(live.occupied_slots or 0)..' \231\224\237\255\242\251\245 \241\235\238\242\238\226')
-            V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
-            if b('\206\242\234\240\251\242\252 \239\238\241\235\229\228\237\232\233 \241\234\224\237','library_live',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
-                V.storage_selected=live_index
-                V.storage_library_page='detail'
-                V.reset_list('storage_items')
-                return
-            end
-            imgui.Separator()
-        end
         if #library==0 then
-            V.muted('\209\238\245\240\224\237\184\237\237\251\245 \245\240\224\237\232\235\232\249 \239\238\234\224 \237\229\242.')
-            V.muted('\207\238\241\235\229 \239\238\235\237\238\227\238 \241\234\224\237\224 \226\251\225\229\240\232 \171\209\238\245\240\224\237\232\242\252 \234\224\234 \237\238\226\238\229\187 \232 \231\224\228\224\233 \232\236\255.')
-        else
-            V.list_rows('storage_library',library,76,function(entry,i,w)
-                local snap=entry.snapshot
-                local kind=snap.kind=='trunk'and'\193\224\227\224\230\237\232\234' or snap.kind=='cabinet'and'\216\234\224\244'
-                    or snap.kind=='warehouse'and'\209\234\235\224\228' or snap.kind=='inventory'and'\200\237\226\229\237\242\224\240\252' or'\213\240\224\237\232\235\232\249\229'
-                V.row('storage_library_'..i,76,function(rw,x,y)
-                    V.at(x,y)
-                    V.apply_font((V.font_pixels or 18)*1.12)
-                    if V.text_button(V.fit(tostring(snap.title or kind),rw),'storage_library_open_'..i,rw,false,34)then
-                        V.storage_selected=entry.index
-                        V.storage_library_page='detail'
-                        V.reset_list('storage_items')
-                    end
-                    V.apply_font()
-                    V.at(x,y+39)
-                    V.muted(V.fit(kind..' \183 '..os.date('%d.%m %H:%M',snap.observed_at or os.time())..
-                        ' \183 '..tostring(snap.count_known or 0)..' \248\242.',rw))
-                end)
-            end,{count=#library,footer=function()
-                V.muted('\209\238\245\240\224\237\229\237\238: '..#library..' / '..tostring(S.max_saved or 20))
-            end})
+            V.muted('\207\238\234\224 \237\232\247\229\227\238 \237\229 \241\238\245\240\224\237\229\237\238.')
+            V.muted('\207\240\238\241\234\224\237\232\240\243\233 \225\224\227\224\230\237\232\234 \232 \226\251\225\229\240\232 \171\209\238\245\240\224\237\232\242\252 \234\224\234 \237\238\226\238\229\187.')
+            return
         end
-        if b('\211\228\224\235\232\242\252 \226\241\229 \241\238\245\240\224\237\184\237\237\251\229','clear_snapshots',math.min(250,imgui.GetContentRegionAvail().x))then
-            V.open_popup('\206\247\232\241\242\232\242\252 \241\237\232\236\234\232?','storage_clear')
-        end
+        V.list_rows('storage_library',library,88,function(entry,i)
+            local snap=entry.snapshot
+            local kind=snap.kind=='trunk'and'\193\224\227\224\230\237\232\234' or snap.kind=='cabinet'and'\216\234\224\244'
+                or snap.kind=='warehouse'and'\209\234\235\224\228' or'\213\240\224\237\232\235\232\249\229'
+            V.row('storage_library_'..i,88,function(rw,x,y)
+                V.at(x,y)
+                V.apply_font((V.font_pixels or 18)*1.16)
+                if V.text_button(V.fit(tostring(snap.title or kind),rw),'storage_library_open_'..i,rw,false,36)then
+                    V.storage_selected=entry.index
+                    V.storage_library_page='detail'
+                    V.reset_list('storage_items')
+                end
+                V.apply_font()
+                V.at(x,y+43)
+                local info=S.evaluate(snap)
+                V.muted(V.fit(kind..' \183 '..tostring(snap.count_known or 0)..' \248\242. \183 '..DSP.money(info.sell_to_buyers),rw))
+            end)
+        end,{footer=function()V.muted('\209\238\245\240\224\237\229\237\238: '..#library..' / '..tostring(S.max_saved or 20))end})
         return
     end
 
-    if #snapshots==0 then V.storage_library_page='list';return end
-    V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
-    local current=snapshots[V.storage_selected]
-    if not current then V.storage_library_page='list';return end
-    if b('< \204\206\200 \213\208\192\205\200\203\200\217\192','library_back',math.min(230,imgui.GetContentRegionAvail().x))then
+    local current=snapshots[V.storage_selected or 1]
+    if not current or current.source=='packet220_trunk' then
         V.storage_library_page='list'
         return
     end
-    V.apply_font((V.font_pixels or 18)*1.32)
-    V.text(V.fit(tostring(current.title or '\193\229\231 \237\224\231\226\224\237\232\255'),imgui.GetContentRegionAvail().x))
-    V.apply_font()
-    local is_live=current.source=='packet220_trunk'
-    local is_named_trunk=current.source=='packet220_trunk_named'
-    if is_live then
-        V.green('\207\206\209\203\197\196\205\200\201 \209\202\192\205 \183 \205\197 \209\206\213\208\192\205\168\205')
-    else
-        V.muted('\209\206\213\208\192\205\168\205\205\206\197 \213\208\192\205\200\203\200\217\197')
+    if b('< \204\206\200 \213\208\192\205\200\203\200\217\192','library_back',math.min(230,width))then
+        V.storage_library_page='list'
+        return
     end
-    V.muted(os.date('%d.%m.%Y %H:%M',current.observed_at or os.time()))
-    if is_live then
-        if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','library_save_live',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
-            V.storage_name_target=current
-            V.storage_name_buf=imgui.new.char[128]()
-            V.storage_name_error=nil
-            V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
-        end
-    elseif is_named_trunk then
-        if b('\206\193\205\206\194\200\210\220 \221\210\206\210 \193\192\195\192\198\205\200\202','library_update_named',math.min(310,imgui.GetContentRegionAvail().x),false,true)then
+
+    V.apply_font((V.font_pixels or 18)*1.34)
+    V.text(V.fit(tostring(current.title or '\193\229\231 \237\224\231\226\224\237\232\255'),width))
+    V.apply_font()
+    local kind=current.kind=='trunk'and'\193\224\227\224\230\237\232\234' or current.kind=='cabinet'and'\216\234\224\244'
+        or current.kind=='warehouse'and'\209\234\235\224\228' or'\213\240\224\237\232\235\232\249\229'
+    V.muted(kind..' \183 '..os.date('%d.%m.%Y %H:%M',current.observed_at or os.time()))
+
+    if current.source=='packet220_trunk_named' then
+        if b('\206\193\205\206\194\200\210\220 \209\202\192\205','library_update',math.min(240,width),false,true)then
             S.begin_trunk_scan(current.id)
             V.storage_tab='scan'
             V.storage_scan_mode='trunk'
-            V.reset_list('storage_scan_panel')
             return
         end
-        if b('\207\229\240\229\232\236\229\237\238\226\224\242\252','rename',math.min(180,imgui.GetContentRegionAvail().x))then
-            V.storage_label_target=current
-            V.storage_label_buf=imgui.new.char[128]()
-            ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
-            V.storage_label_error=nil
-            V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
-        end
-    else
-        if b('\207\229\240\229\232\236\229\237\238\226\224\242\252','rename',math.min(180,imgui.GetContentRegionAvail().x))then
-            V.storage_label_target=current
-            V.storage_label_buf=imgui.new.char[128]()
-            ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
-            V.storage_label_error=nil
-            V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
-        end
+    end
+    if b('\207\229\240\229\232\236\229\237\238\226\224\242\252','rename',math.min(180,width))then
+        V.storage_label_target=current
+        V.storage_label_buf=imgui.new.char[128]()
+        ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
+        V.storage_label_error=nil
+        V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
+    end
+    if b('\211\196\192\203\200\210\220','delete_one',math.min(150,width))then
+        V.storage_delete_target=current
+        V.storage_delete_error=nil
+        V.open_popup('\211\228\224\235\232\242\252 \245\240\224\237\232\235\232\249\229','storage_delete_one')
     end
 
-    local controlw=math.max(110,(imgui.GetContentRegionAvail().x-8)/2)
-    if b(V.storage_sort=='value'and'\209\238\240\242\232\240\238\226\234\224: \238\246\229\237\234\224'or V.storage_sort=='qty'and'\209\238\240\242\232\240\238\226\234\224: \234\238\235\232\247\229\241\242\226\238'
-        or V.storage_sort=='price'and'\209\238\240\242\232\240\238\226\234\224: \246\229\237\224'or V.storage_sort=='category'and'\209\238\240\242\232\240\238\226\234\224: \234\224\242\229\227\238\240\232\232' or '\209\238\240\242\232\240\238\226\234\224: \192\150\223',
-        'sort',math.min(controlw*2+8,imgui.GetContentRegionAvail().x))then
-        V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
-            or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value'
-        V.reset_list('storage_items')
-    end
     local rows,info=S.sorted(current,V.storage_sort)
-    V.text('\207\238\228\242\226\229\240\230\228\229\237\238: '..info.total_qty..' \248\242. \183 \237\229\232\231\226\229\241\242\237\238: '..info.unknown_qty..' \241\242\240\238\234')
+    V.text('\207\240\229\228\236\229\242\238\226: '..info.total_qty..' \248\242.')
     if current.kind=='trunk' then
-        V.muted(tostring(current.slots_count or 180)..' \241\235\238\242\238\226 \183 '..tostring(current.occupied_slots or #current.rows)..' \231\224\237\255\242\238')
-    end
-    if current.source=='packet220_probe' then
-        V.red('\205\197\207\206\203\205\219\201 \209\205\200\204\206\202: \242\232\239 \234\238\237\242\229\233\237\229\240\224 \239\238\234\224 \237\229 \239\238\228\242\226\229\240\230\228\184\237.')
+        V.muted('\199\224\237\255\242\238 \241\235\238\242\238\226: '..tostring(current.occupied_slots or #current.rows)..' / 180')
+    elseif current.source=='packet220_probe' then
+        V.red('\207\240\229\228\226\224\240\232\242\229\235\252\237\251\233 \241\237\232\236\238\234: \239\238\235\237\251\233 \244\238\240\236\224\242 \253\242\238\227\238 \245\240\224\237\232\235\232\249\224 \229\249\184 \239\240\238\226\229\240\255\229\242\241\255.')
     end
     V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
-    V.muted('\207\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(info.ask_value)..' \183 \253\242\238 \237\229 \247\232\241\242\224\255 \239\240\232\225\251\235\252')
-    if info.cross_server then V.red('\196\240\243\227\238\233 \241\229\240\226\229\240: \246\229\237\251 \241\234\240\251\242\251')end
-    V.list_rows('storage_items',rows,94,function(it,i)
-        V.row('storage_item_'..i,94,function(ww,x,y)
-            local textwidth=math.max(80,ww-118)
-            V.at(x,y);V.text(V.fit(it.name,textwidth))
-            V.at(x,y+27);V.muted(V.fit('\202\238\235\232\247\229\241\242\226\238: '..(it.qty and tostring(it.qty)..' \248\242.'or'\237\229\232\231\226\229\241\242\237\238')..' / '..tostring(it.slots or 1)..' \241\235\238\242\238\226',textwidth))
+    V.muted('\207\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(info.ask_value)..' \183 \237\229 \247\232\241\242\224\255 \239\240\232\225\251\235\252')
+
+    V.list_rows('storage_items',rows,82,function(it,i)
+        V.row('storage_item_'..i,82,function(rw,x,y)
+            V.at(x,y);V.text(V.fit(it.name,rw))
+            V.at(x,y+30)
+            V.muted(V.fit('\202\238\235\232\247\229\241\242\226\238: '..(it.qty and tostring(it.qty)..' \248\242.'or'\237\229\232\231\226\229\241\242\237\238'),rw))
             V.at(x,y+56)
             local total=(it.bid and it.qty)and DSP.money(it.bid*it.qty)or'\237\229\242 \238\246\229\237\234\232'
-            V.muted(V.fit((it.manual_price and '\209\226\238\255 \246\229\237\224: ' or '\209\234\243\239\224\254\242: ')..(it.bid and DSP.money(it.bid)or'?')..' / \248\242. \183 '..total,textwidth))
-            V.at(x+math.max(0,ww-107),y+16)
-            if b('\209\226\238\255 \246\229\237\224','edit_price_'..i,106,it.manual_price)then
-                V.storage_price_target=current
-                V.storage_price_row=it
-                V.storage_price_buf={value=it.manual_price and it.bid or 0}
-                V.storage_price_error=nil
-                V.open_popup('\209\226\238\255 \246\229\237\224','storage_price')
-            end
+            V.muted(V.fit('\209\234\243\239\224\254\242: '..(it.bid and DSP.money(it.bid)or'?')..' / \248\242. \183 '..total,rw))
         end)
-    end,{footer=function()V.muted('\209\234\224\237 \237\229 \239\229\240\229\236\229\249\224\229\242 \239\240\229\228\236\229\242\251 \226 \232\227\240\229.')end})
+    end,{footer=false})
 end
 
 -- Deletion is a real modal confirmation; cancellation never changes snapshots.
@@ -1373,7 +1366,7 @@ function V.popups()
             if ok then
                 V.storage_name_target=nil
                 V.storage_name_error=nil
-                V.storage_tab='snapshots'
+                V.storage_tab='library'
                 V.storage_library_page='detail'
                 for i,saved in ipairs(S.snapshots or {})do
                     if saved==snapshot then V.storage_selected=i;break end
@@ -1423,6 +1416,25 @@ function V.popups()
         V.inline();if b('\206\242\236\229\237\224','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
     end,{w=460,h=240})
+    V.popup('\211\228\224\235\232\242\252 \245\240\224\237\232\235\232\249\229','storage_delete_one',function()
+        local target=V.storage_delete_target
+        if not target then V.muted('\213\240\224\237\232\235\232\249\229 \243\230\229 \237\229 \226\251\225\240\224\237\238.');return end
+        V.text('\211\228\224\235\232\242\252 \171'..tostring(target.title or '\193\229\231 \237\224\231\226\224\237\232\255')..'\187?')
+        V.muted('\211\228\224\235\255\229\242\241\255 \242\238\235\252\234\238 \231\224\239\232\241\252 Palatka AI. \207\240\229\228\236\229\242\251 \226 \232\227\240\229 \237\229 \236\229\237\255\254\242\241\255.')
+        if b('\211\196\192\203\200\210\220','delete_one_confirm',150,false,true)then
+            local ok,err=S.delete_snapshot(target)
+            if ok then
+                V.storage_delete_target=nil
+                V.storage_delete_error=nil
+                V.storage_selected=1
+                V.storage_library_page='list'
+                imgui.CloseCurrentPopup()
+            else V.storage_delete_error=tostring(err) end
+        end
+        V.inline()
+        if b('\206\242\236\229\237\224','delete_one_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_delete_error then V.red(V.storage_delete_error)end
+    end,{w=470,h=250})
     V.popup('\206\247\232\241\242\232\242\252 \241\237\232\236\234\232?','storage_clear',function()
         V.text('\211\228\224\235\232\242\252 \241\238\245\240\224\237\184\237\237\251\229 \241\237\232\236\234\232 \248\234\224\244\238\226 \232 \225\224\227\224\230\237\232\234\238\226?')
         V.muted('\207\240\229\228\236\229\242\251 \226 \232\227\240\229 \238\241\242\224\237\243\242\241\255 \225\229\231 \232\231\236\229\237\229\237\232\233.')
@@ -1470,6 +1482,7 @@ end
       V.set_screen=function(id)
         if id=='storage' then
           V.storage_tab='scan'
+          if V.storage_scan_mode=='inventory' then V.storage_scan_mode='trunk' end
           V.storage_scan_mode=V.storage_scan_mode or 'trunk'
           V.storage_library_page='list'
           if V.reset_list then V.reset_list('storage_scan_panel') end
@@ -1480,7 +1493,7 @@ end
     end
   end
 
-  DSP.version='2.8.1'
-  if DSP.flog then DSP.flog('Smart storage library beta 2.8.1 loaded; menu rollback -> 2.7.0') end
+  DSP.version='2.8.2'
+  if DSP.flog then DSP.flog('Simplified storage beta 2.8.2 loaded; menu rollback -> 2.7.0') end
   return true
 end

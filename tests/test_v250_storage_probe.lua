@@ -35,9 +35,7 @@ local ok,snap=P.save(1)
 assert(ok and snap.kind=='cabinet' and snap.complete_verified==false and snap.identity_verified==false)
 assert(snap.rows[1].name=='Item_101' and snap.rows[2].qty==8)
 assert(saves==1)
-assert(P.arm('inventory',30));assert(P.on_packet(0,'unknown'));assert(P.stop())
-local v=P.preview(1);assert(v.unknown_qty==1)
-local b,shot=P.save(1);assert(b and shot.rows[1].qty==nil and shot.kind=='inventory')
+assert(not P.arm('inventory',30),'personal inventory probe is intentionally removed')
 local current=DSP.storage.snapshots
 DSP.save_settings=function()return false,'disk fail' end
 assert(P.arm('warehouse',30));assert(P.on_packet(2,'other'));assert(P.stop())
