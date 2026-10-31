@@ -17,12 +17,13 @@ function V.storage_screen()
     V.storage_tab=V.storage_tab or 'scan'
     V.storage_scan_mode=V.storage_scan_mode or 'trunk'
     local w=imgui.GetContentRegionAvail().x
-    local tabw=math.max(78,(w-12)/3)
+    local compact_tabs=w<270
+    local tabw=compact_tabs and math.max(100,w) or math.max(78,(w-12)/3)
     for i,tab in ipairs({{'scan','Скан'}, {'snapshots','Снимки'}, {'manual','Ввод'}})do
         if b(tab[2],'tab_'..tab[1],tabw,V.storage_tab==tab[1],V.storage_tab==tab[1])then
             V.storage_tab=tab[1];V.reset_list('storage_scan_panel')
         end
-        if i<3 then V.inline(5)end
+        if i<3 and not compact_tabs then V.inline(5)end
     end
     imgui.Separator()
     if V.storage_tab=='scan' then
@@ -30,14 +31,15 @@ function V.storage_screen()
             local options={{'trunk','Багажник'},{'inventory','Инвентарь'},
                            {'cabinet','Шкаф'},{'warehouse','Склад'}}
             V.text('Что нужно проверить?')
-            local bw=math.max(92,math.floor((width-12)/2))
+            local stack_buttons=width<230
+            local bw=stack_buttons and width or math.max(92,math.floor((width-12)/2))
             for i,item in ipairs(options)do
                 if b(item[2],'choose_'..item[1],bw,V.storage_scan_mode==item[1],V.storage_scan_mode==item[1])then
                     V.storage_scan_mode=item[1]
                     V.probe_error=nil
                     V.reset_list('storage_scan_panel')
                 end
-                if i%2==1 then V.inline(6)end
+                if i%2==1 and not stack_buttons then V.inline(6)end
             end
             imgui.Separator()
             if V.storage_scan_mode=='trunk' then
@@ -138,11 +140,12 @@ function V.storage_screen()
             V.muted('Если игровой интерфейс не выдаёт содержимое через события,')
             V.muted('можно вставить список вручную — это не игровой скан.')
             V.storage_manual_kind=V.storage_manual_kind or 'trunk'
-            local bw=math.max(90,math.floor((width-12)/2))
+            local stack_buttons=width<230
+            local bw=stack_buttons and width or math.max(90,math.floor((width-12)/2))
             for i,t in ipairs({{'trunk','Багажник'},{'inventory','Инвентарь'},
                                {'cabinet','Шкаф'},{'warehouse','Склад'}})do
                 if b(t[2],'manual_'..t[1],bw,V.storage_manual_kind==t[1],V.storage_manual_kind==t[1])then V.storage_manual_kind=t[1]end
-                if i%2==1 then V.inline(6)end
+                if i%2==1 and not stack_buttons then V.inline(6)end
             end
             V.storage_input=V.storage_input or imgui.new.char[8192]()
             V.muted('Формат: Дрова x45000  или  Дрова (45000 шт.)')
