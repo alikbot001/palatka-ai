@@ -1,5 +1,5 @@
--- Palatka AI 2.8.0 storage scanner beta. Native mimgui only.
-PALATKA_UPDATE_VERSION = '2.8.0'
+-- Palatka AI 2.8.1 smart storage library beta. Native mimgui only.
+PALATKA_UPDATE_VERSION = '2.8.1'
 return function(DSP)
   local function module_storage()
 -- Read-only inventory analysis for classic SA-MP cabinet/trunk dialogs.
@@ -9,6 +9,7 @@ local S = DSP.storage
 S.snapshots = S.snapshots or (DSP.settings and DSP.settings.storage_snapshots) or {}
 S.last_error = nil
 S.max_rows = 180
+S.max_saved = 20
 
 local function normal(s)
     s = DSP.clean_text(tostring(s or ''))
@@ -161,8 +162,14 @@ function S.set_snapshot_label(snapshot,label)
     label=DSP.trim(DSP.clean_text(label))
     if #label>66 or label=='' then return false,'name must be 1-66 bytes' end
     local found=false
-    for _,s in ipairs(S.snapshots or{})do if s==snapshot then found=true;break end end
+    for _,saved in ipairs(S.snapshots or{})do if saved==snapshot then found=true;break end end
     if not found then return false,'stale snapshot' end
+    -- The live trunk is disposable by design. Renaming it must create a
+    -- persistent library entry, otherwise the next scan would erase the name.
+    if snapshot.source=='packet220_trunk' then
+        if not S.save_named_trunk then return false,'archive function unavailable' end
+        return S.save_named_trunk(snapshot,label)
+    end
     local previous=snapshot.title
     snapshot.title=label
     if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
@@ -170,7 +177,7 @@ function S.set_snapshot_label(snapshot,label)
         local called,ok,err=pcall(DSP.save_settings)
         if not called or not ok then snapshot.title=previous;return false,tostring(err or ok or 'save error')end
     end
-    return true
+    return true,snapshot
 end
 function S.evaluate(snapshot,lookup)
     lookup=lookup or market_lookup
@@ -332,6 +339,7 @@ local function save_snapshot(slots, source_reason)
     local rows, total, occupied = build_rows(slots)
     local previous = active_snapshot()
     local requested_at=T.requested_at
+    local update_target_id=T.update_target_id
     local snap={
         id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
         kind='trunk',
@@ -364,6 +372,8 @@ local function save_snapshot(slots, source_reason)
     if requested_at then
         T.last_completed_request_at=ts
         T.requested_at=nil
+        T.completed_update_target_id=update_target_id
+        T.update_target_id=nil
     end
     if DSP.save_settings then
         local called,ok,err=pcall(DSP.save_settings)
@@ -375,6 +385,8 @@ local function save_snapshot(slots, source_reason)
             T.last_saved_at=old_saved_at
             T.last_completed_request_at=old_completed_at
             T.requested_at=requested_at
+            T.update_target_id=update_target_id
+            T.completed_update_target_id=nil
             T.status='save_error'
             T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
             if DSP.flog then DSP.flog('TRUNK save failed: '..T.last_error) end
@@ -411,13 +423,19 @@ function S.on_inventory_packet(sub, raw)
     if T.pending and (ts-T.pending.started)>PENDING_TIMEOUT then
         T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
     end
-    local starts_full=(sub==0 and #items>=8 and items[1].slot==0)
-    if starts_full then
-        T.pending={slots={},seen={},count=0,started=ts}
+    -- A trunk may arrive in chunks whose first chunk is not slot 0.
+    -- type=8 is already the confirmed trunk namespace; large batches start a
+    -- fresh capture, while tiny <=5 slot deltas remain ignored.
+    local starts_capture=(not T.pending and #items>5)
+    local explicit_restart=(T.pending and #items>5 and items[1] and items[1].slot==0 and T.pending.seen[0])
+    local stale_restart=(T.pending and #items>5 and T.pending.last_at and (ts-T.pending.last_at)>3)
+    if starts_capture or explicit_restart or stale_restart then
+        T.pending={slots={},seen={},count=0,started=ts,last_at=ts}
         T.status='receiving';T.received=0;T.last_error=nil
     end
     if T.pending then
         local p=T.pending
+        p.last_at=ts
         for _,v in ipairs(items) do
             if not p.seen[v.slot] then p.seen[v.slot]=true;p.count=p.count+1 end
             p.slots[v.slot+1]=v
@@ -473,14 +491,34 @@ function S.set_trunk_autoscan(enabled)
     return true
 end
 
-function S.begin_trunk_scan()
+function S.begin_trunk_scan(update_target_id)
     T.pending=nil
     T.received=0
     T.last_error=nil
     T.last_completed_request_at=nil
+    T.completed_update_target_id=nil
+    T.update_target_id=update_target_id
     T.requested_at=os.time()
     T.status='waiting'
     return true
+end
+
+function S.find_snapshot(id)
+    if not id then return nil end
+    for i,saved in ipairs(S.snapshots or {}) do
+        if tostring(saved.id)==tostring(id) then return saved,i end
+    end
+    return nil
+end
+
+function S.library()
+    local rows={}
+    for i,saved in ipairs(S.snapshots or {}) do
+        if saved.source~='packet220_trunk' then
+            rows[#rows+1]={snapshot=saved,index=i}
+        end
+    end
+    return rows
 end
 
 -- Keep manually named copies independent from the latest automatically opened
@@ -510,6 +548,11 @@ function S.save_named_trunk(snapshot,label)
         observed_at=snapshot.observed_at,server=snapshot.server,
         slots_count=TRUNK_SLOTS,occupied_slots=snapshot.occupied_slots,
         count_known=snapshot.count_known,rows=rows}
+    for _,existing in ipairs(S.snapshots or {}) do
+        if existing.source~='packet220_trunk' and DSP.lower(tostring(existing.title or ''))==DSP.lower(name) then
+            return false,'\210\224\234\238\229 \237\224\231\226\224\237\232\229 \243\230\229 \229\241\242\252. \206\242\234\240\238\233 \229\227\238 \232 \226\251\225\229\240\232 \171\206\225\237\238\226\232\242\252\187.'
+        end
+    end
     local prior=S.snapshots
     local prior_saved=DSP.settings and DSP.settings.storage_snapshots
     local fresh={}
@@ -520,7 +563,7 @@ function S.save_named_trunk(snapshot,label)
     for _,existing in ipairs(prior) do
         if existing~=named and existing~=fresh[1] then
             fresh[#fresh+1]=existing
-            if #fresh>=8 then break end
+            if #fresh>=S.max_saved+1 then break end
         end
     end
     S.snapshots=fresh
@@ -533,8 +576,49 @@ function S.save_named_trunk(snapshot,label)
             return false,tostring(err or saved or 'save failed')
         end
     end
+    T.completed_update_target_id=nil
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,named
+end
+
+function S.apply_latest_to_saved(target_id)
+    local live=T.snapshot
+    local target=S.find_snapshot(target_id)
+    if not live or live.source~='packet220_trunk' or live.slots_count~=TRUNK_SLOTS then
+        return false,'\205\229\242 \239\238\235\237\238\227\238 \237\238\226\238\227\238 \241\234\224\237\224'
+    end
+    if not target or target.source~='packet220_trunk_named' then
+        return false,'\209\238\245\240\224\237\184\237\237\251\233 \225\224\227\224\230\237\232\234 \237\229 \237\224\233\228\229\237'
+    end
+    local backup={
+        rows=target.rows,observed_at=target.observed_at,server=target.server,
+        occupied_slots=target.occupied_slots,count_known=target.count_known,
+        slots_count=target.slots_count,updated_at=target.updated_at
+    }
+    local rows={}
+    for i,row in ipairs(live.rows or {}) do
+        rows[i]={slot=row.slot,id=row.id,name=row.name,ench=row.ench,
+            qty=row.qty,quantity_confirmed=row.quantity_confirmed}
+    end
+    target.rows=rows
+    target.observed_at=live.observed_at
+    target.updated_at=os.time()
+    target.server=live.server
+    target.occupied_slots=live.occupied_slots
+    target.count_known=live.count_known
+    target.slots_count=TRUNK_SLOTS
+    if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            for k,v in pairs(backup) do target[k]=v end
+            if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    T.completed_update_target_id=nil
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true,target
 end
 
 -- Refresh timeout status when the scanner panel is drawn, even if no more packets arrive.
@@ -545,6 +629,7 @@ function S.trunk_state()
     end
     if T.requested_at and now-T.requested_at>60 then
         T.requested_at=nil
+        T.update_target_id=nil
         if T.status=='waiting' or T.status=='receiving' then
             T.status='no_packets'
             T.last_error='No complete trunk snapshot within 60 seconds. Open the trunk normally.'
@@ -959,7 +1044,8 @@ function V.storage_screen()
                 local statuses={idle='\206\230\232\228\224\229\242 \238\242\234\240\251\242\232\255',receiving='\207\238\235\243\247\229\237\232\229 \228\224\237\237\251\245',
                     saved='\207\238\241\235\229\228\237\232\233 \225\224\227\224\230\237\232\234 \241\238\245\240\224\237\184\237',saved_from_disk='\197\241\242\252 \241\242\224\240\251\233 \241\237\232\236\238\234',
                     incomplete='\205\229\228\238\241\242\224\242\238\247\237\238 \241\235\238\242\238\226',unknown_partial='\207\238\235\243\247\229\237\224 \235\232\248\252 \247\224\241\242\252',
-                    unverified_delta='\205\229\239\240\238\226\229\240\229\237\237\238\229 \232\231\236\229\237\229\237\232\229',save_error='\206\248\232\225\234\224 \241\238\245\240\224\237\229\237\232\255'}
+                    unverified_delta='\205\229\239\240\238\226\229\240\229\237\237\238\229 \232\231\236\229\237\229\237\232\229',save_error='\206\248\232\225\234\224 \241\238\245\240\224\237\229\237\232\255',
+                    no_packets='\207\238\235\237\251\233 \241\237\232\236\238\234 \237\229 \239\238\235\243\247\229\237'}
                 V.text('\193\192\195\192\198\205\200\202 \183 \241\234\224\237\232\240\238\226\224\237\232\229')
                 if b((t.autoscan_enabled and '\192\226\242\238\241\234\224\237: \194\202\203' or '\192\226\242\238\241\234\224\237: \194\219\202\203'),
                      'toggle_trunk_auto',math.min(width,250),t.autoscan_enabled,t.autoscan_enabled) then
@@ -1013,15 +1099,41 @@ function V.storage_screen()
                             V.muted('\205\229\242 \246\229\237 \228\235\255 '..info.missing_prices..' \241\242\240\238\234.')
                         end
                     end
-                    if b('\205\192\199\194\192\210\220 \200 \209\206\213\208\192\205\200\210\220','name_trunk',math.min(width,310),false,true)then
-                        V.storage_name_target=t.snapshot
-                        V.storage_name_buf=imgui.new.char[128]()
-                        V.storage_name_error=nil
-                        V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
+                    local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
+                    if update_target then
+                        V.green('\195\206\210\206\194\206 \196\203\223 \206\193\205\206\194\203\197\205\200\223: '..tostring(update_target.title))
+                        V.muted('\205\238\226\251\233 \241\234\224\237 \229\249\184 \205\197 \231\224\239\232\241\224\237 \239\238\226\229\240\245 \241\238\245\240\224\237\184\237\237\238\227\238 \245\240\224\237\232\235\232\249\224.')
+                        if b('\207\208\200\204\197\205\200\210\220 \202 '..tostring(update_target.title),'apply_update',math.min(width,330),false,true)then
+                            local ok,updated=S.apply_latest_to_saved(update_target.id)
+                            if ok then
+                                local _,idx=S.find_snapshot(updated.id)
+                                V.storage_selected=idx or 1
+                                V.storage_library_page='detail'
+                                V.storage_tab='snapshots'
+                                V.storage_error=nil
+                                return
+                            else
+                                V.storage_error=tostring(updated)
+                            end
+                        end
+                        if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','save_update_as_new',math.min(width,300))then
+                            V.storage_name_target=t.snapshot
+                            V.storage_name_buf=imgui.new.char[128]()
+                            V.storage_name_error=nil
+                            V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
+                        end
+                    else
+                        if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','name_trunk',math.min(width,300),false,true)then
+                            V.storage_name_target=t.snapshot
+                            V.storage_name_buf=imgui.new.char[128]()
+                            V.storage_name_error=nil
+                            V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
+                        end
                     end
-                    V.muted('\205\224\231\226\224\237\232\229 \238\242\237\238\241\232\242\241\255 \234 \253\242\238\236\243 \241\237\232\236\234\243, \237\229 \234 ID \224\226\242\238\236\238\225\232\235\255.')
-                    if b('\207\238\241\236\238\242\240\229\242\252 \239\238\241\235\229\228\237\232\233 \225\224\227\224\230\237\232\234','view_trunk',math.min(width,310),false,true)then
+                    V.muted('\205\224\231\226\224\237\232\229 \231\224\234\240\229\239\235\255\229\242\241\255 \231\224 \241\238\245\240\224\237\184\237\237\238\233 \231\224\239\232\241\252\254, \237\229 \231\224 \239\238\241\235\229\228\237\232\236 \241\234\224\237\238\236.')
+                    if b('\206\242\234\240\251\242\252 \239\238\241\235\229\228\237\232\233 \241\234\224\237','view_trunk',math.min(width,280))then
                         V.storage_tab='snapshots'
+                        V.storage_library_page='detail'
                         for i,snap in ipairs(S.snapshots or {})do
                             if snap==t.snapshot or (snap.source=='packet220_trunk' and snap.kind=='trunk') then
                                 V.storage_selected=i;break
@@ -1035,8 +1147,8 @@ function V.storage_screen()
             else
                 V.red('\196\232\224\227\237\238\241\242\232\234\224 \253\242\238\227\238 \234\238\237\242\229\233\237\229\240\224 \237\229\228\238\241\242\243\239\237\224 \226 \228\224\237\237\238\233 \241\225\238\240\234\229.')
             end
-            if b('\209\237\232\236\234\232 \232 \241\238\245\240\224\237\184\237\237\251\229 \226\229\249\232','show_snapshots',math.min(width,290))then
-                V.storage_tab='snapshots';V.storage_selected=1
+            if b('\204\206\200 \213\208\192\205\200\203\200\217\192','show_snapshots',math.min(width,260),false,true)then
+                V.storage_tab='snapshots';V.storage_library_page='list'
             end
             if b('\194\226\229\241\242\232 \241\239\232\241\238\234 \226\240\243\247\237\243\254','manual_open',math.min(width,250))then
                 V.storage_tab='manual'
@@ -1075,64 +1187,139 @@ function V.storage_screen()
         return
     end
     local snapshots=S.snapshots
-    if #snapshots==0 then
-        V.muted('\209\237\232\236\234\238\226 \237\229\242: \238\225\251\247\237\251\233 \232\227\240\238\226\238\233 \228\232\224\235\238\227 \239\238\234\224 \237\229 \240\224\241\239\238\231\237\224\237.')
-        if b('\206\242\234\240\251\242\252 \241\234\224\237\229\240','scan_open',220,false,true)then V.storage_tab='scan'end
+    V.storage_library_page=V.storage_library_page or 'list'
+    local library=S.library and S.library() or {}
+    local live=nil
+    local live_index=nil
+    for i,snap in ipairs(snapshots)do
+        if snap.source=='packet220_trunk' then live=snap;live_index=i;break end
+    end
+    if V.storage_library_page=='list' then
+        if b('+ \209\202\192\205\200\208\206\194\192\210\220 \205\206\194\206\197','library_new_scan',math.min(290,imgui.GetContentRegionAvail().x),false,true)then
+            V.storage_tab='scan'
+            V.storage_scan_mode='trunk'
+            S.begin_trunk_scan()
+            V.reset_list('storage_scan_panel')
+            return
+        end
+        V.apply_font((V.font_pixels or 18)*1.24)
+        V.text('\204\206\200 \213\208\192\205\200\203\200\217\192')
+        V.apply_font()
+        V.muted('\207\238\241\235\229\228\237\232\233 \241\234\224\237 \238\242\228\229\235\252\237\238. \209\238\245\240\224\237\184\237\237\251\229 \237\224\231\226\224\237\232\255 \237\229 \239\229\240\229\231\224\239\232\241\251\226\224\254\242\241\255.')
+        if live then
+            local info=S.evaluate(live)
+            V.text('\207\206\209\203\197\196\205\200\201 \209\202\192\205 \183 \205\197 \209\206\213\208\192\205\168\205')
+            V.muted(os.date('%d.%m %H:%M',live.observed_at)..' \183 '..tostring(live.occupied_slots or 0)..' \231\224\237\255\242\251\245 \241\235\238\242\238\226')
+            V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
+            if b('\206\242\234\240\251\242\252 \239\238\241\235\229\228\237\232\233 \241\234\224\237','library_live',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
+                V.storage_selected=live_index
+                V.storage_library_page='detail'
+                V.reset_list('storage_items')
+                return
+            end
+            imgui.Separator()
+        end
+        if #library==0 then
+            V.muted('\209\238\245\240\224\237\184\237\237\251\245 \245\240\224\237\232\235\232\249 \239\238\234\224 \237\229\242.')
+            V.muted('\207\238\241\235\229 \239\238\235\237\238\227\238 \241\234\224\237\224 \226\251\225\229\240\232 \171\209\238\245\240\224\237\232\242\252 \234\224\234 \237\238\226\238\229\187 \232 \231\224\228\224\233 \232\236\255.')
+        else
+            V.list_rows('storage_library',library,76,function(entry,i,w)
+                local snap=entry.snapshot
+                local kind=snap.kind=='trunk'and'\193\224\227\224\230\237\232\234' or snap.kind=='cabinet'and'\216\234\224\244'
+                    or snap.kind=='warehouse'and'\209\234\235\224\228' or snap.kind=='inventory'and'\200\237\226\229\237\242\224\240\252' or'\213\240\224\237\232\235\232\249\229'
+                V.row('storage_library_'..i,76,function(rw,x,y)
+                    V.at(x,y)
+                    V.apply_font((V.font_pixels or 18)*1.12)
+                    if V.text_button(V.fit(tostring(snap.title or kind),rw),'storage_library_open_'..i,rw,false,34)then
+                        V.storage_selected=entry.index
+                        V.storage_library_page='detail'
+                        V.reset_list('storage_items')
+                    end
+                    V.apply_font()
+                    V.at(x,y+39)
+                    V.muted(V.fit(kind..' \183 '..os.date('%d.%m %H:%M',snap.observed_at or os.time())..
+                        ' \183 '..tostring(snap.count_known or 0)..' \248\242.',rw))
+                end)
+            end,{count=#library,footer=function()
+                V.muted('\209\238\245\240\224\237\229\237\238: '..#library..' / '..tostring(S.max_saved or 20))
+            end})
+        end
+        if b('\211\228\224\235\232\242\252 \226\241\229 \241\238\245\240\224\237\184\237\237\251\229','clear_snapshots',math.min(250,imgui.GetContentRegionAvail().x))then
+            V.open_popup('\206\247\232\241\242\232\242\252 \241\237\232\236\234\232?','storage_clear')
+        end
         return
     end
-    if b('\209\234\224\237\232\240\238\226\224\242\252 \229\249\184 \238\228\232\237 \234\238\237\242\229\233\237\229\240','back_to_scan',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
-        V.storage_tab='scan'
-        V.reset_list('storage_scan_panel')
-    end
-    if b('\211\228\224\235\232\242\252 \226\241\229 \241\238\245\240\224\237\184\237\237\251\229 \241\237\232\236\234\232','clear_snapshots',math.min(300,imgui.GetContentRegionAvail().x))then
-        V.open_popup('\206\247\232\241\242\232\242\252 \241\237\232\236\234\232?','storage_clear')
-    end
+
+    if #snapshots==0 then V.storage_library_page='list';return end
     V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
     local current=snapshots[V.storage_selected]
-    if V.storage_ask_name then
-        V.storage_ask_name=nil
-        V.storage_label_target=current
-        V.storage_label_buf=imgui.new.char[128]()
-        -- Suggest a default name but let the player replace it.
-        local current_title=DSP.utf8(tostring(current.title or ''))
-        ffi.copy(V.storage_label_buf,current_title:sub(1,120))
-        V.storage_label_error=nil
-        V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
+    if not current then V.storage_library_page='list';return end
+    if b('< \204\206\200 \213\208\192\205\200\203\200\217\192','library_back',math.min(230,imgui.GetContentRegionAvail().x))then
+        V.storage_library_page='list'
+        return
     end
-    local controlw=math.max(90,(imgui.GetContentRegionAvail().x-8)/2)
-    if b('\209\237\232\236\238\234 '..V.storage_selected..' / '..#snapshots,'next',controlw)then
-        V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
+    V.apply_font((V.font_pixels or 18)*1.32)
+    V.text(V.fit(tostring(current.title or '\193\229\231 \237\224\231\226\224\237\232\255'),imgui.GetContentRegionAvail().x))
+    V.apply_font()
+    local is_live=current.source=='packet220_trunk'
+    local is_named_trunk=current.source=='packet220_trunk_named'
+    if is_live then
+        V.green('\207\206\209\203\197\196\205\200\201 \209\202\192\205 \183 \205\197 \209\206\213\208\192\205\168\205')
+    else
+        V.muted('\209\206\213\208\192\205\168\205\205\206\197 \213\208\192\205\200\203\200\217\197')
     end
-    V.inline(7)
-    if b(V.storage_sort=='value'and'\206\246\229\237\234\224'or V.storage_sort=='qty'and'\202\238\235\232\247\229\241\242\226\238'
-        or V.storage_sort=='price'and'\214\229\237\224'or V.storage_sort=='category'and'\202\224\242\229\227\238\240\232\232' or '\192\150\223',
-        'sort',controlw)then
+    V.muted(os.date('%d.%m.%Y %H:%M',current.observed_at or os.time()))
+    if is_live then
+        if b('\209\206\213\208\192\205\200\210\220 \202\192\202 \205\206\194\206\197','library_save_live',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
+            V.storage_name_target=current
+            V.storage_name_buf=imgui.new.char[128]()
+            V.storage_name_error=nil
+            V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
+        end
+    elseif is_named_trunk then
+        if b('\206\193\205\206\194\200\210\220 \221\210\206\210 \193\192\195\192\198\205\200\202','library_update_named',math.min(310,imgui.GetContentRegionAvail().x),false,true)then
+            S.begin_trunk_scan(current.id)
+            V.storage_tab='scan'
+            V.storage_scan_mode='trunk'
+            V.reset_list('storage_scan_panel')
+            return
+        end
+        if b('\207\229\240\229\232\236\229\237\238\226\224\242\252','rename',math.min(180,imgui.GetContentRegionAvail().x))then
+            V.storage_label_target=current
+            V.storage_label_buf=imgui.new.char[128]()
+            ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
+            V.storage_label_error=nil
+            V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
+        end
+    else
+        if b('\207\229\240\229\232\236\229\237\238\226\224\242\252','rename',math.min(180,imgui.GetContentRegionAvail().x))then
+            V.storage_label_target=current
+            V.storage_label_buf=imgui.new.char[128]()
+            ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
+            V.storage_label_error=nil
+            V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
+        end
+    end
+
+    local controlw=math.max(110,(imgui.GetContentRegionAvail().x-8)/2)
+    if b(V.storage_sort=='value'and'\209\238\240\242\232\240\238\226\234\224: \238\246\229\237\234\224'or V.storage_sort=='qty'and'\209\238\240\242\232\240\238\226\234\224: \234\238\235\232\247\229\241\242\226\238'
+        or V.storage_sort=='price'and'\209\238\240\242\232\240\238\226\234\224: \246\229\237\224'or V.storage_sort=='category'and'\209\238\240\242\232\240\238\226\234\224: \234\224\242\229\227\238\240\232\232' or '\209\238\240\242\232\240\238\226\234\224: \192\150\223',
+        'sort',math.min(controlw*2+8,imgui.GetContentRegionAvail().x))then
         V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
             or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value'
         V.reset_list('storage_items')
     end
-    if b('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','rename',math.min(190,imgui.GetContentRegionAvail().x))then
-        V.storage_label_target=current
-        V.storage_label_buf=imgui.new.char[128]()
-        ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
-        V.storage_label_error=nil
-        V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
-    end
     local rows,info=S.sorted(current,V.storage_sort)
-    V.muted(V.fit(current.title..' \183 '..os.date('%d.%m %H:%M',current.observed_at)..
-        (current.source=='packet220_trunk'and' \183 Packet 220' or current.source=='packet220_probe'and' \183 Packet 220 (\237\229\239\240\238\226\229\240\229\237\238)' or current.source=='manual'and' \183 \226\240\243\247\237\243\254' or current.source=='textdraw'and' \183 TextDraw' or' \183 Dialog'),imgui.GetContentRegionAvail().x))
     V.text('\207\238\228\242\226\229\240\230\228\229\237\238: '..info.total_qty..' \248\242. \183 \237\229\232\231\226\229\241\242\237\238: '..info.unknown_qty..' \241\242\240\238\234')
-    if current.source=='packet220_trunk' then
-        V.muted('180 \241\235\238\242\238\226 | '..tostring(current.occupied_slots or #current.rows)..' \231\224\237\255\242\238 | ID \224\226\242\238 \237\229 \239\238\228\242\226\229\240\230\228\229\237')
+    if current.kind=='trunk' then
+        V.muted(tostring(current.slots_count or 180)..' \241\235\238\242\238\226 \183 '..tostring(current.occupied_slots or #current.rows)..' \231\224\237\255\242\238')
     end
     if current.source=='packet220_probe' then
-        V.red('\205\197\207\206\203\205\219\201 \209\205\200\204\206\202: \242\232\239 \226\251\225\240\224\237 \226\240\243\247\237\243\254, \237\229\232\231\226\229\241\242\237\251\229 \241\235\238\242\251 \237\229 \243\247\232\242\251\226\224\254\242\241\255.')
-        V.muted('\206\246\229\237\234\232 \238\242\237\238\241\255\242\241\255 \242\238\235\252\234\238 \234 \239\240\229\228\236\229\242\224\236, \239\238\235\243\247\229\237\237\251\236 \239\240\232 \237\224\225\235\254\228\229\237\232\232.')
+        V.red('\205\197\207\206\203\205\219\201 \209\205\200\204\206\202: \242\232\239 \234\238\237\242\229\233\237\229\240\224 \239\238\234\224 \237\229 \239\238\228\242\226\229\240\230\228\184\237.')
     end
     V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
-    V.muted('\205\229 \239\240\232\225\251\235\252 \183 \239\240\238\228\224\230\224 \239\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(info.ask_value))
+    V.muted('\207\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(info.ask_value)..' \183 \253\242\238 \237\229 \247\232\241\242\224\255 \239\240\232\225\251\235\252')
     if info.cross_server then V.red('\196\240\243\227\238\233 \241\229\240\226\229\240: \246\229\237\251 \241\234\240\251\242\251')end
-    V.muted('\194 \238\228\237\238\233 \241\242\240\238\234\229 \151 \226\241\229 \241\242\224\234\232 \238\228\237\238\227\238 \239\240\229\228\236\229\242\224 \232 \243\235\243\247\248\229\237\232\255.')
     V.list_rows('storage_items',rows,94,function(it,i)
         V.row('storage_item_'..i,94,function(ww,x,y)
             local textwidth=math.max(80,ww-118)
@@ -1150,7 +1337,7 @@ function V.storage_screen()
                 V.open_popup('\209\226\238\255 \246\229\237\224','storage_price')
             end
         end)
-    end,{footer=function()V.muted('\210\238\235\252\234\238 \241\238\240\242\232\240\238\226\234\224 Palatka AI, \237\229 \239\240\229\228\236\229\242\238\226 \232\227\240\251.')end})
+    end,{footer=function()V.muted('\209\234\224\237 \237\229 \239\229\240\229\236\229\249\224\229\242 \239\240\229\228\236\229\242\251 \226 \232\227\240\229.')end})
 end
 
 -- Deletion is a real modal confirmation; cancellation never changes snapshots.
@@ -1187,6 +1374,7 @@ function V.popups()
                 V.storage_name_target=nil
                 V.storage_name_error=nil
                 V.storage_tab='snapshots'
+                V.storage_library_page='detail'
                 for i,saved in ipairs(S.snapshots or {})do
                     if saved==snapshot then V.storage_selected=i;break end
                 end
@@ -1220,9 +1408,17 @@ function V.popups()
         imgui.InputText('##storage_name_input',V.storage_label_buf,128)
         if b('\209\238\245\240\224\237\232\242\252','rename_apply',135,false,true)then
             local label=DSP.to_cp(ffi.string(V.storage_label_buf))
-            local ok,err=S.set_snapshot_label(target,label)
-            if ok then V.storage_label_target=nil;imgui.CloseCurrentPopup()
-            else V.storage_label_error=err end
+            local ok,result=S.set_snapshot_label(target,label)
+            if ok then
+                V.storage_label_target=nil
+                if type(result)=='table' then
+                    for i,saved in ipairs(S.snapshots or {})do
+                        if saved==result then V.storage_selected=i;break end
+                    end
+                    V.storage_library_page='detail'
+                end
+                imgui.CloseCurrentPopup()
+            else V.storage_label_error=result end
         end
         V.inline();if b('\206\242\236\229\237\224','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
@@ -1232,7 +1428,7 @@ function V.popups()
         V.muted('\207\240\229\228\236\229\242\251 \226 \232\227\240\229 \238\241\242\224\237\243\242\241\255 \225\229\231 \232\231\236\229\237\229\237\232\233.')
         if b('\211\228\224\235\232\242\252 \241\237\232\236\234\232','confirm_clear',170,false,true)then
             local old=S.snapshots
-            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1
+            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1;V.storage_library_page='list'
             local old_trunk=S.trunk and S.trunk.snapshot
             if S.trunk then S.trunk.snapshot=nil;S.trunk.pending=nil;S.trunk.status='idle';S.trunk.received=0 end
             if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
@@ -1275,6 +1471,7 @@ end
         if id=='storage' then
           V.storage_tab='scan'
           V.storage_scan_mode=V.storage_scan_mode or 'trunk'
+          V.storage_library_page='list'
           if V.reset_list then V.reset_list('storage_scan_panel') end
         end
         return previous(id)
@@ -1283,7 +1480,7 @@ end
     end
   end
 
-  DSP.version='2.8.0'
-  if DSP.flog then DSP.flog('Storage scanner beta 2.8.0 loaded; menu rollback -> 2.7.0') end
+  DSP.version='2.8.1'
+  if DSP.flog then DSP.flog('Smart storage library beta 2.8.1 loaded; menu rollback -> 2.7.0') end
   return true
 end
