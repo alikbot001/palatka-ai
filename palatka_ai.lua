@@ -1,7 +1,7 @@
--- Palatka AI v2.9.3 mobile release, built from src/*.lua
+-- Palatka AI v2.9.4 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.3')
+script_version('2.9.4')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,7 +25137,7 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1783675
+DSP.item_icon_blob_offset = 1803606
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
@@ -25578,15 +25578,21 @@ function DSP.theme.set(name)
     if DSP.theme.list[name] then
         DSP.theme.current = name
         DSP.settings.theme = name
-        DSP.save_settings()
-        DSP.add_log(': ' .. DSP.theme.list[name].name)
+        local ok,err=DSP.save_settings()
+        if ok then
+            if DSP.save_ui_state then DSP.save_ui_state() end
+            DSP.add_log(': ' .. DSP.theme.list[name].name)
+        elseif DSP.flog then DSP.flog('THEME SAVE ERROR '..tostring(err)) end
     end
 end
 
 function DSP.theme.set_opacity(v)
     DSP.theme.opacity = DSP.clamp(v, 0.65, 1.00)
     DSP.settings.opacity = DSP.theme.opacity
-    DSP.save_settings()
+    local ok,err=DSP.save_settings()
+    if ok then
+        if DSP.save_ui_state then DSP.save_ui_state() end
+    elseif DSP.flog then DSP.flog('OPACITY SAVE ERROR '..tostring(err)) end
 end
 
 -- Push the full ImGui style palette for the active theme.
@@ -25658,7 +25664,7 @@ function DSP.theme.push_overlay(accent_alpha)
 end
 
 -- UI state persistence (CR button position, screen, theme transient)
-function DSP.load_ui_state()
+function DSP.load_ui_state(prefer_settings)
     local f = io.open(DSP.ui_state_path, 'rb')
     if not f then return false end
     local raw = f:read('*a')
@@ -25669,8 +25675,12 @@ function DSP.load_ui_state()
         DSP.settings.cr_pos = { x = tonumber(d.cr_pos.x) or 28, y = tonumber(d.cr_pos.y) or 215 }
     end
     if type(d.screen) == 'string' then DSP.settings.screen = d.screen end
-    if type(d.theme) == 'string' then DSP.settings.theme = d.theme end
-    if type(d.opacity) == 'number' then DSP.settings.opacity = d.opacity end
+    -- The primary settings file is authoritative. An old UI snapshot may only
+    -- restore appearance when the primary settings file was not available.
+    if not prefer_settings then
+        if type(d.theme) == 'string' then DSP.settings.theme = d.theme end
+        if type(d.opacity) == 'number' then DSP.settings.opacity = d.opacity end
+    end
     return true
 end
 
@@ -25691,8 +25701,8 @@ function DSP.save_ui_state()
     return true
 end
 
-DSP.load_settings()
-DSP.load_ui_state()
+local loaded_settings = DSP.load_settings()
+DSP.load_ui_state(loaded_settings)
 -- Never overwrite a personal theme during startup/migration.
 if not DSP.settings.ui_v14_migrated then
     DSP.settings.ui_v14_migrated=true
@@ -25881,6 +25891,98 @@ end
 
 end
 __mod_00a_settings_safety()
+
+local function __mod_00b_settings_persistence_v294()
+-- v2.9.4: persist theme and opacity across OTA, game restart and UI snapshots.
+-- This overlay is also applied to existing 2.9.3 installations whose core is loaded.
+local G=DSP.settings_persistence_v294 or {}
+DSP.settings_persistence_v294=G
+if G.installed then return true end
+
+-- Recover the selected appearance from the authoritative settings file even if
+-- an older core has already overlaid it with stale ui_state.json at startup.
+local function read_selected()
+    local path=DSP.settings_path
+    if type(path)~='string' then return end
+    local f=io.open(path,'rb')
+    if not f then return end
+    local body=f:read('*a')
+    f:close()
+    local ok,saved=pcall(decodeJson,body or'')
+    if not ok or type(saved)~='table' then return end
+    if type(saved.theme)=='string' and DSP.theme.list[saved.theme] then
+        DSP.theme.current=saved.theme
+        DSP.settings.theme=saved.theme
+    end
+    if type(saved.opacity)=='number' then
+        DSP.theme.opacity=DSP.clamp(saved.opacity,0.65,1)
+        DSP.settings.opacity=DSP.theme.opacity
+    end
+end
+read_selected()
+
+local function persist_appearance()
+    if not DSP.save_ui_state then return true end
+    local ok,why=DSP.save_ui_state()
+    if not ok and DSP.flog then DSP.flog('APPEARANCE UI STATE SAVE FAILED: '..tostring(why))end
+    return ok,why
+end
+
+function DSP.theme.set(name)
+    if not DSP.theme.list[name] then return false,'Неизвестная тема'end
+    local old=DSP.theme.current
+    DSP.theme.current=name
+    DSP.settings.theme=name
+    local ok,why=DSP.save_settings()
+    if not ok then
+        DSP.theme.current=old
+        DSP.settings.theme=old
+        if DSP.flog then DSP.flog('APPEARANCE SAVE FAILED: '..tostring(why))end
+        return false,why
+    end
+    persist_appearance()
+    return true
+end
+function DSP.theme.set_opacity(value)
+    local old=DSP.theme.opacity
+    local next=DSP.clamp(tonumber(value)or 0.97,0.65,1)
+    DSP.theme.opacity=next
+    DSP.settings.opacity=next
+    local ok,why=DSP.save_settings()
+    if not ok then
+        DSP.theme.opacity=old
+        DSP.settings.opacity=old
+        if DSP.flog then DSP.flog('OPACITY SAVE FAILED: '..tostring(why))end
+        return false,why
+    end
+    persist_appearance()
+    return true
+end
+
+-- Explicit save action and deferred changes use the same durable primary file.
+if DSP.mobile and not G.flush_wrapped then
+    local M=DSP.mobile
+    local old_flush=M.flush_save
+    if type(old_flush)=='function' then
+        M.flush_save=function(force)
+            local result=old_flush(force)
+            if M._save_pending and DSP.flog then
+                local now=os.time()
+                if force or not G.last_warning or now-G.last_warning>15 then
+                    G.last_warning=now
+                    DSP.flog('PERSISTENCE: pending save retry, primary write failed')
+                end
+            end
+            return result
+        end
+    end
+    G.flush_wrapped=true
+end
+G.installed=true
+return true
+
+end
+__mod_00b_settings_persistence_v294()
 
 local function __mod_05_items()
 -- Item catalog: numeric item id -> CP1251 name.
@@ -39776,6 +39878,249 @@ return true
 end
 __mod_49b_promo_mh_options()
 
+local function __mod_49c_promo_mh_scheduler_v294()
+-- v2.9.4: Market Helper scheduler: one template = one batch of chat commands.
+-- No packet injection or server cooldown bypass. Fully opt-in and cancellable.
+local P=DSP.promo
+if P._mh_scheduler_v294 then return true end
+P._mh_scheduler_v294=true
+
+local function now()return os.time()end
+local function connected()
+    if type(sampSendChat)~='function' then return false end
+    if sampIsSampAvailable and not sampIsSampAvailable()then return false end
+    if sampIsLocalPlayerSpawned and not sampIsLocalPlayerSpawned()then return false end
+    return true
+end
+local function clamp(v,lo,hi,default)
+    v=tonumber(v)
+    if not v or v~=v then return default end
+    return math.max(lo,math.min(hi,v))
+end
+local function persist()
+    if DSP.save_settings then
+        local ok,why=DSP.save_settings()
+        if not ok and DSP.flog then DSP.flog('PROMO SAVE ERROR: '..tostring(why))end
+        return ok~=false,why
+    end
+    return true
+end
+local function rows(t)
+    local result={}
+    for _,r in ipairs(t.rows or{})do
+        if r.auto~=false and type(r.text)=='string' and r.text~='' and P.validate(r.text)then
+            result[#result+1]=r.text
+        end
+    end
+    return result
+end
+local function active()
+    for i,t in ipairs(P.settings().templates)do
+        if t.auto~=false and #rows(t)>0 then return true end
+    end
+    return false
+end
+local function interval(t)
+    local low=clamp(t.interval_min,0,3600,0)
+    if low<=0 then
+        low=clamp((t.rows or{})[1] and t.rows[1].interval or t.interval,30,3600,180)
+    end
+    local high=clamp(t.interval_max,0,3600,0)
+    if high<=0 or high<low then high=low end
+    low=math.max(30,math.floor(low))
+    high=math.max(low,math.floor(high))
+    return low==high and low or math.random(low,high)
+end
+local function make_batch(index,t,manual,at)
+    local commands=rows(t)
+    if #commands==0 then return nil,'Нет разрешённых строк в шаблоне'end
+    if t.random_line and #commands>1 then commands={commands[math.random(1,#commands)]}end
+    return {index=index,commands=commands,pos=1,manual=manual==true,
+        due=at,waiting=clamp(t.waiting,.5,10,1.5)}
+end
+local function set_stopped(reason)
+    local s=P.settings()
+    P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
+    P.pause_reason=reason or 'Выключен'
+    s.enabled=false
+    persist()
+end
+local function report_error(err)
+    P.last_error=tostring(err or'Ошибка отправки')
+    P.pause_reason=P.last_error
+    if DSP.flog then DSP.flog('PROMO: '..P.last_error)end
+end
+function P.start(at)
+    at=at or now()
+    if not active()then return false,'Включи хотя бы один шаблон с командами'end
+    local s=P.settings()
+    if not s.continuous and (P.session_count or 0)>=P.MAX_SESSION then
+        return false,'Лимит отправок сессии исчерпан'
+    end
+    local prior=s.enabled
+    s.enabled=true
+    local ok,why=persist()
+    if not ok then s.enabled=prior;return false,tostring(why or'Не удалось сохранить запуск')end
+    P.running=true;P.last_error=nil;P.pause_reason=nil;P._batch=nil
+    P.manual_busy=false;P.manual_template=nil
+    P.was_online=false
+    P.next_at=at+clamp(s.start_delay,10,120,20)
+    for _,t in ipairs(s.templates)do t._promo_due=nil end
+    return true
+end
+function P.stop()
+    set_stopped('Остановлен пользователем')
+end
+function P.bootstrap(at)
+    at=at or now()
+    local s=P.settings()
+    P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
+    P.session_count=0;P.last_sent=0;P.was_online=false;P.last_error=nil
+    P.next_at=0
+    for _,t in ipairs(s.templates)do t._promo_due=nil end
+    if s.resume_on_login and s.enabled and active() then
+        P.running=true
+        P.next_at=at+clamp(s.start_delay,10,120,20)
+        P.pause_reason='Ожидание подключения'
+    end
+end
+function P.send_template_once(index)
+    if P._batch then return false,'Дождись завершения текущего шаблона'end
+    if not connected()then return false,'Нет подключения к игре'end
+    local t=P.settings().templates[index]
+    if not t then return false,'Шаблон не найден'end
+    local batch,why=make_batch(index,t,true,now())
+    if not batch then return false,why end
+    P._batch=batch
+    P.manual_busy=true;P.manual_template=index
+    P.last_error=nil;P.pause_reason=nil
+    return true
+end
+local function finish_batch(batch,at)
+    local s=P.settings()
+    local t=s.templates[batch.index]
+    if t then
+        t.last_sent=at
+        if not batch.manual then
+            t.auto_count=(tonumber(t.auto_count)or 0)+1
+            local limit=clamp(t.auto_limit,0,1000,0)
+            if limit>0 and t.auto_count>=limit then
+                t.auto=false
+                t.auto_count=0
+                P.last_error='Шаблон «'..tostring(t.name or'?')..'»: достигнут лимит'
+            end
+            t._promo_due=at+interval(t)
+        end
+    end
+    P._batch=nil;P.manual_busy=false;P.manual_template=nil
+    P.next_at=at+math.max(30,tonumber(P.MIN_INTERVAL)or 30)
+    persist()
+end
+local function step_batch(at,send,online)
+    local batch=P._batch
+    if not batch or at<batch.due then return false end
+    if not online then
+        report_error('Нет соединения: отправка приостановлена')
+        P._batch=nil;P.manual_busy=false;P.manual_template=nil
+        return false
+    end
+    if not P.settings().continuous and (P.session_count or 0)>=P.MAX_SESSION then
+        set_stopped('Лимит сообщений за сессию')
+        return false
+    end
+    local raw=batch.commands[batch.pos]
+    local cmd,why=P.expand(raw)
+    if not cmd or #cmd>P.MAX_STEP_BYTES then
+        report_error(why or'Команда превышает 200 байт')
+        P._batch=nil;P.manual_busy=false;P.manual_template=nil
+        P.next_at=at+30
+        return false
+    end
+    local sender=send or sampSendChat
+    if type(sender)~='function'then report_error('Отправка чата недоступна');return false end
+    local ok,result=pcall(sender,cmd)
+    if not ok or result==false then
+        report_error(ok and'Отправка отклонена' or result)
+        P._batch=nil;P.manual_busy=false;P.manual_template=nil
+        P.next_at=at+30
+        return false
+    end
+    P.last_sent=at
+    P.last_command=cmd
+    P.session_count=(P.session_count or 0)+1
+    batch.pos=batch.pos+1
+    P.last_error=nil
+    if batch.pos>#batch.commands then
+        finish_batch(batch,at)
+    else
+        batch.due=at+math.max(1,math.ceil(batch.waiting))
+        P.next_at=batch.due
+    end
+    if not P.settings().continuous and P.session_count>=P.MAX_SESSION then
+        set_stopped('Лимит сообщений за сессию')
+    end
+    return true
+end
+
+function P.tick(at,send,online)
+    at=at or now()
+    if online==nil then online=connected()end
+    if P._batch then return step_batch(at,send,online)end
+    if not P.running then return false end
+    if not online then
+        P.was_online=false
+        P.pause_reason='Нет подключения: ожидание'
+        return false
+    end
+    local s=P.settings()
+    if not P.was_online then
+        P.was_online=true
+        P.next_at=math.max(P.next_at or 0,at+clamp(s.start_delay,10,120,20))
+        P.pause_reason='Ожидание после входа'
+        return false
+    end
+    if at<(P.next_at or 0)then return false end
+    if not s.continuous and P.session_count>=P.MAX_SESSION then
+        set_stopped('Лимит сообщений за сессию')
+        return false
+    end
+    local earliest
+    for index,t in ipairs(s.templates)do
+        if t.auto~=false and #rows(t)>0 then
+            local due=t._promo_due
+            if not due then
+                local last=tonumber(t.last_sent)or 0
+                due=last>0 and last+interval(t)or at
+                t._promo_due=due
+            end
+            if at>=due and at>=((P.last_sent or 0)+math.max(30,P.MIN_INTERVAL or 30)) or
+               (at>=due and (P.last_sent or 0)==0) then
+                local batch,why=make_batch(index,t,false,at)
+                if not batch then report_error(why);return false end
+                P._batch=batch
+                P.pause_reason=nil
+                return step_batch(at,send,online)
+            end
+            earliest=not earliest and due or math.min(earliest,due)
+        end
+    end
+    if not earliest then
+        set_stopped('Нет включённых шаблонов')
+    else
+        P.next_at=math.max(at+1,earliest)
+    end
+    return false
+end
+function P.queue_left()
+    if P._batch then return math.max(0,math.ceil(P._batch.due-now()))end
+    if not P.running then return nil end
+    return math.max(0,math.ceil((P.next_at or 0)-now()))
+end
+return true
+
+end
+__mod_49c_promo_mh_scheduler_v294()
+
 local function __mod_50_overlay()
 -- 50_overlay.lua
 -- v1.2 overlay windows: trade eval + shop scan + crlog mini-window.
@@ -44891,6 +45236,190 @@ return true
 
 end
 __mod_66c_mh_trade_journal()
+
+local function __mod_66d_mh_journal_screen_v294()
+-- v2.9.4: Market Helper-style journal as ONE normal screen, not a second floating UI.
+-- Layout and filtering follow the user-provided Market_Helper(1).lua trade log.
+local C,V=DSP.craglog,DSP.ui22
+if C._mh_journal_screen_v294 then return true end
+C._mh_journal_screen_v294=true
+local function u(s)return DSP.utf8(tostring(s or''))end
+local function text(s)imgui.Text(u(s))end
+local function faded(s)imgui.TextDisabled(u(s))end
+local function money(n)return DSP.money(math.floor(tonumber(n)or 0))end
+local function button(s,id,w,active)
+    return V.button(s,'mhjournal294_'..id,w,active,false,34)
+end
+local function state()
+    DSP.settings.journal_mh=DSP.settings.journal_mh or {period='day',side='all',page=1,date=''}
+    local s=DSP.settings.journal_mh
+    if not ({day=true,week=true,month=true,all=true,date=true})[s.period] then s.period='day' end
+    if not ({all=true,sell=true,buy=true})[s.side] then s.side='all' end
+    s.page=math.max(1,math.floor(tonumber(s.page)or 1))
+    return s
+end
+local function persist()
+    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
+    elseif DSP.save_settings then DSP.save_settings()end
+end
+local function select_period(s,period)
+    if s.period~=period then s.period=period;s.page=1;persist()end
+end
+local function matching_date(ts,period,spec,now)
+    if period=='all' then return true end
+    if period=='date' then return os.date('%Y-%m-%d',ts)==spec end
+    if period=='day' then return os.date('%Y-%m-%d',ts)==os.date('%Y-%m-%d',now)end
+    local delta=period=='week' and 7*86400 or 30*86400
+    return ts>=now-delta and ts<=now
+end
+local function available_dates(rows)
+    local seen,dates={},{}
+    for _,r in ipairs(rows)do
+        if (r.ts or 0)>0 then
+            local day=os.date('%Y-%m-%d',r.ts)
+            if not seen[day] then dates[#dates+1]=day;seen[day]=true end
+        end
+    end
+    table.sort(dates,function(a,b)return a>b end)
+    return dates
+end
+local function cell(s,width,tip)
+    local str=tostring(s or'')
+    local shown=V.fit and V.fit(str,math.max(25,width-7)) or str
+    text(shown)
+    if tip and shown~=str and imgui.IsItemHovered and imgui.IsItemHovered() then
+        imgui.SetTooltip(u(str))
+    end
+    imgui.NextColumn()
+end
+local function columns(w)
+    -- The same six columns as the Market Helper "Сделки" table.
+    local ratios={.155,.265,.075,.155,.14,.21}
+    local sizes={}
+    for i,r in ipairs(ratios)do sizes[i]=math.max(43,math.floor(w*r))end
+    imgui.Columns(6,'##mhjournal294_columns',false)
+    for i=1,6 do imgui.SetColumnWidth(i-1,sizes[i])end
+    faded('Дата');imgui.NextColumn()
+    faded('Товар');imgui.NextColumn()
+    faded('Кол.');imgui.NextColumn()
+    faded('Цена $');imgui.NextColumn()
+    faded('Тип');imgui.NextColumn()
+    faded('Ник');imgui.NextColumn()
+    imgui.Separator()
+    return sizes
+end
+local function row(e,sizes)
+    local stamp=(e.ts and e.ts>0)and os.date('%d.%m %H:%M',e.ts)or'—'
+    cell(stamp,sizes[1],true)
+    cell(e.name or'?',sizes[2],true)
+    cell(tostring(e.qty or 1)..(e.qty_exact==false and'~'or''),sizes[3])
+    local price=tonumber(e.amount)or 0
+    -- Palatka receipts already store the actual FULL transaction amount.
+    -- Do not accidentally multiply by quantity a second time.
+    cell('$'..money(price):gsub('^%$', ''),sizes[4],true)
+    if e.kind=='sell' then
+        imgui.TextColored(DSP.theme.col('good',1),u('Продажа'))
+    else
+        imgui.TextColored(DSP.theme.col('accent',1),u('Покупка'))
+    end
+    imgui.NextColumn()
+    cell(e.partner and e.partner~='' and e.partner or'—',sizes[6],true)
+end
+local function page_nav(s,count)
+    local count_pages=math.max(1,math.ceil(count/60))
+    s.page=math.max(1,math.min(count_pages,s.page))
+    local width=math.max(39,math.min(55,imgui.GetContentRegionAvail().x/7))
+    if button('<<','first',width)then s.page=1;persist()end
+    imgui.SameLine(0,4)
+    if button('<','back',width)then s.page=math.max(1,s.page-1);persist()end
+    imgui.SameLine(0,8)
+    faded('Стр. '..s.page..'/'..count_pages..' ('..count..')')
+    imgui.SameLine(0,8)
+    if button('>','next',width)then s.page=math.min(count_pages,s.page+1);persist()end
+    imgui.SameLine(0,4)
+    if button('>>','last',width)then s.page=count_pages;persist()end
+end
+
+-- The original floating button/pin/minimize window is deliberately removed.
+-- Data collection by C.log_trade/C.log_market continues unchanged.
+function C.draw() end
+if DSP.settings.craglog then DSP.settings.craglog.open=false end
+
+function V.journal()
+    local s=state()
+    V.heading('Журнал сделок')
+    local avail=imgui.GetContentRegionAvail().x
+    local labels={{'all','Все'},{'day','Сегодня'},{'week','Неделя'},
+                  {'month','Месяц'},{'date','Дата'}}
+    local width=math.max(54,(avail-24)/5)
+    for i,p in ipairs(labels)do
+        if button(p[2],'period_'..p[1],width,s.period==p[1])then
+            select_period(s,p[1])
+            if p[1]=='date' then imgui.OpenPopup('##mhjournal294_dates')end
+        end
+        if i<#labels then imgui.SameLine(0,6)end
+    end
+    local query,edited=V.search('mhjournal294_search','Поиск товара / ника',-1)
+    if edited then s.page=1 end
+    local side_width=math.max(73,(imgui.GetContentRegionAvail().x-12)/3)
+    for i,p in ipairs({{'all','Все сделки'},{'sell','Продажи'},{'buy','Покупки'}})do
+        if button(p[2],'side_'..p[1],side_width,s.side==p[1])then
+            s.side=p[1];s.page=1;persist()
+        end
+        if i<3 then imgui.SameLine(0,6)end
+    end
+    -- Read all once so date selection contains every recorded trade.
+    local all=C.trade_rows('all',query or'',s.side)
+    if imgui.BeginPopup('##mhjournal294_dates')then
+        faded('Выбери дату')
+        for _,date in ipairs(available_dates(all))do
+            local display=date:sub(9,10)..'.'..date:sub(6,7)..'.'..date:sub(1,4)
+            if imgui.Selectable(display..'##'..date,s.date==date)then
+                s.date=date;s.period='date';s.page=1;persist();imgui.CloseCurrentPopup()
+            end
+        end
+        imgui.EndPopup()
+    end
+    if s.period=='date' then
+        if s.date=='' then faded('Дата не выбрана')
+        else faded('Дата: '..s.date:sub(9,10)..'.'..s.date:sub(6,7)..'.'..s.date:sub(1,4))end
+    end
+
+    local filtered,now={},os.time()
+    for _,r in ipairs(all)do
+        if matching_date(tonumber(r.ts)or 0,s.period,s.date,now)then
+            filtered[#filtered+1]=r
+        end
+    end
+    table.sort(filtered,function(a,b)return (a.ts or 0)>(b.ts or 0)end)
+    local total=C.trade_totals(filtered)
+    imgui.Separator()
+    imgui.TextColored(DSP.theme.col('good',1),u('Продажи: '..total.sell_qty..' шт. · '..money(total.sells)))
+    imgui.SameLine(0,18)
+    imgui.TextColored(DSP.theme.col('accent',1),u('Покупки: '..total.buy_qty..' шт. · '..money(total.buys)))
+    if total.approx then faded('~ В некоторых старых записях количество приблизительное')end
+    local start=(s.page-1)*60+1
+    local finish=math.min(start+59,#filtered)
+    local height=math.max(95,imgui.GetContentRegionAvail().y-54)
+    if imgui.BeginChild('##mhjournal294_table',imgui.ImVec2(-1,height),true)then
+        local sizes=columns(math.max(610,imgui.GetWindowContentRegionWidth()))
+        if #filtered==0 then faded('История сделок пуста.')end
+        for i=start,finish do
+            local e=filtered[i]
+            if e then row(e,sizes)end
+        end
+        imgui.Columns(1)
+        if DSP.mobile and DSP.mobile.touch_scroll then
+            DSP.mobile.touch_scroll(imgui.GetIO(),'mhjournal294')
+        end
+    end
+    imgui.EndChild()
+    page_nav(s,#filtered)
+end
+return true
+
+end
+__mod_66d_mh_journal_screen_v294()
 
 local function __mod_67_ui22_shop_scan()
 -- Observed stalls are separate from API snapshots and never rewrite preset prices implicitly.
