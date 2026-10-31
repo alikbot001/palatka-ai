@@ -1,0 +1,30 @@
+name: Palatka storage OTA beta checks
+on:
+  push:
+    branches:
+      - feat/storage-readonly-probe-v1
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'updates/**'
+      - 'version.json'
+      - '.github/workflows/storage-beta.yml'
+jobs:
+  storage-luajit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Validate OTA overlay Lua syntax
+        run: luajit -b updates/palatka_update.lua /dev/null
+      - name: Test storage scanner models
+        run: |
+          set -e
+          luajit tests/test_v250_storage_probe.lua
+          luajit tests/test_v250_storage_probe_report.lua
+          luajit tests/test_v250_storage_probe_ui.lua
+          luajit tests/test_v250_storage_navigation.lua
+          luajit tests/test_v250_trunk_named.lua
