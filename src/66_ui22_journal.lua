@@ -80,6 +80,13 @@ function V.journal()
     end
     V.inline()
     if b('Открыть лог','mini_open',124)then st.open=true;M.defer_save()end
+    if b(st.pinned and 'Разблокировать положение' or 'Закрепить положение','mini_pin',230,st.pinned)then
+        C.set_pinned(not st.pinned)
+    end
+    V.inline()
+    if b(st.minimized and 'Развернуть лог' or 'Свернуть лог','mini_collapse',150,st.minimized)then
+        C.set_minimized(not st.minimized)
+    end
     V.muted('Окно сохраняет позицию после перетаскивания. Закреплять вручную не нужно.')
     local alpha=imgui.new.float(tonumber(st.alpha)or .28)
     imgui.SetNextItemWidth(math.min(260,imgui.GetContentRegionAvail().x))
