@@ -1,5 +1,4 @@
--- Small OTA overlay for the already installed v2.5.2 standalone.
--- The original game event subscriber stays intact; no WebView or chat commands.
+-- Palatka AI 2.8.0 storage scanner beta. Native mimgui only.
 PALATKA_UPDATE_VERSION = '2.8.0'
 return function(DSP)
   local function module_storage()
@@ -556,6 +555,7 @@ end
 
   end
   module_storage()
+
   local function module_probe()
 -- Opt-in, read-only observer for unknown InventoryScreen containers.
 -- Does not send packets, click slots or assume undocumented type => kind mappings.
@@ -735,6 +735,7 @@ end
 
   end
   module_probe()
+
   local function module_probe_ui()
 -- Contextual controls inside Storage > Scan (native mimgui).
 -- The selector lives in 60b_carbon_storage.lua; never capture another kind silently.
@@ -795,7 +796,7 @@ function V.storage_probe_panel(width,kind)
     end
     V.probe_selected=math.max(1,math.min(#state.order,V.probe_selected or 1))
     local selected=V.probe_selected
-    if button('\202\224\237\228\232\228\224\242 '..selected..' / '..#state.order..' ?','next',w)then
+    if button('\202\224\237\228\232\228\224\242 '..selected..' / '..#state.order..' >','next',w)then
         selected=selected%#state.order+1;V.probe_selected=selected
     end
     local info,err=P.preview(selected)
@@ -838,6 +839,72 @@ end
 
   end
   module_probe_ui()
+
+  local function install_beta_rollback()
+    local U=DSP.updater
+    local stable=[==[
+-- Palatka AI v2.7.0: restore the native v2.5.2 mimgui interface.
+-- This rollback release intentionally contains no WebUI hooks or browser UI.
+-- The update manager reloads the base Lua after installing this overlay.
+PALATKA_UPDATE_VERSION = '2.7.0'
+
+return function(DSP)
+    -- Best effort: clean up a WebView retained by the previous overlay.
+    local W = DSP.webui
+    if W and type(W.hide) == 'function' then pcall(W.hide) end
+    local ok, web = pcall(require, 'webviews')
+    if ok and web then
+        local id = 95253
+        if type(web.setClickable) == 'function' then pcall(web.setClickable, id, false) end
+        if type(web.setVisible) == 'function' then pcall(web.setVisible, id, false) end
+        if type(web.setPos) == 'function' then pcall(web.setPos, id, -99999, -99999) end
+        if type(web.setSize) == 'function' then pcall(web.setSize, id, 1, 1) end
+    end
+    -- Leave presets, settings, market cache, saved storages and trading runtime untouched.
+    DSP.version = '2.7.0'
+    if DSP.flog then pcall(DSP.flog, 'Rollback to native mimgui UI (v2.5.2 base)') end
+    return true
+end
+
+]==]
+    local function restore()
+      if not U or type(U.update_path)~='string' then return false,'Updater path unavailable' end
+      local dest=U.update_path
+      local temp=dest..'.crr_tmp'
+      local backup=dest..'.crr_beta_backup'
+      local f,err=io.open(temp,'wb')
+      if not f then return false,tostring(err or 'cannot create rollback file') end
+      local wrote,write_err=f:write(stable)
+      local closed,close_err=f:close()
+      if not wrote or not closed then
+        pcall(os.remove,temp)
+        return false,tostring(write_err or close_err or 'rollback write failed')
+      end
+      pcall(os.remove,backup)
+      local kept,keep_err=os.rename(dest,backup)
+      if not kept then pcall(os.remove,temp);return false,'backup failed: '..tostring(keep_err) end
+      local placed,move_err=os.rename(temp,dest)
+      if not placed then
+        pcall(os.rename,backup,dest)
+        pcall(os.remove,temp)
+        return false,'restore failed: '..tostring(move_err)
+      end
+      if U.state then U.state.status='rolled_back';U.state.error=nil end
+      if DSP.notify then pcall(DSP.notify,'CRR: stable 2.7.0 restored') end
+      if lua_thread and lua_thread.create and wait and thisScript then
+        lua_thread.create(function()
+          wait(650)
+          local sc=thisScript()
+          if sc and sc.reload then sc:reload() end
+        end)
+      end
+      return true
+    end
+    DSP.storage_beta_rollback=restore
+    if U then U.rollback=restore end
+  end
+  install_beta_rollback()
+
   local function module_storage_ui()
 -- Safe container analyzer; cannot read bespoke game UIs without a packet parser.
 local ffi=require('ffi')
@@ -849,11 +916,15 @@ local function b(s,id,w,on,primary)return V.button(s,'storage_'..id,w,on,primary
 -- previous giant fixed header which pushed the item list off small screens.
 function V.storage_screen()
     V.heading('\213\240\224\237\232\235\232\249\224',function()
-        if b('\209\234\224\237\229\240','quick_scan',105) then
+        if DSP.storage_beta_rollback then
+            if b('CRR \206\210\202\192\210','beta_rollback',145,false,true) then
+                V.open_popup('CRR \238\242\234\224\242','storage_beta_rollback')
+            end
+        elseif b('\209\234\224\237\229\240','quick_scan',105) then
             V.storage_tab='scan'
             V.reset_list('storage_scan_panel')
         end
-    end,109)
+    end,DSP.storage_beta_rollback and 149 or 109)
     local capstate,capcount,caperr=S.textdraw_state()
     V.storage_tab=V.storage_tab or 'scan'
     V.storage_scan_mode=V.storage_scan_mode or 'trunk'
@@ -1082,19 +1153,25 @@ function V.storage_screen()
     end,{footer=function()V.muted('\210\238\235\252\234\238 \241\238\240\242\232\240\238\226\234\224 Palatka AI, \237\229 \239\240\229\228\236\229\242\238\226 \232\227\240\251.')end})
 end
 
-
-  end
-  module_storage_ui()
-  -- The base popups already support rename, manual prices and clearing.
-  -- Add ONLY the newly introduced named-trunk popup; do not draw base
-  -- popups twice (that would trigger duplicate ImGui modal IDs).
-  do
-    local V,S,M = DSP.ui21,DSP.storage,DSP.mobile
-    local ffi = require('ffi')
-    local function b(label,id,w,on,primary) return V.button(label,'storage_'..id,w,on,primary) end
-    local original = V.popups
-    function V.popups()
-      if original then original() end
+-- Deletion is a real modal confirmation; cancellation never changes snapshots.
+local old_popups=V.popups
+function V.popups()
+    if old_popups then old_popups()end
+    V.popup('CRR \238\242\234\224\242','storage_beta_rollback',function()
+        V.text('\194\229\240\237\243\242\252 \241\242\224\225\232\235\252\237\243\254 Palatka AI \241 \238\225\251\247\237\251\236 \232\237\242\229\240\244\229\233\241\238\236?')
+        V.muted('\210\229\241\242\238\226\251\233 \241\234\224\237\229\240 \225\243\228\229\242 \238\242\234\235\254\247\184\237. \205\224\241\242\240\238\233\234\232, \239\240\229\241\229\242\251 \232 \241\237\232\236\234\232 \237\229 \243\228\224\235\255\254\242\241\255.')
+        if b('\207\206\196\210\194\197\208\196\200\210\220 \206\210\202\192\210','beta_rollback_confirm',230,false,true)then
+            local ok,err=DSP.storage_beta_rollback()
+            if ok then
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_rollback_error=tostring(err)
+            end
+        end
+        V.inline()
+        if b('\206\242\236\229\237\224','beta_rollback_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_rollback_error then V.red(V.fit(V.storage_rollback_error,imgui.GetContentRegionAvail().x))end
+    end,{w=480,h=260})
     V.popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name',function()
         local target=V.storage_name_target
         if not target then V.red('\205\229\242 \239\238\235\237\238\227\238 \241\237\232\236\234\224 \225\224\227\224\230\237\232\234\224.');return end
@@ -1121,112 +1198,92 @@ end
         if b('\206\242\236\229\237\224','cancel_named_trunk',120)then imgui.CloseCurrentPopup()end
         if V.storage_name_error then V.red(V.fit(V.storage_name_error,imgui.GetContentRegionAvail().x))end
     end,{w=460,h=330})
-
-    end
-  end
-  -- Observe inventory without replacing the working trade/shop handlers.
-  do
-    local live=DSP.live
-    local previous=live.handle
-    live.handle=function(iface,sub,raw)
-      if iface==52 and DSP.storage_probe and DSP.storage_probe.on_packet then
-        local ok,err=pcall(DSP.storage_probe.on_packet,sub,raw)
-        if not ok and DSP.flog then DSP.flog('STORAGE observer: '..tostring(err)) end
-      end
-      return previous(iface,sub,raw)
-    end
-  end
-  -- Keep the old mimgui workspace, just make Storage open the scanner.
-  do
-    local V=DSP.ui21
-    local prior=V.set_screen
-    V.set_screen=function(id)
-      if id=='storage' then
-        V.storage_tab='scan'
-        V.storage_scan_mode=V.storage_scan_mode or 'trunk'
-        if V.reset_list then V.reset_list('storage_scan_panel') end
-      end
-      return prior(id)
-    end
-  end
-  -- Rollback ALWAYS restores the known native stable overlay (not an old
-  -- previously-installed WebUI backup).
-  do
-    local U,V=DSP.updater,DSP.ui21
-    local stable=[==[
--- Palatka AI v2.7.0: restore the native v2.5.2 mimgui interface.
--- This rollback release intentionally contains no WebUI hooks or browser UI.
--- The update manager reloads the base Lua after installing this overlay.
-PALATKA_UPDATE_VERSION = '2.7.0'
-
-return function(DSP)
-    -- Best effort: clean up a WebView retained by the previous overlay.
-    local W = DSP.webui
-    if W and type(W.hide) == 'function' then pcall(W.hide) end
-    local ok, web = pcall(require, 'webviews')
-    if ok and web then
-        local id = 95253
-        if type(web.setClickable) == 'function' then pcall(web.setClickable, id, false) end
-        if type(web.setVisible) == 'function' then pcall(web.setVisible, id, false) end
-        if type(web.setPos) == 'function' then pcall(web.setPos, id, -99999, -99999) end
-        if type(web.setSize) == 'function' then pcall(web.setSize, id, 1, 1) end
-    end
-    -- Leave presets, settings, market cache, saved storages and trading runtime untouched.
-    DSP.version = '2.7.0'
-    if DSP.flog then pcall(DSP.flog, 'Rollback to native mimgui UI (v2.5.2 base)') end
-    return true
+    V.popup('\209\226\238\255 \246\229\237\224','storage_price',function()
+        local target,row=V.storage_price_target,V.storage_price_row
+        if not target or not row then V.muted('\205\229\242 \226\251\225\240\224\237\237\238\227\238 \239\240\229\228\236\229\242\224');return end
+        V.text(V.fit(row.name,imgui.GetContentRegionAvail().x))
+        V.muted('\214\229\237\224 \231\224 \238\228\237\243 \248\242\243\234\243 \228\235\255 \240\224\241\247\184\242\224 \253\242\238\227\238 \241\237\232\236\234\224. 0 = \246\229\237\224 API.')
+        M.compact_number(V.storage_price_buf,'value','storage_price_value',math.min(250,imgui.GetContentRegionAvail().x),0)
+        if b('\209\238\245\240\224\237\232\242\252','price_apply',135,false,true)then
+            local ok,err=S.set_manual_price(target,row,V.storage_price_buf.value)
+            if ok then V.reset_list('storage_items');V.storage_price_target=nil;imgui.CloseCurrentPopup()
+            else V.storage_price_error=err end
+        end
+        V.inline();if b('\206\242\236\229\237\224','price_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_price_error then V.red(V.storage_price_error)end
+    end,{w=460,h=260})
+    V.popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename',function()
+        local target=V.storage_label_target
+        if not target then return end
+        V.muted('\221\242\238 \232\236\255 \242\238\235\252\234\238 \228\235\255 \241\237\232\236\234\224. ID \236\224\248\232\237\251 \224\226\242\238\236\224\242\232\247\229\241\234\232 \237\229 \238\239\240\229\228\229\235\255\229\242\241\255.')
+        imgui.SetNextItemWidth(-1)
+        imgui.InputText('##storage_name_input',V.storage_label_buf,128)
+        if b('\209\238\245\240\224\237\232\242\252','rename_apply',135,false,true)then
+            local label=DSP.to_cp(ffi.string(V.storage_label_buf))
+            local ok,err=S.set_snapshot_label(target,label)
+            if ok then V.storage_label_target=nil;imgui.CloseCurrentPopup()
+            else V.storage_label_error=err end
+        end
+        V.inline();if b('\206\242\236\229\237\224','rename_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_label_error then V.red(V.storage_label_error)end
+    end,{w=460,h=240})
+    V.popup('\206\247\232\241\242\232\242\252 \241\237\232\236\234\232?','storage_clear',function()
+        V.text('\211\228\224\235\232\242\252 \241\238\245\240\224\237\184\237\237\251\229 \241\237\232\236\234\232 \248\234\224\244\238\226 \232 \225\224\227\224\230\237\232\234\238\226?')
+        V.muted('\207\240\229\228\236\229\242\251 \226 \232\227\240\229 \238\241\242\224\237\243\242\241\255 \225\229\231 \232\231\236\229\237\229\237\232\233.')
+        if b('\211\228\224\235\232\242\252 \241\237\232\236\234\232','confirm_clear',170,false,true)then
+            local old=S.snapshots
+            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1
+            local old_trunk=S.trunk and S.trunk.snapshot
+            if S.trunk then S.trunk.snapshot=nil;S.trunk.pending=nil;S.trunk.status='idle';S.trunk.received=0 end
+            if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+            if DSP.save_settings and not DSP.save_settings() then
+                S.snapshots=old
+                if S.trunk then S.trunk.snapshot=old_trunk;S.trunk.status='saved' end
+                if DSP.settings then DSP.settings.storage_snapshots=old end
+                V.storage_error='\205\229 \243\228\224\235\238\241\252 \241\238\245\240\224\237\232\242\252 \243\228\224\235\229\237\232\229';return
+            end
+            imgui.CloseCurrentPopup()
+        end
+        V.inline()
+        if b('\206\242\236\229\237\224','cancel_clear',120)then imgui.CloseCurrentPopup()end
+    end,{w=480,h=230})
 end
 
-]==]
-    local function restore_stable()
-      local dest=U.update_path
-      local temp=dest..'.crr_tmp'
-      local original=dest..'.crr_beta_backup'
-      local f,err=io.open(temp,'wb')
-      if not f then return false,tostring(err) end
-      local wrote,reason=f:write(stable)
-      local closed,close_error=f:close()
-      if not wrote or not closed then pcall(os.remove,temp);return false,tostring(reason or close_error) end
-      pcall(os.remove,original)
-      local kept,keep_error=os.rename(dest,original)
-      if not kept then pcall(os.remove,temp);return false,'Cannot back up active overlay: '..tostring(keep_error) end
-      local placed,move_error=os.rename(temp,dest)
-      if not placed then pcall(os.rename,original,dest);pcall(os.remove,temp);return false,'Cannot restore stable overlay: '..tostring(move_error) end
-      U.state.status='rolled_back';U.state.error=nil
-      if DSP.notify then pcall(DSP.notify,'CRR: stable interface restored (2.7.0)') end
-      if lua_thread and lua_thread.create and wait and thisScript then
-        lua_thread.create(function() wait(650);local sc=thisScript();if sc and sc.reload then sc:reload() end end)
-      end
-      return true
-    end
-    U.rollback=restore_stable
-    -- The updater screen already exposes a rollback action. Change the
-    -- label and require confirmation instead of adding a new chat command.
-    local old_button=V.button
-    V.button=function(label,id,width,active,primary,height)
-      if id=='tools22_updater_rollback_v252' then
-        if old_button('CRR \206\210\202\192\210 - \209\210\192\193\200\203\220\205\219\201 \200\205\210\197\208\212\197\201\209',id,width,false,true,height) then
-          V.open_popup('CRR \238\242\234\224\242','crr_stable_confirm')
+  end
+  module_storage_ui()
+
+  do
+    local live=DSP.live
+    if live and type(live.handle)=='function' and not live._storage_probe_wrapped then
+      local previous=live.handle
+      live.handle=function(iface,sub,raw)
+        if iface==52 and DSP.storage_probe and DSP.storage_probe.on_packet then
+          local ok,err=pcall(DSP.storage_probe.on_packet,sub,raw)
+          if not ok and DSP.flog then DSP.flog('STORAGE observer: '..tostring(err)) end
         end
-        return false
+        return previous(iface,sub,raw)
       end
-      return old_button(label,id,width,active,primary,height)
-    end
-    local old_popups=V.popups
-    function V.popups()
-      if old_popups then old_popups() end
-      V.popup('CRR \238\242\234\224\242','crr_stable_confirm',function()
-        V.text('\194\229\240\237\243\242\252 \238\225\251\247\237\251\233 \232\237\242\229\240\244\229\233\241 Palatka AI v2.7.0?')
-        V.muted('\209\234\240\232\239\242 \239\229\240\229\231\224\239\243\241\242\232\242\241\255. \209\238\245\240\224\237\229\237\232\255 \232 \239\240\229\241\229\242\251 \237\229 \243\228\224\235\255\254\242\241\255.')
-        if V.button('\207\206\196\210\194\197\208\196\200\210\220 \206\210\202\192\210','crr_beta_rollback_confirm',250,false,true) then
-          local ok,reason=restore_stable()
-          if not ok then V.red(tostring(reason)) else imgui.CloseCurrentPopup() end
-        end
-        if V.button('\206\242\236\229\237\224','crr_beta_rollback_cancel',120) then imgui.CloseCurrentPopup() end
-      end,{w=460,h=250})
+      live._storage_probe_wrapped=true
     end
   end
+
+  do
+    local V=DSP.ui21
+    if V and type(V.set_screen)=='function' and not V._storage_screen_wrapped then
+      local previous=V.set_screen
+      V.set_screen=function(id)
+        if id=='storage' then
+          V.storage_tab='scan'
+          V.storage_scan_mode=V.storage_scan_mode or 'trunk'
+          if V.reset_list then V.reset_list('storage_scan_panel') end
+        end
+        return previous(id)
+      end
+      V._storage_screen_wrapped=true
+    end
+  end
+
   DSP.version='2.8.0'
-  if DSP.flog then DSP.flog('Native storage scanner beta 2.8.0 loaded, rollback -> 2.7.0') end
+  if DSP.flog then DSP.flog('Storage scanner beta 2.8.0 loaded; menu rollback -> 2.7.0') end
   return true
 end
