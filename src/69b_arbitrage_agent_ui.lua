@@ -54,7 +54,7 @@ local function header(s,g,io)
         if d.x~=0 or d.y~=0 then save_geometry(g,d.x,d.y,0,0,io)end
     end
     imgui.SameLine(0,4)
-    if btn(A.queue_expanded and '−' or '+','queue_toggle',33,32)then
+    if btn(A.queue_expanded and '-' or '+','queue_toggle',33,32)then
         A.queue_expanded=not A.queue_expanded
     end
     imgui.SameLine(0,4)
@@ -63,11 +63,11 @@ end
 local function summary(s)
     local st=A.stats()
     good('Сделок: '..st.done..' / '..st.routes..'  |  В работе: '..st.pending)
-    text('Куплено: '..st.bought..'  ·  Сдано: '..st.sold)
+    text('Куплено: '..st.bought..'  |  Сдано: '..st.sold)
     good('Прибыль ~ '..fmt(st.profit_estimate))
     muted('Расчёт по ценам плана, не подтверждённая касса')
     local updated=M.state and M.state.updated or 0
-    muted('API: '..(M.freshness and M.freshness()or'нет данных')..' · обзор каждые 60 с')
+    muted('API: '..(M.freshness and M.freshness()or'нет данных')..' | обзор каждые 60 с')
 end
 local function queue(s)
     local visible={}
@@ -82,11 +82,11 @@ local function queue(s)
     for j=1,take do
         local i=visible[j]
         local e=s.routes[i]
-        local label=(i==s.focus and '● 'or'')..tostring(i)..'. '..e.name..
+        local label=(i==s.focus and '* 'or'')..tostring(i)..'. '..e.name..
             '  '..(e.sold>0 and('сдано '..e.sold..'/'..e.qty)or flag(e))
         if btn(label,'route_'..i,-1,30)then A.focus(i);A.qty_key=nil end
     end
-    if #visible>take then muted('Ещё маршрутов: '..(#visible-take)..' · переключай стрелками')end
+    if #visible>take then muted('Ещё маршрутов: '..(#visible-take)..' | переключай стрелками')end
 end
 -- Normal ImGui input is used intentionally: unavailable native exotic widgets
 -- must not make the floating assistant impossible to close.
@@ -119,10 +119,10 @@ function A.draw()
             if A.queue_expanded then queue(s);imgui.Separator()end
             local e,index=selected(s)
             if e then
-                text('МАРШРУТ '..index..' / '..#s.routes..' · '..flag(e))
+                text('МАРШРУТ '..index..' / '..#s.routes..' | '..flag(e))
                 text(V.fit(e.name,math.max(100,imgui.GetContentRegionAvail().x-8)))
-                muted('План: '..e.qty..' шт. · ожидание ~ '..fmt(e.proposed_profit))
-                muted('Куплено '..e.bought..' / '..e.qty..' · Продано '..e.sold..' / '..e.qty)
+                muted('План: '..e.qty..' шт. | ожидание ~ '..fmt(e.proposed_profit))
+                muted('Куплено '..e.bought..' / '..e.qty..' | Продано '..e.sold..' / '..e.qty)
                 -- Confirming each step updates the local offer ledger, never cash history.
                 if e.skipped then
                     if btn('Вернуть','restore',-1)then A.skip(index,false)end
@@ -134,8 +134,8 @@ function A.draw()
                         local owner=side=='buy'and e.seller_owner or e.buyer_owner
                         local unit=side=='buy'and e.buy_price or e.sell_price
                         text(side=='buy'and'КУПИТЬ' or'СДАТЬ')
-                        text('Лавка #'..shop..' · '..owner)
-                        text('x'..remaining..' · '..fmt(unit)..'/шт.')
+                        text('Лавка #'..shop..' | '..owner)
+                        text('x'..remaining..' | '..fmt(unit)..'/шт.')
                         if btn('Найти лавку #'..shop,'target',-1)then
                             if not M.mark_shop(shop)then notify('Метка недоступна')end
                         end
@@ -166,9 +166,9 @@ function A.draw()
         end
         imgui.EndChild()
         if A.ui_message then muted(V.fit(A.ui_message,math.max(80,g.w-32)))end
-        if btn('◀','previous',47,30)then A.next(-1);A.qty_key=nil end
+        if btn('<','previous',47,30)then A.next(-1);A.qty_key=nil end
         imgui.SameLine(0,5)
-        if btn('▶','next',47,30)then A.next(1);A.qty_key=nil end
+        if btn('>','next',47,30)then A.next(1);A.qty_key=nil end
         imgui.SameLine(0,5)
         local e,i=selected(s)
         if e and btn('Пропустить','skip',100,30)then A.skip(i,true);A.next(1);A.qty_key=nil end
