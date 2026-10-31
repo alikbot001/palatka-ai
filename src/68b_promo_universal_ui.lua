@@ -1,207 +1,143 @@
--- Native Palatka promo: template = name + multiple individually timed commands.
+-- Market Helper pattern: template title and editable chat commands in one panel.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
-local function b(s,id,w,on)return V.button(s,'unipromo_'..id,w,on)end
-local function fit(s,w)return V.fit(tostring(s or''),math.max(60,w))end
-local function fill(buf,value,max)
-    local raw=DSP.to_u8(tostring(value or''))
-    ffi.fill(buf,max);ffi.copy(buf,raw:sub(1,max-1))
+local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
+local function txt(s)return DSP.utf8(tostring(s or''))end
+local function buff(str,n)
+    local b=imgui.new.char[n]()
+    local raw=DSP.to_u8(tostring(str or''))
+    ffi.fill(b,n);ffi.copy(b,raw:sub(1,n-1))
+    return b
 end
-local function input(id,hint,buffer,length)
-    imgui.SetNextItemWidth(-1)
-    return imgui.InputTextWithHint('##unipromo_'..id,DSP.utf8(hint),buffer,length)
-end
-local function save()
-    if DSP.save_settings then return DSP.save_settings()~=false end
-    return false
-end
-local function begin_template(index)
+local function open_editor(index)
     local t=P.settings().templates[index]
-    V.unipromo_editor=true;V.unipromo_edit_index=index
-    V.unipromo_name=V.unipromo_name or imgui.new.char[128]()
-    fill(V.unipromo_name,t and t.name or'',128)
     local rows={}
-    for _,v in ipairs(t and t.rows or{})do
-        rows[#rows+1]={text=v.text,interval=v.interval,auto=v.auto~=false}
+    local buffers={}
+    for i,r in ipairs(t and t.rows or{})do
+        rows[i]={text=r.text,interval=r.interval,auto=r.auto~=false}
+        buffers[i]=buff(r.text,512)
     end
-    V.unipromo_draft={rows=rows,auto=(t==nil or t.auto~=false)}
-    V.unipromo_error=nil
+    V.mhpromo_edit={index=index,name=buff(t and t.name or'Новый шаблон',96),
+        rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false}
 end
-local function begin_line(index)
-    V.unipromo_line_index=index
-    V.unipromo_line=V.unipromo_line or imgui.new.char[512]()
-    local row=V.unipromo_draft.rows[index]
-    fill(V.unipromo_line,row and row.text or'/vr ',512)
-    V.unipromo_line_interval={value=row and row.interval or 180}
-    V.unipromo_line_enabled=(row==nil or row.auto~=false)
-    V.unipromo_line_error=nil
-    V.open_popup('Строка рекламы','unipromo_line')
-end
-local function summary(settings)
-    if P.running then
-        if b('ОСТАНОВИТЬ','stop',170,true)then P.stop()end
-    else
-        if b('ЗАПУСТИТЬ','start',170,true)then
-            local ok,err=P.start()
-            V.unipromo_error=ok and nil or tostring(err)
-        end
-    end
-    V.inline(5)
-    if b(settings.continuous and'Цикл: БЕЗ ЛИМИТА' or'Цикл: 12 сообщений',
-        'continuous',216,settings.continuous)then
-        local ok,err=P.set_option('continuous',not settings.continuous)
-        if not ok then V.unipromo_error=err end
-    end
-    if b(settings.resume_on_login and'После входа: ВКЛ' or'После входа: ВЫКЛ',
-        'resume',216,settings.resume_on_login)then
-        local ok,err=P.set_option('resume_on_login',not settings.resume_on_login)
-        if not ok then V.unipromo_error=err end
-    end
-    V.inline(5)
-    V.muted('Задержка перед стартом: '..tostring(settings.start_delay)..' сек.')
-    for i,n in ipairs({10,20,30,60})do
-        if b(n..'с','startup_'..i,62,settings.start_delay==n)then
-            local ok,err=P.set_option('start_delay',n)
-            if not ok then V.unipromo_error=err end
-        end
-        if i<4 then V.inline(4)end
-    end
-    V.muted('Статус: '..(P.running and(P.pause_reason or'работает')or'остановлен'))
-    V.muted('Сообщений: '..tostring(P.session_count)..
-        (settings.continuous and' | без лимита' or' / 12')..
-        '  ·  следующий шаг через '..math.max(0,(P.next_at or 0)-os.time())..'с')
-end
-local function template_editor()
-    local draft=V.unipromo_draft
-    V.heading(V.unipromo_edit_index and'Редактирование шаблона' or'Создание шаблона',function()
-        if b('Назад','back',112)then V.unipromo_editor=false end
-    end,135)
+local function editor(e)
+    V.heading('Пиар / Редактор',function()
+        if button('Назад','back',120)then V.mhpromo_edit=nil end
+    end,142)
     V.text('Название шаблона')
-    input('template_name','Например: Реклама ЦР',V.unipromo_name,128)
-    V.muted('Добавь отдельную строку на каждый игровой чат или команду.')
-    if b('+ Добавить строку','add_line',205,true)then begin_line(nil)end
-    V.inline(6)
-    if b('Сохранить шаблон','save_template',205,true)then
-        local name=DSP.to_cp(ffi.string(V.unipromo_name)):match('^%s*(.-)%s*$')
-        local ok,why=P.save_template(V.unipromo_edit_index,name,draft.rows,draft.auto)
-        if ok then V.unipromo_editor=false;V.unipromo_error=nil
-        else V.unipromo_error=tostring(why)end
-    end
-    if V.unipromo_error then V.red(V.unipromo_error)end
-    if #draft.rows==0 then
-        V.muted('В шаблоне пока нет строк. Нажми «Добавить строку».')
-    else
-        V.muted('В шаблоне '..#draft.rows..' строк. Отправка по очереди с разными интервалами.')
-    end
-    V.list_rows('unipromo_template_lines',draft.rows,112,function(row,i)
-        V.row('unipromo_step_'..i,112,function(w,x,y)
-            V.at(x,y)
-            V.text(fit(i..'. '..(row.text or''),w-170))
-            V.at(x,y+29)
-            V.muted('Интервал после: '..tostring(row.interval or 180)..' сек.')
-            V.at(x,y+61)
-            if b(row.auto~=false and'ВКЛ' or'ВЫКЛ','row_toggle_'..i,67,row.auto~=false)then
+    imgui.SetNextItemWidth(-1)
+    imgui.InputText('##mhpromo_name',e.name,96)
+    V.muted('Каждая строка — отдельная игровая команда; отправляются по очереди.')
+    local rm=nil
+    if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,300),true)then
+        for i,row in ipairs(e.rows)do
+            imgui.PushID(i)
+            V.muted('Строка '..i)
+            imgui.SetNextItemWidth(-1)
+            if imgui.InputTextWithHint('##line',txt('/vr Текст рекламы'),
+                e.buffers[i],512)then
+                row.text=DSP.to_cp(ffi.string(e.buffers[i]))
+            end
+            V.muted('Пауза после, секунд')
+            M.compact_number(row,'interval','mhpromo_delay_'..i,145,60)
+            V.inline(4)
+            if button(row.auto~=false and 'ВКЛ' or 'ВЫКЛ','on_'..i,68,row.auto~=false)then
                 row.auto=not(row.auto~=false)
             end
             V.inline(4)
-            if b('Вверх','row_up_'..i,69)and i>1 then
-                draft.rows[i],draft.rows[i-1]=draft.rows[i-1],draft.rows[i]
+            if button('Удалить','rm_'..i,94)then rm=i end
+            imgui.Separator()
+            imgui.PopID()
+        end
+    end
+    imgui.EndChild()
+    if rm then table.remove(e.rows,rm);table.remove(e.buffers,rm)end
+    if button('+ Добавить строку','add',225,true)then
+        if #e.rows<24 then
+            e.rows[#e.rows+1]={text='/vr ',interval=180,auto=true}
+            e.buffers[#e.buffers+1]=buff('/vr ',512)
+        else e.error='Не более 24 строк'end
+    end
+    V.inline(6)
+    if button('Вставить лавку','shop',160)then
+        local i=#e.rows
+        if i>0 then
+            local value=ffi.string(e.buffers[i])
+            if #value<495 then
+                e.buffers[i]=buff(DSP.to_cp(value..' {shop}'),512)
+                e.rows[i].text=DSP.to_cp(ffi.string(e.buffers[i]))
             end
-            V.inline(4)
-            if b('Вниз','row_down_'..i,69)and i<#draft.rows then
-                draft.rows[i],draft.rows[i+1]=draft.rows[i+1],draft.rows[i]
-            end
-            V.at(x+w-150,y+6)
-            if b('Изменить','row_edit_'..i,146)then begin_line(i)end
-            V.at(x+w-150,y+60)
-            if b('Удалить','row_remove_'..i,146)then
-                table.remove(draft.rows,i)
-            end
-        end)
-    end,{footer=function()
-        V.muted('Пример: /vr Продам товары · /fam Продам товары · /gd Продам товары')
-    end})
+        end
+    end
+    V.muted('Макрос {shop} вставляет кликабельную ссылку на свою лавку.')
+    if e.error then V.red(e.error)end
+    if button('СОХРАНИТЬ ШАБЛОН','save',250,true)then
+        local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
+        local ok,reason=P.save_template(e.index,name,e.rows,e.enabled)
+        if ok then V.mhpromo_edit=nil else e.error=tostring(reason)end
+    end
+    V.inline(4)
+    if button('Отмена','cancel',120)then V.mhpromo_edit=nil end
 end
 function V.promo_screen()
+    if V.mhpromo_edit then
+        return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end)
+    end
     local settings=P.settings()
-    if V.unipromo_editor then return template_editor()end
-    V.heading('Автопиар · Palatka AI',function()
-        if b('+ Создать шаблон','new_template',195,true)then begin_template(nil)end
-    end,211)
-    V.muted('Один шаблон содержит несколько строк рекламы для разных чатов.')
-    summary(settings)
-    if V.unipromo_error then V.red(V.unipromo_error)end
-    V.muted('Шаблоны: '..#settings.templates..' / '..P.MAX_TEMPLATES)
-    V.list_rows('unipromo_templates',settings.templates,119,function(t,i)
-        V.row('unipromo_template_'..i,119,function(w,x,y)
-            local count=#(t.rows or{})
-            V.at(x,y)
-            V.text(fit(t.name or'Без названия',w-162))
-            V.at(x,y+28)
-            V.muted('Строк: '..count..' · '..(t.auto~=false and'активен' or'выключен'))
-            if count>0 then
-                V.at(x,y+53)
-                V.muted(fit((t.rows[1]or{}).text or'',w-170))
+    V.heading('Автопиар · Palatka',function()
+        if button('+ Шаблон','new',155,true)then open_editor(nil)end
+    end,172)
+    if P.running then
+        if button('СТОП','stop',127,true)then P.stop()end
+    else
+        if button('ПУСК','start',127,true)then
+            local ok,why=P.start()
+            V.mhpromo_error=ok and nil or tostring(why)
+        end
+    end
+    V.inline(5)
+    if button(settings.continuous and 'Цикл: ВКЛ' or 'Цикл: ВЫКЛ',
+        'loop',152,settings.continuous)then
+        P.set_option('continuous',not settings.continuous)
+    end
+    V.inline(5)
+    if button(settings.resume_on_login and'При входе: ВКЛ' or'При входе: ВЫКЛ',
+        'resume',191,settings.resume_on_login)then
+        P.set_option('resume_on_login',not settings.resume_on_login)
+    end
+    V.muted('Отправлено: '..tostring(P.session_count)..
+        (settings.continuous and' | без лимита' or' / 12')..
+        ' | '..(P.running and(P.pause_reason or'работает')or'выключен'))
+    if V.mhpromo_error then V.red(V.mhpromo_error)end
+    V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
+    V.list_rows('mhpromo_templates',settings.templates,96,function(t,i)
+        V.row('mhpromo_t_'..i,96,function(w,x,y)
+            V.at(x,y);V.text(V.fit(t.name or'Шаблон',math.max(80,w-155)))
+            V.at(x,y+27);V.muted(#(t.rows or{})..' строк')
+            V.at(x,y+53)
+            if button(t.auto~=false and'Авто: ВКЛ' or'Авто: ВЫКЛ',
+                'enable_'..i,132,t.auto~=false)then
+                local was=t.auto;t.auto=not(t.auto~=false)
+                if DSP.save_settings and DSP.save_settings()==false then t.auto=was end
             end
-            V.at(x,y+81)
-            if b(t.auto~=false and'ВКЛ' or'ВЫКЛ','template_toggle_'..i,79,t.auto~=false)then
-                t.auto=not(t.auto~=false)
-                if not save()then t.auto=not(t.auto~=false)end
+            V.at(x+w-143,y+4)
+            if button('Изменить','edit_'..i,140)then open_editor(i)end
+            V.at(x+w-143,y+52)
+            if button('Удалить','del_'..i,140)then
+                V.mhpromo_del=i;V.open_popup('Удалить шаблон','mhpromo_delete')
             end
-            V.inline(5)
-            if b('Удалить','template_remove_'..i,91)then
-                V.unipromo_delete=i;V.open_popup('Удалить шаблон','unipromo_delete')
-            end
-            V.at(x+w-150,y+10)
-            if b('Настроить','template_edit_'..i,146,true)then begin_template(i)end
         end)
-    end,{footer=function()
-        V.muted('Бесконечный цикл и автовозобновление включаются только вручную.')
-    end})
+    end)
 end
-local old_popups=V.popups
+local previous=V.popups
 function V.popups()
-    if old_popups then old_popups()end
-    V.popup('Строка рекламы','unipromo_line',function()
-        V.text('Команда / сообщение в одну строку')
-        input('line_command','/vr Продам товары на ЦР',V.unipromo_line,512)
-        V.muted('Например: /vr ..., /fam ..., /gd ..., /f ..., /ad ...')
-        V.text('Интервал после этой строки, секунд')
-        for i,n in ipairs({60,120,180,300,600})do
-            if b(n..'с','interval_'..i,61,V.unipromo_line_interval.value==n)then
-                V.unipromo_line_interval.value=n
-            end
-            if i<5 then V.inline(5)end
+    if previous then previous()end
+    V.popup('Удалить шаблон','mhpromo_delete',function()
+        V.text('Удалить шаблон со всеми строками?')
+        if button('Да','yes',105)then
+            if P.remove(V.mhpromo_del)then imgui.CloseCurrentPopup()end
         end
-        M.compact_number(V.unipromo_line_interval,'value','unipromo_line_interval',190,60)
-        if V.unipromo_line_error then V.red(V.unipromo_line_error)end
-        if b('Добавить / сохранить','line_save',225,true)then
-            local command=DSP.to_cp(ffi.string(V.unipromo_line)):match('^%s*(.-)%s*$')
-            local ok,err=P.validate(command)
-            if ok and #P.lines(command)==1 then
-                local row={text=command,interval=math.max(60,math.min(3600,
-                    math.floor(tonumber(V.unipromo_line_interval.value)or 180))),
-                    auto=V.unipromo_line_enabled~=false}
-                if V.unipromo_line_index then
-                    V.unipromo_draft.rows[V.unipromo_line_index]=row
-                else
-                    V.unipromo_draft.rows[#V.unipromo_draft.rows+1]=row
-                end
-                V.unipromo_line_error=nil
-                imgui.CloseCurrentPopup()
-            else
-                V.unipromo_line_error=err or'Одна команда на строку'
-            end
-        end
-        V.inline(6);V.cancel('unipromo_line')
-    end,{w=660,h=400,resizable=true})
-    V.popup('Удалить шаблон','unipromo_delete',function()
-        V.text('Удалить шаблон целиком вместе со строками?')
-        if b('Да, удалить','remove_template',160)then
-            local ok=P.remove(V.unipromo_delete)
-            if ok then imgui.CloseCurrentPopup()else V.unipromo_error='Ошибка сохранения'end
-        end
-        V.inline(6);V.cancel('unipromo_delete')
-    end,{w=460,h=250})
+        V.inline(5);V.cancel('mhpromo_delete')
+    end,{w=415,h=225})
 end
 return true
