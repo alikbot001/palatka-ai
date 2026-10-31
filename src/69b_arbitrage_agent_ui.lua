@@ -118,7 +118,19 @@ function A.draw()
         if imgui.BeginChild('##arb_agent_scroll',imgui.ImVec2(0,-40),false)then
             summary(s)
             imgui.Separator()
-            if A.queue_expanded then queue(s);imgui.Separator()end
+            if A.queue_expanded then
+                queue(s)
+                if not A.end_confirm then
+                    if btn('Завершить сессию','end_session',-1,28)then A.end_confirm=true end
+                else
+                    bad('Завершить текущую сессию? История останется.')
+                    if btn('Да, завершить','end_yes',-1,30)then
+                        A.stop();A.end_confirm=false
+                    end
+                    if btn('Отмена','end_cancel',-1,28)then A.end_confirm=false end
+                end
+                imgui.Separator()
+            end
             local e,index=selected(s)
             if e then
                 text('МАРШРУТ '..index..' / '..#s.routes..' | '..flag(e))
