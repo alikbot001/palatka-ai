@@ -7,7 +7,8 @@ DSP={
    return nil
  end},
  items={name=function(id)return 'ID:'..id end},
- lower=function(s)return string.lower(tostring(s or ''))end,
+ -- Tests run as UTF-8 source; on Android DSP.lower handles CP1251.
+ lower=function(s)return (string.lower(tostring(s or '')):gsub('С','с'))end,
  trim=function(s)return tostring(s or ''):match('^%s*(.-)%s*$')end,
  clean_text=function(s)return tostring(s or '')end,
  item_key=function(s,e)return tostring(s)..':'..tostring(e or 0)end,
