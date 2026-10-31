@@ -131,7 +131,7 @@ function P.save(index)
     local replacement={snap}
     for _,old in ipairs(previous or {})do
         replacement[#replacement+1]=old
-        if #replacement>=8 then break end
+        if #replacement>=(S.max_saved or 20)+1 then break end
     end
     S.snapshots=replacement
     if DSP.settings then DSP.settings.storage_snapshots=replacement end
