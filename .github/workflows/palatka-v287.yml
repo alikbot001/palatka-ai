@@ -36,6 +36,19 @@ jobs:
             echo "Compiling $file"
             luajit -b "$file" /dev/null
           done
+      - name: Check escaped Lua scheduler wrapper and show syntax context
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          source=Path('src/49a_promo_universal.lua').read_text()
+          esc=''.join(c if ord(c)<128 else ''.join('\\\\%03d'%b for b in c.encode('cp1251')) for c in source)
+          Path('/tmp/wrapped_promo.lua').write_text('return function()\\n'+esc+'\\nend\\n')
+          cp=subprocess.run(['luajit','-b','/tmp/wrapped_promo.lua','/dev/null'],capture_output=True,text=True)
+          print('wrapped schedule syntax:',cp.returncode,cp.stderr)
+          lines=Path('updates/palatka_update.lua').read_text().splitlines()
+          for i in range(2088,2116): print(f'{i+1}: {lines[i]}')
+          PY
       - name: Check arbitrage agent accounting
         run: luajit tests/test_arbitrage_session.lua
       - name: Check missing shop and item handling
