@@ -32,6 +32,7 @@ template.auto=true;template.auto_count=0
 P.stop()
 assert(P.start(2000))
 assert(#P.steps()==1)
+assert(not P.tick(2000,send,true))
 assert(P.tick(2020,send,true))
 assert(#sent==3)
 assert(P.next_at-2020>=60)
