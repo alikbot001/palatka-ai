@@ -5,37 +5,37 @@ local M = DSP.market
 local function b(label,id,w,active) return V.button(label,'local_arb_'..id,w,active) end
 local function elapsed(at,now)
     local n=math.max(0,now-(tonumber(at)or 0))
-    return tostring(math.floor(n/60))..' ìèí íàçàä'
+    return tostring(math.floor(n/60))..' мин назад'
 end
 local function txt(s,w) return V.fit(s,math.max(1,w)) end
 function V.local_arbitrage_view()
     local now=os.time()
     local stats=A.stats(now)
     local auto=DSP.settings.auto_shop_scan~=false
-    if b(auto and 'ÀÂÒÎÑÊÀÍ: ÂÊË' or 'ÀÂÒÎÑÊÀÍ: ÂÛÊË','auto_toggle',180) then
+    if b(auto and 'АВТОСКАН: ВКЛ' or 'АВТОСКАН: ВЫКЛ','auto_toggle',180) then
         DSP.settings.auto_shop_scan=not auto
         if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
         else DSP.save_settings() end
         auto=not auto
     end
     V.inline()
-    V.muted('Ñêàíèðóåò ïðè îòêðûòèè ëàâêè, áåç êíîïêè è áåç API')
+    V.muted('Сканирует при открытии лавки, без кнопки и без API')
     local saver=DSP.settings.fps_saver==true
-    if b(saver and 'ÝÊÎÍÎÌÈß FPS: ÂÊË' or 'ÝÊÎÍÎÌÈß FPS: ÂÛÊË','fps_toggle',200) then
+    if b(saver and 'ЭКОНОМИЯ FPS: ВКЛ' or 'ЭКОНОМИЯ FPS: ВЫКЛ','fps_toggle',200) then
         DSP.settings.fps_saver=not saver
         if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
         else DSP.save_settings() end
     end
     V.inline()
-    V.muted('Îòêëþ÷àåò äîïîëíèòåëüíûå îêíà è èêîíêè, àâòîñêàí îñòà¸òñÿ')
+    V.muted('Отключает дополнительные окна и иконки, автоскан остаётся')
     local last=DSP.live and DSP.live.auto_scan
     if last and (last.at or 0)>0 then
-        V.muted('Ïîñëåäíèé ñêàí: ëàâêà #'..tostring(last.shop)..' | '..tostring(last.items)..' ïîçèöèé | '..elapsed(last.at,now))
+        V.muted('Последний скан: лавка #'..tostring(last.shop)..' | '..tostring(last.items)..' позиций | '..elapsed(last.at,now))
     end
-    V.green('ÈÇ ÑÊÀÍÎÂ Â ÈÃÐÅ · ÁÅÇ API')
-    V.muted('Ëàâîê: '..stats.shops..' · ïðåäëîæåíèé: '..stats.offers..' · ïàìÿòü: 60 ìèí')
-    V.muted('Ñîõðàíÿþòñÿ öåíû òîëüêî ÎÒÊÐÛÒÛÕ ëàâîê ñ èçâåñòíûì íîìåðîì. Ïðîâåðÿé íàëè÷èå ïåðåä ñäåëêîé.')
-    local query,changed=V.search('local_arb','Íàçâàíèå ïðåäìåòà èëè íîìåð ëàâêè',-1)
+    V.green('ИЗ СКАНОВ В ИГРЕ · БЕЗ API')
+    V.muted('Лавок: '..stats.shops..' · предложений: '..stats.offers..' · память: 60 мин')
+    V.muted('Сохраняются цены только ОТКРЫТЫХ лавок с известным номером. Проверяй наличие перед сделкой.')
+    local query,changed=V.search('local_arb','Название предмета или номер лавки',-1)
     if changed then V.reset_list('local_arb_items');V.reset_list('local_offer_search') end
     if query~='' and DSP.shop_store and DSP.shop_store.search then
         local matches=DSP.shop_store.search(query,nil,stats.server)
@@ -64,70 +64,70 @@ function V.local_arbitrage_view()
         end
         return out
     end)
-    V.muted('Íàéäåíî ñâÿçîê: '..tostring(#routes)..' · ïîðÿäîê: ïðèáûëü çà 1 øò.')
-    if #routes==0 then V.muted('Íåò âûãîäíûõ ïàð èç òâîèõ ñêàíîâ çà ïîñëåäíèé ÷àñ.') end
+    V.muted('Найдено связок: '..tostring(#routes)..' · порядок: прибыль за 1 шт.')
+    if #routes==0 then V.muted('Нет выгодных пар из твоих сканов за последний час.') end
     V.list_rows('local_arb_items',routes,142,function(r,i)
         V.row('local_route_'..i,142,function(w,x,y)
             local text_width=math.max(130,w-134)
             V.at(x,y+1);V.text(txt((r.name or 'ID:'..r.id)..' +'..tostring(r.ench or 0),text_width))
-            V.at(x,y+28);V.muted(txt('ÊÓÏÈÒÜ: #'..r.seller_shop..' · '..DSP.money(r.buy_price)..'/øò.',text_width))
-            V.at(x,y+51);V.muted(txt('ÑÄÀÒÜ: #'..r.buyer_shop..' · '..DSP.money(r.sell_price)..'/øò.',text_width))
-            V.at(x,y+75);V.green(txt('~ +'..DSP.money(r.profit_unit)..'/øò. ïîñëå êîìèññèè',text_width))
+            V.at(x,y+28);V.muted(txt('КУПИТЬ: #'..r.seller_shop..' · '..DSP.money(r.buy_price)..'/шт.',text_width))
+            V.at(x,y+51);V.muted(txt('СДАТЬ: #'..r.buyer_shop..' · '..DSP.money(r.sell_price)..'/шт.',text_width))
+            V.at(x,y+75);V.green(txt('~ +'..DSP.money(r.profit_unit)..'/шт. после комиссии',text_width))
             V.at(x,y+100)
-            V.muted(txt('Ñêàí: '..elapsed(r.seller_at,now)..' / '..elapsed(r.buyer_at,now),w))
+            V.muted(txt('Скан: '..elapsed(r.seller_at,now)..' / '..elapsed(r.buyer_at,now),w))
             V.at(x+math.max(0,w-124),y+33)
-            if b('Ìàðøðóò >','open_'..i,118) then
+            if b('Маршрут >','open_'..i,118) then
                 V.local_route={server=stats.server,route=r}
-                V.open_popup('Ìàðøðóò èç ñêàíà','local_route')
+                V.open_popup('Маршрут из скана','local_route')
             end
         end)
     end,{footer=function()
-        V.muted('Ïîòåíöèàëüíûå öåíû, ÍÅ ðåàëüíûå ïðîäàæè. Íåèçâåñòíûå îáú¸ìû íå ñóììèðóþòñÿ.')
+        V.muted('Потенциальные цены, НЕ реальные продажи. Неизвестные объёмы не суммируются.')
     end})
 end
 local previous=V.popups
 function V.popups()
     if previous then previous() end
-    V.popup('Ìàðøðóò èç ñêàíà','local_route',function()
+    V.popup('Маршрут из скана','local_route',function()
         local selected=V.local_route
         if not selected or selected.server~=A.stats().server then
-            V.red('Ñìåíèëñÿ ñåðâåð. Âûáåðè ìàðøðóò çàíîâî.')
-            if b('Çàêðûòü','changed_close',150) then imgui.CloseCurrentPopup()end
+            V.red('Сменился сервер. Выбери маршрут заново.')
+            if b('Закрыть','changed_close',150) then imgui.CloseCurrentPopup()end
             return
         end
         local r=selected.route
         local age=os.time()
         if age-r.seller_at>=A.ttl or age-r.buyer_at>=A.ttl then
-            V.red('Äàííûå óñòàðåëè. Îòêðîé ëàâêè çàíîâî.')
-            if b('Çàêðûòü','stale_close',150)then imgui.CloseCurrentPopup()end
+            V.red('Данные устарели. Открой лавки заново.')
+            if b('Закрыть','stale_close',150)then imgui.CloseCurrentPopup()end
             return
         end
         V.text(txt(r.name or '?',imgui.GetContentRegionAvail().x))
-        V.green('ÈÑÒÎ×ÍÈÊ: ëîêàëüíûé ñêàí â èãðå, íå API')
-        V.text('1. ÊÓÏÈÒÜ â ëàâêå #'..r.seller_shop..' ('..tostring(r.seller_owner or '?')..')')
-        V.muted(DSP.money(r.buy_price)..' çà øòóêó · '..elapsed(r.seller_at,age))
-        V.text('2. ÑÄÀÒÜ â ëàâêó #'..r.buyer_shop..' ('..tostring(r.buyer_owner or '?')..')')
-        V.muted(DSP.money(r.sell_price)..' çà øòóêó · '..elapsed(r.buyer_at,age))
-        V.text('Ïîñòóïëåíèÿ ïîñëå êîìèññèè: '..DSP.money(r.net_unit)..' çà øòóêó')
-        V.green('Ïîòåíöèàëüíàÿ ïðèáûëü: +'..DSP.money(r.profit_unit)..' çà øòóêó')
+        V.green('ИСТОЧНИК: локальный скан в игре, не API')
+        V.text('1. КУПИТЬ в лавке #'..r.seller_shop..' ('..tostring(r.seller_owner or '?')..')')
+        V.muted(DSP.money(r.buy_price)..' за штуку · '..elapsed(r.seller_at,age))
+        V.text('2. СДАТЬ в лавку #'..r.buyer_shop..' ('..tostring(r.buyer_owner or '?')..')')
+        V.muted(DSP.money(r.sell_price)..' за штуку · '..elapsed(r.buyer_at,age))
+        V.text('Поступления после комиссии: '..DSP.money(r.net_unit)..' за штуку')
+        V.green('Потенциальная прибыль: +'..DSP.money(r.profit_unit)..' за штуку')
         if r.qty and r.profit_total then
-            V.muted('Èçâåñòíûé ëèìèò: äî '..r.qty..' øò. · ïîòîëîê ïðèáûëè ~ '..DSP.money(r.profit_total))
+            V.muted('Известный лимит: до '..r.qty..' шт. · потолок прибыли ~ '..DSP.money(r.profit_total))
         else
-            V.muted('Êîëè÷åñòâî íåèçâåñòíî: èòîãîâóþ ïðèáûëü íå ðàññ÷èòûâàåì.')
+            V.muted('Количество неизвестно: итоговую прибыль не рассчитываем.')
         end
-        V.red('Ñêàí ÍÅ ãàðàíòèðóåò, ÷òî ïðåäëîæåíèå åù¸ ñóùåñòâóåò!')
+        V.red('Скан НЕ гарантирует, что предложение ещё существует!')
         if DSP.arb_agent and r.qty and b('В МИНИ-АГЕНТ','local_to_agent',186)then
             local ok,why=DSP.arb_agent.add_local_route(r)
             if ok then DSP.arb_agent.show(true);imgui.CloseCurrentPopup()
             else DSP.notify('Агент: '..tostring(why))end
         end
-        if b('Ìåòêà ïðîäàâöà','seller_marker',155) then M.mark_shop(r.seller_shop)end
-        V.inline();if b('Ìåòêà ñêóïùèêà','buyer_marker',155) then M.mark_shop(r.buyer_shop)end
-        if b('Íåò ëàâêè #'..r.seller_shop,'seller_missing',195) then
+        if b('Метка продавца','seller_marker',155) then M.mark_shop(r.seller_shop)end
+        V.inline();if b('Метка скупщика','buyer_marker',155) then M.mark_shop(r.buyer_shop)end
+        if b('Нет лавки #'..r.seller_shop,'seller_missing',195) then
             M.mark_shop_missing(r.seller_shop,30);if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
             imgui.CloseCurrentPopup()
         end
-        V.inline();if b('Íåò ëàâêè #'..r.buyer_shop,'buyer_missing',195) then
+        V.inline();if b('Нет лавки #'..r.buyer_shop,'buyer_missing',195) then
             M.mark_shop_missing(r.buyer_shop,30);if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
             imgui.CloseCurrentPopup()
         end
