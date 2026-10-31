@@ -10,13 +10,19 @@ function M.invalidate_arbitrage(...)
 end
 local function signature()
     local f=DSP.settings.arb_filters or{}
-    return table.concat({M.state.sid or 0,M.state.version or 0,epoch,DSP.settings.tax_bp or 200,
-        f.budget or 0,f.min_profit or 0,f.min_roi or 0,f.sort or 1,f.max_age or 1800,
-        tostring(f.include_unknown~=false),tostring(f.allow_partial~=false),f.max_qty or 0,f.safety_pct or 0},'|')
+    return table.concat({M.state.sid or 0,M.state.version or 0,M.state.status or '',epoch,DSP.settings.tax_bp or 200,
+        f.budget or 0,f.min_profit or 0,f.min_roi or 0,f.sort or 1,f.max_age or 300,
+        tostring(f.include_unknown~=false),tostring(f.allow_partial~=false),f.max_qty or 0,f.safety_pct or 0,
+        f.tax_bp or 'global', f.min_unit_profit or 0, f.max_buy_price or 0,
+        f.min_stock or 0, f.shop_mode or 0,M.missing_revision or 0},'|')
 end
 local function expiry()
     local age=math.max(0,tonumber((DSP.settings.arb_filters or{}).max_age)or 1800)
     local now,until_ts=os.time(),math.huge
+    for _,record in pairs(M.missing_shops or{})do
+        local d=M.missing_deadline and M.missing_deadline(record) or tonumber(record) or 0
+        if d>now then until_ts=math.min(until_ts,d)end
+    end
     for _,row in ipairs(M.state.rows or{})do
         for _,side in ipairs({row.sell,row.buy})do
             for _,o in ipairs(side.offers or{})do

@@ -20,7 +20,7 @@ local function find_list_index(text, name)
         local base=nm:match('^(.-)%s+%[%d+[^%]]*%]') or nm
         base=fold(base_name(base)):match('^%s*(.-)%s*$')
         if base==wanted then
-            if found~=nil then return nil,'РЅРµСЃРєРѕР»СЊРєРѕ РѕРґРёРЅР°РєРѕРІС‹С… СЃС‚СЂРѕРє' end
+            if found~=nil then return nil,'несколько одинаковых строк' end
             found=idx
         end
         idx=idx+1
@@ -29,50 +29,55 @@ local function find_list_index(text, name)
 end
 
 local function open_shop_menu()
+    runtime.transition('buy','open_shop','request native stall menu')
     close_dialog()
     _G.dsp_click_slot(8, 7, -1, '')
+    runtime.transition('buy','wait_shop','dialogs 3040/15072')
     -- v1.2 hotfix: accept 15072/15073 fallback for shop menu open in newer Arizona Mobile.
     return wait_dialog({ 3040, 15072 }, 2500)
 end
 
 local function buy_one(it, pi, total, dry_run)
-    DSP.auto.status = 'СЃРєСѓРїРєР°: ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
+    DSP.auto.status = 'скупка: ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
     if not sampIsDialogActive() or (sampGetCurrentDialogId() ~= 3040 and sampGetCurrentDialogId()~=15072) then
         if not open_shop_menu() then
-            log('РЎРєСѓРїРєР°: РјРµРЅСЋ РЅРµ РѕС‚РєСЂС‹Р»РѕСЃСЊ РґР»СЏ ' .. it.name, 'error')
+            log('Скупка: меню не открылось для ' .. it.name, 'error')
             return false
         end
     end
     local menu_id = sampGetCurrentDialogId()
     wait_text(menu_id, 350)
+    runtime.transition('buy','open_search','menu='..tostring(menu_id))
     sampSendDialogResponse(menu_id, 1, 2, '')
     -- v1.2 hotfix: also accept 15065-15067 (newer search/dialog IDs).
     local id = wait_dialog({ 25663, 15065, 15066, 15067 }, 3000)
     if not id then
-        log('РЎРєСѓРїРєР°: СЃС‚СЂРѕРєР° РїРѕРёСЃРєР° РЅРµ РѕС‚РєСЂС‹Р»Р°СЃСЊ', 'error')
+        log('Скупка: строка поиска не открылась', 'error')
         return false
     end
     wait_text(id, 700)
     local search = base_name(it.name):sub(1, 24)
+    runtime.transition('buy','search',tostring(it.name))
     sampSendDialogResponse(id, 1, 0, search)
     -- v1.2 hotfix: search results dialog may also be 15068 in newer versions.
     id = wait_dialog({ 25664, 15068 }, 3500)
     if not id then
-        log('РЎРєСѓРїРєР°: СЂРµР·СѓР»СЊС‚Р°С‚С‹ РЅРµ РѕС‚РєСЂС‹Р»РёСЃСЊ: ' .. it.name, 'error')
+        log('Скупка: результаты не открылись: ' .. it.name, 'error')
         return false
     end
     local list_text = DSP.dialog_clean(wait_text(id, 500))
     local idx,index_err = find_list_index(list_text, it.name)
     if idx==nil then
-        log('РЎРєСѓРїРєР°: '..tostring(index_err or 'РЅРµ РЅР°Р№РґРµРЅРѕ')..': ' .. it.name, 'error')
+        log('Скупка: '..tostring(index_err or 'не найдено')..': ' .. it.name, 'error')
         close_dialog()
         return false
     end
+    runtime.transition('buy','select_result',tostring(it.name)..' row='..tostring(idx))
     sampSendDialogResponse(id, 1, idx, '')
-    -- v1.2 hotfix: РІС‹СЃС‚Р°РІР»РµРЅРёРµ price dialog may also use 15070/15071 in newer Arizona Mobile.
+    -- v1.2 hotfix: выставление price dialog may also use 15070/15071 in newer Arizona Mobile.
     id = wait_dialog({ 26560, 26563, 15070, 15071 }, 3000)
     if not id then
-        log('РЎРєСѓРїРєР°: РґРёР°Р»РѕРі С†РµРЅС‹ РЅРµ РѕС‚РєСЂС‹Р»СЃСЏ: ' .. it.name, 'error')
+        log('Скупка: диалог цены не открылся: ' .. it.name, 'error')
         return false
     end
     if id == 26560 then
@@ -80,47 +85,55 @@ local function buy_one(it, pi, total, dry_run)
         -- v1.2 hotfix: also accept 15071 fallback.
         id = wait_dialog({ 26563, 15071 }, 2000)
     end
-    -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final РІС‹СЃС‚Р°РІР»РµРЅРёРµ dialog.
+    -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final выставление dialog.
     if id ~= 26563 and id ~= 15071 then return false end
-    local validated_id,txt=wait_item({id},it.name,1300)
+    local validated_id,txt,dialog_title=wait_item({id},it.name,1700,'buy')
     local base = base_name(it.name)
     if not validated_id then
-        log('РЎРєСѓРїРєР°: РІ РґРёР°Р»РѕРіРµ РґСЂСѓРіРѕР№ С‚РѕРІР°СЂ: ' .. it.name, 'error')
+        log('Скупка: в диалоге другой товар: ' .. it.name, 'error')
         close_dialog()
         return false
     end
     -- Stabilize the native price input after the dialog text appears. Never
     -- submit to another item/ID that replaced it during the delay.
     trade_wait(180)
-    if not sampIsDialogActive() or sampGetCurrentDialogId()~=id or
-       not runtime.matches(DSP.dialog_clean(sampGetDialogText() or ''),base) then
-        log('РЎРєСѓРїРєР°: РґРёР°Р»РѕРі РёР·РјРµРЅРёР»СЃСЏ РґРѕ РѕС‚РїСЂР°РІРєРё В· '..it.name,'error')
+    local current=sampIsDialogActive() and sampGetCurrentDialogId() or nil
+    local valid,actual,actual_title=false,'',''
+    if current then valid,actual,actual_title=trade_dialog_matches(current,it.name,'buy') end
+    if current~=id or not valid then
+        log('\xd1\xea\xf3\xef\xea\xe0: \xe4\xe8\xe0\xeb\xee\xe3 \xe8\xe7\xec\xe5\xed\xe8\xeb\xf1\xff \xe4\xee \xee\xf2\xef\xf0\xe0\xe2\xea\xe8 \xb7 '..it.name,'error')
         close_dialog()
         return false
     end
+    txt,dialog_title=actual,actual_title
     local qty = tonumber(it.qty) or 1
     if qty < 1 then qty = 1 end
-    if not has_qty(txt) and qty>1 then
-        log('РЎРєСѓРїРєР°: СЃРµСЂРІРµСЂ РЅРµ РїСЂРµРґР»Р°РіР°РµС‚ РїРѕР»Рµ РєРѕР»РёС‡РµСЃС‚РІР°; Р»РёРјРёС‚ Р±СѓРґРµС‚ РґРѕР±Р°РІР»РµРЅ РїРѕ РѕРґРЅРѕР№ С€С‚СѓРєРµ','error')
+    local combined = has_qty((dialog_title or '') .. '\n' .. (txt or ''))
+    if not combined and qty>1 then
+        -- Same fallback as Market Helper: a price-only buy dialog represents one
+        -- unit, so the outer loop repeats the listing until requested qty is done.
+        log('Buy: price-only dialog, one unit per submit', 'info')
         qty=1
     end
-    local resp = has_qty(txt) and (tostring(qty) .. ',' .. tostring(it.price))
+    local resp = combined and (tostring(qty) .. ',' .. tostring(it.price))
         or tostring(it.price)
+    DSP.flog('PRESET buy input: item='..tostring(it.name)..' dialog='..tostring(id)..
+        ' mode='..(combined and 'qty_price' or 'price_only')..' resp_len='..tostring(#resp))
     if dry_run then
-        log('dry-run: РєСѓРїРёР» Р±С‹ ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price))
+        log('dry-run: купил бы ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price))
         close_dialog()
         return 'dry', tonumber(it.qty) or 1
     end
     -- v1.2 hotfix: use the active dialog id (may be 26563 or 15071 in newer
-    -- Arizona Mobile РІС‹СЃС‚Р°РІР»РµРЅРёРµ dialogs). Fallback chain via sampGetCurrentDialogId.
+    -- Arizona Mobile выставление dialogs). Fallback chain via sampGetCurrentDialogId.
     local resp_id = id or (sampGetCurrentDialogId and sampGetCurrentDialogId()) or 26563
     sampSendDialogResponse(resp_id, 1, 0, resp)
-    log('РЎРєСѓРїРєР°: ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price), 'ok')
+    log('Скупка: ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price), 'ok')
     for _ = 1, 24 do
         if not sampIsDialogActive() then return 'bought', qty end
         trade_wait(30)
     end
-    log('РЎРєСѓРїРєР°: РЅРµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ Р·Р°РєСЂС‹С‚РёСЏ РґРёР°Р»РѕРіР°', 'error')
+    log('Скупка: нет подтверждения закрытия диалога', 'error')
     return false
 end
 
@@ -128,22 +141,47 @@ function DSP.auto.start_buy()
     if DSP.auto.buy_running or DSP.auto.scanning then return false end
     if DSP.auto.sell_running or DSP.auto.scanning then return false end
     local list = {}
-    for _, it in ipairs(DSP.settings.buy_preset.items) do
+    local preset=DSP.settings.buy_preset
+    if type(preset)~='table' or type(preset.items)~='table' then
+        DSP.notify('Buy preset unavailable');return false
+    end
+    for _, it in ipairs(preset.items) do
+        if type(it)~='table' then DSP.notify('Invalid buy preset row');return false end
         if it.enabled ~= false and runtime.positive(it.price) and runtime.positive(it.qty or 1) then
+            if type(it.name)~='string' or it.name=='' then
+                DSP.notify('Invalid buy preset item name');return false
+            end
             list[#list+1] = {name=it.name,price=tonumber(it.price),qty=tonumber(it.qty) or 1}
         end
     end
-    if #list == 0 then DSP.notify('РЎРєСѓРїРєР°: РїСЂРµСЃРµС‚ РїСѓСЃС‚ РёР»Рё С†РµРЅС‹ 0'); return end
+    if #list == 0 then DSP.notify('Скупка: пресет пуст или цены 0'); return end
     local dry_run = DSP.settings.dry_run
     DSP.auto.buy_running = true
-    DSP.auto.status = 'СЃРєСѓРїРєР°...'
-    log('РЎРєСѓРїРєР°: ' .. #list .. ' РїРѕР·РёС†РёР№' .. (dry_run and ' (dry-run)' or ''))
+    DSP.auto.status = 'скупка...'
+    DSP.flog('PRESET buy accepted: '..#list..' positions, dry_run='..tostring(dry_run))
+    log('Скупка: ' .. #list .. ' позиций' .. (dry_run and ' (dry-run)' or ''))
+    if dry_run then
+        DSP.notify('ТЕСТ: игровые окна не открываются. Для действий нужен режим РЕАЛЬНО.')
+        -- No shop menu, network packets or dialog interactions in preview.
+        runtime.spawn('buy',function()
+            DSP.auto.progress.total=#list
+            for i,it in ipairs(list) do
+                DSP.auto.progress.dry=i
+                DSP.auto.progress.done=i
+                DSP.auto.progress.units=(DSP.auto.progress.units or 0)+(it.qty or 1)
+                log('preview: '..it.name..' x'..it.qty..' @ '..DSP.money(it.price))
+            end
+            DSP.auto.buy_running=false
+            DSP.auto.status='buy preview: '..#list..' positions, no packets sent'
+        end)
+        return true
+    end
     runtime.spawn('buy', function()
         DSP.auto.progress.total = #list
         if not open_shop_menu() then
-            log('РЎРєСѓРїРєР°: Р»Р°РІРєР° РЅРµ РѕС‚РєСЂС‹Р»Р°СЃСЊ. РџРѕРґРѕР№РґРёС‚Рµ Рє Р»Р°РІРєРµ.', 'error')
+            log('Скупка: лавка не открылась. Подойдите к лавке.', 'error')
             DSP.auto.buy_running = false
-            DSP.auto.status = 'СЃРєСѓРїРєР°: РѕС€РёР±РєР°'
+            DSP.auto.status = 'скупка: ошибка'
             return
         end
         local bought, dry = 0, 0
@@ -172,8 +210,8 @@ function DSP.auto.start_buy()
             end
         end
         DSP.auto.buy_running = false
-        DSP.auto.status = 'СЃРєСѓРїРєР°: ' .. bought .. '/' .. #list .. (dry > 0 and (' (dry ' .. dry .. ')') or '')
-        log('РЎРєСѓРїРєР° Р·Р°РІРµСЂС€РµРЅР°: ' .. bought .. '/' .. #list, 'ok')
+        DSP.auto.status = 'скупка: ' .. bought .. '/' .. #list .. (dry > 0 and (' (dry ' .. dry .. ')') or '')
+        log('Скупка завершена: ' .. bought .. '/' .. #list, 'ok')
     end)
     return true
 end
@@ -182,7 +220,50 @@ function DSP.auto.stop_buy()
     if not DSP.auto.buy_running then return false end
     runtime.cancel()
     DSP.auto.buy_running = false
-    DSP.auto.status = 'СЃРєСѓРїРєР° РѕСЃС‚Р°РЅРѕРІР»РµРЅР°'
+    DSP.auto.status = 'скупка остановлена'
     close_dialog()
-    log('РЎРєСѓРїРєР° РѕСЃС‚Р°РЅРѕРІР»РµРЅР°')
+    log('Скупка остановлена')
+end
+
+
+-- Queue user-initiated listing outside the ImGui drawing callback. Synchronous
+-- Lua exceptions during an ImGui frame can corrupt its Begin/End stack.
+-- This catches Lua-side errors only; native Android faults still need a log.
+function DSP.auto.safe_start(kind)
+    if kind~='sell' and kind~='buy' then return false end
+    if DSP.auto._launch_queued or DSP.auto.buy_running or DSP.auto.sell_running or DSP.auto.scanning then
+        DSP.notify('Trade already running or inventory scan active')
+        return false
+    end
+    if type(lua_thread)~='table' or type(lua_thread.create)~='function' then
+        DSP.notify('Thread scheduler unavailable')
+        return false
+    end
+    DSP.auto._launch_queued=true
+    DSP.flog('PRESET queued: kind='..kind..' dry_run='..tostring(DSP.settings.dry_run))
+    local ok,err=pcall(lua_thread.create,function()
+        DSP.auto._launch_queued=false
+        local started,result=xpcall(function()
+            if kind=='sell' then return DSP.auto.start_sell() end
+            return DSP.auto.start_buy()
+        end,function(e)
+            if debug and debug.traceback then return debug.traceback(tostring(e),2) end
+            return tostring(e)
+        end)
+        if not started then
+            DSP.auto[kind..'_running']=false
+            DSP.auto.status='Preset error; see standalone.log'
+            if DSP.flog then DSP.flog('PRESET launch exception: '..tostring(result)) end
+            DSP.notify('Preset error; see standalone.log')
+        elseif result~=true then
+            if DSP.flog then DSP.flog('PRESET launch rejected: '..kind) end
+        end
+    end)
+    if not ok then
+        DSP.auto._launch_queued=false
+        DSP.flog('PRESET scheduler failure: '..tostring(err))
+        DSP.notify('Failed to queue preset; see standalone.log')
+        return false
+    end
+    return true
 end

@@ -59,17 +59,17 @@ local function render_offer(g,offer,side,index)
         if side=='sell' then U.v16_arb_seller=v==id and nil or id
         else U.v16_arb_buyer=v==id and nil or id end
     end
-    if b('РњРµС‚РєР°','pin_'..side..index,115) then DSP.market.mark_shop(offer.shop) end
+    if b('Метка','pin_'..side..index,115) then DSP.market.mark_shop(offer.shop) end
     M.inline();M.text('API: '..DSP.market.offer_freshness(offer.ts))
 end
 local function detail(g)
-    if b('< Рљ СЃРїРёСЃРєСѓ','back',205) then U.v16_arb_detail=nil;return end
+    if b('< К списку','back',205) then U.v16_arb_detail=nil;return end
     M.inline();M.title(title(g))
-    M.text('РџСЂРѕРґР°СЋС‚ '..g.supply..' С€С‚. / РЎРєСѓРїР°СЋС‚ '..g.demand..' С€С‚.')
-    M.text('РџР»Р°РЅ '..g.planned..' С€С‚.  |  +'..DSP.money(g.profit))
-    if b('РџСЂРѕРґР°СЋС‚','sellers',165,U.v16_arb_tab~='buy') then U.v16_arb_tab='sell' end
+    M.text('Продают '..g.supply..' шт. / Скупают '..g.demand..' шт.')
+    M.text('План '..g.planned..' шт.  |  +'..DSP.money(g.profit))
+    if b('Продают','sellers',165,U.v16_arb_tab~='buy') then U.v16_arb_tab='sell' end
     M.inline()
-    if b('РЎРєСѓРїР°СЋС‚','buyers',165,U.v16_arb_tab=='buy') then U.v16_arb_tab='buy' end
+    if b('Скупают','buyers',165,U.v16_arb_tab=='buy') then U.v16_arb_tab='buy' end
     local side=U.v16_arb_tab=='buy' and 'buy' or 'sell'
     local offers=(side=='sell' and g.sellers or g.buyers) or {}
     local pages=math.max(1,math.ceil(#offers/5))
@@ -95,18 +95,18 @@ local function detail(g)
         local f=DSP.settings.arb_filters or {}
         local estimate=DSP.arb_v16.manual_pair(seller,buyer,f.budget,DSP.settings.tax_bp)
         if estimate then
-            M.title('Р’С‹Р±СЂР°РЅРЅР°СЏ РїР°СЂР°: '..estimate.qty..' С€С‚.')
-            M.text('Р—Р°С‚СЂР°С‚С‹: '..DSP.money(estimate.cost)..' | Р’С‹СЂСѓС‡РєР°: '..DSP.money(estimate.revenue))
-            M.text('РџСЂРёР±С‹Р»СЊ: '..DSP.money(estimate.profit)..' (РѕС‚РґРµР»СЊРЅС‹Р№ СЃС†РµРЅР°СЂРёР№)')
-            M.text('РќРµ РїСЂРёР±Р°РІР»СЏРµС‚СЃСЏ Рє РѕР±С‰РµРјСѓ РїР»Р°РЅСѓ, С‡С‚РѕР±С‹ РЅРµ СѓС‡РёС‚С‹РІР°С‚СЊ РѕРґРёРЅ Р»РѕС‚ РґРІР°Р¶РґС‹.')
+            M.title('Выбранная пара: '..estimate.qty..' шт.')
+            M.text('Затраты: '..DSP.money(estimate.cost)..' | Выручка: '..DSP.money(estimate.revenue))
+            M.text('Прибыль: '..DSP.money(estimate.profit)..' (отдельный сценарий)')
+            M.text('Не прибавляется к общему плану, чтобы не учитывать один лот дважды.')
         end
     end
-    if b('Р›СѓС‡С€РёР№ РїР»Р°РЅ','auto',198) then auto_select(g);U.v16_arb_seller=nil;U.v16_arb_buyer=nil end
+    if b('Лучший план','auto',198) then auto_select(g);U.v16_arb_seller=nil;U.v16_arb_buyer=nil end
     M.inline()
-    if b('РћС‡РёСЃС‚РёС‚СЊ','clear',155) then
+    if b('Очистить','clear',155) then
         U.v16_arb_selected={};U.v16_arb_seller=nil;U.v16_arb_buyer=nil
     end
-    M.title('РџРѕРґС…РѕРґСЏС‰РёРµ СЃРґРµР»РєРё')
+    M.title('Подходящие сделки')
     local displayed=0
     for i,r in ipairs(g.routes or {}) do
         local seller=offer_id(r.sell_offer)
@@ -116,7 +116,7 @@ local function detail(g)
             local key=route_id(g,r)
             local marked=U.v16_arb_selected and U.v16_arb_selected[key]
             local label=(marked and '[x] ' or '[ ] ')..'#'..r.sell_offer.shop..' -> #'..r.buy_offer.shop
-                ..' | '..r.tradable_qty..' С€С‚. | +'..DSP.money(r.net_profit)
+                ..' | '..r.tradable_qty..' шт. | +'..DSP.money(r.net_profit)
             if b(label,'route_'..i,-1,marked) then
                 U.v16_arb_selected=U.v16_arb_selected or {}
                 U.v16_arb_selected[key]=not marked or nil
@@ -125,26 +125,26 @@ local function detail(g)
             if displayed>=6 then break end
         end
     end
-    if displayed==0 then M.text('РџРѕРґС…РѕРґСЏС‰РµР№ СЃРІСЏР·РєРё РЅРµС‚. РЈР±РµСЂРёС‚Рµ С„РёР»СЊС‚СЂ РїСЂРѕРґР°РІС†Р°/СЃРєСѓРїС‰РёРєР°.') end
+    if displayed==0 then M.text('Подходящей связки нет. Уберите фильтр продавца/скупщика.') end
     U.v16_arb_expenses=U.v16_arb_expenses or {extra=0}
-    if b(U.v16_arb_use_extra and 'Р”РѕРї. СЂР°СЃС…РѕРґС‹: РґР°' or 'Р”РѕРї. СЂР°СЃС…РѕРґС‹: РЅРµС‚','extra',250) then
+    if b(U.v16_arb_use_extra and 'Доп. расходы: да' or 'Доп. расходы: нет','extra',250) then
         U.v16_arb_use_extra=not U.v16_arb_use_extra
     end
-    if U.v16_arb_use_extra then M.number('Р Р°СЃС…РѕРґ РЅР° РїР»Р°РЅ ($)','additional_expense',U.v16_arb_expenses,'extra',0,180) end
+    if U.v16_arb_use_extra then M.number('Расход на план ($)','additional_expense',U.v16_arb_expenses,'extra',0,180) end
     local plan=selected_plan(g)
-    M.text('РљСѓРїРёС‚СЊ: '..plan.qty..' С€С‚.  |  Р Р°СЃС…РѕРґ: '..DSP.money(plan.cost))
-    M.text('Р’С‹СЂСѓС‡РєР° РїРѕСЃР»Рµ РєРѕРјРёСЃСЃРёРё: '..DSP.money(plan.revenue))
+    M.text('Купить: '..plan.qty..' шт.  |  Расход: '..DSP.money(plan.cost))
+    M.text('Выручка после комиссии: '..DSP.money(plan.revenue))
     imgui.TextColored(DSP.theme.col(plan.profit>=0 and 'good' or 'bad',1),
-        DSP.utf8('Р§РёСЃС‚Р°СЏ РїСЂРёР±С‹Р»СЊ: '..DSP.money(plan.profit)))
-    if b(U.v16_arb_route and 'РЎРєСЂС‹С‚СЊ РјР°СЂС€СЂСѓС‚' or 'РњР°СЂС€СЂСѓС‚','route_view',210) then
+        DSP.utf8('Чистая прибыль: '..DSP.money(plan.profit)))
+    if b(U.v16_arb_route and 'Скрыть маршрут' or 'Маршрут','route_view',210) then
         U.v16_arb_route=not U.v16_arb_route
     end
     if U.v16_arb_route then
         for i,r in ipairs(plan.routes) do
-            M.text(i..'. РљСѓРїРёС‚СЊ '..r.tradable_qty..' С€С‚. РІ #'..r.sell_offer.shop)
-            if b('РњРµС‚РєР° РїСЂРѕРґР°РІС†Р°','sell_route_'..i,200) then DSP.market.mark_shop(r.sell_offer.shop) end
-            M.text('   РџСЂРѕРґР°С‚СЊ '..r.tradable_qty..' С€С‚. РІ #'..r.buy_offer.shop)
-            if b('РњРµС‚РєР° СЃРєСѓРїС‰РёРєР°','buy_route_'..i,200) then DSP.market.mark_shop(r.buy_offer.shop) end
+            M.text(i..'. Купить '..r.tradable_qty..' шт. в #'..r.sell_offer.shop)
+            if b('Метка продавца','sell_route_'..i,200) then DSP.market.mark_shop(r.sell_offer.shop) end
+            M.text('   Продать '..r.tradable_qty..' шт. в #'..r.buy_offer.shop)
+            if b('Метка скупщика','buy_route_'..i,200) then DSP.market.mark_shop(r.buy_offer.shop) end
         end
     end
 end
@@ -161,37 +161,37 @@ function U.arbitrage_tab()
         end
         U.v16_arb_detail=nil
     end
-    M.text('Р С‹РЅРѕРє: '..DSP.market.freshness()..' | '..tostring(state.status or '?'))
-    if b('РћР±РЅРѕРІРёС‚СЊ','refresh',170) then DSP.market.pull(state.sid) end
+    M.text('Рынок: '..DSP.market.freshness()..' | '..tostring(state.status or '?'))
+    if b('Обновить','refresh',170) then DSP.market.pull(state.sid) end
     M.inline()
-    if b(U.v16_arb_filters and 'РЎРєСЂС‹С‚СЊ С„РёР»СЊС‚СЂС‹' or 'Р¤РёР»СЊС‚СЂС‹','filters',170) then
+    if b(U.v16_arb_filters and 'Скрыть фильтры' or 'Фильтры','filters',170) then
         U.v16_arb_filters=not U.v16_arb_filters
     end
     if U.v16_arb_filters then
         local f=DSP.settings.arb_filters or {};DSP.settings.arb_filters=f
-        if M.number('Р‘СЋРґР¶РµС‚','arb_budget',f,'budget',0,190) then DSP.market.invalidate_arbitrage() end
-        if M.number('РњРёРЅРёРјСѓРј РїСЂРёР±С‹Р»Рё','arb_profit',f,'min_profit',0,190) then DSP.market.invalidate_arbitrage() end
+        if M.number('Бюджет','arb_budget',f,'budget',0,190) then DSP.market.invalidate_arbitrage() end
+        if M.number('Минимум прибыли','arb_profit',f,'min_profit',0,190) then DSP.market.invalidate_arbitrage() end
     end
     local groups=DSP.market.arbitrage_grouped()
     U.v16_arb_search=U.v16_arb_search or imgui.new.char[128]()
     imgui.SetNextItemWidth(math.min(500,imgui.GetContentRegionAvail().x))
-    imgui.InputTextWithHint('##arb16_search',DSP.utf8('РџРѕРёСЃРє РїСЂРµРґРјРµС‚Р°'),U.v16_arb_search,128)
+    imgui.InputTextWithHint('##arb16_search',DSP.utf8('Поиск предмета'),U.v16_arb_search,128)
     local query=DSP.lower(DSP.trim(DSP.to_cp(require('ffi').string(U.v16_arb_search))))
     local shown={}
     for _,g in ipairs(groups) do
         if query=='' or DSP.lower(g.name):find(query,1,true) then shown[#shown+1]=g end
     end
-    M.text('РџСЂРµРґРјРµС‚РѕРІ: '..#shown)
+    M.text('Предметов: '..#shown)
     local from,to=DSP.screens.pager(#shown,7,'arbitrage')
     for i=from,to do
         local g=shown[i]
         M.thumbnail({name=g.name,id=g.row and g.row.id},26);M.inline()
-        local label=g.name..'  '..g.planned..' С€С‚.  +'..DSP.money(g.profit)
+        local label=g.name..'  '..g.planned..' шт.  +'..DSP.money(g.profit)
         if b(label,'item_'..i,-1) then
             U.v16_arb_detail=g.key;U.v16_arb_tab='sell';U.v16_arb_offer_page=1
             U.v16_arb_seller=nil;U.v16_arb_buyer=nil
             U.v16_arb_selected={}
         end
     end
-    if #shown==0 then M.text('РЎРІСЏР·РѕРє РЅРµС‚ вЂ” РїСЂРѕРІРµСЂСЊС‚Рµ С„РёР»СЊС‚СЂС‹ Рё СЃРІРµР¶РµСЃС‚СЊ РґР°РЅРЅС‹С….') end
+    if #shown==0 then M.text('Связок нет — проверьте фильтры и свежесть данных.') end
 end

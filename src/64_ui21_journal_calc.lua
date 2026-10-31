@@ -1,19 +1,19 @@
 -- Compact journal and iPhone-like keypad share the workspace touch primitives.
 local V,M,C=DSP.ui21,DSP.mobile,DSP.craglog
 local ffi=require('ffi')
-local filters={{'all','Р’СЃРµ'},{'loot','РќР°РіСЂР°РґС‹'},{'payday','PayDay'},{'sales','РџСЂРѕРґР°Р¶Рё'},
- {'buys','РЎРєСѓРїРєР°'},{'income','Р”РѕС…РѕРґС‹'},{'other','Р”СЂСѓРіРѕРµ'}}
+local filters={{'all','Все'},{'loot','Награды'},{'payday','PayDay'},{'sales','Продажи'},
+ {'buys','Скупка'},{'income','Доходы'},{'other','Другое'}}
 V.jfilter='all'
 local function b(s,id,w,on,primary,height)return V.button(s,'tools_'..id,w,on,primary,height)end
 function V.journal()
-    V.text('РСЃС‚РѕСЂРёСЏ');V.inline()
-    if b('РњРёРЅРё-Р¶СѓСЂРЅР°Р»','mini',170)then DSP.settings.craglog.open=true;M.defer_save()end
+    V.text('История');V.inline()
+    if b('Мини-журнал','mini',170)then DSP.settings.craglog.open=true;M.defer_save()end
     V.jfilter_pos=V.jfilter_pos or 1
     V.inline();if b('<','filter_prev',44)then V.jfilter_pos=(V.jfilter_pos-2)%#filters+1 end
     V.inline();if b(filters[V.jfilter_pos][2],'filter',134,true)then V.jfilter_pos=V.jfilter_pos%#filters+1 end
     V.inline();if b('>','filter_next',44)then V.jfilter_pos=V.jfilter_pos%#filters+1 end
     V.jfilter=filters[V.jfilter_pos][1]
-    local query,edited=V.search('journal','РџРѕРёСЃРє РїРѕ СЃРѕР±С‹С‚РёСЋ Рё РёСЃС‚РѕС‡РЅРёРєСѓ',-1)
+    local query,edited=V.search('journal','Поиск по событию и источнику',-1)
     -- Ring is bounded; cache invalidates on newest record and in-place detail updates.
     if edited then V.reset_list('journal_'..V.jfilter)end
     local newest
@@ -26,10 +26,10 @@ function V.journal()
         V.row('journal_'..i,54,function(w,x,y)
             V.muted(os.date('%H:%M',e.ts or 0))
             V.at(x+52,y)
-            if b(V.fit(C.describe(e),w-68),'entry_'..i,w-54)then V.journal_detail=e;V.open_popup('РЎРѕР±С‹С‚РёРµ','event')end
+            if b(V.fit(C.describe(e),w-68),'entry_'..i,w-54)then V.journal_detail=e;V.open_popup('Событие','event')end
         end)
     end,{footer=function()
-        V.muted(#newest..' СЃРѕР±С‹С‚РёР№')
+        V.muted(#newest..' событий')
         if C.last_error then V.inline();V.red(V.fit(C.last_error,imgui.GetContentRegionAvail().x))end
     end})
 end
@@ -50,22 +50,22 @@ local function decimal(label,key,width)
         V.finance_invalid=V.finance_invalid or{};V.finance_invalid[key]=not valid or nil
         if valid then finance[key]=n end
     end
-    if V.finance_invalid and V.finance_invalid[key]then V.at(x,imgui.GetCursorPosY());V.red('РџСЂРѕРІРµСЂСЊС‚Рµ С‡РёСЃР»Рѕ')end
+    if V.finance_invalid and V.finance_invalid[key]then V.at(x,imgui.GetCursorPosY());V.red('Проверьте число')end
 end
 local function finance_panel()
-    V.text('РџСЂРёР±С‹Р»СЊ РѕС‚ СЃРґРµР»РєРё')
+    V.text('Прибыль от сделки')
     local w=imgui.GetContentRegionAvail().x;local x=imgui.GetCursorPosX();local y=imgui.GetCursorPosY()
-    decimal('Р—Р°РєСѓРїРєР°, $','buy',(w-10)/2)
-    V.at(x+(w+10)/2,y);decimal('РџСЂРѕРґР°Р¶Р°, $','sell',(w-10)/2)
-    y=imgui.GetCursorPosY();V.at(x,y);decimal('РљРѕР»РёС‡РµСЃС‚РІРѕ','qty',(w-10)/2)
-    V.at(x+(w+10)/2,y);decimal('РљРѕРјРёСЃСЃРёСЏ, %','commission',(w-10)/2)
-    V.at(x,imgui.GetCursorPosY());decimal('Р”РѕРї. СЂР°СЃС…РѕРґС‹, $','extra',-1)
+    decimal('Закупка, $','buy',(w-10)/2)
+    V.at(x+(w+10)/2,y);decimal('Продажа, $','sell',(w-10)/2)
+    y=imgui.GetCursorPosY();V.at(x,y);decimal('Количество','qty',(w-10)/2)
+    V.at(x+(w+10)/2,y);decimal('Комиссия, %','commission',(w-10)/2)
+    V.at(x,imgui.GetCursorPosY());decimal('Доп. расходы, $','extra',-1)
     imgui.Separator()
-    if V.finance_invalid and next(V.finance_invalid)then V.red('РСЃРїСЂР°РІСЊС‚Рµ РїРѕР»СЏ РґР»СЏ СЂР°СЃС‡С‘С‚Р°');return end
+    if V.finance_invalid and next(V.finance_invalid)then V.red('Исправьте поля для расчёта');return end
     local r=calc.finance(finance.buy,finance.sell,finance.qty,finance.commission,finance.extra)
-    V.muted('Р—Р°С‚СЂР°С‚С‹ '..DSP.money(r.spent));V.muted('Р’С‹СЂСѓС‡РєР° РїРѕСЃР»Рµ РєРѕРјРёСЃСЃРёРё '..DSP.money(r.received))
-    if r.profit>=0 then V.green('Р§РёСЃС‚С‹РјРё '..DSP.money(r.profit))else V.red('РЈР±С‹С‚РѕРє '..DSP.money(r.profit))end
-    V.muted(string.format('РќР°С†РµРЅРєР° %.2f%% В· ROI %.2f%%',r.markup,r.roi))
+    V.muted('Затраты '..DSP.money(r.spent));V.muted('Выручка после комиссии '..DSP.money(r.received))
+    if r.profit>=0 then V.green('Чистыми '..DSP.money(r.profit))else V.red('Убыток '..DSP.money(r.profit))end
+    V.muted(string.format('Наценка %.2f%% · ROI %.2f%%',r.markup,r.roi))
 end
 local function keypad(width,height)
     local top=imgui.GetCursorPosY();local x=imgui.GetCursorPosX()
@@ -91,13 +91,13 @@ local function keypad(width,height)
     imgui.PopStyleVar(1)
 end
 function V.calculator()
-    V.text('РљР°Р»СЊРєСѓР»СЏС‚РѕСЂ');V.inline()
-    if b('РСЃС‚РѕСЂРёСЏ В· '..#calc.history,'history',175,calc.history_open)then V.open_popup('РСЃС‚РѕСЂРёСЏ СЂР°СЃС‡С‘С‚РѕРІ','calc_history')end
+    V.text('Калькулятор');V.inline()
+    if b('История · '..#calc.history,'history',175,calc.history_open)then V.open_popup('История расчётов','calc_history')end
     local avail=imgui.GetContentRegionAvail();local narrow=avail.x<720
     if narrow then
         V.calc_mode=V.calc_mode or 'standard'
-        if b('РћР±С‹С‡РЅС‹Р№','standard',140,V.calc_mode=='standard')then V.calc_mode='standard'end
-        V.inline();if b('РџСЂРёР±С‹Р»СЊ / %','finance',166,V.calc_mode=='finance')then V.calc_mode='finance'end
+        if b('Обычный','standard',140,V.calc_mode=='standard')then V.calc_mode='standard'end
+        V.inline();if b('Прибыль / %','finance',166,V.calc_mode=='finance')then V.calc_mode='finance'end
         V.list('calculator',function(w,h)
             if V.calc_mode=='finance'then finance_panel()else keypad(w,h)end
         end)
@@ -116,30 +116,30 @@ end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
-    V.popup('РЎРѕР±С‹С‚РёРµ','event',function()
+    V.popup('Событие','event',function()
         local e=V.journal_detail;if not e then return end
         V.list('event_details',function()
             for _,line in ipairs(C.detail_lines(e))do imgui.TextWrapped(DSP.utf8(line))end
         end,{height=215})
-        if b('Р—Р°РєСЂС‹С‚СЊ','event_close',138)then imgui.CloseCurrentPopup()end
-        V.inline();if C.delete_event and b('РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ','event_delete',180)then
-            imgui.OpenPopup(DSP.utf8('РЈРґР°Р»РёС‚СЊ СЃРѕР±С‹С‚РёРµ')..'##v22_delete_event')
+        if b('Закрыть','event_close',138)then imgui.CloseCurrentPopup()end
+        V.inline();if C.delete_event and b('Удалить запись','event_delete',180)then
+            imgui.OpenPopup(DSP.utf8('Удалить событие')..'##v22_delete_event')
         end
-        V.popup('РЈРґР°Р»РёС‚СЊ СЃРѕР±С‹С‚РёРµ','delete_event',function()
-            V.text('РЎРєСЂС‹С‚СЊ СЌС‚Сѓ Р·Р°РїРёСЃСЊ РІ Р¶СѓСЂРЅР°Р»Рµ?')
-            V.muted('РСЃС…РѕРґРЅС‹Р№ СѓС‡С‘С‚ СЃРґРµР»РѕРє СЃРѕС…СЂР°РЅРёС‚СЃСЏ')
+        V.popup('Удалить событие','delete_event',function()
+            V.text('Скрыть эту запись в журнале?')
+            V.muted('Исходный учёт сделок сохранится')
             V.cancel('delete_event');V.inline()
-            if b('РЈРґР°Р»РёС‚СЊ','event_yes',142)then
+            if b('Удалить','event_yes',142)then
                 local ok,err=C.delete_event(e)
                 if ok then V.journal_detail=nil;imgui.CloseCurrentPopup()else DSP.notify(tostring(err))end
             end
         end,{w=560,h=200})
     end)
-    V.popup('РСЃС‚РѕСЂРёСЏ СЂР°СЃС‡С‘С‚РѕРІ','calc_history',function()
+    V.popup('История расчётов','calc_history',function()
         local rows={};for i=#calc.history,1,-1 do rows[#rows+1]=calc.history[i]end
         V.list_rows('calc_history',rows,48,function(e,i)
             if b(V.fit(e.text,imgui.GetContentRegionAvail().x-10),'calc_record_'..i,-1)and e.result then calc.display=tostring(e.result);calc.fresh=true end
         end,{height=235})
-        if b('Р—Р°РєСЂС‹С‚СЊ','calc_history_close',140)then imgui.CloseCurrentPopup()end
+        if b('Закрыть','calc_history_close',140)then imgui.CloseCurrentPopup()end
     end)
 end

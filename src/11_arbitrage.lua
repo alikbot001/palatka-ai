@@ -1,6 +1,127 @@
 -- Compare real offers; budget limits apply before profitability filters.
 local M = DSP.market
 local cache, signature, expires
+-- Missing shops reported by the player are hidden temporarily per server.
+-- No API timestamp is proof that a physical stall still exists.
+M.missing_shops = M.missing_shops or DSP.settings.arb_missing_shops or {}
+DSP.settings.arb_missing_shops=M.missing_shops
+M.missing_revision = M.missing_revision or 0
+local function missing_key(shop)
+    local id=tonumber(shop)
+    if not id or id<=0 or id>99999 or id%1~=0 then return nil end
+    return tostring(M.state.sid or DSP.settings.server or 0)..':'..tostring(math.floor(id))
+end
+local function record_deadline(record)
+    if type(record)=='table' then return tonumber(record.until_ts) or 0 end
+    return tonumber(record) or 0
+end
+function M.missing_deadline(record)
+    return record_deadline(record)
+end
+local function changed_missing()
+    M.missing_revision=(M.missing_revision or 0)+1
+    if M.invalidate_arbitrage then M.invalidate_arbitrage() end
+    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
+    elseif DSP.save_settings then pcall(DSP.save_settings) end
+end
+-- Numeric entries remain compatible with the v2.2.15 settings file.
+-- A confirmed game rejection persists longer and does not reappear merely
+-- because the same stale API payload was downloaded again.
+function M.is_shop_missing(shop, now, offer_ts)
+    local key=missing_key(shop)
+    if not key then return true end
+    now=now or os.time()
+    local record=M.missing_shops[key]
+    if record==nil then return false end
+    local deadline=record_deadline(record)
+    if deadline<=now then
+        M.missing_shops[key]=nil
+        return false
+    end
+    if type(record)=='table' and record.reason=='game_not_found' then
+        local observed=tonumber(offer_ts) or 0
+        local blocked=tonumber(record.snapshot_ts) or 0
+        local since=tonumber(record.since) or now
+        -- A truly newer stall *observation*, fetched after the rejection,
+        -- may be legitimate. Old API refreshes cannot erase a server verdict.
+        if observed>blocked and observed>since and observed<=now+60
+            and now>=since+300 and (tonumber(M.state.received_at) or 0)>since then
+            return false
+        end
+    end
+    return true
+end
+function M.mark_shop_missing(shop, minutes)
+    local key=missing_key(shop)
+    if not key then return false end
+    local duration=math.max(60,math.min(3600,math.floor((tonumber(minutes) or 30)*60)))
+    M.missing_shops[key]=os.time()+duration
+    changed_missing()
+    return true
+end
+function M.mark_shop_missing_from_game(shop, timestamp)
+    local key=missing_key(shop)
+    if not key then return false end
+    local now=tonumber(timestamp) or os.time()
+    local latest=0
+    for _,row in ipairs(M.state.rows or {}) do
+        for _,side in ipairs({row.sell or {},row.buy or {}}) do
+            for _,offer in ipairs(side.offers or {}) do
+                if tostring(offer.shop)==tostring(shop) then
+                    latest=math.max(latest,tonumber(offer.ts) or 0)
+                end
+            end
+        end
+    end
+    M.missing_shops[key]={reason='game_not_found',since=now,
+        until_ts=now+21600,snapshot_ts=latest}
+    changed_missing()
+    -- /findilavka feedback can arrive after the UI was closed. Persist now,
+    -- rather than relying on an ImGui frame to flush deferred settings.
+    if DSP.save_settings then pcall(DSP.save_settings) end
+    return true
+end
+function M.restore_shop(shop)
+    local key=missing_key(shop)
+    if not key then return false end
+    M.missing_shops[key]=nil
+    changed_missing()
+    return true
+end
+
+-- Match server notifications only while a /findilavka request is outstanding.
+-- They must never be attributed to an unrelated chat or arbitrary API record.
+function M.on_shop_lookup_feedback(text, timestamp)
+    local pending=M.pending_find
+    if not pending then return false end
+    local now=tonumber(timestamp) or os.time()
+    if now-(tonumber(pending.at) or 0)>8 or now<(tonumber(pending.at) or 0) then
+        M.pending_find=nil
+        return false
+    end
+    local actual=DSP.detect_server and DSP.detect_server()
+    if tonumber(pending.sid)~=tonumber(M.state.sid) or (actual and tonumber(actual)~=tonumber(pending.sid)) then
+        M.pending_find=nil
+        return false
+    end
+    local cleaned=DSP.lower(DSP.clean_text(text or '')):gsub('%s+',' ')
+    local has_stall=cleaned:find('лавк' ,1,true) ~= nil
+    local no_stall=cleaned:find('не существует' ,1,true)
+        or cleaned:find('не найдена' ,1,true)
+        or cleaned:find('не найдено' ,1,true)
+        or cleaned:find('отсутствует' ,1,true)
+    if not has_stall or not no_stall then return false end
+    -- Prefer an explicit number, if the server includes one. A different
+    -- number means this response is not for our request.
+    local numbered=cleaned:match('#%s*(%d+)')
+    if numbered and tonumber(numbered)~=tonumber(pending.shop) then return false end
+    M.pending_find=nil
+    if not M.mark_shop_missing_from_game(pending.shop,now) then return false end
+    if DSP.shop_marker and DSP.shop_marker.clear then DSP.shop_marker.clear() end
+    if DSP.add_log then DSP.add_log('Игра: лавка #'..tostring(pending.shop)..' не существует. Удалена из API-маршрутов.','error') end
+    if DSP.flog then DSP.flog('FINDILAVKA missing shop='..tostring(pending.shop)..' sid='..tostring(pending.sid)) end
+    return true
+end
 
 local function checkpoint()
     local hook=M.arb_yield
@@ -15,7 +136,7 @@ end
 function M.should_refresh(now)
     if M.state.status == 'loading' then return false end
     if (tonumber(M.state.next_auto_retry) or 0) > (now or os.time()) then return false end
-    local interval = math.max(30, tonumber(DSP.settings.refresh_seconds) or 60)
+    local interval = math.max(180, tonumber(DSP.settings.refresh_seconds) or 300)
     return (now or os.time()) - (M.state.last_request or 0) >= interval
 end
 
@@ -36,10 +157,12 @@ local function after_tax(gross, tax_bp)
 end
 
 local function fresh(offer, now, filters)
+    if M.state.status=='cache' or M.state.status=='error' then return false end
+    if M.is_shop_missing(offer.shop,now,offer.ts) then return false end
     local ts = integer(offer.ts)
     if ts == 0 then return filters.include_unknown ~= false end
     if ts > now + 60 then return false end
-    local max_age = integer(filters.max_age, 1800)
+    local max_age = integer(filters.max_age, 300)
     return max_age == 0 or now - ts <= max_age
 end
 
@@ -48,7 +171,7 @@ end
 -- Greedy allocation prioritizes unit profit (or ROI under a cash budget).
 local function opportunities(filters, now, rows, selections)
     local candidates, out = {}, {}
-    local tax_bp = filters.tax_bp or DSP.settings.tax_bp
+    local tax_bp = math.min(10000, integer(filters.tax_bp, DSP.settings.tax_bp or 200))
     local budget = integer(filters.budget)
     local remaining_budget = budget > 0 and budget or math.huge
     local max_qty = integer(filters.max_qty)
@@ -56,6 +179,10 @@ local function opportunities(filters, now, rows, selections)
     local min_profit = integer(filters.min_profit)
     local min_roi = tonumber(filters.min_roi) or 0
     local reserve_pct = math.floor(math.max(0, math.min(90, tonumber(filters.safety_pct) or 0)))
+    local min_unit_profit = integer(filters.min_unit_profit)
+    local max_buy_price = integer(filters.max_buy_price)
+    local min_stock = integer(filters.min_stock)
+    local shop_mode = integer(filters.shop_mode)
     for _, row in ipairs(rows or M.state.rows or {}) do
         for _, seller in ipairs(row.sell.offers or {}) do
             if (not selections or selections.sell[seller]) and fresh(seller, now, filters) then
@@ -67,7 +194,12 @@ local function opportunities(filters, now, rows, selections)
                         and (seller.ench or 0) == (buyer.ench or 0)
                         and fresh(buyer, now, filters)
                         and p_buy > 0 and p_sell > p_buy
-                        and integer(seller.qty) > 0 and integer(buyer.qty) > 0 then
+                        and (max_buy_price == 0 or p_buy <= max_buy_price)
+                        and (shop_mode == 0
+                            or (shop_mode == 1 and tostring(seller.shop)==tostring(buyer.shop))
+                            or (shop_mode == 2 and tostring(seller.shop)~=tostring(buyer.shop)))
+                        and integer(seller.qty) >= math.max(1, min_stock)
+                        and integer(buyer.qty) >= math.max(1, min_stock) then
                         local demand_qty = integer(buyer.qty)
                         if not buyer.verified_at then
                             local factor=100-reserve_pct
@@ -86,7 +218,7 @@ local function opportunities(filters, now, rows, selections)
                         -- Tax is rounded on the batch, not on each individual item.
                         local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
                         local unit_profit = after_tax(p_sell, tax_bp) - p_buy + fraction
-                        if unit_profit > 0 then
+                        if unit_profit > 0 and unit_profit >= min_unit_profit then
                             candidates[#candidates+1] = {
                                 row=row, seller=seller, buyer=buyer,
                                 p_buy=p_buy, p_sell=p_sell, unit_profit=unit_profit,
@@ -230,14 +362,20 @@ end
 function M.arbitrage_filtered()
     local f = DSP.settings.arb_filters or {}
     local now = os.time()
-    local sig = table.concat({M.state.sid or 0, M.state.version or 0, DSP.settings.tax_bp or 200,
+    local sig = table.concat({M.state.sid or 0, M.state.version or 0, M.state.status or '', DSP.settings.tax_bp or 200,
         f.budget or 0, f.min_profit or 0, f.min_roi or 0, f.sort or 1,
-        f.max_age or 1800, tostring(f.include_unknown ~= false),
-        tostring(f.allow_partial ~= false), f.max_qty or 0, f.safety_pct or 0}, '|')
+        f.max_age or 300, tostring(f.include_unknown == true),
+        tostring(f.allow_partial ~= false), f.max_qty or 0, f.safety_pct or 0,
+        f.tax_bp or 'global',f.min_unit_profit or 0,f.max_buy_price or 0,
+        f.min_stock or 0,f.shop_mode or 0,M.missing_revision or 0}, '|')
     if cache and sig == signature and not M.arb_dirty and now < expires then return cache end
     cache, signature = opportunities(f, now), sig
     expires = math.huge
-    local max_age = integer(f.max_age,1800)
+    local max_age = integer(f.max_age,300)
+    for _,record in pairs(M.missing_shops or {})do
+        local deadline=record_deadline(record)
+        if deadline>now then expires=math.min(expires,deadline)end
+    end
     for _, row in ipairs(M.state.rows or {}) do
             for _, side in ipairs({row.sell,row.buy}) do
                 for _, offer in ipairs(side.offers or {}) do
@@ -254,12 +392,12 @@ end
 
 function M.offer_freshness(ts)
     ts = tonumber(ts) or 0
-    if ts <= 0 then return 'РІСЂРµРјСЏ РЅРµРёР·РІРµСЃС‚РЅРѕ', 'muted' end
+    if ts <= 0 then return 'время неизвестно', 'muted' end
     local age = os.time() - ts
-    if age < -60 then return 'РѕС€РёР±РєР° РІСЂРµРјРµРЅРё', 'warn' end
-    if age < 180 then return 'СЃРІРµР¶РµРµ', 'good' end
-    if age < 600 then return math.floor(age / 60) .. ' РјРёРЅ РЅР°Р·Р°Рґ', 'warn' end
-    return math.floor(age / 60) .. ' РјРёРЅ РЅР°Р·Р°Рґ', 'muted'
+    if age < -60 then return 'ошибка времени', 'warn' end
+    if age < 180 then return 'свежее', 'good' end
+    if age < 600 then return math.floor(age / 60) .. ' мин назад', 'warn' end
+    return math.floor(age / 60) .. ' мин назад', 'muted'
 end
 
 -- Direct observations from a currently open mobile stall are independent of

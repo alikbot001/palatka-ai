@@ -11,6 +11,14 @@ local function now()
     return os.time()
 end
 
+local function mono_ms()
+    if getGameTimer then
+        local ok,v=pcall(getGameTimer)
+        if ok and type(v)=='number' then return v end
+    end
+    return os.time()*1000
+end
+
 local function decode(raw)
     raw = tostring(raw or ''):gsub('%z+$', '')
     if raw == '' then return nil end
@@ -19,24 +27,39 @@ local function decode(raw)
     return nil
 end
 
+-- Decimal punctuation belongs to the number when there is a k/kk/m suffix.
+-- Without a suffix, accept grouped thousands (1.500.000 or 1,500,000).
 function DSP.money_val(s)
     s = tostring(s or ''):gsub('{[%x]+}', ''):gsub('%s+', '')
-    if s == '' then return 0 end
-    local mult = 1
     local low = s:lower()
-    if low:find('–∫–∫', 1, true) or low:find('kk', 1, true) then
+    local mult = 1
+    if low:find('kk', 1, true) or low:find('ÍÍ', 1, true) then
         mult = 1000000
-        s = s:gsub('[–ö–∫]–∫', ''):gsub('[Kk]k', '')
-    elseif low:find('–∫–∫', 1, true) == nil and (low:find('–∫', 1, true) or low:find('k', 1, true)) then
+    elseif low:find('m', 1, true) or low:find('Ï', 1, true) then
+        mult = 1000000
+    elseif low:find('k', 1, true) or low:find('Í', 1, true) then
         mult = 1000
-        s = s:gsub('[–ö–∫]', ''):gsub('[Kk]', '')
-    elseif low:find('–º', 1, true) or low:find('m', 1, true) then
-        mult = 1000000
-        s = s:gsub('[–ú–º]', ''):gsub('[Mm]', '')
     end
-    s = s:gsub('%$', ''):gsub('%.', ''):gsub(',', '.')
-    local n = tonumber(s:match('(%d+%.?%d*)'))
-    if not n then return 0 end
+    local number = s:match('(%d[%d%,%.]*)')
+    if not number then return 0 end
+    local separators = select(2, number:gsub('[%,%.]', ''))
+    if separators > 0 then
+        local groups = {}
+        for group in number:gmatch('%d+') do groups[#groups + 1] = group end
+        local grouped = #groups > 1 and #groups[1] <= 3
+        for i = 2, #groups do if #groups[i] ~= 3 then grouped = false end end
+        if mult == 1 and grouped then
+            number = table.concat(groups)
+        elseif separators == 1 then
+            number = number:gsub(',', '.')
+        elseif grouped then
+            number = table.concat(groups)
+        else
+            return 0 -- malformed or ambiguous mixed separators
+        end
+    end
+    local n = tonumber(number)
+    if not n or n ~= n or n < 0 then return 0 end
     return math.floor(n * mult)
 end
 
@@ -65,9 +88,46 @@ function L.reset_trade(partner)
         give = {}, get = {},
         money_give = 0, money_get = 0,
         opened = now(), updated = now(),
-        complete = false,
+        complete = false, _recorded = false,
     }
     DSP.flog('TRADE reset partner=' .. tostring(partner or ''))
+end
+
+local function trade_fingerprint(t)
+    local function items_key(items)
+        local parts = {}
+        for _, it in ipairs(items or {}) do
+            parts[#parts + 1] = table.concat({tostring(it.id or ''),
+                tostring(it.name or ''), tostring(it.ench or 0), tostring(it.qty or 1)}, ':')
+        end
+        table.sort(parts)
+        return table.concat(parts, ';')
+    end
+    return table.concat({tostring(t.partner), tostring(t.money_give), tostring(t.money_get),
+        items_key(t.give), items_key(t.get)}, '|')
+end
+
+-- Both packet confirmation and result dialog go through this single guard.
+function L.record_trade_once(t)
+    if not t or t._recorded then return false end
+    if #(t.give or {}) == 0 and #(t.get or {}) == 0
+        and (t.money_give or 0) <= 0 and (t.money_get or 0) <= 0 then return false end
+    local fingerprint, ts = trade_fingerprint(t), now()
+    local last = L.last_recorded
+    if last and last.fingerprint == fingerprint and ts - last.at <= 5 then
+        t._recorded = true -- retransmitted result after another start event
+        return false
+    end
+    if not (DSP.logs and DSP.logs.record_trade) then return false end
+    t._recorded = true -- before callback: protects reentrant and duplicate events
+    L.last_recorded = {fingerprint=fingerprint, at=ts}
+    local ok, err = pcall(DSP.logs.record_trade, t.partner, t.give, t.get,
+        t.money_give, t.money_get, 'accepted')
+    if not ok then
+        -- A logging callback may have partially persisted the trade; never retry blindly.
+        DSP.flog('TRADE record failed, manual review needed: '..tostring(err))
+    end
+    return ok
 end
 
 local function shop_server()
@@ -77,11 +137,14 @@ local function shop_changed(s)
     L.shop_revision=(L.shop_revision or 0)+1;s.revision=L.shop_revision
 end
 function L.reset_shop(owner, num)
+    L._auto_scan_pending=false
+    L._auto_scan_stable_ticks=0
     L.shop_generation=(L.shop_generation or 0)+1
     L.shop = {
         owner = owner or '', num = tostring(num or ''),
         sell = {}, buy = {}, seen = {},
         opened = now(), updated = now(), items_updated = 0, menu_closed = 0,generation=L.shop_generation,server=shop_server(),
+        fragment_count=0,last_fragment_ms=0,scan_complete=false,
     }
     shop_changed(L.shop)
     DSP.flog('SHOP reset owner=' .. tostring(owner or '') .. ' num=' .. tostring(num or ''))
@@ -132,7 +195,7 @@ function L.handle_trade(sub, raw)
         local partner = d and (d.name or d.owner or d.nick) or raw:match('"name"%s*:%s*"([^"]+)"')
         partner = partner and strip(partner):match('^(.-)%s*%(%d+%)%s*$') or strip(partner or '')
         if partner == '' then partner = '?' end
-        if t.partner ~= partner or now() - (t.updated or 0) > 300 then
+        if t._recorded or t.partner ~= partner or now() - (t.updated or 0) > 300 then
             L.reset_trade(partner)
         else
             t.partner = partner
@@ -142,6 +205,7 @@ function L.handle_trade(sub, raw)
     end
     if not t or t.opened == 0 then L.reset_trade(t and t.partner or '?') end
     t = L.trade
+    if t._recorded then return end
     if sub == 2 then
         local tp = tonumber(raw:match('"type"%s*:%s*(%d+)')) or 0
         local items = L.parse_trade_items(raw, tp)
@@ -154,6 +218,7 @@ function L.handle_trade(sub, raw)
         end
         t.updated = now()
         DSP.flog('TRADE sub2 type=' .. tostring(tp) .. ' n=' .. tostring(#items))
+        if t.complete then L.record_trade_once(t) end
     elseif sub == 6 then
         local sg = tonumber(raw:match('"self"%s*:%s*{[^}]-"value"%s*:%s*(%d+)'))
         local tg = tonumber(raw:match('"target"%s*:%s*{[^}]-"value"%s*:%s*(%d+)'))
@@ -161,6 +226,7 @@ function L.handle_trade(sub, raw)
         if tg then t.money_get = tg end
         t.updated = now()
         DSP.flog('TRADE sub6 give=' .. tostring(t.money_give) .. ' get=' .. tostring(t.money_get))
+        if t.complete then L.record_trade_once(t) end
     elseif sub == 4 then
         local sc = tonumber(raw:match('"self"%s*:%s*{[^}]-"confirm"%s*:%s*(%d+)')) or 0
         local tc = tonumber(raw:match('"target"%s*:%s*{[^}]-"confirm"%s*:%s*(%d+)')) or 0
@@ -169,12 +235,121 @@ function L.handle_trade(sub, raw)
         if sa == 1 and ta == 1 and sc == 1 and tc == 1 then
             t.complete = true
             DSP.flog('TRADE complete partner=' .. tostring(t.partner))
-            if DSP.logs and DSP.logs.record_trade then
-                DSP.logs.record_trade(t.partner, t.give, t.get, t.money_give, t.money_get, 'accepted')
-            end
+            L.record_trade_once(t)
         end
         t.updated = now()
     end
+end
+
+-- Auto-capture happens AFTER the game's stall packets settle, not in the
+-- network packet callback. This prevents stalls on large 100-180 slot menus.
+-- The menu must be opened; proximity alone contains no confirmed prices.
+L.auto_scan = {shop='',items=0,at=0,attempts=0}
+L.scan_diagnostics = {reason='idle', generation=0, at=0}
+-- Truthful per-opening scan state; visible even when the game does not
+-- supply a usable numeric stall ID. Such menus are NOT added to routes.
+function L.scan_state(shop)
+    local s = shop or L.shop or {}
+    local n = #(s.sell or {}) + #(s.buy or {})
+    if DSP.settings and DSP.settings.auto_shop_scan == false then return 'disabled',n end
+    if n == 0 then return 'empty',0 end
+    if tonumber(s.server or 0) ~= shop_server() or tonumber(s.server or 0) == 0 then return 'server',n end
+    if DSP.shop_identity and DSP.shop_identity.resolve then pcall(DSP.shop_identity.resolve,s) end
+    local diagnostic=L.scan_diagnostics
+    if diagnostic and diagnostic.generation==s.generation and diagnostic.reason=='error' then
+        return 'error',n
+    end
+    if L._auto_scan_pending then return 'pending',n end
+    local has,row=false,nil
+    if DSP.local_arb and DSP.local_arb.has_shop then
+        local ok,a,b=pcall(DSP.local_arb.has_shop,s)
+        if ok then has,row=a,b end
+    end
+    if has then
+        return tonumber(row and row.num or s.num) and 'saved' or 'saved_unmapped',n
+    end
+    return 'not_saved',n
+end
+local function scan_diag(reason, s, detail)
+    s=s or L.shop or {}
+    local previous=L.scan_diagnostics
+    local generation=s.generation or 0
+    if not previous or previous.reason~=reason or previous.generation~=generation then
+        if DSP.flog then DSP.flog('SCAN STATUS '..tostring(reason)..' generation='..tostring(generation)
+            ..' shop='..tostring(s.num or '')..' sell='..tostring(#(s.sell or {}))
+            ..' buy='..tostring(#(s.buy or {}))..' server='..tostring(s.server or '')
+            .. (detail and (' detail='..tostring(detail)) or '')) end
+    end
+    L.scan_diagnostics={reason=reason,generation=generation,at=os.time(),detail=detail}
+end
+function L.commit_shop_autoscan(defer_io)
+    if not L._auto_scan_pending or (DSP.settings and DSP.settings.auto_shop_scan==false) then
+        return false,'disabled'
+    end
+    local s=L.shop
+    if not s or (s.items_updated or 0)<=0 or (#(s.sell or {})+#(s.buy or {}))==0 then
+        scan_diag('empty',s);return false,'empty'
+    end
+    if tonumber(s.server)~=shop_server() or tonumber(s.server)==0 then
+        scan_diag('server',s);return false,'server'
+    end
+    if DSP.shop_identity and DSP.shop_identity.resolve then
+        local ok,n,src=pcall(DSP.shop_identity.resolve,s)
+        if ok and n then s.num=tostring(n);s.num_source=src or s.num_source end
+    end
+    local count=#(s.sell or {})+#(s.buy or {})
+    local learned=0
+    if DSP.shop_scan and DSP.shop_scan.learn then
+        local ok,r=pcall(DSP.shop_scan.learn,{defer_save=defer_io==true})
+        if ok and type(r)=='table' and r.ok then learned=r.count or 0
+        elseif DSP.flog then DSP.flog('AUTO SCAN learn error: '..tostring(ok and r and r.error or r)) end
+    end
+    local arb=DSP.local_arb
+    if not(arb and arb.observe and arb.has_shop)then scan_diag('error',s,'shop store unavailable');return false,'error' end
+    local ok,r,detail,saved_row=pcall(arb.observe,s,os.time())
+    if not ok or (not r and detail~='unchanged') then scan_diag('error',s,ok and detail or r);return false,'error' end
+    local verified,row=arb.has_shop(s)
+    row=row or saved_row
+    if not verified then scan_diag('error',s,'missing saved snapshot');return false,'error' end
+    L._auto_scan_pending=false;L._auto_scan_stable_ticks=0;s.scan_complete=true
+    L.auto_scan.shop=tostring((row and row.num)or s.num or '')
+    L.auto_scan.identity=tostring((row and row.identity)or s.local_identity or '')
+    L.auto_scan.owner=tostring((row and row.owner)or s.owner or '')
+    L.auto_scan.mapped=tonumber((row and row.num)or s.num)~=nil
+    L.auto_scan.num_source=tostring((row and row.number_source)or s.num_source or 'unknown')
+    L.auto_scan.items=count;L.auto_scan.at=os.time();L.auto_scan.attempts=(L.auto_scan.attempts or 0)+1
+    L.auto_scan.learned=learned;L.auto_scan.server=s.server;L.auto_scan.generation=s.generation
+    L.auto_scan.sell=#(s.sell or {});L.auto_scan.buy=#(s.buy or {})
+    if not defer_io and arb.flush then pcall(arb.flush) end
+    scan_diag(L.auto_scan.mapped and 'saved' or 'saved_unmapped',s)
+    return true,count,row
+end
+function L.queue_shop_autoscan()
+    if DSP.settings and DSP.settings.auto_shop_scan==false then return end
+    L._auto_scan_pending=true;L._auto_scan_stable_ticks=0
+    if L.shop then scan_diag('pending',L.shop) end
+    -- Unit-test/minimal hosts without a scheduler still get a deterministic commit.
+    if not(lua_thread and lua_thread.create and wait) then L.commit_shop_autoscan(true) end
+end
+function L.tick_shop_autoscan()
+    if DSP.db and DSP.db._dirty and type(DSP.db.save)=='function' and os.time()-(DSP.db.last_save or 0)>=10 then DSP.db.save(false) end
+    if DSP.settings and DSP.settings.auto_shop_scan==false then L._auto_scan_pending=false;return end
+    if not L._auto_scan_pending then return end
+    local s=L.shop or {}
+    local quiet=tonumber(DSP.settings and DSP.settings.scan_quiet_ms)or 650
+    quiet=math.max(250,math.min(2500,quiet))
+    local last=tonumber(s.last_fragment_ms)or 0
+    if getGameTimer then
+        if last>0 and mono_ms()-last<quiet then return end
+        local grace=tonumber(DSP.settings and DSP.settings.identity_grace_ms)or 1500
+        grace=math.max(0,math.min(5000,grace))
+        if (not tonumber(s.num)) and tostring(s.owner or '')=='' and last>0 and mono_ms()-last<grace then return end
+    else
+        if L._auto_scan_last_revision==(s.revision or 0) then L._auto_scan_stable_ticks=(L._auto_scan_stable_ticks or 0)+1
+        else L._auto_scan_last_revision=s.revision or 0;L._auto_scan_stable_ticks=0 end
+        if (L._auto_scan_stable_ticks or 0)<2 then return end
+    end
+    L.commit_shop_autoscan(true)
 end
 
 local function shop_number(obj,key)
@@ -182,87 +357,75 @@ local function shop_number(obj,key)
     local n=tonumber(raw)
     if n and n==n and n>=0 and n<=9007199254740991 and n%1==0 then return n end
 end
-function L.parse_shop_item(obj, side)
-    local s=L.ensure_shop()
-    local item_raw=obj:match('"item"%s*:%s*"([^"]+)"') or obj:match('"item"%s*:%s*(%d+)')
-    if not item_raw then return end
-    local slot,ench=shop_number(obj,'slot'),shop_number(obj,'enchant') or 0
-    local it=L.item_from_id(item_raw,ench,1)
-    local key=side..':'..(slot and tostring(slot) or ('item:'..tostring(it and it.id or item_raw)..':'..tostring(it and it.ench or ench)))
-    local list=side=='sell' and s.sell or s.buy
-    local previous=s.seen[key]
-    local text=obj:match('"text"%s*:%s*"([^"]*)"') or ''
-    local raw_price=text:match('%$%s*([%d%., ]+)') or text:match('([%d][%d%., ]*)%s*%$')
-    local text_price=raw_price and tonumber((raw_price:gsub('[^%d]','')))
-    local price=shop_number(obj,'price') or math.max(text_price or 0,shop_number(obj,'amount') or 0)
-    local qty=shop_number(obj,'count') or shop_number(obj,'qty') or shop_number(obj,'quantity')
-    if qty==nil then
-        -- Read only explicitly labelled units, never infer stack size from
-        -- a price or an inventory slot. Accept 45000 and 45.000/45 000 —à—Ç.
-        local label=text:match('%(([%d%., ]+)%s*—à—Ç%.?%)')
-            or text:match('([%d][%d%., ]*)%s*—à—Ç%.?')
-        if label then
-            label=label:match('^%s*(.-)%s*$')
-            local parts={};for digits in label:gmatch('%d+')do parts[#parts+1]=digits end
-            local valid=#parts>0
-            if #parts>1 then
-                if #parts[1]>3 then valid=false end
-                for i=2,#parts do if #parts[i]~=3 then valid=false end end
+function L.parse_shop_item(obj, side, ordinal)
+    local s=L.ensure_shop();local row=nil
+    if type(obj)=='table' and DSP.item_registry and DSP.item_registry.from_node then
+        row=DSP.item_registry.from_node(obj,side,ordinal)
+    else
+        local raw=tostring(obj or '')
+        local item_raw=raw:match('"item"%s*:%s*"([^"]+)"') or raw:match('"item"%s*:%s*(%d+)')
+        if item_raw then
+            local node={item=item_raw,slot=shop_number(raw,'slot'),enchant=shop_number(raw,'enchant'),
+                price=shop_number(raw,'price'),count=shop_number(raw,'count'),qty=shop_number(raw,'qty'),
+                quantity=shop_number(raw,'quantity'),text=raw:match('"text"%s*:%s*"([^"]*)"')or''}
+            if DSP.item_registry and DSP.item_registry.from_node then row=DSP.item_registry.from_node(node,side,ordinal) end
+        end
+    end
+    if not row and type(obj)=='string' then
+        local raw=tostring(obj or '')
+        local item_raw=raw:match('\"item\"%s*:%s*\"([^\"]+)\"') or raw:match('\"item\"%s*:%s*(%d+)')
+        if item_raw then
+            local ench=shop_number(raw,'enchant') or 0
+            local it=L.item_from_id(item_raw,ench,1)
+            local slot=shop_number(raw,'slot')
+            local price=shop_number(raw,'price')
+            local qty=shop_number(raw,'count') or shop_number(raw,'qty') or shop_number(raw,'quantity')
+            if it and price and price>0 then
+                local key=side..':'..(slot and ('slot:'..tostring(slot)) or ('item:'..tostring(it.id)..':'..tostring(it.ench)..':p'..tostring(price)))
+                row={key=key,slot=slot,name=it.name,ench=it.ench,id=it.id,item_id=it.id,price=price,qty=qty,qty_known=qty~=nil,slot_count=1,ordinal=ordinal}
             end
-            if valid then qty=tonumber(table.concat(parts)) end
         end
     end
-    if tonumber(item_raw)==0 or price==0 or qty==0 then
-        if previous then
-            for i,e in ipairs(list) do if e==previous then table.remove(list,i);break end end
-            s.seen[key]=nil;shop_changed(s)
-        end
-        return
-    end
-    if not it or not price or price<=0 or price>9007199254740991 or price%1~=0 then return end
-    if qty and (qty>9007199254740991 or qty<0 or qty%1~=0) then qty=nil end
-    if previous and previous.id==it.id and previous.ench==it.ench and previous.price==price and previous.qty==qty then return end
-    local row={key=key,slot=slot,name=it.name,ench=it.ench,id=it.id,item_id=it.id,price=price,
-        qty=qty,qty_known=qty~=nil,slot_count=1}
-    if previous then
-        for i,e in ipairs(list) do if e==previous then list[i]=row;break end end
+    if not row then return false end
+    local list=side=='sell' and s.sell or s.buy
+    local previous=s.seen[row.key]
+    if previous and previous.id==row.id and previous.ench==row.ench and previous.price==row.price and previous.qty==row.qty then return false end
+    if previous then for i,e in ipairs(list)do if e==previous then list[i]=row;break end end
     else list[#list+1]=row end
-    s.seen[key]=row;shop_changed(s)
-    if DSP.shop_scan then
-        local result=DSP.shop_scan.learn()
-        if not result.ok then DSP.flog('SHOP learn: '..tostring(result.error)) end
-    else DSP.db.learn(it.id,it.ench,price,side) end
+    s.seen[row.key]=row;shop_changed(s);return true
 end
 
+local function decoded_shop_nodes(raw)
+    if not(DSP.item_registry and DSP.item_registry.decode_nodes)then return {},nil end
+    local ok,nodes,root=pcall(function()local a,b=DSP.item_registry.decode_nodes(raw);return a,b end)
+    if not ok then return {},nil end
+    return nodes or {},root
+end
 function L.handle_shop_items(raw)
-    local tp = tonumber(raw:match('"type"%s*:%s*(%d+)')) or 0
-    if tp ~= 13 and tp ~= 28 then return end
-    local s = L.ensure_shop()
-    if s.server~=shop_server() then L.reset_shop('','');s=L.shop end
-    local first_slot = tonumber(raw:match('"slot"%s*:%s*(%d+)'))
-    local stale = now() - (s.items_updated or 0) > 10
-    -- A slot-0 packet can start a different stall before its owner metadata.
-    -- Never carry the previous stall identity into this new generation. If the
-    -- owner packet arrived first, reset_shop() already cleared items_updated;
-    -- it belongs to the new generation and must *not* be discarded here.
-    if first_slot == 0 and ((s.menu_closed or 0) > 0 or
-        ((s.items_updated or 0) > 0 and stale)) then
-        L.reset_shop('', '')
-        s = L.shop
-    end
-    s.updated = now()
-    s.items_updated = s.updated
-    if s.opened == 0 then s.opened = s.updated end
-    s.menu_closed = 0
-    local side = tp == 13 and 'sell' or 'buy'
-    local n = 0
-    for obj in tostring(raw or ''):gmatch('{([^}]+)}') do
-        if obj:find('"item"', 1, true) then
-            L.parse_shop_item(obj, side)
-            n = n + 1
+    local decoded_nodes,decoded=decoded_shop_nodes(raw)
+    local tp=decoded and tonumber(decoded.type or decoded.interface_type or decoded.kind)or tonumber(tostring(raw or ''):match('"type"%s*:%s*(%d+)'))or 0
+    if tp~=13 and tp~=28 then return end
+    local s=L.ensure_shop();if s.server~=shop_server()then L.reset_shop('','');s=L.shop end
+    local first_slot=nil
+    if #decoded_nodes>0 then first_slot=tonumber(decoded_nodes[1].slot or decoded_nodes[1].slot_id or decoded_nodes[1].slotId) end
+    first_slot=first_slot or tonumber(tostring(raw or ''):match('"slot"%s*:%s*(%d+)'))
+    local stale=now()-(s.items_updated or 0)>10
+    if first_slot==0 and((s.menu_closed or 0)>0 or((s.items_updated or 0)>0 and stale))then L.reset_shop('','');s=L.shop end
+    s.updated=now();s.items_updated=s.updated;if s.opened==0 then s.opened=s.updated end;s.menu_closed=0;s.scan_complete=false
+    local side=tp==13 and'sell'or'buy';local parsed=0
+    if #decoded_nodes>0 then
+        for i,node in ipairs(decoded_nodes)do if L.parse_shop_item(node,side,i)then parsed=parsed+1 end end
+    else
+        -- Compatibility fallback for malformed/non-JSON packets.
+        local i=0
+        for obj in tostring(raw or ''):gmatch('{([^}]+)}')do
+            if obj:find('"item"',1,true)then i=i+1;if L.parse_shop_item(obj,side,i)then parsed=parsed+1 end end
         end
     end
-    if n > 0 then DSP.flog('SHOP items type=' .. tostring(tp) .. ' n=' .. tostring(n)) end
+    if parsed>0 then
+        s.fragment_count=(tonumber(s.fragment_count)or 0)+1;s.last_fragment_ms=mono_ms();L.queue_shop_autoscan()
+        if DSP.flog then DSP.flog('SHOP fragment side='..side..' parsed='..parsed..' total='..(#s.sell+#s.buy)..' fragment='..s.fragment_count)end
+    end
 end
 
 function L.handle_shop_owner(raw)
@@ -291,12 +454,30 @@ function L.handle_shop_owner(raw)
         s.menu_closed = 0
     end
     DSP.flog('SHOP owner=' .. tostring(owner) .. ' num=' .. tostring(num or '?'))
-    if DSP.logs and DSP.logs.stall_dropped then
-        DSP.logs.stall_dropped(owner, num or '', 'opened', (s.sell and #s.sell) or 0)
-    end
+    -- Owner metadata may arrive after all item packets; schedule another
+    -- auto-scan only when a menu contains actual offers.
+    if (s.items_updated or 0)>0 then L.queue_shop_autoscan() end
 end
 
 function L.handle(iface, sub, raw)
+    -- Own-stall inventory acknowledgement. Real sale listing must first open
+    -- the stall inventory, just like the native UI does.
+    if iface==52 and sub==2 and DSP.auto then
+        local _tp=tonumber(tostring(raw or ''):match('"type"%s*:%s*(%d+)')) or 0
+        if _tp==1 then
+            DSP.auto.stall_inventory_ready=true
+            DSP.auto.stall_inventory_seen_at=os.time()
+            if DSP.flog then DSP.flog('TRADE stall inventory ready (iface52/type1)') end
+        end
+    end
+    -- Route only confirmed vehicle trunk inventory (type=8). Other iface 52
+    -- packets must continue through the existing shop/player handler.
+    if iface == 52 and DSP.storage and DSP.storage.on_inventory_packet
+        and tonumber(tostring(raw):match('"type"%s*:%s*(%d+)')) == 8 then
+        local ok, err = pcall(DSP.storage.on_inventory_packet, sub, raw)
+        if not ok and DSP.flog then DSP.flog('TRUNK packet error: '..tostring(err)) end
+        return
+    end
     if iface == 60 and sub == 1 then
         L.handle_shop_owner(raw)
     elseif iface == 52 and sub == 2 then
@@ -311,7 +492,7 @@ function L.handle(iface, sub, raw)
     elseif iface == 8 and sub == 15 then
         local tp = tonumber(raw:match('"type"%s*:%s*(%d+)')) or 0
         local title = strip(raw:match('"title"%s*:%s*"([^"]*)"') or '')
-        if tp == 3 and title:find('–ú–µ–Ω', 1, true) then
+        if tp == 3 and title:find('ÃÂÌ', 1, true) then
             local s = L.ensure_shop()
             if (s.menu_closed or 0)>0 then L.reset_shop('','');s=L.shop end
             s.updated = now()
@@ -319,7 +500,15 @@ function L.handle(iface, sub, raw)
             s.menu_closed = 0
         end
     elseif iface == 255 then
+        -- Finalize pending game data before the menu becomes closed. The save
+        -- itself is deferred; disk writes during a network callback cause lag.
+        if L._auto_scan_pending then L.commit_shop_autoscan(L._auto_scan_worker==true) end
         if L.shop and (L.shop.menu_closed or 0)==0 then L.shop.menu_closed=now();shop_changed(L.shop) end
+        if DSP.local_arb and DSP.local_arb.flush and not L._auto_scan_worker then
+            -- Test/fallback hosts do not run the background save coroutine.
+            local ok,err=pcall(DSP.local_arb.flush)
+            if not ok then DSP.flog('LOCAL ARB flush error: '..tostring(err)) end
+        end
     end
 end
 
@@ -335,6 +524,11 @@ end
 
 function L.on_receive(packet_id, bs)
     if packet_id ~= 220 then return end
+    local original_offset = nil
+    if type(raknetBitStreamGetReadOffset)=='function' then
+        local o,v = pcall(raknetBitStreamGetReadOffset, bs)
+        if o then original_offset = v end
+    end
     pcall(raknetBitStreamResetReadPointer, bs)
     local ok, err = pcall(function()
         raknetBitStreamIgnoreBits(bs, 8)
@@ -346,15 +540,20 @@ function L.on_receive(packet_id, bs)
         if raw and raw ~= '' then L.handle(iface, sub, raw) end
     end)
     if not ok then DSP.flog('LIVE packet error: ' .. tostring(err)) end
-    pcall(raknetBitStreamResetReadPointer, bs)
+    if original_offset ~= nil and type(raknetBitStreamSetReadOffset)=='function' then
+        pcall(raknetBitStreamSetReadOffset, bs, original_offset)
+    else
+        pcall(raknetBitStreamResetReadPointer, bs)
+    end
 end
 
 function L.parse_dialog_trade(title, text)
-    local partner = strip(title or ''):match('–†–µ–∑—É–ª—å—Ç–∞—Ç —Å–¥–µ–ª–∫–∏ —Å (.-)%s*$') or ''
+    local partner = strip(title or ''):match('–ÂÁÛÎ¸Ú‡Ú Ò‰ÂÎÍË Ò (.-)%s*$') or ''
     if partner == '' then return end
     local t = L.trade
     if not t or t.opened == 0 or t.partner ~= partner then L.reset_trade(partner) end
     t = L.trade
+    if t._recorded then return end
     local sec = ''
     local give, get = {}, {}
     -- v1.2 hotfix: Lua 5.5 forbids reassigning for-loop variables.
@@ -362,19 +561,19 @@ function L.parse_dialog_trade(title, text)
     -- (LuaJIT 5.1 permits it but lupa's Lua 5.5 sandbox test enforces the rule.)
     for raw_line in tostring(text or ''):gsub('{[%x]+}', ''):gmatch('[^\r\n]+') do
         local line = strip(raw_line)
-        if line:find('–ü–µ—Ä–µ–¥', 1, true) then
+        if line:find('œÂÂ‰', 1, true) then
             sec = 'give'
-        elseif line:find('–ü–æ–ª—É—á', 1, true) then
+        elseif line:find('œÓÎÛ˜', 1, true) then
             sec = 'get'
-        elseif line:find('–ö–æ–º–∏—Å', 1, true) then
+        elseif line:find(' ÓÏËÒ', 1, true) then
             sec = ''
         elseif (sec == 'give' or sec == 'get') and line ~= '' and line ~= '-' then
             local money = DSP.money_val(line)
-            local is_money = (line:find('%$') or line:lower():find('–∫–∫') or line:lower():find('kk')) and money > 0
+            local is_money = (line:find('%$') or line:lower():find('ÍÍ') or line:lower():find('kk')) and money > 0
             if is_money then
                 if sec == 'give' then t.money_give = money else t.money_get = money end
             else
-                local nm, qty = line:match('^(.-)%s*[xX—Ö–•]%s*(%d+)%s*$')
+                local nm, qty = line:match('^(.-)%s*[xXı’]%s*(%d+)%s*$')
                 if not nm then nm, qty = line:match('^(.-)%s*%((%d+)%s*[^%)]*%)%s*$') end
                 if not nm then nm, qty = line, '1' end
                 local base, e = name_ench(nm)
@@ -403,7 +602,8 @@ function L.on_dialog(dialog_id, style, title, b1, b2, text)
         L.parse_dialog_trade(title, text)
         -- Also check for trade result in dialog text
         local txt = DSP.clean_text(text or '')
-        if txt:find('—Å–¥–µ–ª–∫–∞', 1, true) or txt:find('–û–±–º–µ–Ω', 1, true) then
+        local low_txt = DSP.lower and DSP.lower(txt) or txt
+        if low_txt:find('Ò‰ÂÎÍ‡', 1, true) or low_txt:find('Ó·ÏÂÌ', 1, true) then
             local t = L.trade
             if t and t.give and t.get then
                 local items_given, items_received = {}, {}
@@ -414,13 +614,8 @@ function L.on_dialog(dialog_id, style, title, b1, b2, text)
                     table.insert(items_received, { name = it.name, ench = it.ench, qty = it.qty })
                 end
                 if (#items_given > 0 or #items_received > 0 or t.money_give > 0 or t.money_get > 0) then
-                    if not t._recorded then
-                        t._recorded = true
-                        if DSP.logs and DSP.logs.record_trade then
-                            DSP.logs.record_trade(t.partner or '?', items_given, items_received,
-                                t.money_give, t.money_get, 'accepted')
-                        end
-                    end
+                    -- Packet and dialog acknowledgements share one idempotency guard.
+                    L.record_trade_once(t)
                 end
             end
         end
@@ -432,6 +627,19 @@ end
 function L.install()
     if L.installed then return end
     L.installed = true
+    if lua_thread and lua_thread.create and wait then
+        L._auto_scan_worker=true
+        local ok,err=pcall(function()
+            lua_thread.create(function()
+                while true do
+                    wait(200)
+                    local good,why=pcall(L.tick_shop_autoscan)
+                    if not good then DSP.flog('AUTO SCAN tick: '..tostring(why)) end
+                end
+            end)
+        end)
+        if not ok then L._auto_scan_worker=false;DSP.flog('AUTO SCAN worker: '..tostring(err)) end
+    end
     if addEventHandler then
         addEventHandler('onReceivePacket', L.on_receive)
         DSP.flog('LIVE receive hook installed')
@@ -442,9 +650,16 @@ function L.install()
         -- onChatMessage is for player chat in some event implementations.
         -- Process both with same short-lived deduplication guard.
         local last_chat_text, last_chat_at = nil, 0
-        local function capture(text)
+        local function capture(text,is_server)
             if type(text) ~= 'string' or text == '' then return end
             local ts = os.time()
+            -- Do not use ordinary player chat to mark stalls nonexistent.
+            -- Also handle a server reply even if the same text was logged via
+            -- another chat event less than a second earlier.
+            if is_server and DSP.market and DSP.market.on_shop_lookup_feedback then
+                local success, err=pcall(DSP.market.on_shop_lookup_feedback,text,ts)
+                if not success then DSP.flog('FINDILAVKA feedback error: '..tostring(err)) end
+            end
             if last_chat_text == text and ts - last_chat_at <= 1 then return end
             last_chat_text, last_chat_at = text, ts
             if DSP.logs and DSP.logs.log_chat then
@@ -455,12 +670,12 @@ function L.install()
         L.capture_server_chat = capture
         local prev_server = sampev.onServerMessage
         sampev.onServerMessage = function(color, text)
-            capture(text)
+            capture(text,true)
             if prev_server then return prev_server(color, text) end
         end
         local prev_chat = sampev.onChatMessage
         sampev.onChatMessage = function(message, author, answer)
-            capture(message)
+            capture(message,false)
             if prev_chat then return prev_chat(message, author, answer) end
         end
         local prev = sampev.onShowDialog
@@ -495,12 +710,12 @@ end
 -- =========================================================================
 
 -- Recognize only explicit cash receipt messages, not account balances or
--- speculative market valuations. Reward '–í—ã –ø–æ–ª—É—á–∏–ª–∏ $' is handled by R.parse.
+-- speculative market valuations. Reward '¬˚ ÔÓÎÛ˜ËÎË $' is handled by R.parse.
 function L.check_income_message(text)
     local s=DSP.lower(DSP.clean_text(text or ''))
     local words={
-        '–≤—ã –∑–∞—Ä–∞–±–æ—Ç–∞–ª–∏', '–¥–æ—Ö–æ–¥ –æ—Ç –±–∏–∑–Ω–µ—Å–∞', '–¥–æ—Ö–æ–¥ –æ—Ç –∞—Ä–µ–Ω–¥—ã',
-        '–¥–æ—Ö–æ–¥ —Å –¥–µ–ø–æ–∑–∏—Ç–∞', '–≤–∞–º –≤—ã–ø–ª–∞—á–µ–Ω–∞ –∑–∞—Ä–ø–ª–∞—Ç–∞', '–∑–∞—Ä–ø–ª–∞—Ç–∞ –∑–∞ —Ä–∞–±–æ—Ç—É',
+        '‚˚ Á‡‡·ÓÚ‡ÎË', '‰ÓıÓ‰ ÓÚ ·ËÁÌÂÒ‡', '‰ÓıÓ‰ ÓÚ ‡ÂÌ‰˚',
+        '‰ÓıÓ‰ Ò ‰ÂÔÓÁËÚ‡', '‚‡Ï ‚˚ÔÎ‡˜ÂÌ‡ Á‡ÔÎ‡Ú‡', 'Á‡ÔÎ‡Ú‡ Á‡ ‡·ÓÚÛ',
     }
     local label
     for _,word in ipairs(words) do
@@ -521,14 +736,14 @@ end
 function L.check_market_message(raw)
     local s=DSP.clean_text(raw or '')
     local dir, item, amount
-    for _,side in ipairs({{'sell','–ø—Ä–æ–¥–∞–ª–∏'},{'buy','–∫—É–ø–∏–ª–∏'}}) do
+    for _,side in ipairs({{'sell','ÔÓ‰‡ÎË'},{'buy','ÍÛÔËÎË'}}) do
         local verb=side[2]
-        item,amount=s:match('^–í—ã '..verb..' (.-) –∑–∞ %$([%d%., ]+)')
-        if not item then item,amount=s:match('^–í—ã '..verb..' (.-) –∑–∞ ([%d%., ]+)%$') end
+        item,amount=s:match('^¬˚ '..verb..' (.-) Á‡ %$([%d%., ]+)')
+        if not item then item,amount=s:match('^¬˚ '..verb..' (.-) Á‡ ([%d%., ]+)%$') end
         if item and amount then dir=side[1];break end
     end
     if not dir then
-        item,amount=s:match('^–ò–≥—Ä–æ–∫ .- –∫—É–ø–∏–ª —É –≤–∞—Å (.-) –∑–∞ %$([%d%., ]+)')
+        item,amount=s:match('^»„ÓÍ .- ÍÛÔËÎ Û ‚‡Ò (.-) Á‡ %$([%d%., ]+)')
         if item then dir='sell' end
     end
     local cash=amount and DSP.money_val(amount) or 0
@@ -541,10 +756,10 @@ end
 
 local PAYDAY_PATTERNS = {
     'PayDay',
-    '–ü—ç–π–î—ç–π',
-    '–ü–µ–π–î–µ–π',
-    '–≤—ã –ø–æ–ª—É—á–∏–ª–∏ –∑–∞—Ä–ø–ª–∞—Ç—É',
-    '–í–∞–º –Ω–∞—á–∏—Å–ª–µ–Ω–∞ –∑–∞—Ä–∞–±–æ—Ç–Ω–∞—è –ø–ª–∞—Ç–∞',
+    'œ˝Èƒ˝È',
+    'œÂÈƒÂÈ',
+    '‚˚ ÔÓÎÛ˜ËÎË Á‡ÔÎ‡ÚÛ',
+    '¬‡Ï Ì‡˜ËÒÎÂÌ‡ Á‡‡·ÓÚÌ‡ˇ ÔÎ‡Ú‡',
 }
 
 function L.check_payday_message(text)
@@ -552,7 +767,7 @@ function L.check_payday_message(text)
     local s=DSP.lower(DSP.clean_text(text)):gsub('^[%s|]+','')
     if s:find('%[%d+%]:')or s:match('^%[')then return false end
     local hit=s:match('^payday%s*[!:%.]*$')or s:match('^payday%s*[:%-]')
-    for _,header in ipairs({'–ë–ê–ù–ö–û–í–°–ö–ò–ô –ß–ï–ö','–≤—ã –ø–æ–ª—É—á–∏–ª–∏ –∑–∞—Ä–ø–ª–∞—Ç—É','–≤–∞–º –Ω–∞—á–∏—Å–ª–µ–Ω–∞ –∑–∞—Ä–∞–±–æ—Ç–Ω–∞—è –ø–ª–∞—Ç–∞','–ü—ç–π–î—ç–π','–ü–µ–π–î–µ–π'})do
+    for _,header in ipairs({'¡¿Õ Œ¬— »… ◊≈ ','‚˚ ÔÓÎÛ˜ËÎË Á‡ÔÎ‡ÚÛ','‚‡Ï Ì‡˜ËÒÎÂÌ‡ Á‡‡·ÓÚÌ‡ˇ ÔÎ‡Ú‡','œ˝Èƒ˝È','œÂÈƒÂÈ'})do
         if s:find(DSP.lower(header),1,true)==1 then hit=true;break end
     end
     if not hit then return false end
@@ -570,19 +785,19 @@ function L.check_payday_message(text)
     if DSP.craglog and DSP.craglog.log_payday then
         pcall(DSP.craglog.log_payday, summary, text)
     end
-    DSP.add_log(string.format('PayDay: %d —Å–¥–µ–ª–æ–∫, %s%s',
+    DSP.add_log(string.format('PayDay: %d Ò‰ÂÎÓÍ, %s%s',
         summary.count,
         summary.profit >= 0 and '+' or '',
         DSP.money(summary.profit)))
     -- Telegram notification (UTF-8 over HTTP)
     if DSP.settings.tg_payday_enabled and DSP.settings.tg_notify and DSP.settings.tg_bot_token and DSP.settings.tg_chat_id then
         local msg = '[palatka ai] PayDay ' .. os.date('%H:%M') .. '\n'
-            .. '–°–¥–µ–ª–æ–∫ –∑–∞ –¥–µ–Ω—å: ' .. summary.count .. '\n'
-            .. '–ü—Ä–∏–±—ã–ª—å: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit) .. '\n'
-            .. '–ü–æ–ª—É—á–µ–Ω–æ: ' .. DSP.money(summary.total_get) .. '\n'
-            .. '–û—Ç–¥–∞–Ω–æ: ' .. DSP.money(summary.total_give) .. '\n'
+            .. '—‰ÂÎÓÍ Á‡ ‰ÂÌ¸: ' .. summary.count .. '\n'
+            .. 'œË·˚Î¸: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit) .. '\n'
+            .. 'œÓÎÛ˜ÂÌÓ: ' .. DSP.money(summary.total_get) .. '\n'
+            .. 'ŒÚ‰‡ÌÓ: ' .. DSP.money(summary.total_give) .. '\n'
             .. 'ROI: ' .. string.format('%.1f%%', summary.roi) .. '\n'
-            .. '–°—Ä–µ–¥–Ω—è—è —Å–¥–µ–ª–∫–∞: ' .. DSP.money(summary.avg_profit)
+            .. '—Â‰Ìˇˇ Ò‰ÂÎÍ‡: ' .. DSP.money(summary.avg_profit)
         if DSP.logs and DSP.logs.send_telegram then
             pcall(DSP.logs.send_telegram, msg)
         end

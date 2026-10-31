@@ -26,12 +26,17 @@ safe('items.load',   function() DSP.items.load() end)
 safe('db.load',      function() DSP.db.load() end)
 safe('logs.load',   function() DSP.logs.load() end)
 safe('market.load', function() DSP.market.load() end)
+safe('shop_store.install', function() if DSP.shop_store and DSP.shop_store.install then DSP.shop_store.install() end end)
+safe('lombard.install', function() if DSP.lombard and DSP.lombard.install then DSP.lombard.install() end end)
 safe('auto.install', function() DSP.auto.install() end)
 safe('ui.install',   function() DSP.ui.install() end)
 safe('screens.install', function()
     if DSP.screens and DSP.screens.install then DSP.screens.install() end
 end)
 safe('live.install',  function() DSP.live.install() end)
+safe('shop_identity.install', function() if DSP.shop_identity and DSP.shop_identity.install then DSP.shop_identity.install() end end)
+safe('trade_probe.install', function() DSP.trade_probe.install() end)
+safe('local_arb.install', function() if DSP.local_arb then DSP.local_arb.install() end end)
 safe('storage.textdraw', function() if DSP.storage and DSP.storage.install_textdraw then DSP.storage.install_textdraw() end end)
 safe('promo.install', function() DSP.promo.install() end)
 safe('shop_marker.install', function() DSP.shop_marker.install() end)
@@ -50,7 +55,7 @@ local function broadcast_version()
         pcall(DSP.flog, '--- BROADCAST ' .. msg .. ' ---')
     end
     if sampAddChatMessage then
-        pcall(sampAddChatMessage, '{FFAA00}[palatka ai] {FFFFFF}v' .. tostring(DSP.version) .. ' {00FF00}Ð°ÐºÑ‚Ð¸Ð²Ð¸Ñ€Ð¾Ð²Ð°Ð½{FFFFFF}. ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ: {FFAA00}/crr', 0xFFAA00)
+        pcall(sampAddChatMessage, '{FFAA00}[palatka ai] {FFFFFF}v' .. tostring(DSP.version) .. ' {00FF00}àêòèâèðîâàí{FFFFFF}. Îòêðûòü: {FFAA00}/crr', 0xFFAA00)
     end
 end
 safe('broadcast_version', broadcast_version)
@@ -67,9 +72,15 @@ if lua_thread and wait and DSP.detect_server then
                     local sid = DSP.detect_server()
                     local nick = DSP.player_nick()
                     local nick_changed = nick ~= '' and nick ~= (DSP.market.state.nick or '')
-                    if DSP.market.state.status ~= 'loading'
-                        and ((sid and sid ~= (DSP.market.state.sid or 0)) or nick_changed
-                            or (DSP.market.should_refresh and DSP.market.should_refresh(os.time()))) then
+                    local now = os.time()
+                    local retry_allowed = now >= (tonumber(DSP.market.state.next_auto_retry) or 0)
+                    -- Android player-name APIs may return transiently different
+                    -- values; identity changes must not bypass the poll interval.
+                    local nick_due = nick_changed and now - (tonumber(DSP.market.state.last_request) or 0)
+                        >= math.max(180, tonumber(DSP.settings.refresh_seconds) or 300)
+                    if retry_allowed and DSP.market.state.status ~= 'loading'
+                        and ((sid and sid ~= (DSP.market.state.sid or 0)) or nick_due
+                            or (DSP.market.should_refresh and DSP.market.should_refresh(now))) then
                         sid = sid or DSP.market.state.sid
                         DSP.flog('MARKET refresh sid=' .. tostring(sid) .. ' nick=' .. tostring(nick))
                         DSP.market.pull(sid)

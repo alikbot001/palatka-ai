@@ -8,18 +8,22 @@ local function money(n)
     local text=string.format('%.0f',math.abs(n)):reverse():gsub('(%d%d%d)','%1.'):reverse():gsub('^%.','')
     return (n<0 and '-$'or'$')..text
 end
-local function report(ok,msg)DSP.notify(ok and tostring(msg or 'Р“РѕС‚РѕРІРѕ')or('РќРµ СѓРґР°Р»РѕСЃСЊ: '..tostring(msg or '?')))end
+local function report(ok,msg)DSP.notify(ok and tostring(msg or 'Готово')or('Не удалось: '..tostring(msg or '?')))end
 function V.trade_add(source,it)
     if source=='inventory'then return T.add_from_inventory(V.kind,it)end
     return T.add_from_catalog(V.kind,it)
 end
 local function launch()
-    local ok,issues=T.validate(V.kind)
-    if not ok then V.tab='preset';report(false,table.concat(issues,'; '));return end
-    local started
-    if V.kind=='sell'then started=DSP.auto.start_sell()else started=DSP.auto.start_buy()end
+    local checked,ok,issues=pcall(T.validate,V.kind)
+    if not checked then
+        DSP.flog('PRESET validate error: '..tostring(ok))
+        DSP.notify('Preset check failed; see standalone.log')
+        return false
+    end
+    if not ok then V.tab='preset';report(false,table.concat(issues,'; '));return false end
+    local started=DSP.auto.safe_start(V.kind)
     if started~=true then
-        DSP.notify('Р’С‹СЃС‚Р°РІР»РµРЅРёРµ РЅРµ Р·Р°РїСѓС‰РµРЅРѕ: СЃРјРѕС‚СЂРёС‚Рµ РїСЂРёС‡РёРЅСѓ РІ СЃС‚Р°С‚СѓСЃРµ С‚РѕСЂРіРѕРІР»Рё')
+        DSP.notify('Выставление не запущено: смотрите причину в статусе торговли')
         return false
     end
     return true
@@ -30,32 +34,32 @@ local function footer(key)
     local w=imgui.GetContentRegionAvail().x
     local first,second
     if not r.complete then
-        first=(V.kind=='buy'and'Р‘СЋРґР¶РµС‚'or'Р’С‹СЂСѓС‡РєР°')..' вЂ” РёС‚РѕРі РЅРµ СЂР°СЃСЃС‡РёС‚Р°РЅ'
-        second=r.overflow and 'РЎСѓРјРјР° РІРЅРµ С‚РѕС‡РЅРѕРіРѕ РґРёР°РїР°Р·РѕРЅР°' or r.invalid_tax and 'РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРјРёСЃСЃРёСЋ' or ('РџСЂРѕРІРµСЂСЊС‚Рµ С†РµРЅСѓ / РєРѕР»РёС‡РµСЃС‚РІРѕ: '..r.invalid..' РїРѕР·.')
+        first=(V.kind=='buy'and'Бюджет'or'Выручка')..' — итог не рассчитан'
+        second=r.overflow and 'Сумма вне точного диапазона' or r.invalid_tax and 'Проверьте комиссию' or ('Проверьте цену / количество: '..r.invalid..' поз.')
     elseif V.kind=='buy'then
-        first='Р‘СЋРґР¶РµС‚ СЃРєСѓРїРєРё '..money(r.required_funds)
-        second=r.positions..' РїРѕР·. В· '..r.qty..' С€С‚. В· Р‘РµР· РєРѕРјРёСЃСЃРёРё РїСЂРѕРґР°Р¶Рё'
+        first='Бюджет скупки '..money(r.required_funds)
+        second=r.positions..' поз. · '..r.qty..' шт. · Без комиссии продажи'
     else
-        first='Р’С‹СЂСѓС‡РєР° '..money(r.gross)..' В· РљРѕРјРёСЃСЃРёСЏ ~ '..money(r.commission)
-        second='Р§РёСЃС‚С‹РјРё ~ '..money(r.net)..' В· РџСЂРёР±С‹Р»СЊ '..(r.profit and '~ '..money(r.profit)or'вЂ” РЅРµС‚ СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚Рё')
+        first='Выручка '..money(r.gross)..' · Комиссия ~ '..money(r.commission)
+        second='Чистыми ~ '..money(r.net)..' · Прибыль '..(r.profit and '~ '..money(r.profit)or'— нет себестоимости')
     end
     V.text(V.fit(first,w));V.muted(V.fit(second,w))
     local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
-    local info=(DSP.settings.dry_run and 'РўР•РЎРў'or'Р Р•РђР›Р¬РќРћ')
-    if V.kind=='sell'and r.complete then info=r.positions..' РїРѕР·. В· '..r.qty..' С€С‚. В· '..info end
+    local info=(DSP.settings.dry_run and 'ТЕСТ'or'РЕАЛЬНО')
+    if V.kind=='sell'and r.complete then info=r.positions..' поз. · '..r.qty..' шт. · '..info end
     V.muted(V.fit(info,math.max(1,w-406)))
     V.at(x+math.max(0,w-398),y);V.scroll_buttons(key);V.inline()
     if V.tab=='items'then
-        if b(V.source=='inventory'and'РРЅРІРµРЅС‚Р°СЂСЊ'or'РљР°С‚Р°Р»РѕРі','source_menu',112)then V.open_popup('РџСЂРµРґРјРµС‚С‹','source_menu')end
+        if b(V.source=='inventory'and'Инвентарь'or'Каталог','source_menu',112)then V.open_popup('Предметы','source_menu')end
     else
-        if b('РќР°Р±РѕСЂС‹','manage',112)then V.open_popup('РќР°Р±РѕСЂС‹','presets')end
+        if b('Наборы','manage',112)then V.open_popup('Наборы','presets')end
     end
     V.inline()
     if busy()then
-        if b('РћСЃС‚Р°РЅРѕРІРёС‚СЊ','stop',146,true)then
+        if b('Остановить','stop',146,true)then
             if DSP.auto.sell_running then DSP.auto.stop_sell()else DSP.auto.stop_buy()end
         end
-    elseif V.button('Р’С‹СЃС‚Р°РІРёС‚СЊ >','trade_launch',146,false,true)then V.open_popup('Р’С‹СЃС‚Р°РІР»РµРЅРёРµ','launch')end
+    elseif V.button('Выставить >','trade_launch',146,false,true)then V.open_popup('Выставление','launch')end
 end
 
 local function item_row(it,i,w)
@@ -64,9 +68,9 @@ local function item_row(it,i,w)
         M.thumbnail(it,32)
         V.at(x+42,y-3)
         if V.text_button(V.fit(it.display or it.name or '?',rw-190),'trade_name_add_'..i,rw-180,false,28)then report(V.trade_add(V.source,it))end
-        V.at(x+42,y+26);V.muted(V.source=='inventory'and('Р’ РёРЅРІРµРЅС‚Р°СЂРµ В· '..tostring(it.count or it.qty or 0)..' С€С‚.')or('ID '..tostring(it.id or '?')))
+        V.at(x+42,y+26);V.muted(V.source=='inventory'and('В инвентаре · '..tostring(it.count or it.qty or 0)..' шт.')or('ID '..tostring(it.id or '?')))
         V.at(x+rw-134,y+2)
-        if b(found and 'Р”РѕР±Р°РІР»РµРЅ' or '+ Р”РѕР±Р°РІРёС‚СЊ','add_'..i,134,found~=nil)then
+        if b(found and 'Добавлен' or '+ Добавить','add_'..i,134,found~=nil)then
             report(V.trade_add(V.source,it))
         end
     end)
@@ -99,9 +103,9 @@ local function items(query,edited)
 end
 
 local function price_button_label(label,price)
-    if not price then return label..' вЂ”' end
-    if price>=1000000 then return label..' '..string.format('%.1fРј',price/1000000) end
-    if price>=10000 then return label..' '..string.format('%.1fРє',price/1000) end
+    if not price then return label..' —' end
+    if price>=1000000 then return label..' '..string.format('%.1fм',price/1000000) end
+    if price>=10000 then return label..' '..string.format('%.1fк',price/1000) end
     return label..' '..tostring(price)
 end
 local function price_choice(it,i,which,label,w)
@@ -110,7 +114,7 @@ local function price_choice(it,i,which,label,w)
     if b(price_button_label(label,amount),'reference_'..which..'_'..i,w,false) and not busy() then
         local ok,msg
         if DSP.db and DSP.db.apply_reference then ok,msg=DSP.db.apply_reference(it,which)
-        else ok,msg=false,'РќРµС‚ РјРѕРґРµР»Рё СЂС‹РЅРѕС‡РЅС‹С… С†РµРЅ' end
+        else ok,msg=false,'Нет модели рыночных цен' end
         if ok then M.refresh_buffer(it,'price');M.defer_save() end
         report(ok,msg)
     end
@@ -125,7 +129,7 @@ local function preset_row(it,i)
         end
         V.at(x+48,y+2);M.thumbnail(it,30)
         V.at(x+86,y+8)
-        if V.text_button(V.fit(it.name or '?',namew-92),'trade_name_'..i,namew-86,false,36)then V.item_info=it;V.open_popup('РџСЂРµРґРјРµС‚','item_info')end
+        if V.text_button(V.fit(it.name or '?',namew-92),'trade_name_'..i,namew-86,false,36)then V.item_info=it;V.open_popup('Предмет','item_info')end
         local px=x+namew+6
         V.at(px,y)
         if busy()then V.text(DSP.money(it.price))else
@@ -137,17 +141,17 @@ local function preset_row(it,i)
         if busy()then V.text(tostring(it.qty))else M.compact_number(it,'qty','v22_qty_'..V.kind..i,76,1)end
         V.at(px+210,y)
         if V.kind=='buy'then
-            if b('...','quantity_'..i,44)and not busy()then V.qty_item=it;V.open_popup('РљРѕР»РёС‡РµСЃС‚РІРѕ','quantity')end
+            if b('...','quantity_'..i,44)and not busy()then V.qty_item=it;V.open_popup('Количество','quantity')end
             V.at(px+260,y)
         end
-        if b('x','remove_'..i,42)and not busy()then V.remove_pending={kind=V.kind,item=it};V.open_popup('РЈРґР°Р»РёС‚СЊ РїРѕР·РёС†РёСЋ','remove')end
+        if b('x','remove_'..i,42)and not busy()then V.remove_pending={kind=V.kind,item=it};V.open_popup('Удалить позицию','remove')end
         -- Full-size actions stay on a second line: price input remains editable.
         -- Today is unavailable until genuine completed-sale history exists.
         local gap=6
         local btnw=math.max(54,math.floor((w-gap*2)/3))
-        V.at(x,y+49);price_choice(it,i,'market','Р С‹РЅРѕРє',btnw)
-        V.at(x+btnw+gap,y+49);price_choice(it,i,'buy','РЎРєСѓРїРєР°',btnw)
-        V.at(x+(btnw+gap)*2,y+49);price_choice(it,i,'today','РЎРµРіРѕРґРЅСЏ',btnw)
+        V.at(x,y+49);price_choice(it,i,'market','Рынок',btnw)
+        V.at(x+btnw+gap,y+49);price_choice(it,i,'buy','Скупка',btnw)
+        V.at(x+(btnw+gap)*2,y+49);price_choice(it,i,'today','Сегодня',btnw)
     end)
 end
 local function my_preset()
@@ -155,36 +159,36 @@ local function my_preset()
     local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
     local w=imgui.GetContentRegionAvail().x
     local px=x+8+math.max(80,w-16-318)+6
-    V.at(px,y);V.muted('Р¦РµРЅР°');V.at(px+128,y);V.muted('РЁС‚.')
+    V.at(px,y);V.muted('Цена');V.at(px+128,y);V.muted('Шт.')
     V.at(x,y+24)
     V.list_rows('preset_'..V.kind..'_'..tostring(p),p.items or{},100,preset_row,{toolbar=footer,footer_height=footer_height()})
 end
 function V.trade()
-    V.heading('РўРѕСЂРіРѕРІР»СЏ',function()
-        if b('РџСЂРѕРґР°Р¶Р°','sell',112,V.kind=='sell')then V.kind='sell'end
-        V.inline();if b('РЎРєСѓРїРєР°','buy',112,V.kind=='buy')then V.kind='buy'end
+    V.heading('Торговля',function()
+        if b('Продажа','sell',112,V.kind=='sell')then V.kind='sell'end
+        V.inline();if b('Скупка','buy',112,V.kind=='buy')then V.kind='buy'end
     end,230)
     local w=imgui.GetContentRegionAvail().x
-    V.muted(V.fit('РћС‡РµСЂРµРґСЊ: '..tostring(DSP.auto.status or 'РіРѕС‚РѕРІ')..
-        ' В· РРЅРІРµРЅС‚Р°СЂСЊ: '..tostring(DSP.auto.inv_status or 'РЅРµ СЃРєР°РЅРёСЂРѕРІР°РЅ'),w))
+    V.muted(V.fit('Очередь: '..tostring(DSP.auto.status or 'готов')..
+        ' · Инвентарь: '..tostring(DSP.auto.inv_status or 'не сканирован'),w))
     local tabs=w*.56;local each=(tabs-6)/2
-    if b('РџСЂРµРґРјРµС‚С‹','items_tab',each,V.tab=='items')then V.tab='items'end
-    V.inline();if b('РњРѕР№ РїСЂРµСЃРµС‚ В· '..#(preset().items or{}),'preset_tab',each,V.tab=='preset')then V.tab='preset'end
+    if b('Предметы','items_tab',each,V.tab=='items')then V.tab='items'end
+    V.inline();if b('Мой пресет · '..#(preset().items or{}),'preset_tab',each,V.tab=='preset')then V.tab='preset'end
     V.inline()
     if V.tab=='items'then
-        local query,edited=V.search('items','РџРѕРёСЃРє РїСЂРµРґРјРµС‚Р° РёР»Рё ID',-1)
+        local query,edited=V.search('items','Поиск предмета или ID',-1)
         items(query,edited)
     else
-        if b(V.fit(preset().name or'РћСЃРЅРѕРІРЅРѕР№',w-tabs-28)..' >','manage',-1)then V.open_popup('РќР°Р±РѕСЂС‹','presets')end
+        if b(V.fit(preset().name or'Основной',w-tabs-28)..' >','manage',-1)then V.open_popup('Наборы','presets')end
         my_preset()
     end
 end
 
 local function remove_position()
     local p=V.remove_pending;if not p then return end
-    V.text('РЈРґР°Р»РёС‚СЊ '..tostring(p.item.name)..'?')
+    V.text('Удалить '..tostring(p.item.name)..'?')
     V.cancel('remove');V.inline()
-    if b('РЈРґР°Р»РёС‚СЊ','confirm_remove',132)then
+    if b('Удалить','confirm_remove',132)then
         for i,it in ipairs(DSP.presets.items(p.kind))do if it==p.item then DSP.presets.remove(p.kind,i);break end end
         V.remove_pending=nil;imgui.CloseCurrentPopup()
     end
@@ -196,115 +200,115 @@ local function presets_popup()
         if b(p.name,'select_'..i,-1,DSP.presets.selected(kind)==i)then report(DSP.presets.select(kind,i))end
     end,{height=math.max(48,math.min(110,imgui.GetContentRegionAvail().y-240))})
     V.preset_name=V.preset_name or imgui.new.char[128]()
-    imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_preset_name',DSP.utf8('РќР°Р·РІР°РЅРёРµ РЅР°Р±РѕСЂР°'),V.preset_name,128)
+    imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_preset_name',DSP.utf8('Название набора'),V.preset_name,128)
     local name=DSP.to_cp(ffi.string(V.preset_name))
-    if b('+ РЎРѕР·РґР°С‚СЊ','preset_create',130)then report(DSP.presets.create(kind,name))end
-    V.inline();if b('РџРµСЂРµРёРјРµРЅРѕРІР°С‚СЊ','preset_rename',166)then report(DSP.presets.rename(kind,DSP.presets.selected(kind),name))end
-    if b('Р­РєСЃРїРѕСЂС‚','preset_export',110)then report(DSP.presets.export_file(kind))end
+    if b('+ Создать','preset_create',130)then report(DSP.presets.create(kind,name))end
+    V.inline();if b('Переименовать','preset_rename',166)then report(DSP.presets.rename(kind,DSP.presets.selected(kind),name))end
+    if b('Экспорт','preset_export',110)then report(DSP.presets.export_file(kind))end
     V.inline();if b('Market Helper','preset_mh',151)then report(DSP.presets.import_mh())end
-    V.inline();if b('РЈРґР°Р»РёС‚СЊ','preset_delete',116)then
-        V.delete_preset={kind=kind,index=DSP.presets.selected(kind)};imgui.OpenPopup(DSP.utf8('РЈРґР°Р»РёС‚СЊ РЅР°Р±РѕСЂ')..'##v22_del_preset')
+    V.inline();if b('Удалить','preset_delete',116)then
+        V.delete_preset={kind=kind,index=DSP.presets.selected(kind)};imgui.OpenPopup(DSP.utf8('Удалить набор')..'##v22_del_preset')
     end
-    V.popup('РЈРґР°Р»РёС‚СЊ РЅР°Р±РѕСЂ','del_preset',function()
-        V.text('Р‘РµР·РІРѕР·РІСЂР°С‚РЅРѕ СѓРґР°Р»РёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ РЅР°Р±РѕСЂ?');V.cancel('del_preset');V.inline()
-        if b('РЈРґР°Р»РёС‚СЊ','del_preset_yes',142)then local p=V.delete_preset;report(DSP.presets.delete(p.kind,p.index));imgui.CloseCurrentPopup()end
+    V.popup('Удалить набор','del_preset',function()
+        V.text('Безвозвратно удалить выбранный набор?');V.cancel('del_preset');V.inline()
+        if b('Удалить','del_preset_yes',142)then local p=V.delete_preset;report(DSP.presets.delete(p.kind,p.index));imgui.CloseCurrentPopup()end
     end,{w=560,h=170})
-    if b('РРјРїРѕСЂС‚ JSON...','json_popup',160)then imgui.OpenPopup(DSP.utf8('РРјРїРѕСЂС‚ JSON')..'##v22_import')end
-    V.inline();if b('Р—Р°РєСЂС‹С‚СЊ','presets_close',116)then imgui.CloseCurrentPopup()end
-    V.popup('РРјРїРѕСЂС‚ JSON','import',function()
+    if b('Импорт JSON...','json_popup',160)then imgui.OpenPopup(DSP.utf8('Импорт JSON')..'##v22_import')end
+    V.inline();if b('Закрыть','presets_close',116)then imgui.CloseCurrentPopup()end
+    V.popup('Импорт JSON','import',function()
         V.import_path=V.import_path or imgui.new.char[384]()
-        imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_import_path',DSP.utf8('РџСѓС‚СЊ Рє С„Р°Р№Р»Сѓ JSON'),V.import_path,384)
+        imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_import_path',DSP.utf8('Путь к файлу JSON'),V.import_path,384)
         V.cancel('import');V.inline()
-        if b('РРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ','import_file',180)then report(DSP.presets.import_file(DSP.to_cp(ffi.string(V.import_path)),kind))end
+        if b('Импортировать','import_file',180)then report(DSP.presets.import_file(DSP.to_cp(ffi.string(V.import_path)),kind))end
     end,{w=620,h=180})
 end
 local old=V.popups
 function V.popups()
     if old then old()end
-    V.popup('РџСЂРµРґРјРµС‚С‹','source_menu',function()
-        if b('РРЅРІРµРЅС‚Р°СЂСЊ','inventory',-1,V.source=='inventory')then V.source='inventory';imgui.CloseCurrentPopup()end
-        if b('РљР°С‚Р°Р»РѕРі','catalog',-1,V.source=='catalog')then V.source='catalog';imgui.CloseCurrentPopup()end
-        if b('РџСЂРѕСЃРєР°РЅРёСЂРѕРІР°С‚СЊ РёРЅРІРµРЅС‚Р°СЂСЊ','scan',-1)then DSP.auto.scan_inventory();imgui.CloseCurrentPopup()end
-        if b('+ Р’РІРµСЃС‚Рё РЅР°Р·РІР°РЅРёРµ РІСЂСѓС‡РЅСѓСЋ','manual',-1)then imgui.CloseCurrentPopup();V.open_popup('РќРѕРІС‹Р№ РїСЂРµРґРјРµС‚','manual')end
-        if b('Р—Р°РєСЂС‹С‚СЊ','source_close',140)then imgui.CloseCurrentPopup()end
+    V.popup('Предметы','source_menu',function()
+        if b('Инвентарь','inventory',-1,V.source=='inventory')then V.source='inventory';imgui.CloseCurrentPopup()end
+        if b('Каталог','catalog',-1,V.source=='catalog')then V.source='catalog';imgui.CloseCurrentPopup()end
+        if b('Просканировать инвентарь','scan',-1)then DSP.auto.scan_inventory();imgui.CloseCurrentPopup()end
+        if b('+ Ввести название вручную','manual',-1)then imgui.CloseCurrentPopup();V.open_popup('Новый предмет','manual')end
+        if b('Закрыть','source_close',140)then imgui.CloseCurrentPopup()end
     end,{w=620,h=300})
-    V.popup('Р’С‹СЃС‚Р°РІР»РµРЅРёРµ','launch',function()
+    V.popup('Выставление','launch',function()
         local ok,issues,total=T.validate(V.kind)
-        V.text((V.kind=='sell'and'РџСЂРѕРґР°Р¶Р°' or'РЎРєСѓРїРєР°')..' В· '..(DSP.settings.dry_run and 'РўР•РЎРў' or 'Р Р•РђР›Р¬РќРћ'))
+        V.text((V.kind=='sell'and'Продажа' or'Скупка')..' · '..(DSP.settings.dry_run and 'ТЕСТ' or 'РЕАЛЬНО'))
         if DSP.settings.dry_run then
-            V.red('РўР•РЎРў: С‚РѕСЂРіРѕРІС‹Рµ Р·Р°СЏРІРєРё РќР• РѕС‚РїСЂР°РІР»СЏСЋС‚СЃСЏ СЃРµСЂРІРµСЂСѓ.')
-            if b('РџРµСЂРµРєР»СЋС‡РёС‚СЊ РЅР° Р Р•РђР›Р¬РќРћ','mode_to_real',252) then
+            V.red('ТЕСТ: торговые заявки НЕ отправляются серверу.')
+            if b('Переключить на РЕАЛЬНО','mode_to_real',252) then
                 DSP.settings.dry_run=false;M.defer_save()
             end
         else
-            V.red('Р Р•РђР›Р¬РќРћ: РѕС‚РїСЂР°РІСЏС‚СЃСЏ Р·Р°СЏРІРєРё РЅР° РІС‹СЃС‚Р°РІР»РµРЅРёРµ РІ РёРіСЂРѕРІРѕР№ Р»Р°РІРєРµ.')
-            if b('РџРµСЂРµРєР»СЋС‡РёС‚СЊ РЅР° РўР•РЎРў','mode_to_test',252) then
+            V.red('РЕАЛЬНО: отправятся заявки на выставление в игровой лавке.')
+            if b('Переключить на ТЕСТ','mode_to_test',252) then
                 DSP.settings.dry_run=true;M.defer_save()
             end
         end
-        if not ok and #issues>0 then V.red(V.fit('РџСЂРёС‡РёРЅР°: '..tostring(issues[1]),math.max(1,imgui.GetContentRegionAvail().x))) end
-        V.text('РџРѕР·РёС†РёР№: '..DSP.presets.active_count(V.kind)..' В· '..DSP.money(total))
+        if not ok and #issues>0 then V.red(V.fit('Причина: '..tostring(issues[1]),math.max(1,imgui.GetContentRegionAvail().x))) end
+        V.text('Позиций: '..DSP.presets.active_count(V.kind)..' · '..DSP.money(total))
         V.list('launch_issues',function()for _,s in ipairs(issues)do V.red(s)end end,{height=100})
         V.cancel('launch');V.inline()
-        if b('РџСЂРѕРІРµСЂРёС‚СЊ','review',128)then imgui.CloseCurrentPopup();V.open_popup('РџСЂРѕРІРµСЂРєР° СЃРїРёСЃРєР°','review')end
-        V.inline();if b('Р’С‹СЃС‚Р°РІРёС‚СЊ','fast',142,ok)and ok then if launch() then imgui.CloseCurrentPopup() end end
+        if b('Проверить','review',128)then imgui.CloseCurrentPopup();V.open_popup('Проверка списка','review')end
+        V.inline();if b('Выставить','fast',142,ok)and ok then if launch() then imgui.CloseCurrentPopup() end end
     end)
-    V.popup('РџСЂРѕРІРµСЂРєР° СЃРїРёСЃРєР°','review',function()
+    V.popup('Проверка списка','review',function()
         local ok,issues,total=T.validate(V.kind)
         V.list_rows('review_items',preset().items or{},48,function(it)
-            V.text(V.fit(it.name,300));V.muted(tostring(it.qty)..' С€С‚. В· '..DSP.money(it.price)..(it.enabled==false and ' В· РІС‹РєР»СЋС‡РµРЅ'or''))
+            V.text(V.fit(it.name,300));V.muted(tostring(it.qty)..' шт. · '..DSP.money(it.price)..(it.enabled==false and ' · выключен'or''))
         end,{height=185})
-        V.text('Р’СЃРµРіРѕ: '..DSP.money(total));if not ok then V.red(V.fit(table.concat(issues,'; '),550))end
-        V.cancel('review');V.inline();if b('РџРѕРґС‚РІРµСЂРґРёС‚СЊ','review_start',176,ok)and ok then if launch() then imgui.CloseCurrentPopup() end end
+        V.text('Всего: '..DSP.money(total));if not ok then V.red(V.fit(table.concat(issues,'; '),550))end
+        V.cancel('review');V.inline();if b('Подтвердить','review_start',176,ok)and ok then if launch() then imgui.CloseCurrentPopup() end end
     end)
-    V.popup('РЈРґР°Р»РёС‚СЊ РїРѕР·РёС†РёСЋ','remove',remove_position,{w=620,h=200})
-    V.popup('РќР°Р±РѕСЂС‹','presets',presets_popup)
-    V.popup('РќРѕРІС‹Р№ РїСЂРµРґРјРµС‚','manual',function()
+    V.popup('Удалить позицию','remove',remove_position,{w=620,h=200})
+    V.popup('Наборы','presets',presets_popup)
+    V.popup('Новый предмет','manual',function()
         V.manual_name=V.manual_name or imgui.new.char[192]()
-        imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_manual',DSP.utf8('РќР°Р·РІР°РЅРёРµ РєР°Рє РІ РёРіСЂРµ'),V.manual_name,192)
+        imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_manual',DSP.utf8('Название как в игре'),V.manual_name,192)
         V.cancel('manual');V.inline()
-        if b('+ Р”РѕР±Р°РІРёС‚СЊ','manual_add',150)then
+        if b('+ Добавить','manual_add',150)then
             local ok,msg=T.add_from_catalog(V.kind,{name=DSP.trim(DSP.to_cp(ffi.string(V.manual_name)))})
             report(ok,msg);if ok then imgui.CloseCurrentPopup()end
         end
     end,{w=620,h=180})
-    V.popup('РџСЂРµРґРјРµС‚','item_info',function()
+    V.popup('Предмет','item_info',function()
         local it=V.item_info
         if it then
             imgui.TextWrapped(DSP.utf8(it.name or '?'))
             local refs=DSP.db and DSP.db.reference_prices and DSP.db.reference_prices(it.name,it.ench) or {}
-            V.muted('РћР±СЉСЏРІР»РµРЅРёСЏ: СЂС‹РЅРѕРє '..(refs.market and DSP.money(refs.market) or 'вЂ”')..' / СЃРєСѓРїРєР° '..(refs.buy and DSP.money(refs.buy) or 'вЂ”'))
-            V.muted(refs.today and ('РЎРµРіРѕРґРЅСЏ, СЃСЂРµРґРЅСЏСЏ С†РµРЅР° РїСЂРѕРґР°Р¶Рё: '..DSP.money(refs.today))
-                or 'РЎРµРіРѕРґРЅСЏ: РЅРµС‚ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹С… СЃСЂРµРґРЅРёС… С†РµРЅ СЃРѕРІРµСЂС€С‘РЅРЅС‹С… РїСЂРѕРґР°Р¶')
+            V.muted('Объявления: рынок '..(refs.market and DSP.money(refs.market) or '—')..' / скупка '..(refs.buy and DSP.money(refs.buy) or '—'))
+            V.muted(refs.today and ('Сегодня, средняя цена продажи: '..DSP.money(refs.today))
+                or 'Сегодня: нет подтверждённых средних цен совершённых продаж')
             if refs.source then V.muted(V.fit(refs.source,530)) end
             if V.kind=='sell'then
-                V.muted('РЎРµР±РµСЃС‚РѕРёРјРѕСЃС‚СЊ Р·Р° С€С‚. В· 0 = Р±РµСЃРїР»Р°С‚РЅРѕ')
-                if busy()then V.text(it.cost_price~=nil and DSP.money(it.cost_price)or'РќРµ Р·Р°РґР°РЅР°')
+                V.muted('Себестоимость за шт. · 0 = бесплатно')
+                if busy()then V.text(it.cost_price~=nil and DSP.money(it.cost_price)or'Не задана')
                 else M.compact_number(it,'cost_price','v22_cost',190,0)end
-                V.muted(it.cost_price==nil and 'РќРµ Р·Р°РґР°РЅР°: РїСЂРёР±С‹Р»СЊ РЅРµРёР·РІРµСЃС‚РЅР°' or 'РџСЂРёР±С‹Р»СЊ СѓС‡РёС‚С‹РІР°РµС‚ РєРѕРјРёСЃСЃРёСЋ РїСЂРѕРґР°Р¶Рё')
-                if b('РќРµРёР·РІРµСЃС‚РЅР°','cost_unknown',146)and not busy()then
+                V.muted(it.cost_price==nil and 'Не задана: прибыль неизвестна' or 'Прибыль учитывает комиссию продажи')
+                if b('Неизвестна','cost_unknown',146)and not busy()then
                     it.cost_price=nil;M.refresh_buffer(it,'cost_price');M.defer_save()
                 end
                 V.inline()
             end
         end
-        if b('Р—Р°РєСЂС‹С‚СЊ','info_close',140)then imgui.CloseCurrentPopup()end
+        if b('Закрыть','info_close',140)then imgui.CloseCurrentPopup()end
     end,{w=620,h=280})
-    V.popup('РљРѕР»РёС‡РµСЃС‚РІРѕ','quantity',function()
+    V.popup('Количество','quantity',function()
         local it=V.qty_item;if not it then return end
         V.text(V.fit(it.name,530));M.compact_number(it,'qty','popup_qty',180,1)
         for _,n in ipairs({1,10,100})do
             if b(tostring(n),'quick_qty_'..n,72)and not busy()then it.qty=n;M.refresh_buffer(it,'qty');M.defer_save()end
             V.inline()
         end
-        if b('РњР°РєСЃ','max_qty',100)then
+        if b('Макс','max_qty',100)then
             it._v22_limit=it._v22_limit or{qty=it.max_qty or it.qty};V.limit_open=true
         end
         if V.limit_open then
-            V.muted('РЈРєР°Р¶РёС‚Рµ Р»РёРјРёС‚ СЃРєСѓРїРєРё');local lim=it._v22_limit
+            V.muted('Укажите лимит скупки');local lim=it._v22_limit
             M.compact_number(lim,'qty','limit_qty',180,1)
-            if b('РџСЂРёРјРµРЅРёС‚СЊ Р»РёРјРёС‚','apply_limit',220)and not busy()then it.max_qty=lim.qty;it.qty=lim.qty;M.refresh_buffer(it,'qty');M.defer_save()end
+            if b('Применить лимит','apply_limit',220)and not busy()then it.max_qty=lim.qty;it.qty=lim.qty;M.refresh_buffer(it,'qty');M.defer_save()end
         end
-        if b('Р“РѕС‚РѕРІРѕ','qty_done',140)then V.limit_open=false;imgui.CloseCurrentPopup()end
+        if b('Готово','qty_done',140)then V.limit_open=false;imgui.CloseCurrentPopup()end
     end)
 end

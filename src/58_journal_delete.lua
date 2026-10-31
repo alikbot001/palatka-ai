@@ -35,7 +35,7 @@ local function invalidate()
 end
 function C.delete_event(e)
     local key=C.event_key(e)
-    if not key then return false,'РЅРµС‚ Р·Р°РїРёСЃРё' end
+    if not key then return false,'нет записи' end
     if hidden[key] then return true end
     local ok,raw=pcall(encodeJson,{type='journal_deleted',event_key=key,ts=os.time()})
     if not ok or type(raw)~='string' then C.last_error='JSON encoding error';return false,C.last_error end

@@ -12,7 +12,7 @@ local function inline() imgui.SameLine(0,8) end
 local function state() return DSP.settings.craglog end
 local function header(g)
     local s=state()
-    local handle=s.pinned and 'Ð–Ð£Ð ÐÐÐ› / Ð—ÐÐšÐ Ð•ÐŸÐ›ÐÐ' or 'Ð–Ð£Ð ÐÐÐ› / ÐŸÐ•Ð Ð•Ð¢ÐÐ©Ð˜Ð¢Ð¬'
+    local handle=s.pinned and 'ÆÓÐÍÀË / ÇÀÊÐÅÏË¨Í' or 'ÆÓÐÍÀË / ÏÅÐÅÒÀÙÈÒÜ'
     button(handle,'handle',g.w-300,false)
     if not s.pinned and imgui.IsItemActive() and imgui.IsMouseDragging(0) then
         local delta=imgui.GetIO().MouseDelta
@@ -20,7 +20,7 @@ local function header(g)
     end
     if not imgui.IsMouseDown(0) then C.end_drag() end
     inline()
-    if button(s.pinned and 'PIN: Ð”Ð' or 'PIN: ÐÐ•Ð¢','pin',120,s.pinned) then C.set_pinned(not s.pinned) end
+    if button(s.pinned and 'PIN: ÄÀ' or 'PIN: ÍÅÒ','pin',120,s.pinned) then C.set_pinned(not s.pinned) end
     inline()
     if button(s.minimized and '+' or '-','collapse',60) then C.set_minimized(not s.minimized) end
     inline()
@@ -28,8 +28,8 @@ local function header(g)
 end
 local function filters(g)
     local s=state()
-    for i,pair in ipairs({{'all','Ð’ÑÐµ'},{'loot','Ð¢Ð°Ð¹Ð½Ð¸ÐºÐ¸'},{'payday','PayDay'},
-                           {'sales','ÐŸÑ€Ð¾Ð´Ð°Ð¶Ð¸'},{'buys','Ð¡ÐºÑƒÐ¿ÐºÐ°'},{'income','Ð”Ð¾Ñ…Ð¾Ð´Ñ‹'}}) do
+    for i,pair in ipairs({{'all','Âñå'},{'loot','Òàéíèêè'},{'payday','PayDay'},
+                           {'sales','Ïðîäàæè'},{'buys','Ñêóïêà'},{'income','Äîõîäû'}}) do
         if button(pair[2],'filter_'..pair[1],(g.w-42)/3,s.filter==pair[1]) then
             s.filter=pair[1]; C.scroll=0; DSP.save_settings()
         end
@@ -38,12 +38,12 @@ local function filters(g)
 end
 local function row_card(entry)
     local kind=entry.kind or entry.type
-    local tag=kind=='item' and 'ÐÐÐ“Ð ÐÐ”Ð' or kind=='cash' and 'Ð”Ð•ÐÐ¬Ð“Ð˜' or kind=='opening' and 'Ð¢ÐÐ™ÐÐ˜Ðš'
-        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'Ð”ÐžÐ¥ÐžÐ”' or 'Ð¡Ð”Ð•Ð›ÐšÐ'
+    local tag=kind=='item' and 'ÍÀÃÐÀÄÀ' or kind=='cash' and 'ÄÅÍÜÃÈ' or kind=='opening' and 'ÒÀÉÍÈÊ'
+        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'ÄÎÕÎÄ' or 'ÑÄÅËÊÀ'
     imgui.TextColored(DSP.theme.col('accent',1),cp(os.date('%H:%M:%S',entry.ts or 0)..'  '..tag))
     text(C.describe(entry))
     if entry.source then
-        text('Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº: '..entry.source..(entry.association=='inferred' and ' (Ð¿Ð¾ Ñ‡Ð°Ñ‚Ñƒ)' or ''))
+        text('Èñòî÷íèê: '..entry.source..(entry.association=='inferred' and ' (ïî ÷àòó)' or ''))
     end
     imgui.Separator()
 end
@@ -53,14 +53,19 @@ function C.draw()
     local s=state()
     C.active_geometry=g
     imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
-    imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
+    local force_size=(not C._window_size_initialized) or C._last_minimized~=s.minimized
+    if force_size then imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always) end
+    if not s.minimized and imgui.SetNextWindowSizeConstraints then
+        imgui.SetNextWindowSizeConstraints(imgui.ImVec2(360,280),imgui.ImVec2(math.max(360,io.DisplaySize.x-16),math.max(280,io.DisplaySize.y-16)))
+    end
+    C._window_size_initialized=true;C._last_minimized=s.minimized
     imgui.SetNextWindowBgAlpha(.96)
     local colors=DSP.theme.push_overlay(.98)
     imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,16)
     imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,9)
     imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(12,12))
     imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(8,8))
-    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoMove
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove
         +imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+imgui.WindowFlags.NoFocusOnAppearing
     if imgui.Begin('##palatka_mini_journal',nil,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.15) end
@@ -71,23 +76,27 @@ function C.draw()
             local per=3
             C.scroll=math.max(0,math.min(C.scroll,math.max(0,#events-per)))
             local start=#events-C.scroll
-            text('ÐŸÐ¾ÑÐ»ÐµÐ´Ð½Ð¸Ðµ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ: '..#events..' / '..C.ring_cap..'   |   PIN Ñ„Ð¸ÐºÑÐ¸Ñ€ÑƒÐµÑ‚ Ð¿Ð¾Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ')
-            if button('Ð’Ð’Ð•Ð Ð¥ / ÐÐžÐ’Ð•Ð•','up',(g.w-40)/2,C.scroll>0) then C.scroll=math.max(0,C.scroll-per) end
+            text('Ïîñëåäíèå ñîáûòèÿ: '..#events..' / '..C.ring_cap..'   |   PIN ôèêñèðóåò ïîëîæåíèå')
+            if button('ÂÂÅÐÕ / ÍÎÂÅÅ','up',(g.w-40)/2,C.scroll>0) then C.scroll=math.max(0,C.scroll-per) end
             inline()
-            if button('Ð’ÐÐ˜Ð— / Ð¡Ð¢ÐÐ Ð¨Ð•','down',(g.w-40)/2,start>per) then C.scroll=math.min(math.max(0,#events-per),C.scroll+per) end
+            if button('ÂÍÈÇ / ÑÒÀÐØÅ','down',(g.w-40)/2,start>per) then C.scroll=math.min(math.max(0,#events-per),C.scroll+per) end
             start=#events-C.scroll
             local shown=imgui.BeginChild('##mini_cards',imgui.ImVec2(0,0),false)
             if shown then
                 if #events==0 then
-                    text('Ð—Ð´ÐµÑÑŒ Ð¿Ð¾ÑÐ²ÑÑ‚ÑÑ ÑÐ´ÐµÐ»ÐºÐ¸, Ð´ÐµÐ½ÑŒÐ³Ð¸ Ð¸ Ð½Ð°Ð³Ñ€Ð°Ð´Ñ‹ Ð¸Ð· Ð¸Ð³Ñ€Ð¾Ð²Ð¾Ð³Ð¾ Ñ‡Ð°Ñ‚Ð°.')
-                    text('ÐŸÐ¾Ð»Ð½Ð°Ñ Ð¸ÑÑ‚Ð¾Ñ€Ð¸Ñ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð° Ð² Ð³Ð»Ð°Ð²Ð½Ð¾Ð¼ Ð¼ÐµÐ½ÑŽ.')
+                    text('Çäåñü ïîÿâÿòñÿ ñäåëêè, äåíüãè è íàãðàäû èç èãðîâîãî ÷àòà.')
+                    text('Ïîëíàÿ èñòîðèÿ äîñòóïíà â ãëàâíîì ìåíþ.')
                 end
                 for i=start,math.max(1,start-per+1),-1 do if events[i] then row_card(events[i]) end end
-                if C.last_error then text('ÐžÑˆÐ¸Ð±ÐºÐ° Ð·Ð°Ð¿Ð¸ÑÐ¸: '..C.last_error) end
+                if C.last_error then text('Îøèáêà çàïèñè: '..C.last_error) end
             end
             imgui.EndChild()
         end
     end
+    if not s.minimized and imgui.GetWindowSize then
+        local ws=imgui.GetWindowSize();C.remember_size(ws.x,ws.y)
+    end
+    C.end_resize()
     imgui.End()
     imgui.PopStyleVar(4)
     if colors and colors>0 then imgui.PopStyleColor(colors) end

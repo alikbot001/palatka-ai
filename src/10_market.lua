@@ -123,15 +123,15 @@ function DSP.http_get(url, cb)
                 if not res then return finish(nil, err, 0) end
                 if res.code ~= 200 then
                     if res.code == 0 and res.err then
-                        return finish(nil, 'РЎРµС‚СЊ: ' .. tostring(res.err), 0)
+                        return finish(nil, 'Сеть: ' .. tostring(res.err), 0)
                     end
-                    local hint = res.err and (' В· ' .. tostring(res.err)) or ''
+                    local hint = res.err and (' · ' .. tostring(res.err)) or ''
                     if res.code == 401 or res.code == 403 then
-                        hint = ' В· РґРѕСЃС‚СѓРї Рє API РЅРµ СЂР°Р·СЂРµС€С‘РЅ РёР»Рё С‚СЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ'
+                        hint = ' · доступ к API не разрешён или требуется авторизация'
                     elseif res.code == 404 then
-                        hint = ' В· endpoint РЅРµ РЅР°Р№РґРµРЅ'
+                        hint = ' · endpoint не найден'
                     elseif res.code == 429 then
-                        hint = ' В· Р»РёРјРёС‚ Р·Р°РїСЂРѕСЃРѕРІ'
+                        hint = ' · лимит запросов'
                     end
                     return finish(nil, 'HTTP ' .. tostring(res.code) .. hint, res.code)
                 end
@@ -338,8 +338,8 @@ function DSP.market.rebuild(payload, sid)
                 if name ~= '' and price > 0 and qty > 0 then
                     has_slot = true
                     offers_n = offers_n + 1
-                    -- v1.2 Stage 2 fix: shop.sell_slots = Р»Р°РІРєР° РџР РћР”РђРЃРў РёРіСЂРѕРєСѓ -> player BUYS.
-                    -- Store in row.sell (Р»Р°РІРєР° РїСЂРѕРґР°С‘С‚) so the UI label matches the data
+                    -- v1.2 Stage 2 fix: shop.sell_slots = лавка ПРОДАЁТ игроку -> player BUYS.
+                    -- Store in row.sell (лавка продаёт) so the UI label matches the data
                     -- AND finish_side's asc sort + best=min gives the cheapest price
                     -- for the player to buy at.
                     add_offer(map, name, sanitize_ench(slot.ench), {
@@ -357,8 +357,8 @@ function DSP.market.rebuild(payload, sid)
                 if name ~= '' and price > 0 and qty > 0 then
                     has_slot = true
                     offers_n = offers_n + 1
-                    -- v1.2 Stage 2 fix: shop.buy_slots = Р»Р°РІРєР° РЎРљРЈРџРђР•Рў Сѓ РёРіСЂРѕРєР° -> player SELLS.
-                    -- Store in row.buy (Р»Р°РІРєР° СЃРєСѓРїР°РµС‚); finish_side sorts desc, best=max
+                    -- v1.2 Stage 2 fix: shop.buy_slots = лавка СКУПАЕТ у игрока -> player SELLS.
+                    -- Store in row.buy (лавка скупает); finish_side sorts desc, best=max
                     -- so row.buy.best = the highest buyback price (best for the player to sell to).
                     add_offer(map, name, sanitize_ench(slot.ench), {
                         side = 'buy', price = price, qty = qty,
@@ -427,12 +427,12 @@ end
 
 function DSP.market.freshness()
     local ts = DSP.market.state.updated
-    if not ts or ts <= 0 then return 'РЅРµС‚ РґР°РЅРЅС‹С…' end
+    if not ts or ts <= 0 then return 'нет данных' end
     local age = math.max(0, os.time() - ts)
-    if age < 60 then return age .. ' СЃРµРє' end
-    if age < 3600 then return math.floor(age / 60) .. ' РјРёРЅ' end
-    if age < 86400 then return math.floor(age / 3600) .. ' С‡' end
-    return math.floor(age / 86400) .. ' РґРЅ'
+    if age < 60 then return age .. ' сек' end
+    if age < 3600 then return math.floor(age / 60) .. ' мин' end
+    if age < 86400 then return math.floor(age / 3600) .. ' ч' end
+    return math.floor(age / 86400) .. ' дн'
 end
 
 local function query_value(s)
@@ -468,11 +468,12 @@ end
 
 local function market_request_error(sid, err, code, done)
     local st = DSP.market.state
-    st.error = tostring(err or 'РѕС€РёР±РєР° СЃРµС‚Рё')
+    st.error = tostring(err or 'ошибка сети')
     st.last_http_code = tonumber(code) or 0
     st.failed_at = os.time()
+    st.pending_sid = nil
     st.failures = math.min(8, (tonumber(st.failures) or 0) + 1)
-    -- Do not hammer a broken/private endpoint. Manual 'РћР±РЅРѕРІРёС‚СЊ' is still
+    -- Do not hammer a broken/private endpoint. Manual 'Обновить' is still
     -- allowed. Keep the last valid same-server cache visible, clearly stale.
     local delay = math.min(900, 30 * (2 ^ (st.failures - 1)))
     if code == 429 then delay = math.max(delay, 300) end
@@ -481,7 +482,7 @@ local function market_request_error(sid, err, code, done)
     st.status = (st.rows and #st.rows > 0) and 'cache' or 'error'
     DSP.flog('PULL error sid=' .. tostring(sid) .. ' code=' .. tostring(code or 0)
         .. ' retry_in=' .. delay .. 's ' .. st.error)
-    DSP.add_log('Р С‹РЅРѕРє: ' .. st.error .. (st.status == 'cache' and ' (РїРѕРєР°Р·Р°РЅ СЃС‚Р°СЂС‹Р№ СЃРЅРёРјРѕРє)' or ''), 'error')
+    DSP.add_log('Рынок: ' .. st.error .. (st.status == 'cache' and ' (показан старый снимок)' or ''), 'error')
     if done then done(false, st.error) end
 end
 
@@ -500,7 +501,7 @@ function DSP.market.pull(sid, done)
     st.last_request = os.time()
     st.error = nil
     st.nick = DSP.player_nick()
-    DSP.add_log('Р—Р°РїСЂРѕСЃ СЂС‹РЅРєР° Mobile ' .. tostring(sid) .. '...')
+    DSP.add_log('Запрос рынка Mobile ' .. tostring(sid) .. '...')
     DSP.flog('PULL start sid=' .. tostring(sid) .. ' generation=' .. tostring(generation))
     DSP.http_get(DSP.market.url(sid), function(body, err, code)
         if generation ~= st.request_generation or tonumber(st.sid) ~= sid then
@@ -509,31 +510,33 @@ function DSP.market.pull(sid, done)
         end
         if not body then return market_request_error(sid, err, code, done) end
         if body:match('^%s*<![Dd][Oo][Cc][Tt][Yy][Pp][Ee]') or body:match('^%s*<[Hh][Tt][Mm][Ll]') then
-            return market_request_error(sid, 'API РІРµСЂРЅСѓР» HTML РІРјРµСЃС‚Рѕ JSON (РѕС€РёР±РєР° С€Р»СЋР·Р° РёР»Рё Р·Р°С‰РёС‚Р° СЃР°Р№С‚Р°)', code, done)
+            return market_request_error(sid, 'API вернул HTML вместо JSON (ошибка шлюза или защита сайта)', code, done)
         end
         local ok_json, payload = pcall(decodeJson, body)
         if not ok_json or type(payload) ~= 'table' then
-            return market_request_error(sid, 'API РІРµСЂРЅСѓР» РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ JSON', code, done)
+            return market_request_error(sid, 'API вернул некорректный JSON', code, done)
         end
         if payload.ok == false or payload.success == false then
-            return market_request_error(sid, 'API РѕС‚РєР°Р·Р°Р»: ' .. tostring(payload.error or payload.message or 'unknown'), code, done)
+            return market_request_error(sid, 'API отказал: ' .. tostring(payload.error or payload.message or 'unknown'), code, done)
         end
         if type(payload.shops) ~= 'table' then
-            return market_request_error(sid, 'API РёР·РјРµРЅРёР» С„РѕСЂРјР°С‚: РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ shops', code, done)
+            return market_request_error(sid, 'API изменил формат: отсутствует shops', code, done)
         end
         -- Do not replace a known-good snapshot when rebuild fails.
         local previous = {rows=st.rows, by_key=st.by_key, shops=st.shops,
             offers=st.offers, updated=st.updated, oldest=st.oldest,
             version=st.version, filter_cache=st.filter_cache,
             filter_version=st.filter_version}
-        local ok_rebuild, rebuild_err = pcall(DSP.market.rebuild, payload, sid)
+        local ok_rebuild, rebuilt, rebuild_err = pcall(DSP.market.rebuild, payload, sid)
         if generation ~= st.request_generation or tonumber(st.sid) ~= sid then
             DSP.flog('PULL ignored superseded rebuild sid=' .. tostring(sid))
             return
         end
-        if not ok_rebuild then
+        if not ok_rebuild or rebuilt ~= true then
             for k, v in pairs(previous) do st[k] = v end
-            return market_request_error(sid, 'API parsing: ' .. tostring(rebuild_err), code, done)
+            return market_request_error(sid,
+                'API parsing: ' .. tostring(ok_rebuild and (rebuild_err or 'rebuild was interrupted') or rebuilt),
+                code, done)
         end
         st.failures, st.next_auto_retry, st.failed_at = 0, 0, nil
         st.received_at = os.time()
@@ -547,7 +550,7 @@ function DSP.market.pull(sid, done)
         if not ok_save then DSP.flog('PULL settings error: ' .. tostring(save_err)) end
         DSP.flog(string.format('PULL ok shops=%d offers=%d rows=%d newest=%d',
             st.shops, st.offers, #st.rows, st.updated))
-        DSP.add_log(string.format('Р С‹РЅРѕРє: %d Р»Р°РІРѕРє, %d РѕС„С„РµСЂРѕРІ, СЃРІРµР¶РµСЃС‚СЊ %s',
+        DSP.add_log(string.format('Рынок: %d лавок, %d офферов, свежесть %s',
             st.shops, st.offers, DSP.market.freshness()))
         if done then done(true) end
     end)
@@ -629,8 +632,8 @@ function DSP.market.load_cache(sid)
         local ok2, payload = pcall(decodeJson, pack.body)
         if not ok2 or type(payload) ~= 'table' or type(payload.shops) ~= 'table'
             or payload.ok == false or payload.success == false then return false end
-        local rebuilt = pcall(DSP.market.rebuild, payload, sid)
-        if not rebuilt then return false end
+        local called, rebuilt = pcall(DSP.market.rebuild, payload, sid)
+        if not called or rebuilt ~= true then return false end
         DSP.market.state.saved_at = tonumber(pack.saved_at) or 0
         DSP.market.state.status = 'cache'
         return true
@@ -642,8 +645,8 @@ function DSP.market.load_cache(sid)
     end
     if type(pack.shops) == 'table' then
         if pack.ok == false or pack.success == false then return false end
-        local rebuilt = pcall(DSP.market.rebuild, pack, sid)
-        if not rebuilt then return false end
+        local called, rebuilt = pcall(DSP.market.rebuild, pack, sid)
+        if not called or rebuilt ~= true then return false end
         DSP.market.state.saved_at = tonumber(pack.saved_at) or 0
         DSP.market.state.status = 'cache'
         return true
@@ -729,31 +732,31 @@ end
 -- =========================================================================
 
 -- Freshness label for an offer. Returns (text, palette_key).
---   ts < 3 min: ('РЎР’Р•Р–Рћ (<3m)', 'good')  -- green
---   ts < 10 min: ('5m РЅР°Р·Р°Рґ', 'warn')    -- yellow (text is approximate)
---   ts >= 10 min or 0: ('РЈСЃС‚Р°СЂРµР»Рѕ', 'muted')  -- gray
+--   ts < 3 min: ('СВЕЖО (<3m)', 'good')  -- green
+--   ts < 10 min: ('5m назад', 'warn')    -- yellow (text is approximate)
+--   ts >= 10 min or 0: ('Устарело', 'muted')  -- gray
 function DSP.market.offer_freshness(ts)
-    if not ts or ts <= 0 then return 'РЈСЃС‚Р°СЂРµР»Рѕ', 'muted' end
+    if not ts or ts <= 0 then return 'Устарело', 'muted' end
     local age = math.max(0, os.time() - ts)
     if age < 180 then
-        return string.format('РЎР’Р•Р–Рћ (<%dm)', math.floor(age / 60) + 1), 'good'
+        return string.format('СВЕЖО (<%dm)', math.floor(age / 60) + 1), 'good'
     end
     if age < 600 then
-        return string.format('%dm РЅР°Р·Р°Рґ', math.floor(age / 60)), 'warn'
+        return string.format('%dm назад', math.floor(age / 60)), 'warn'
     end
-    return 'РЈСЃС‚Р°СЂРµР»Рѕ', 'muted'
+    return 'Устарело', 'muted'
 end
 
 -- Build cross-shop arbitrage opportunities.
--- Iterates row.sell.offers (Р»Р°РІРєР° A РїСЂРѕРґР°С‘С‚ cheap) + row.buy.offers
--- (Р»Р°РІРєР° B СЃРєСѓРїР°РµС‚ expensive), pairs them when A.shop ~= B.shop AND
+-- Iterates row.sell.offers (лавка A продаёт cheap) + row.buy.offers
+-- (лавка B скупает expensive), pairs them when A.shop ~= B.shop AND
 -- B.price > A.price (otherwise negative profit).
 -- Key includes @ench (set in DSP.item_key), so +0 stock is never matched
 -- against +12 buyback.
 --
--- v1.2 hotfix: Р»Р°РІРєРё СЃС‚Р°СЂС€Рµ STALE_AFTER СЃРµРєСѓРЅРґ (default 1800 = 30 РјРёРЅ)
--- РѕС‚СЃРµРєР°СЋС‚СЃСЏ РєР°Рє РЅРµР°РєС‚СѓР°Р»СЊРЅС‹Рµ, С‡С‚РѕР±С‹ РЅРµ Р»РѕРІРёС‚СЊ С„Р°РЅС‚РѕРјРЅС‹Р№ Р°СЂР±РёС‚СЂР°Р¶ РїРѕ
--- СѓСЃС‚Р°СЂРµРІС€РёРј РґР°РЅРЅС‹Рј РёР· РєСЌС€Р° va-ta.com.
+-- v1.2 hotfix: лавки старше STALE_AFTER секунд (default 1800 = 30 мин)
+-- отсекаются как неактуальные, чтобы не ловить фантомный арбитраж по
+-- устаревшим данным из кэша va-ta.com.
 local STALE_AFTER = 1800
 
 -- v1.2 hotfix: ARBITRAGE CACHE.
@@ -951,8 +954,8 @@ end
 
 -- Group all offers by shop. Returns array of
 --   { num, owner, ts (max), sell_count, buy_count, sell_offers = [], buy_offers = [] }
--- where sell_offers = [{ row, offer }] (Р»Р°РІРєР° РџР РћР”РђРЃРў to player)
--- and   buy_offers  = [{ row, offer }] (Р»Р°РІРєР° РЎРљРЈРџРђР•Рў from player)
+-- where sell_offers = [{ row, offer }] (лавка ПРОДАЁТ to player)
+-- and   buy_offers  = [{ row, offer }] (лавка СКУПАЕТ from player)
 -- Sorted by ts desc (freshest first).
 function DSP.market.shops_list()
     local shops = {}
@@ -996,21 +999,35 @@ end
 -- Send the /findilavka N command to mark a shop on the GPS map.
 -- This is the standard Arizona Mobile command for highlighting a CR shop.
 function DSP.market.mark_shop(shop_num)
-    if shop_num == nil then return false end
-    local cmd = '/findilavka ' .. tostring(shop_num)
-    if sampSendChat then
-        local ok = pcall(sampSendChat, cmd)
-        if ok then
-            DSP.add_log('РњРµС‚РєР° Р»Р°РІРєРё: ' .. tostring(shop_num))
-            return true
-        end
+    local n=tonumber(shop_num)
+    if not n or n<1 or n>99999 or n%1~=0 then return false end
+    -- A cached API snapshot may belong to the last visited game server.
+    local actual=DSP.detect_server and DSP.detect_server()
+    local market_server=tonumber(DSP.market.state.sid)
+    if actual and actual~=market_server then
+        DSP.add_log('Лавка: сервер игры не совпадает с сервером API. Обнови рынок.','error')
+        return false
     end
-    return false
+    local now=os.time()
+    local pending=DSP.market.pending_find
+    -- Do not confuse two close server replies and blacklist the wrong shop.
+    if pending and now-(tonumber(pending.at)or 0)<8 then
+        if tonumber(pending.shop)==n then return true end
+        DSP.add_log('Поиск другой лавки: дождись ответа предыдущего запроса.','warn')
+        return false
+    end
+    if not sampSendChat then return false end
+    local command='/findilavka '..tostring(math.floor(n))
+    local ok,sent=pcall(sampSendChat,command)
+    if not ok or sent==false then return false end
+    DSP.market.pending_find={shop=n,at=now,sid=market_server}
+    DSP.add_log('Проверка лавки #'..tostring(n)..' в игре (API не гарантирует наличие)')
+    return true
 end
 
--- Copy a shop's buyback list (buy_slots = items Р»Р°РІРєР° СЃРєСѓРїР°РµС‚ Сѓ РёРіСЂРѕРєР°)
--- into the player's BUY preset (so the player РІС‹СЃС‚Р°РІР»СЏРµС‚ the same buyback
--- in their own Р»Р°РІРєР°).
+-- Copy a shop's buyback list (buy_slots = items лавка скупает у игрока)
+-- into the player's BUY preset (so the player выставляет the same buyback
+-- in their own лавка).
 -- Args:
 --   shop_num   -- the shop number whose buy offers to copy
 --   preset_name -- override name for the new preset (optional)
@@ -1026,13 +1043,13 @@ function DSP.market.copy_shop_skupka(shop_num, preset_name, markup)
             break
         end
     end
-    if not target then return nil, 'Р»Р°РІРєР° РЅРµ РЅР°Р№РґРµРЅР°' end
-    if target.buy_count == 0 then return nil, 'Сѓ Р»Р°РІРєРё РЅРµС‚ СЃРєСѓРїРєРё' end
+    if not target then return nil, 'лавка не найдена' end
+    if target.buy_count == 0 then return nil, 'у лавки нет скупки' end
     local p = DSP.settings.buy_preset
     if not p.items then p.items = {} end
     if preset_name then p.name = preset_name
-    elseif p.name == 'РЎРєСѓРїРєР°' then
-        p.name = 'РЎРєСѓРїРєР°_' .. tostring(target.owner)
+    elseif p.name == 'Скупка' then
+        p.name = 'Скупка_' .. tostring(target.owner)
     end
     local added = 0
     for _, entry in ipairs(target.buy_offers) do
@@ -1057,7 +1074,7 @@ function DSP.market.copy_shop_skupka(shop_num, preset_name, markup)
         end
     end
     DSP.save_settings()
-    DSP.add_log(string.format('РЎРєРѕРїРёСЂРѕРІР°РЅРѕ СЃРєСѓРїРєРё: Р»Р°РІРєР° #%s, +%d РїРѕР·. (markup +%d$)',
+    DSP.add_log(string.format('Скопировано скупки: лавка #%s, +%d поз. (markup +%d$)',
         tostring(shop_num), added, markup))
     return added
 end
@@ -1081,7 +1098,7 @@ DSP.market.cr_scan_state = {
     page = 0,
     total = 0,
     items = {},
-    status = 'РЅРµ СЃРєР°РЅРёСЂРѕРІР°РЅ',
+    status = 'не сканирован',
     started_at = 0,
 }
 
@@ -1091,7 +1108,7 @@ DSP.market.cr_scan_state = {
 -- the sampev.onShowDialog hook.
 function DSP.market.scan_cr_marker()
     if DSP.market.cr_scan_state.active then
-        DSP.notify('РЎРєР°РЅ Р¦Р : СѓР¶Рµ РёРґС‘С‚, РґРѕР¶РґРёС‚РµСЃСЊ РѕРєРѕРЅС‡Р°РЅРёСЏ')
+        DSP.notify('Скан ЦР: уже идёт, дождитесь окончания')
         return false
     end
     DSP.market.cr_scan_state.active = true
@@ -1101,8 +1118,8 @@ function DSP.market.scan_cr_marker()
     DSP.market.cr_scan_state.items = {}
     DSP.market.cr_scan_state.last_page_text = nil
     DSP.market.cr_scan_state.started_at = os.time()
-    DSP.market.cr_scan_state.status = 'РѕР¶РёРґР°РЅРёРµ РґРёР°Р»РѕРіР° 15073 (РІСЃС‚Р°РЅСЊС‚Рµ РЅР° РјРµС‚РєСѓ Р¦Р )'
-    DSP.add_log('РЎРєР°РЅ Р¦Р : Р·Р°РїСѓС‰РµРЅ, РІСЃС‚Р°РЅСЊС‚Рµ РЅР° РјРµС‚РєСѓ СЃСЂРµРґРЅРёС… С†РµРЅ Р¦Р ')
+    DSP.market.cr_scan_state.status = 'ожидание диалога 15073 (встаньте на метку ЦР)'
+    DSP.add_log('Скан ЦР: запущен, встаньте на метку средних цен ЦР')
     -- Auto-expire after 60 seconds if no dialog fires.
     if lua_thread and wait then
         lua_thread.create(function()
@@ -1112,8 +1129,8 @@ function DSP.market.scan_cr_marker()
             end
             if DSP.market.cr_scan_state.active then
                 DSP.market.cr_scan_state.active = false
-                DSP.market.cr_scan_state.status = 'С‚Р°Р№РјР°СѓС‚ Р¦Р  (СЃС‚СЂ. '..DSP.market.cr_scan_state.page..'), СЃС‚Р°СЂС‹Рµ РґР°РЅРЅС‹Рµ СЃРѕС…СЂР°РЅРµРЅС‹'
-                DSP.add_log('РЎРєР°РЅ Р¦Р : С‚Р°Р№РјР°СѓС‚, СЃРЅРёРјРѕРє РЅРµ Р·Р°РјРµРЅС‘РЅ', 'error')
+                DSP.market.cr_scan_state.status = 'таймаут ЦР (стр. '..DSP.market.cr_scan_state.page..'), старые данные сохранены'
+                DSP.add_log('Скан ЦР: таймаут, снимок не заменён', 'error')
             end
         end)
     end
@@ -1140,21 +1157,36 @@ end
 
 function DSP.market.save_cr_marker(sid)
     sid = tonumber(sid) or DSP.market.state.sid or 102
-    local old = DSP.market.load_cr_marker(sid)
+    local old = DSP.market.load_cr_marker(sid) or {}
     local s = DSP.market.cr_scan_state
+    local items = s.sid == sid and #s.items>0 and s.items or (old.items or {})
+    local avg_history = type(old.avg_history)=='table' and old.avg_history or {}
+    local now=os.time();local cutoff=now-30*86400
+    if s.sid==sid and #s.items>0 then
+        for _,it in ipairs(s.items) do
+            local key=DSP.lower(DSP.clean_text(it.name or ''))
+            if key~='' and tonumber(it.sell_med) and tonumber(it.sell_med)>0 then
+                local h=avg_history[key];if type(h)~='table'then h={};avg_history[key]=h end
+                local last=h[#h]
+                if not last or last.price~=it.sell_med or now-(last.at or 0)>=900 then
+                    h[#h+1]={at=now,price=math.floor(it.sell_med),source='cr_average'}
+                else last.at=now end
+                while #h>90 or (#h>0 and (h[1].at or 0)<cutoff) do table.remove(h,1) end
+            end
+        end
+    end
     local pack = {
-        saved_at = os.time(), sid = sid,
-        items = s.sid == sid and #s.items>0 and s.items or (old and old.items or {}),
+        saved_at = now, sid = sid, items = items,
         page = s.page, total = s.total,
-        histories = (old and old.histories) or {},
+        histories = type(old.histories)=='table' and old.histories or {},
+        avg_history = avg_history,
     }
     local ok, json = pcall(encodeJson, pack)
     if not ok or not json then DSP.flog('CR MARKER save failed: '..tostring(json));return false end
-    local f = io.open(DSP.market.cr_marker_path(sid), 'wb')
-    if not f then return false end
-    local wrote = f:write(json)
-    local closed = f:close()
-    if not wrote or not closed then return false end
+    local tmp=DSP.market.cr_marker_path(sid)..'.tmp'
+    local f = io.open(tmp, 'wb');if not f then return false end
+    local wrote=f:write(json);local closed=f:close();if not wrote or not closed then return false end
+    local renamed,err=os.rename(tmp,DSP.market.cr_marker_path(sid));if not renamed then return false,err end
     DSP.market._cr_cache[sid] = pack
     DSP.flog(string.format('CR MARKER saved sid=%d items=%d page=%d',sid,#pack.items,pack.page))
     return true
@@ -1170,27 +1202,36 @@ end
 -- CP price formats observed in the Market Helper 15073 scanner:
 -- $61.300, :CASH:61300, K61.3, KK1.25, M2.5.
 function DSP.market.parse_cr_price(raw)
-    local v = DSP.clean_text(raw or ''):gsub('^:CASH:', '')
-    v = v:gsub('^%$%s*',''):gsub('%s*%$$',''):gsub('%s+','')
-    local unit, number = v:match('^([РљРљРњKkMm]+)([%d%.,]+)$')
-    local multiplier
-    if unit then
-        if unit=='РљРљ' or unit=='KK' or unit=='kk' or unit=='Kk' or unit=='kK' then multiplier=1000000
-        elseif unit=='Рњ' or unit=='M' or unit=='m' then multiplier=1000000000
-        elseif unit=='Рљ' or unit=='K' or unit=='k' then multiplier=1000
-        else return nil end
-        local n=tonumber((number:gsub(',','.')))
-        if not n then return nil end
-        v=n*multiplier
-    else
-        if not v:match('^[%d%.,]+$') then return nil end
-        -- Each 3-digit group in 12.345.678 is a thousands separator.
-        if v:match('^%d%d?%d?[%.,]%d%d%d') then v=v:gsub('[%.,]','')
-        elseif v:find('[%.,]') then return nil end
-        v=tonumber(v)
+    local s=tostring(raw or '')
+    if s:sub(1,6)==':CASH:' then s=s:sub(7) end
+    local c=s:gsub('{%x%x%x%x%x%x}',' '):match('^%s*(.-)%s*$') or ''
+    if c=='' then return nil end
+    c=c:gsub('[Kk][Kk]','\xca\xca')
+    c=c:gsub('([^%a])([Kk])([^%a])',function(a,k,b)return a..'\xca'..b end)
+    c=c:gsub('^([Kk])([^%a])',function(k,b)return '\xca'..b end)
+    c=c:gsub('([^%a])([Mm])([^%a])',function(a,m,b)return a..'\xcc'..b end)
+    c=c:gsub('^([Mm])([^%a])',function(m,b)return '\xcc'..b end)
+    local kk_i,frac_i=c:match('\xca\xca%D*(%d+)%D+(%d[%d%.%,]*)')
+    if kk_i and frac_i then return math.floor(tonumber(kk_i)*1e6)+(tonumber((frac_i:gsub('[.,]','')))or 0) end
+    local m_i,frac_m=c:match('\xcc%D*(%d+)%D+(%d[%d%.%,]*)')
+    if m_i and frac_m then return math.floor(tonumber(m_i)*1e9)+(tonumber((frac_m:gsub('[.,]','')))or 0) end
+    local kk_s,k_s=c:match('\xca\xca%D*([%d%.%,]+)%D+\xca%D*([%d%.%,]+)')
+    if kk_s and k_s then return math.floor((tonumber((kk_s:gsub(',','.')))or 0)*1e6)+(tonumber((k_s:gsub('[.,]','')))or 0) end
+    local m_s,k2_s=c:match('\xcc%D*([%d%.%,]+)%D+\xca%D*([%d%.%,]+)')
+    if m_s and k2_s then return math.floor((tonumber((m_s:gsub(',','.')))or 0)*1e9)+(tonumber((k2_s:gsub('[.,]','')))or 0) end
+    local kk=c:match('\xca\xca%D*([%d%.%,]+)');if kk then local v=tonumber((kk:gsub(',','.')));return v and math.floor(v*1e6)or nil end
+    local m=c:match('\xcc%D*([%d%.%,]+)');if m then local v=tonumber((m:gsub(',','.')));return v and math.floor(v*1e9)or nil end
+    local k=c:match('\xca%s*([%d%.%,]+)');if k then
+        if k:find('[.,]')then return tonumber((k:gsub('[.,]','')))or nil end
+        return (tonumber(k)or 0)*1000
     end
-    if type(v)~='number' or v~=v or v<1 or v>9007199254740991 then return nil end
-    return math.floor(v+0.000001)
+    local d=c:gsub('^%$',''):gsub('%s',''):gsub('%$$','')
+    local nd=0;for _ in d:gmatch('%.')do nd=nd+1 end
+    if nd>1 then d=d:gsub('[.,]','')
+    elseif nd==1 then local a=d:match('%.(%d+)$');if a and #a==3 then d=d:gsub('%.','')end end
+    d=d:gsub(',','')
+    local v=tonumber(d);if not v or v~=v or v<1 or v>9007199254740991 then return nil end
+    return math.floor(v)
 end
 
 function DSP.market.parse_cr_list_line(line)
@@ -1199,8 +1240,8 @@ function DSP.market.parse_cr_list_line(line)
     if not name then name,raw = s:match('^(.-)%s%s+([^%s].-)%s*$') end
     if not name or not raw then return nil end
     name = DSP.trim(name:gsub('^%d+[%.%)]%s*',''))
-    if name=='' or name=='РџРѕРёСЃРє РїРѕ РЅР°Р·РІР°РЅРёСЋ' or name:find('РЎР»РµРґСѓСЋС‰Р°СЏ',1,true)
-        or name:find('РџСЂРµРґС‹РґСѓС‰Р°СЏ',1,true) then return nil end
+    if name=='' or name=='Поиск по названию' or name:find('Следующая',1,true)
+        or name:find('Предыдущая',1,true) then return nil end
     local p = DSP.market.parse_cr_price(raw)
     if not p then return nil end
     return name,p
@@ -1214,7 +1255,7 @@ function DSP.market.observe_cr_detail(title, text)
     local sid = tonumber(DSP.market.state.sid)
     if not sid or sid ~= tonumber(DSP.market.cr_marker_seen_sid) then return false end
     local t = DSP.clean_text(title or '')
-    if not t:find('РџСЂРѕРґР°Р¶Р° С‚РѕРІР°СЂР°',1,true) then return false end
+    if not t:find('Продажа товара',1,true) then return false end
     local name = t:match("'([^']+)'") or t:match('"([^"]+)"')
     if not name or name=='' then return false end
     local nowday = os.date('%Y-%m-%d')
@@ -1247,74 +1288,67 @@ end
 --
 -- We try several formats because Arizona Mobile dialog text varies:
 --   "Item name ........ $X (sell) / $Y (buy) | qty: N"
---   "1. Item name вЂ” sell: $X / buy: $Y"
---   "Item name | СЃСЂРµРґРЅСЏСЏ: $X | СЃРєСѓРїРєР°: $Y | РѕСЃС‚Р°С‚РѕРє: N"
+--   "1. Item name — sell: $X / buy: $Y"
+--   "Item name | средняя: $X | скупка: $Y | остаток: N"
 -- Anything we can't parse, we log + skip (no crash).
+local function cr_find_listitem(text, needle)
+    local line=0
+    for raw in tostring(text or ''):gmatch('[^\r\n]+') do
+        line=line+1
+        local clean=DSP.clean_text(raw)
+        if line>1 and clean:find(needle,1,true) then return line-2 end
+    end
+    return nil
+end
+local function cr_next_index(text)
+    return cr_find_listitem(text,'\xd1\xeb\xe5\xe4\xf3\xfe\xf9\xe0\xff \xf1\xf2\xf0\xe0\xed\xe8\xf6\xe0')
+        or cr_find_listitem(text,'\xc4\xe0\xeb\xe5\xe5')
+        or cr_find_listitem(text,'Next page')
+end
 function DSP.market.on_cr_marker_dialog(text)
     if not DSP.market.cr_scan_state.active then return false end
     local s=DSP.market.cr_scan_state
     if s.sid and s.sid ~= tonumber(DSP.market.state.sid) then
-        s.active=false;s.status='СЃРµСЂРІРµСЂ РёР·РјРµРЅРёР»СЃСЏ, СЃРєР°РЅ РѕСЃС‚Р°РЅРѕРІР»РµРЅ'
-        return false
+        s.active=false;s.status='server changed; scan stopped';return false
     end
+    local next_idx=cr_next_index(text)
     if s.last_page_text==text then
-        s.status='РџРѕРІС‚РѕСЂ С‚РѕР№ Р¶Рµ СЃС‚СЂР°РЅРёС†С‹; РѕР¶РёРґР°РµС‚СЃСЏ РѕР±РЅРѕРІР»РµРЅРёРµ СЃРµСЂРІРµСЂР°'
+        s.repeat_count=(s.repeat_count or 0)+1
+        s.status='same CR page received again ('..s.repeat_count..')'
+        if next_idx and s.repeat_count<=2 and sampSendDialogResponse and sampGetCurrentDialogId then
+            local did=sampGetCurrentDialogId();if lua_thread and wait then lua_thread.create(function()wait(180);if s.active then pcall(sampSendDialogResponse,did,1,next_idx,'')end end)end
+        end
         return true
     end
-    s.last_page_text=text
-    s.page=s.page+1
-    local found={}
-    for i,it in ipairs(s.items) do found[DSP.lower(it.name)]=i end
+    s.repeat_count=0;s.last_page_text=text;s.page=(s.page or 0)+1
+    local found={};for i,it in ipairs(s.items)do found[DSP.lower(DSP.clean_text(it.name or ''))]=i end
     local parsed=0
-    local line_no=0
-    for line in tostring(text or ''):gmatch('[^\r\n]+') do
-        line_no=line_no+1
-        if line_no>3 then
-            local name,price=DSP.market.parse_cr_list_line(line)
-            if name and price then
-                local key=DSP.lower(name)
-                local row={name=name,sell_med=price,buy_med=nil,ts=os.time(),source='cr_average'}
-                if found[key] then s.items[found[key]]=row
-                else s.items[#s.items+1]=row;found[key]=#s.items end
-                parsed=parsed+1
-            end
+    for raw in tostring(text or ''):gmatch('[^\r\n]+') do
+        local name,price=DSP.market.parse_cr_list_line(raw)
+        if name and price then
+            local key=DSP.lower(DSP.clean_text(name));local row={name=name,sell_med=price,buy_med=nil,ts=os.time(),source='cr_average'}
+            if found[key]then s.items[found[key]]=row else s.items[#s.items+1]=row;found[key]=#s.items end
+            parsed=parsed+1
         end
     end
-    s.status=string.format('РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ: СЃС‚СЂ. %d, %d С‚РѕРІР°СЂРѕРІ',s.page,#s.items)
-    DSP.flog('CR MARKER page='..s.page..' parsed='..parsed..' total='..#s.items)
-    local next_idx=nil
-    local n=0
-    for line in tostring(text or ''):gmatch('[^\r\n]+') do
-        n=n+1
-        local c=DSP.clean_text(line)
-        if n>1 and (c:find('РЎР»РµРґСѓСЋС‰Р°СЏ СЃС‚СЂР°РЅРёС†Р°',1,true) or c=='Р”Р°Р»РµРµ') then
-            next_idx=n-2 -- 15073's first row is the header, per Market Helper.
-            break
-        end
-    end
+    s.total=#s.items;s.status=string.format('CR: page %d, items %d',s.page,#s.items)
+    DSP.flog('CR MARKER page='..s.page..' parsed='..parsed..' total='..#s.items..' next='..tostring(next_idx))
     if next_idx and sampSendDialogResponse and sampGetCurrentDialogId then
         local did=sampGetCurrentDialogId()
-        if lua_thread and wait then
-            lua_thread.create(function()
-                wait(150)
-                if not s.active then return end
-                pcall(sampSendDialogResponse,did,1,next_idx,'')
-            end)
-        else pcall(sampSendDialogResponse,did,1,next_idx,'') end
+        if lua_thread and wait then lua_thread.create(function()wait(120);if s.active then pcall(sampSendDialogResponse,did,1,next_idx,'')end end)
+        else pcall(sampSendDialogResponse,did,1,next_idx,'')end
         return true
     end
     s.active=false
-    if parsed<=0 and #s.items==0 then
-        s.status='РќРµ СЂР°СЃРїРѕР·РЅР°РЅ СЃРїРёСЃРѕРє Р¦Р : РЅСѓР¶РЅС‹ СЂРµР°Р»СЊРЅС‹Рµ СЃС‚СЂРѕРєРё 15073'
-        DSP.add_log('РЎРєР°РЅ Р¦Р : С„РѕСЂРјР°С‚ РЅРµ СЂР°СЃРїРѕР·РЅР°РЅ; СЃС‚Р°СЂС‹Рµ РґР°РЅРЅС‹Рµ СЃРѕС…СЂР°РЅРµРЅС‹','error')
+    if #s.items==0 then
+        s.status='CR scan: no item rows recognized; old snapshot preserved'
+        DSP.add_log('CR scan: no item rows recognized; old snapshot preserved','error')
     else
-        s.status=string.format('Р“РѕС‚РѕРІРѕ: %d С‚РѕРІР°СЂРѕРІ РЅР° %d СЃС‚СЂ.',#s.items,s.page)
+        s.status=string.format('CR done: %d items / %d pages',#s.items,s.page)
         DSP.market.save_cr_marker(DSP.market.state.sid)
-        DSP.add_log('РЎРєР°РЅ Р¦Р : РіРѕС‚РѕРІРѕ, '..#s.items..' С‚РѕРІР°СЂРѕРІ','ok')
+        DSP.add_log('CR scan done: '..#s.items..' items','ok')
     end
-    if sampSendDialogResponse and sampGetCurrentDialogId then
-        pcall(sampSendDialogResponse,sampGetCurrentDialogId(),0,0,'')
-    end
+    if sampSendDialogResponse and sampGetCurrentDialogId then pcall(sampSendDialogResponse,sampGetCurrentDialogId(),0,0,'')end
     return true
 end
 
@@ -1346,7 +1380,7 @@ function DSP.market.median_prices(row)
     }
 end
 
--- Format the "Р С‹РЅРѕРє СЃРµСЂРІРµСЂР° #N: РџСЂРѕРґР°Р¶Р° ~X$ | РЎРєСѓРїРєР° ~Y$ (РЅР° РѕСЃРЅРѕРІРµ N Р»Р°РІРѕРє)"
+-- Format the "Рынок сервера #N: Продажа ~X$ | Скупка ~Y$ (на основе N лавок)"
 -- header line for a given row. Falls back to CR marker snapshot if available,
 -- else uses live median from va-ta.com data.
 function DSP.market.market_label_for(row)
@@ -1357,7 +1391,7 @@ function DSP.market.market_label_for(row)
     if marker and marker.items then
         for _, it in ipairs(marker.items) do
             if DSP.lower(it.name or '') == DSP.lower(row.name or '') then
-                return string.format('Р С‹РЅРѕРє Р¦Р  #%d: РџСЂРѕРґР°Р¶Р° ~%s | РЎРєСѓРїРєР° ~%s (РјРµС‚РєР° %s)',
+                return string.format('Рынок ЦР #%d: Продажа ~%s | Скупка ~%s (метка %s)',
                     sid, DSP.money(it.sell_med or 0), DSP.money(it.buy_med or 0),
                     os.date('%d.%m %H:%M', marker.saved_at or 0))
             end
@@ -1370,7 +1404,7 @@ function DSP.market.market_label_for(row)
     local buy = med.buy or { med = 0, shops_n = 0 }
     if sell.med == 0 and buy.med == 0 then return '' end
     local shops = math.max(sell.shops_n or 0, buy.shops_n or 0)
-    return string.format('Р С‹РЅРѕРє #%d: РџСЂРѕРґР°Р¶Р° ~%s | РЎРєСѓРїРєР° ~%s (РЅР° РѕСЃРЅРѕРІРµ %d Р»Р°РІРѕРє)',
+    return string.format('Рынок #%d: Продажа ~%s | Скупка ~%s (на основе %d лавок)',
         sid, DSP.money(sell.med), DSP.money(buy.med), shops)
 end
 

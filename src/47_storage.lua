@@ -20,9 +20,9 @@ local function int(s)
 end
 local function kind_of(title)
     local s=DSP.lower(normal(title))
-    if s:find('Р±Р°РіР°Р¶РЅРёРє',1,true) or s:find('Р‘Р°РіР°Р¶РЅРёРє',1,true) then return 'trunk' end
-    if s:find('С€РєР°С„',1,true) or s:find('РЁРєР°С„',1,true) then return 'cabinet' end
-    if s:find('СЃРєР»Р°Рґ',1,true) or s:find('РЎРєР»Р°Рґ',1,true) or s:find('С…СЂР°РЅРёР»РёС‰Рµ',1,true) or s:find('РҐСЂР°РЅРёР»РёС‰Рµ',1,true) then return 'warehouse' end
+    if s:find('багажник',1,true) or s:find('Багажник',1,true) then return 'trunk' end
+    if s:find('шкаф',1,true) or s:find('Шкаф',1,true) then return 'cabinet' end
+    if s:find('склад',1,true) or s:find('Склад',1,true) or s:find('хранилище',1,true) or s:find('Хранилище',1,true) then return 'warehouse' end
     return nil
 end
 S.kind_of = kind_of
@@ -33,17 +33,17 @@ function S.parse_line(raw)
     if s=='' or #s>320 then return nil end
     local name,qty
     -- An explicit unit is mandatory: 'slot #1' is NOT one item.
-    name,qty=s:match('^(.-)%s*%(%s*([%d%., ]+)%s*С€С‚%.?%s*%)%s*$')
-    if not name then name,qty=s:match('^(.-)%s*%[%s*([%d%., ]+)%s*С€С‚%.?%s*%]%s*$') end
-    if not name then name,qty=s:match('^(.-)%s*[%-%вЂ”:]%s*([%d%., ]+)%s*С€С‚%.?%s*$')end
-    if not name then name,qty=s:match('^(.-)%s+[xС…XРҐ]%s*([%d%., ]+)%s*$')end
-    if not name then name,qty=s:match('^(.-)%s*%([xС…XРҐ]%s*([%d%., ]+)%)%s*$')end
+    name,qty=s:match('^(.-)%s*%(%s*([%d%., ]+)%s*шт%.?%s*%)%s*$')
+    if not name then name,qty=s:match('^(.-)%s*%[%s*([%d%., ]+)%s*шт%.?%s*%]%s*$') end
+    if not name then name,qty=s:match('^(.-)%s*[%-%—:]%s*([%d%., ]+)%s*шт%.?%s*$')end
+    if not name then name,qty=s:match('^(.-)%s+[xхXХ]%s*([%d%., ]+)%s*$')end
+    if not name then name,qty=s:match('^(.-)%s*%([xхXХ]%s*([%d%., ]+)%)%s*$')end
     if not name then
         -- Legitimate unlabeled line: show unknown count, never silently x1.
-        if s:find('%$',1,true) or s:find('Р’С‹Р±РµСЂРёС‚Рµ',1,true) or s:find('РќР°Р·Р°Рґ',1,true)
-            or DSP.lower(s):find('РІРјРµСЃС‚РёРјРѕСЃС‚СЊ',1,true) or s:match('^[-=]+$')
-            or s:find('РћС‚РєСЂС‹С‚СЊ',1,true) or s:find('Р—Р°РєСЂС‹С‚СЊ',1,true)
-            or s:find('Р—Р°Р±СЂР°С‚СЊ',1,true) or s:find('РџРѕР»РѕР¶РёС‚СЊ',1,true) then return nil end
+        if s:find('%$',1,true) or s:find('Выберите',1,true) or s:find('Назад',1,true)
+            or DSP.lower(s):find('вместимость',1,true) or s:match('^[-=]+$')
+            or s:find('Открыть',1,true) or s:find('Закрыть',1,true)
+            or s:find('Забрать',1,true) or s:find('Положить',1,true) then return nil end
         name=s
     end
     name=DSP.trim(name or '')
@@ -95,7 +95,7 @@ function S.accept(kind,title,text,ts,source)
     if DSP.settings and DSP.save_settings then
         DSP.settings.storage_snapshots=S.snapshots
         local ok,err=DSP.save_settings()
-        if not ok then S.last_error='РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СЃРЅРёРјРѕРє: '..tostring(err) end
+        if not ok then S.last_error='Не удалось сохранить снимок: '..tostring(err) end
     end
     return true,snap
 end
@@ -107,8 +107,8 @@ function S.on_dialog(id,style,title,text)
     else DSP.flog('STORAGE unavailable '..tostring(err))end
     return ok
 end
-local function market_lookup(name)
-    local row=DSP.market and DSP.market.row_for and DSP.market.row_for(name,0)
+local function market_lookup(name,ench)
+    local row=DSP.market and DSP.market.row_for and DSP.market.row_for(name,ench or 0)
     if not row then return nil,nil end
     local buy=row.buy and tonumber(row.buy.max)
     local sell=row.sell and tonumber(row.sell.min)
@@ -117,6 +117,56 @@ local function market_lookup(name)
     return buy,sell
 end
 S.market_lookup=market_lookup
+function S.item_group_key(row)
+    if tonumber(row.id) and tonumber(row.id)>0 then
+        return 'id:'..tostring(math.floor(tonumber(row.id)))..':'..tostring(tonumber(row.ench) or 0)
+    end
+    return 'name:'..DSP.item_key(row.name or '',tonumber(row.ench) or 0)
+end
+function S.set_manual_price(snapshot, row, amount)
+    local n=tonumber(amount)
+    if not n or n~=n or n<0 or n>9007199254740991 or n%1~=0 then return false,'invalid price' end
+    local found=false
+    for _,s in ipairs(S.snapshots or{}) do if s==snapshot then found=true;break end end
+    if not found then return false,'stale snapshot' end
+    local key=S.item_group_key(row)
+    snapshot.manual_prices=snapshot.manual_prices or {}
+    local previous=snapshot.manual_prices[key]
+    local sid=tostring(snapshot.server or (DSP.market and DSP.market.state and DSP.market.state.sid) or 0)
+    DSP.settings.storage_prices=DSP.settings.storage_prices or {}
+    DSP.settings.storage_prices[sid]=DSP.settings.storage_prices[sid] or {}
+    local global=DSP.settings.storage_prices[sid]
+    local old_global=global[key]
+    global[key]=n>0 and n or nil
+    snapshot.manual_prices[key]=n>0 and n or nil
+    if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            snapshot.manual_prices[key]=previous
+            global[key]=old_global
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true
+end
+function S.set_snapshot_label(snapshot,label)
+    if type(label)~='string' then return false,'invalid label' end
+    label=DSP.trim(DSP.clean_text(label))
+    if #label>66 or label=='' then return false,'name must be 1-66 bytes' end
+    local found=false
+    for _,s in ipairs(S.snapshots or{})do if s==snapshot then found=true;break end end
+    if not found then return false,'stale snapshot' end
+    local previous=snapshot.title
+    snapshot.title=label
+    if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then snapshot.title=previous;return false,tostring(err or ok or 'save error')end
+    end
+    return true
+end
 function S.evaluate(snapshot,lookup)
     lookup=lookup or market_lookup
     local res={total_qty=0,known_qty_rows=0,unknown_qty=0,missing_prices=0,
@@ -124,21 +174,40 @@ function S.evaluate(snapshot,lookup)
     local current=DSP.market and DSP.market.state and DSP.market.state.sid
     local wrong_server=snapshot and snapshot.server and current and tonumber(snapshot.server)~=tonumber(current)
     res.cross_server=not not wrong_server
-    for i,src in ipairs(snapshot and snapshot.rows or {})do
-        local bid,ask
-        if not wrong_server then bid,ask=lookup(src.name) end
-        local row={name=src.name,qty=src.qty,bid=bid,ask=ask,index=i}
-        res.rows[#res.rows+1]=row
+    local by_key={}
+    for i,src in ipairs(snapshot and snapshot.rows or{})do
+        local key=S.item_group_key(src)
+        local row=by_key[key]
+        if not row then
+            row={key=key,name=src.name,ench=src.ench or 0,id=src.id,qty=0,
+                bid=nil,ask=nil,index=i,slots=0,unknown_slots=0}
+            by_key[key]=row;res.rows[#res.rows+1]=row
+            if not wrong_server then row.bid,row.ask=lookup(src.name,src.ench or 0) end
+            local prices=DSP.settings and DSP.settings.storage_prices
+            local server=tostring(snapshot.server or (DSP.market and DSP.market.state and DSP.market.state.sid) or 0)
+            local shared=prices and prices[server]
+            local manual=(snapshot.manual_prices and snapshot.manual_prices[key]) or (shared and shared[key])
+            if manual and tonumber(manual) and tonumber(manual)>0 then
+                row.bid=tonumber(manual);row.manual_price=true
+            end
+        end
+        row.slots=row.slots+1
         if src.qty then
+            row.qty=row.qty+src.qty
             res.total_qty=res.total_qty+src.qty
             res.known_qty_rows=res.known_qty_rows+1
-            if bid then res.sell_to_buyers=res.sell_to_buyers+bid*src.qty;res.estimated_rows=res.estimated_rows+1
+            if row.bid then res.sell_to_buyers=res.sell_to_buyers+row.bid*src.qty;res.estimated_rows=res.estimated_rows+1
             else res.missing_prices=res.missing_prices+1 end
-            if ask then res.ask_value=res.ask_value+ask*src.qty end
-        else res.unknown_qty=res.unknown_qty+1 end
+            if row.ask then res.ask_value=res.ask_value+row.ask*src.qty end
+        else
+            row.unknown_slots=row.unknown_slots+1
+            res.unknown_qty=res.unknown_qty+1
+        end
     end
+    for _,row in ipairs(res.rows) do if row.unknown_slots>0 and row.qty==0 then row.qty=nil end end
     return res
 end
+
 S.sort_cache=setmetatable({},{__mode='k'})
 function S.sorted(snapshot,mode,lookup)
     if not lookup and snapshot then
@@ -153,10 +222,10 @@ function S.sorted(snapshot,mode,lookup)
         if mode=='category' then
             local function cat(n)
                 n=DSP.lower(tostring(n or ''))
-                if n:find('РґСЂРѕРІ',1,true) or n:find('РјРµС‚Р°Р»Р»',1,true) or n:find('РєР°РјРµРЅСЊ',1,true)
-                    or n:find('Р»РµРЅ',1,true) or n:find('С…Р»РѕРї',1,true) then return 1 end
-                if n:find('Р»Р°СЂРµС†',1,true) or n:find('РєРµР№СЃ',1,true) then return 2 end
-                if n:find('РґРµС‚Р°Р»СЊ С‚СЋРЅРёРЅРіР°',1,true) then return 3 end
+                if n:find('дров',1,true) or n:find('металл',1,true) or n:find('камень',1,true)
+                    or n:find('лен',1,true) or n:find('хлоп',1,true) then return 1 end
+                if n:find('ларец',1,true) or n:find('кейс',1,true) then return 2 end
+                if n:find('деталь тюнинга',1,true) then return 3 end
                 return 4
             end
             if cat(a.name)~=cat(b.name)then return cat(a.name)<cat(b.name)end
@@ -176,4 +245,189 @@ function S.sorted(snapshot,mode,lookup)
         S.sort_cache[snapshot]={key=tostring(mode)..'/'..tostring(st.sid)..'/'..tostring(st.version),rows=sorted,info=info}
     end
     return sorted,info
+end
+
+-- Palatka AI v2.2.13 / Packet220 inventory trunk only (type=8).
+-- Runs within __mod_47_storage, after the original storage/sorting functions.
+-- No packet injection, commands, memory hooks or automatic inventory actions.
+S.trunk = S.trunk or {status='idle', received=0, last_error=nil}
+local T = S.trunk
+local TRUNK_TYPE, TRUNK_SLOTS = 8, 180
+local PENDING_TIMEOUT = 15       -- seconds to receive the 180-slot full snapshot
+-- Partial slot changes are intentionally not applied without vehicle identity.
+
+local function valid_slot(v)
+    local n = tonumber(v)
+    if n and n % 1 == 0 and n >= 0 and n < TRUNK_SLOTS then return n end
+    return nil
+end
+
+local function valid_count(v)
+    local n = tonumber(v)
+    if n and n == n and n >= 0 and n <= 2000000000 and n % 1 == 0 then return n end
+    return nil
+end
+
+local function sanitized_slot(it)
+    if type(it) ~= 'table' then return nil end
+    local slot = valid_slot(it.slot)
+    if slot == nil then return nil end
+    local id = it.item == nil and 0 or tonumber(it.item)
+    if not id or id ~= id or id < 0 or id > 2000000000 or id % 1 ~= 0 then return nil end
+    local amount = id > 0 and valid_count(it.amount) or 0
+    return {slot=slot,item_id=id,qty=amount,
+        ench=tonumber(it.enchant) or 0,empty=(id == 0)}
+end
+
+local function parse_payload(raw)
+    if type(raw) ~= 'string' or #raw == 0 or #raw > 100000 then return nil end
+    -- StringCompressor occasionally returns an extra trailing NUL byte.
+    raw = raw:gsub('%z+$','')
+    local ok, obj = pcall(decodeJson, raw)
+    if not ok or type(obj) ~= 'table' or tonumber(obj.type) ~= TRUNK_TYPE
+        or type(obj.items) ~= 'table' or #obj.items > TRUNK_SLOTS then return nil end
+    local normalized, used = {}, {}
+    for _, item in ipairs(obj.items) do
+        local sl = sanitized_slot(item)
+        if not sl or used[sl.slot] then return nil end
+        used[sl.slot] = true
+        normalized[#normalized+1] = sl
+    end
+    return normalized
+end
+
+local function active_snapshot()
+    for _, s in ipairs(S.snapshots or {}) do
+        if s.source == 'packet220_trunk' and s.kind == 'trunk' then return s end
+    end
+    return nil
+end
+
+local function build_rows(slots)
+    local rows, count, occupied = {}, 0, 0
+    for i=0,TRUNK_SLOTS-1 do
+        local v = slots[i+1]
+        if v and v.item_id and v.item_id > 0 then
+            local name = DSP.items and DSP.items.name and DSP.items.name(v.item_id)
+                or ('ID:'..tostring(v.item_id))
+            if type(name) ~= 'string' or name == '' then name='ID:'..tostring(v.item_id) end
+            rows[#rows+1] = {
+                slot=i,id=v.item_id,name=name,ench=v.ench or 0,
+                qty=v.qty,quantity_confirmed=v.qty ~= nil,
+            }
+            occupied=occupied+1
+            if v.qty then count=count+v.qty end
+        end
+    end
+    return rows,count,occupied
+end
+
+local function save_snapshot(slots, source_reason)
+    local ts=os.time()
+    local rows, total, occupied = build_rows(slots)
+    local previous = active_snapshot()
+    local snap={
+        id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
+        kind='trunk',
+        -- No persistent vehicle identity in observed packet. This is ALWAYS the last opened trunk.
+        title=DSP.to_cp and DSP.to_cp('РџРѕСЃР»РµРґРЅРёР№ РѕС‚РєСЂС‹С‚С‹Р№ Р±Р°РіР°Р¶РЅРёРє') or 'Last opened trunk',
+        source='packet220_trunk', identity_verified=false,
+        observed_at=ts, updated_at=ts, server=DSP.market and DSP.market.state and DSP.market.state.sid or nil,
+        slots_count=TRUNK_SLOTS, occupied_slots=occupied,count_known=total,
+        rows=rows, slots=slots, update_kind=source_reason,
+    }
+    -- One latest trunk, not a fabricated history of unique cars. Preserve manual and legacy snapshots.
+    local new_list={snap}
+    for _, old in ipairs(S.snapshots or {}) do
+        if old.source ~= 'packet220_trunk' then
+            new_list[#new_list+1]=old
+            if #new_list >= 8 then break end
+        end
+    end
+    -- Keep the old verified snapshot until the new one is safely persisted.
+    local old_list=S.snapshots
+    local old_saved=DSP.settings and DSP.settings.storage_snapshots
+    local old_snap,old_updated=T.snapshot,T.last_update
+    local old_occ,old_total=T.occupied,T.total
+    S.snapshots=new_list
+    if DSP.settings then DSP.settings.storage_snapshots=new_list end
+    T.snapshot=snap;T.last_update=ts;T.status='saved';T.received=TRUNK_SLOTS
+    T.occupied=occupied;T.total=total
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=old_list
+            if DSP.settings then DSP.settings.storage_snapshots=old_saved end
+            T.snapshot=old_snap;T.last_update=old_updated
+            T.occupied=old_occ;T.total=old_total
+            T.status='save_error'
+            T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
+            if DSP.flog then DSP.flog('TRUNK save failed: '..T.last_error) end
+            return false
+        end
+    end
+    T.last_error=nil
+    if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots=180 occupied='..occupied..' count='..total) end
+    return true
+end
+
+-- No vehicle/container ID is exposed by the observed packets. A partial
+-- update could belong to an entirely different trunk. Never merge it into
+-- a previously saved snapshot without a verified identity.
+
+-- Only handles JSON with type=8; never processes other inventory blocks (market/player/etc).
+function S.on_inventory_packet(sub, raw)
+    -- Real trunk full snapshots use subid=0. subid=2 carries a separate slot
+    -- namespace for other inventory blocks; never merge it with trunk slots.
+    if tonumber(sub)~=0 then return false end
+    local items=parse_payload(raw)
+    if not items or #items == 0 then return false end
+    local ts=os.time()
+    if T.pending and (ts-T.pending.started)>PENDING_TIMEOUT then
+        T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
+    end
+    local starts_full=(sub==0 and #items>=8 and items[1].slot==0)
+    if starts_full then
+        T.pending={slots={},seen={},count=0,started=ts}
+        T.status='receiving';T.received=0;T.last_error=nil
+    end
+    if T.pending then
+        local p=T.pending
+        for _,v in ipairs(items) do
+            if not p.seen[v.slot] then p.seen[v.slot]=true;p.count=p.count+1 end
+            p.slots[v.slot+1]=v
+        end
+        T.received=p.count
+        if p.count==TRUNK_SLOTS then
+            -- Full snapshot is committed only after ALL slots 0..179 were seen.
+            local complete=true
+            for i=1,TRUNK_SLOTS do if not p.slots[i] then complete=false;break end end
+            if complete then
+                T.pending=nil
+                save_snapshot(p.slots,'full')
+            end
+        end
+        return true
+    end
+    -- Small updates cannot be assigned to the current vehicle reliably.
+    -- Leave the last complete 180-slot snapshot untouched.
+    if #items<=5 and T.snapshot then
+        T.status='unverified_delta'
+        T.last_error='Частичное изменение пропущено: ID машины неизвестен. Открой багажник заново.'
+        return false
+    end
+    T.status='unknown_partial'
+    return false
+end
+
+-- Load the most recently persisted trunk as read-only history after restart.
+T.snapshot=active_snapshot()
+if T.snapshot then T.status='saved_from_disk';T.occupied=T.snapshot.occupied_slots;T.total=T.snapshot.count_known end
+
+-- Refresh timeout status when the scanner panel is drawn, even if no more packets arrive.
+function S.trunk_state()
+    if T.pending and os.time()-T.pending.started>PENDING_TIMEOUT then
+        T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
+    end
+    return T
 end

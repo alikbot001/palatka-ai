@@ -8,7 +8,7 @@ local function library(kind)
     local list_key, active_key, legacy = keys(kind)
     local s = DSP.settings
     if type(s[list_key]) ~= 'table' or #s[list_key] == 0 then
-        s[list_key] = {s[legacy] or {name = 'РџСЂРµСЃРµС‚ 1', items = {}}}
+        s[list_key] = {s[legacy] or {name = 'Пресет 1', items = {}}}
     end
     local idx = math.max(1, math.min(#s[list_key], tonumber(s[active_key]) or 1))
     s[active_key], s[legacy] = idx, s[list_key][idx]
@@ -25,19 +25,19 @@ end
 function P.list(kind) return (library(kind)) end
 function P.selected(kind) local _, idx = library(kind); return idx end
 function P.select(kind, idx)
-    if busy() then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
+    if busy() then return false, 'остановите автоматизацию' end
     return P._transaction(function()
         local list = library(kind)
-        if not list[idx] then return false, 'РЅРµС‚ РїСЂРµСЃРµС‚Р°' end
+        if not list[idx] then return false, 'нет пресета' end
         local _, active, legacy = keys(kind)
         DSP.settings[active], DSP.settings[legacy] = idx, list[idx]
         return true
     end)
 end
 function P.create(kind, name)
-    if busy() then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
+    if busy() then return false, 'остановите автоматизацию' end
     name = tostring(name or ''):match('^%s*(.-)%s*$')
-    if name == '' then return false, 'РІРІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ' end
+    if name == '' then return false, 'введите название' end
     return P._transaction(function()
         local list = library(kind)
         list[#list + 1] = {name = name, items = {}}
@@ -47,19 +47,19 @@ function P.create(kind, name)
     end)
 end
 function P.rename(kind, idx, name)
-    if busy() then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
+    if busy() then return false, 'остановите автоматизацию' end
     name = tostring(name or ''):match('^%s*(.-)%s*$')
     return P._transaction(function()
         local list = library(kind)
-        if not list[idx] or name == '' then return false, 'РЅРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РЅР°Р·РІР°РЅРёРµ' end
+        if not list[idx] or name == '' then return false, 'некорректное название' end
         list[idx].name = name; return true
     end)
 end
 function P.delete(kind, idx)
-    if busy() then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
+    if busy() then return false, 'остановите автоматизацию' end
     return P._transaction(function()
         local list, active = library(kind)
-        if #list <= 1 or not list[idx] then return false, 'РЅСѓР¶РµРЅ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ РїСЂРµСЃРµС‚' end
+        if #list <= 1 or not list[idx] then return false, 'нужен хотя бы один пресет' end
         table.remove(list, idx)
         if idx < active then active = active - 1 end
         local _,active_key,legacy=keys(kind)
@@ -69,13 +69,13 @@ function P.delete(kind, idx)
     end)
 end
 function P.update(kind, idx, changes)
-    if busy() then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
+    if busy() then return false, 'остановите автоматизацию' end
     local it = P.items(kind)[idx]
-    if not it or type(changes) ~= 'table' then return false, 'РЅРµС‚ РїРѕР·РёС†РёРё' end
+    if not it or type(changes) ~= 'table' then return false, 'нет позиции' end
     local price = changes.price ~= nil and positive(changes.price) or it.price
     local qty = changes.qty ~= nil and positive(changes.qty) or it.qty
     if (changes.price ~= nil and not positive(changes.price)) or
-        (changes.qty ~= nil and not positive(changes.qty)) then return false, 'РЅСѓР¶РЅРѕ РїРѕР»РѕР¶РёС‚РµР»СЊРЅРѕРµ С†РµР»РѕРµ С‡РёСЃР»Рѕ' end
+        (changes.qty ~= nil and not positive(changes.qty)) then return false, 'нужно положительное целое число' end
     return P._transaction(function()
         it.price, it.qty = price, qty
         if positive(price) then it.needs_price = nil end
@@ -106,19 +106,19 @@ local function normalize(items, kind)
     return result
 end
 function P.add_manual(kind, item)
-    if busy() then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
-    if type(item) ~= 'table' then return false, 'РЅРµС‚ РїРѕР·РёС†РёРё' end
+    if busy() then return false, 'остановите автоматизацию' end
+    if type(item) ~= 'table' then return false, 'нет позиции' end
     local name = tostring(item.name or ''):match('^%s*(.-)%s*$')
     local unpriced = tonumber(item.price) == 0 and item.enabled == false and item.needs_price == true
     if name == '' or (not positive(item.price) and not unpriced) or not positive(item.qty or 1) then
-        return false, 'СѓРєР°Р¶РёС‚Рµ РЅР°Р·РІР°РЅРёРµ, РїРѕР»РѕР¶РёС‚РµР»СЊРЅСѓСЋ С†РµРЅСѓ Рё РєРѕР»РёС‡РµСЃС‚РІРѕ'
+        return false, 'укажите название, положительную цену и количество'
     end
     local ench = tonumber(item.ench or name:match('%(%+(%d+)%)%s*$')) or 0
-    if ench < 0 or ench % 1 ~= 0 then return false, 'РЅРµРєРѕСЂСЂРµРєС‚РЅРѕРµ СѓР»СѓС‡С€РµРЅРёРµ' end
+    if ench < 0 or ench % 1 ~= 0 then return false, 'некорректное улучшение' end
     local rows = normalize({{name = name, ench = ench, price = tonumber(item.price),
         max_price = tonumber(item.price), qty = item.qty or 1, enabled = item.enabled, cost_price = item.cost_price}}, kind)
-    if not rows then return false, 'РЅРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РїРѕР·РёС†РёСЏ' end
-    if P.find(kind, rows[1].key) then return false, 'РїРѕР·РёС†РёСЏ СѓР¶Рµ РµСЃС‚СЊ РІ РїСЂРµСЃРµС‚Рµ' end
+    if not rows then return false, 'некорректная позиция' end
+    if P.find(kind, rows[1].key) then return false, 'позиция уже есть в пресете' end
     local items = P.items(kind)
     return P._transaction(function()
         items[#items + 1] = rows[1]
@@ -126,35 +126,35 @@ function P.add_manual(kind, item)
     end)
 end
 function P.import_data(data, kind)
-    if busy() then return false, 'РѕСЃС‚Р°РЅРѕРІРёС‚Рµ Р°РІС‚РѕРјР°С‚РёР·Р°С†РёСЋ' end
-    if type(data) ~= 'table' then return false, 'РЅРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚' end
+    if busy() then return false, 'остановите автоматизацию' end
+    if type(data) ~= 'table' then return false, 'неверный формат' end
     local pending = {}
     local function add(k, p)
         if type(p) ~= 'table' or type(p.items) ~= 'table' then return false end
         local items = normalize(p.items, k)
         if not items then return false end
-        pending[#pending + 1] = {kind = k, preset = {name = DSP.text_cp(p.name or 'РРјРїРѕСЂС‚'), items = items}}
+        pending[#pending + 1] = {kind = k, preset = {name = DSP.text_cp(p.name or 'Импорт'), items = items}}
         return true
     end
     if data.items then
         local k = kind or data.kind
-        if k ~= 'buy' and k ~= 'sell' then return false, 'СѓРєР°Р¶РёС‚Рµ С‚РёРї РїСЂРµСЃРµС‚Р°' end
-        if not add(k, data) then return false, 'РЅРµРІРµСЂРЅС‹Рµ РїРѕР·РёС†РёРё' end
+        if k ~= 'buy' and k ~= 'sell' then return false, 'укажите тип пресета' end
+        if not add(k, data) then return false, 'неверные позиции' end
     else
         for _, k in ipairs({'buy', 'sell'}) do
             local list = k == 'buy' and data.buy_presets or (data.presets or data.sell_presets)
             if type(list) == 'table' and #list > 0 then
-                for _, p in ipairs(list) do if not add(k, p) then return false, 'РЅРµРІРµСЂРЅС‹Рµ РїРѕР·РёС†РёРё' end end
+                for _, p in ipairs(list) do if not add(k, p) then return false, 'неверные позиции' end end
             else
                 local p = data[k .. '_preset']
                 local old = data[k == 'buy' and 'autobuy_preset' or 'autosell_preset']
                     or data[k == 'buy' and 'autobuy_items' or 'autosell_items']
-                if p and not add(k, p) then return false, 'РЅРµРІРµСЂРЅС‹Рµ РїРѕР·РёС†РёРё' end
-                if not p and old and not add(k, {items = old}) then return false, 'РЅРµРІРµСЂРЅС‹Рµ РїРѕР·РёС†РёРё' end
+                if p and not add(k, p) then return false, 'неверные позиции' end
+                if not p and old and not add(k, {items = old}) then return false, 'неверные позиции' end
             end
         end
     end
-    if #pending == 0 then return false, 'РЅРµС‚ РїСЂРµСЃРµС‚РѕРІ' end
+    if #pending == 0 then return false, 'нет пресетов' end
     return P._transaction(function()
         local count, imported = 0, {}
         for _, entry in ipairs(pending) do
@@ -192,7 +192,7 @@ function P.import_file(path, kind)
     local closed,close_err=f:close()
     if not raw or not closed then return false,read_err or close_err end
     local ok, data = pcall(decodeJson, raw)
-    if not ok then return false, 'РѕС€РёР±РєР° JSON' end
+    if not ok then return false, 'ошибка JSON' end
     return P.import_data(data, kind)
 end
 function P.export_file(kind, path)
@@ -201,7 +201,7 @@ function P.export_file(kind, path)
         path = DSP.dir .. '/Preset/' .. kind .. '_' .. os.date('%Y%m%d_%H%M%S') .. '.json'
     end
     local ok, raw = pcall(encodeJson, P.export_data(kind))
-    if not ok or type(raw) ~= 'string' then return false, 'РѕС€РёР±РєР° JSON' end
+    if not ok or type(raw) ~= 'string' then return false, 'ошибка JSON' end
     local temporary=path..'.tmp'
     local f, err = io.open(temporary, 'wb')
     if not f then return false, err end
@@ -221,6 +221,6 @@ function P.import_mh()
         local f = io.open(root .. name, 'rb')
         if f then f:close(); return P.import_file(root .. name) end
     end
-    return false, 'РЅР°СЃС‚СЂРѕР№РєРё Market Helper РЅРµ РЅР°Р№РґРµРЅС‹'
+    return false, 'настройки Market Helper не найдены'
 end
 library('buy'); library('sell')

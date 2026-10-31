@@ -3,7 +3,7 @@ local ffi=require('ffi')
 local M=DSP.mobile
 local U=DSP.ui
 local function report(ok,detail)
-    DSP.notify(ok and ('Р“РѕС‚РѕРІРѕ: '..tostring(detail or '')) or ('РћС€РёР±РєР°: '..tostring(detail or '')))
+    DSP.notify(ok and ('Готово: '..tostring(detail or '')) or ('Ошибка: '..tostring(detail or '')))
 end
 local function set_price(kind,it,value)
     it.price=math.max(1,math.floor(value))
@@ -25,7 +25,7 @@ local function item_card(kind,it,index)
             it.enabled=tick[0]; if M.defer_save then M.defer_save() else DSP.save_settings() end
         end
     else
-        M.toggle('Р’С‹СЃС‚Р°РІР»СЏС‚СЊ##'..id,it,'enabled',valid)
+        M.toggle('Выставлять##'..id,it,'enabled',valid)
     end
     M.inline()
     if imgui.SameLine then
@@ -38,14 +38,14 @@ local function item_card(kind,it,index)
     if row then
         local buy=row.buy and row.buy.max or 0
         local sell=row.sell and row.sell.min or 0
-        M.text('Р С‹РЅРѕРє: РїСЂРѕРґР°СЋС‚ '..DSP.money(sell)..' / СЃРєСѓРїР°СЋС‚ '..DSP.money(buy))
+        M.text('Рынок: продают '..DSP.money(sell)..' / скупают '..DSP.money(buy))
     end
     local available=imgui.GetContentRegionAvail and imgui.GetContentRegionAvail().x or 700
     local price_w=math.max(110,math.floor(available*.42))
     local qty_w=math.max(80,math.floor(available*.28))
-    imgui.TextDisabled(DSP.utf8('Р¦РµРЅР° ($/С€С‚.)'))
+    imgui.TextDisabled(DSP.utf8('Цена ($/шт.)'))
     M.inline()
-    imgui.TextDisabled(DSP.utf8('РљРѕР»РёС‡РµСЃС‚РІРѕ'))
+    imgui.TextDisabled(DSP.utf8('Количество'))
     imgui.SetNextItemWidth(price_w)
     if M.compact_number(it,'price','p_'..id,price_w,1) then it.needs_price=nil end
     M.inline()
@@ -55,48 +55,48 @@ local function item_card(kind,it,index)
         DSP.presets.remove(kind,index)
         return true
     end
-    if not valid then M.text('РќРµ РІС‹СЃС‚Р°РІР»СЏРµС‚СЃСЏ: СѓРєР°Р¶РёС‚Рµ С†РµРЅСѓ Рё РєРѕР»РёС‡РµСЃС‚РІРѕ.') end
+    if not valid then M.text('Не выставляется: укажите цену и количество.') end
     return false
 end
 local function preset_library(kind,p)
     if not DSP.presets.list then return end
     U.preset_name_buf=U.preset_name_buf or imgui.new.char[128]()
-    M.title('РќР°Р±РѕСЂС‹ С‚РѕРІР°СЂРѕРІ')
+    M.title('Наборы товаров')
     local list=DSP.presets.list(kind)
     for i,entry in ipairs(list) do
-        if M.button(entry.name or ('РќР°Р±РѕСЂ '..i),'preset'..kind..i,300,DSP.presets.selected(kind)==i) then
+        if M.button(entry.name or ('Набор '..i),'preset'..kind..i,300,DSP.presets.selected(kind)==i) then
             report(DSP.presets.select(kind,i))
         end
     end
     imgui.SetNextItemWidth(360)
-    imgui.InputTextWithHint('##preset_name',DSP.utf8('РќР°Р·РІР°РЅРёРµ РЅР°Р±РѕСЂР°'),U.preset_name_buf,128)
-    if M.button('РЎРѕР·РґР°С‚СЊ РЅР°Р±РѕСЂ','create_preset',250) then report(DSP.presets.create(kind,DSP.to_cp(ffi.string(U.preset_name_buf)))) end
+    imgui.InputTextWithHint('##preset_name',DSP.utf8('Название набора'),U.preset_name_buf,128)
+    if M.button('Создать набор','create_preset',250) then report(DSP.presets.create(kind,DSP.to_cp(ffi.string(U.preset_name_buf)))) end
     M.inline()
-    if M.button('РџРµСЂРµРёРјРµРЅРѕРІР°С‚СЊ','rename_preset',280) then report(DSP.presets.rename(kind,DSP.presets.selected(kind),DSP.to_cp(ffi.string(U.preset_name_buf)))) end
-    if M.button('РЈРґР°Р»РёС‚СЊ СЌС‚РѕС‚ РЅР°Р±РѕСЂ','delete_preset',350) then
+    if M.button('Переименовать','rename_preset',280) then report(DSP.presets.rename(kind,DSP.presets.selected(kind),DSP.to_cp(ffi.string(U.preset_name_buf)))) end
+    if M.button('Удалить этот набор','delete_preset',350) then
         U.confirm_delete=not U.confirm_delete
     end
     if U.confirm_delete then
-        M.text('РЈРґР°Р»РёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ РЅР°Р±РѕСЂ С‚РѕРІР°СЂРѕРІ?')
-        if M.button('Р”Р°, СѓРґР°Р»РёС‚СЊ РЅР°Р±РѕСЂ','confirm_delete',350) then
+        M.text('Удалить выбранный набор товаров?')
+        if M.button('Да, удалить набор','confirm_delete',350) then
             report(DSP.presets.delete(kind,DSP.presets.selected(kind))); U.confirm_delete=false
         end
     end
     imgui.Separator()
-    if M.button('РРјРїРѕСЂС‚ Market Helper','import_mh',350) then report(DSP.presets.import_mh()) end
+    if M.button('Импорт Market Helper','import_mh',350) then report(DSP.presets.import_mh()) end
     M.inline()
-    if DSP.presets.export_file and M.button('Р­РєСЃРїРѕСЂС‚ РЅР°Р±РѕСЂР°','export_preset',300) then report(DSP.presets.export_file(kind)) end
+    if DSP.presets.export_file and M.button('Экспорт набора','export_preset',300) then report(DSP.presets.export_file(kind)) end
     if DSP.presets.import_file then
         U.import_path_buf=U.import_path_buf or imgui.new.char[512]()
         imgui.SetNextItemWidth(math.min(800,imgui.GetContentRegionAvail().x))
-        imgui.InputTextWithHint('##import_path',DSP.utf8('РџРѕР»РЅС‹Р№ РїСѓС‚СЊ Рє JSON С„Р°Р№Р»Сѓ РЅР°Р±РѕСЂР°'),U.import_path_buf,512)
-        if M.button('РРјРїРѕСЂС‚ С„Р°Р№Р»Р°','import_file',300) then report(DSP.presets.import_file(DSP.to_cp(ffi.string(U.import_path_buf)),kind)) end
+        imgui.InputTextWithHint('##import_path',DSP.utf8('Полный путь к JSON файлу набора'),U.import_path_buf,512)
+        if M.button('Импорт файла','import_file',300) then report(DSP.presets.import_file(DSP.to_cp(ffi.string(U.import_path_buf)),kind)) end
     end
 end
 local function inventory(kind)
-    M.text('РРЅРІРµРЅС‚Р°СЂСЊ: '..tostring(DSP.auto.inv_status or 'РЅРµ СЃРєР°РЅРёСЂРѕРІР°РЅ'))
-    if M.button('РЎРєР°РЅРёСЂРѕРІР°С‚СЊ РёРЅРІРµРЅС‚Р°СЂСЊ','scan_inventory',400) then DSP.auto.scan_inventory() end
-    M.text('РћС‚РєСЂРѕР№С‚Рµ РёРЅРІРµРЅС‚Р°СЂСЊ РІ РёРіСЂРµ; РґРѕР±Р°РІР»СЏР№С‚Рµ С‚РѕРІР°СЂС‹ РІ РЅСѓР¶РЅСѓСЋ СЃС‚РѕСЂРѕРЅСѓ С‚РѕСЂРіРѕРІР»Рё.')
+    M.text('Инвентарь: '..tostring(DSP.auto.inv_status or 'не сканирован'))
+    if M.button('Сканировать инвентарь','scan_inventory',400) then DSP.auto.scan_inventory() end
+    M.text('Откройте инвентарь в игре; добавляйте товары в нужную сторону торговли.')
     for i,it in ipairs(DSP.auto.inv or {}) do
         M.text(tostring(it.name or '?')..' x'..tostring(it.count or 0))
         local name=tostring(it.name or '')
@@ -104,13 +104,13 @@ local function inventory(kind)
         local base=name:gsub('%s+%(%+%d+%)%s*$','')
         local row=DSP.market.row_for(base,ench)
         if row then
-            if M.button('Р’ СЃРєСѓРїРєСѓ','inv_buy'..i,240) then report(DSP.presets.add(row,'buy')) end
+            if M.button('В скупку','inv_buy'..i,240) then report(DSP.presets.add(row,'buy')) end
             M.inline()
-            if M.button('Р’ РїСЂРѕРґР°Р¶Сѓ','inv_sell'..i,240) then report(DSP.presets.add(row,'sell')) end
+            if M.button('В продажу','inv_sell'..i,240) then report(DSP.presets.add(row,'sell')) end
         else
-            M.text('Р С‹РЅРѕС‡РЅРѕР№ С†РµРЅС‹ РЅРµС‚. Р”РѕР±Р°РІСЊС‚Рµ С‚РѕРІР°СЂ Рё Р·Р°РґР°Р№С‚Рµ СЃРІРѕСЋ С†РµРЅСѓ РІ РЅР°Р±РѕСЂРµ.')
+            M.text('Рыночной цены нет. Добавьте товар и задайте свою цену в наборе.')
             for _,side in ipairs({'buy','sell'}) do
-                local label=side=='buy' and 'Р’ СЃРєСѓРїРєСѓ / Р·Р°РґР°С‚СЊ С†РµРЅСѓ' or 'Р’ РїСЂРѕРґР°Р¶Сѓ / Р·Р°РґР°С‚СЊ С†РµРЅСѓ'
+                local label=side=='buy' and 'В скупку / задать цену' or 'В продажу / задать цену'
                 if M.button(label,'inv_unknown_'..side..i,430) then
                     local ok,err=DSP.presets.add_manual(side,{name=base,ench=ench,price=0,
                         qty=math.max(1,tonumber(it.count or it.qty) or 1),enabled=false,needs_price=true})
@@ -127,18 +127,18 @@ local function manual_entry(kind)
     U.manual_item=U.manual_item or {ench=0,price=1,qty=1}
     U.manual_name=U.manual_name or imgui.new.char[256]()
     local item=U.manual_item
-    M.title('Р”РћР‘РђР’РРўР¬ РўРћР’РђР  Р’Р РЈР§РќРЈР®')
-    M.text('РўРѕС‡РЅРѕРµ РЅР°Р·РІР°РЅРёРµ РєР°Рє РІ РёРіСЂРµ. Р С‹РЅРѕС‡РЅР°СЏ Р±Р°Р·Р° РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ.')
+    M.title('ДОБАВИТЬ ТОВАР ВРУЧНУЮ')
+    M.text('Точное название как в игре. Рыночная база не требуется.')
     imgui.SetNextItemWidth(math.min(850,imgui.GetContentRegionAvail().x))
-    imgui.InputTextWithHint('##manual_name',DSP.utf8('РќР°Р·РІР°РЅРёРµ С‚РѕРІР°СЂР°'),U.manual_name,256)
-    M.number('Р—Р°С‚РѕС‡РєР°, 0 = Р±РµР· Р·Р°С‚РѕС‡РєРё','manual_ench',item,'ench',0,300)
-    M.number('Р’Р°С€Р° С†РµРЅР° Р·Р° 1 С€С‚. ($)','manual_price',item,'price',1,350)
-    M.number('РљРѕР»РёС‡РµСЃС‚РІРѕ','manual_qty',item,'qty',1,300)
-    if M.button('Р”РѕР±Р°РІРёС‚СЊ РІ '..(kind=='buy' and 'СЃРєСѓРїРєСѓ' or 'РїСЂРѕРґР°Р¶Сѓ'),'manual_add',480) then
+    imgui.InputTextWithHint('##manual_name',DSP.utf8('Название товара'),U.manual_name,256)
+    M.number('Заточка, 0 = без заточки','manual_ench',item,'ench',0,300)
+    M.number('Ваша цена за 1 шт. ($)','manual_price',item,'price',1,350)
+    M.number('Количество','manual_qty',item,'qty',1,300)
+    if M.button('Добавить в '..(kind=='buy' and 'скупку' or 'продажу'),'manual_add',480) then
         local draft={name=DSP.to_cp(ffi.string(U.manual_name)),enabled=true}
         for _,field in ipairs({{'ench',0},{'price',1},{'qty',1}}) do
             if not M.apply_number(draft,field[1],M.edit_buffer(item,field[1]),field[2]) then
-                DSP.notify('РџСЂРѕРІРµСЂСЊС‚Рµ Р·Р°С‚РѕС‡РєСѓ, С†РµРЅСѓ Рё РєРѕР»РёС‡РµСЃС‚РІРѕ'); return
+                DSP.notify('Проверьте заточку, цену и количество'); return
             end
         end
         local ok,err=DSP.presets.add_manual(kind,draft)
@@ -150,14 +150,14 @@ end
 local function catalog_picker(kind)
     U.catalog_search=U.catalog_search or imgui.new.char[128]()
     imgui.SetNextItemWidth(math.min(760,imgui.GetContentRegionAvail().x))
-    imgui.InputTextWithHint('##catalog_quick_search',DSP.utf8('РќР°Р№С‚Рё С‚РѕРІР°СЂ РїРѕ РЅР°Р·РІР°РЅРёСЋ...'),U.catalog_search,128)
+    imgui.InputTextWithHint('##catalog_quick_search',DSP.utf8('Найти товар по названию...'),U.catalog_search,128)
     local query=DSP.to_cp(ffi.string(U.catalog_search))
     if DSP.trim(query)=='' then
-        M.text('Р’РІРµРґРёС‚Рµ РЅРµСЃРєРѕР»СЊРєРѕ Р±СѓРєРІ РЅР°Р·РІР°РЅРёСЏ С‚РѕРІР°СЂР° РёР· Р±Р°Р·С‹ СЂС‹РЅРєР°.')
+        M.text('Введите несколько букв названия товара из базы рынка.')
         return
     end
     local rows=DSP.market.find_item(query)
-    M.text('РќР°Р№РґРµРЅРѕ: '..#rows..' | РџРѕРєР°Р·Р°РЅС‹ РїРµСЂРІС‹Рµ 12')
+    M.text('Найдено: '..#rows..' | Показаны первые 12')
     for i=1,math.min(12,#rows) do
         local row=rows[i]
         imgui.Separator()
@@ -165,9 +165,9 @@ local function catalog_picker(kind)
         M.thumbnail({name=row.display,id=row.id},48)
         M.text(row.display)
         imgui.NextColumn()
-        if M.button('+ Р”РѕР±Р°РІРёС‚СЊ','catalog_add'..i,240) then
+        if M.button('+ Добавить','catalog_add'..i,240) then
             local ok,err=DSP.presets.add(row,kind)
-            if not ok and err=='РЅРµС‚ С†РµРЅС‹ РґР»СЏ СЂР°СЃС‡С‘С‚Р°' then
+            if not ok and err=='нет цены для расчёта' then
                 ok,err=DSP.presets.add_manual(kind,{
                     name=row.name or row.display,ench=row.ench or 0,key=row.key,
                     price=0,qty=1,enabled=false,needs_price=true,
@@ -178,7 +178,7 @@ local function catalog_picker(kind)
         end
         imgui.Columns(1)
     end
-    if #rows==0 then M.text('РќРµС‚ РІ СЂС‹РЅРєРµ. РџРµСЂРµР№РґРёС‚Рµ РЅР° В«Р’СЂСѓС‡РЅСѓСЋВ» Рё СѓРєР°Р¶РёС‚Рµ С†РµРЅСѓ.') end
+    if #rows==0 then M.text('Нет в рынке. Перейдите на «Вручную» и укажите цену.') end
 end
 
 -- Compact two-column editor based on the practical Market Helper workflow.
@@ -218,7 +218,7 @@ local function picker_row(kind,it,idx,source)
     M.thumbnail(it,30)
     M.inline()
     M.text(tostring(it.display or it.name or '?')..(source=='inventory' and (' x'..tostring(it.count or it.qty or 1)) or ''))
-    if M.button('+ Р’ РЅР°Р±РѕСЂ','mh_pick_'..source..idx,185) then
+    if M.button('+ В набор','mh_pick_'..source..idx,185) then
         local ok,err
         if source=='inventory' then
             local name=tostring(it.name or '')
@@ -230,7 +230,7 @@ local function picker_row(kind,it,idx,source)
                 qty=math.max(1,tonumber(it.count or it.qty) or 1),enabled=false,needs_price=true}) end
         else
             ok,err=DSP.presets.add(it,kind)
-            if not ok and err=='РЅРµС‚ С†РµРЅС‹ РґР»СЏ СЂР°СЃС‡С‘С‚Р°' then
+            if not ok and err=='нет цены для расчёта' then
                 ok,err=DSP.presets.add_manual(kind,{name=it.name or it.display,ench=it.ench or 0,
                     price=0,qty=1,enabled=false,needs_price=true})
             end
@@ -246,25 +246,25 @@ function U.trade_tab()
     local running=DSP.auto.buy_running or DSP.auto.sell_running
     -- Keep advanced management accessible without occupying the everyday workspace.
     if U.trade_section=='library' then
-        if M.button('< РќР°Р·Р°Рґ Рє С‚РѕСЂРіРѕРІР»Рµ','mh_back_library',250) then U.trade_section='items' end
+        if M.button('< Назад к торговле','mh_back_library',250) then U.trade_section='items' end
         preset_library(kind)
         return
     elseif U.trade_section=='manual' then
-        if M.button('< РќР°Р·Р°Рґ Рє С‚РѕСЂРіРѕРІР»Рµ','mh_back_manual',250) then U.trade_section='items' end
+        if M.button('< Назад к торговле','mh_back_manual',250) then U.trade_section='items' end
         manual_entry(kind)
         return
     end
-    if M.button('РЎРљРЈРџРљРђ','kind_buy',210,kind=='buy','segment') then
+    if M.button('СКУПКА','kind_buy',210,kind=='buy','segment') then
         U.preset_kind='buy';kind='buy';U.trade_preset_page=1
     end
     M.inline()
-    if M.button('РџР РћР”РђР–Рђ','kind_sell',210,kind=='sell','segment') then
+    if M.button('ПРОДАЖА','kind_sell',210,kind=='sell','segment') then
         U.preset_kind='sell';kind='sell';U.trade_preset_page=1
     end
     local p=kind=='buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
     local list=DSP.presets.list(kind)
     local selected=DSP.presets.selected(kind)
-    M.text('РќР°Р±РѕСЂ: '..tostring(p.name or 'РћСЃРЅРѕРІРЅРѕР№'))
+    M.text('Набор: '..tostring(p.name or 'Основной'))
     if M.button('<','preset_prev',68) and not running then
         DSP.presets.select(kind,selected>1 and selected-1 or #list)
     end
@@ -273,9 +273,9 @@ function U.trade_tab()
         DSP.presets.select(kind,selected<#list and selected+1 or 1)
     end
     M.inline()
-    if M.button('РџСЂРµСЃРµС‚С‹','trade_library',160) then U.trade_section='library';return end
+    if M.button('Пресеты','trade_library',160) then U.trade_section='library';return end
     M.inline()
-    if M.button('Р”РѕР±Р°РІРёС‚СЊ РІСЂСѓС‡РЅСѓСЋ','trade_manual',230) then U.trade_section='manual';return end
+    if M.button('Добавить вручную','trade_manual',230) then U.trade_section='manual';return end
     -- Shared availability: on smaller windows switch between the two panels
     -- instead of crushing numeric controls into unreadable columns.
     local available=imgui.GetContentRegionAvail and imgui.GetContentRegionAvail() or {x=900,y=600}
@@ -286,29 +286,29 @@ function U.trade_tab()
     local two=total_width>=980 and M.child~=nil
     local panel_h=math.max(160,height-102)
     if not two then
-        if M.button('Р”РѕР±Р°РІРёС‚СЊ С‚РѕРІР°СЂ','mh_switch_picker',190,U.trade_narrow_picker) then U.trade_narrow_picker=true end
+        if M.button('Добавить товар','mh_switch_picker',190,U.trade_narrow_picker) then U.trade_narrow_picker=true end
         M.inline()
-        if M.button('РњРѕР№ РЅР°Р±РѕСЂ','mh_switch_preset',180,not U.trade_narrow_picker) then U.trade_narrow_picker=false end
+        if M.button('Мой набор','mh_switch_preset',180,not U.trade_narrow_picker) then U.trade_narrow_picker=false end
     end
     local function draw_picker()
-        if M.button('РРЅРІРµРЅС‚Р°СЂСЊ','mh_source_inv',182,picker=='inventory') then picker='inventory';U.trade_picker=picker;U.trade_picker_page=1 end
+        if M.button('Инвентарь','mh_source_inv',182,picker=='inventory') then picker='inventory';U.trade_picker=picker;U.trade_picker_page=1 end
         M.inline()
-        if M.button('РџРѕРёСЃРє','mh_source_catalog',144,picker=='catalog') then picker='catalog';U.trade_picker=picker;U.trade_picker_page=1 end
+        if M.button('Поиск','mh_source_catalog',144,picker=='catalog') then picker='catalog';U.trade_picker=picker;U.trade_picker_page=1 end
         local entries={}
         if picker=='inventory' then
-            if M.button('РЎРєР°РЅРёСЂРѕРІР°С‚СЊ','scan_inventory',180) then DSP.auto.scan_inventory() end
-            M.text('РРЅРІРµРЅС‚Р°СЂСЊ: '..tostring(DSP.auto.inv_status or 'РЅРµ СЃРєР°РЅРёСЂРѕРІР°РЅ'))
+            if M.button('Сканировать','scan_inventory',180) then DSP.auto.scan_inventory() end
+            M.text('Инвентарь: '..tostring(DSP.auto.inv_status or 'не сканирован'))
             entries=DSP.auto.inv or {}
         else
             U.catalog_search=U.catalog_search or imgui.new.char[128]()
             imgui.SetNextItemWidth(math.min(430,imgui.GetContentRegionAvail().x))
-            if imgui.InputTextWithHint('##catalog_quick_search',DSP.utf8('РќР°Р·РІР°РЅРёРµ РїСЂРµРґРјРµС‚Р°...'),U.catalog_search,128) then
+            if imgui.InputTextWithHint('##catalog_quick_search',DSP.utf8('Название предмета...'),U.catalog_search,128) then
                 U.trade_picker_page=1
             end
             entries=catalog_rows(DSP.to_cp(ffi.string(U.catalog_search)))
-            if #entries==0 then M.text('Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ РїСЂРµРґРјРµС‚Р°.') end
+            if #entries==0 then M.text('Введите название предмета.') end
         end
-        M.text('РќР°Р№РґРµРЅРѕ: '..tostring(#entries))
+        M.text('Найдено: '..tostring(#entries))
         local start,finish=page_buttons('trade_picker_page',#entries,per)
         for i=start,finish do picker_row(kind,entries[i],i,picker) end
     end
@@ -320,10 +320,10 @@ function U.trade_tab()
                 positions=positions+1;subtotal=subtotal+it.price*it.qty
             end
         end
-        M.text('Р’ РЅР°Р±РѕСЂРµ: '..#current.items..' | РђРєС‚РёРІРЅС‹С…: '..positions..' | '..DSP.money(subtotal))
+        M.text('В наборе: '..#current.items..' | Активных: '..positions..' | '..DSP.money(subtotal))
         local start,finish=page_buttons('trade_preset_page',#current.items,per)
         for i=start,finish do if item_card(kind,current.items[i],i) then break end end
-        if #current.items==0 then M.text('Р”РѕР±Р°РІСЊС‚Рµ РїСЂРµРґРјРµС‚ СЃР»РµРІР°: РѕРЅ СЃСЂР°Р·Сѓ РїРѕСЏРІРёС‚СЃСЏ РІ РЅР°Р±РѕСЂРµ.') end
+        if #current.items==0 then M.text('Добавьте предмет слева: он сразу появится в наборе.') end
         U.trade_active_positions=positions
     end
     if two then
@@ -338,38 +338,38 @@ function U.trade_tab()
     end
     -- Always-visible controls, independent of either list's scrolling position.
     if running then M.text(DSP.auto.status_text())
-    else M.toggle('РўРµСЃС‚ Р±РµР· РІС‹СЃС‚Р°РІР»РµРЅРёСЏ',DSP.settings,'dry_run',true) end
-    local label=running and 'РћРЎРўРђРќРћР’РРўР¬' or (DSP.settings.dry_run and 'РџР РћР’Р•Р РРўР¬ РќРђР‘РћР ' or 'Р’Р«РЎРўРђР’РРўР¬ '..(kind=='buy' and 'РЎРљРЈРџРљРЈ' or 'РџР РћР”РђР–РЈ'))
+    else M.toggle('Тест без выставления',DSP.settings,'dry_run',true) end
+    local label=running and 'ОСТАНОВИТЬ' or (DSP.settings.dry_run and 'ПРОВЕРИТЬ НАБОР' or 'ВЫСТАВИТЬ '..(kind=='buy' and 'СКУПКУ' or 'ПРОДАЖУ'))
     if M.button(label,'run_'..kind,500,true,'primary') then
         if DSP.auto.buy_running then DSP.auto.stop_buy()
         elseif DSP.auto.sell_running then DSP.auto.stop_sell()
-        elseif DSP.presets.active_count(kind)==0 then DSP.notify('Р’РєР»СЋС‡РёС‚Рµ С‚РѕРІР°СЂС‹ СЃ С†РµРЅРѕР№ Рё РєРѕР»РёС‡РµСЃС‚РІРѕРј')
-        elseif kind=='buy' then DSP.auto.start_buy() else DSP.auto.start_sell() end
+        elseif DSP.presets.active_count(kind)==0 then DSP.notify('Включите товары с ценой и количеством')
+        elseif kind=='buy' then DSP.auto.safe_start('buy') else DSP.auto.safe_start('sell') end
     end
 end
 U.palatka_tab=U.trade_tab
 function U.auto_tab()
-    M.title('РђР’РўРћРњРђРўРР—РђР¦РРЇ')
+    M.title('АВТОМАТИЗАЦИЯ')
     M.text(DSP.auto.status_text())
-    M.text('РђРІС‚РѕРјР°С‚РёР·Р°С†РёСЏ РІС‹СЃС‚Р°РІР»СЏРµС‚ С‚РѕРІР°СЂС‹. РЎС‡С‘С‚С‡РёРє РїРѕРєР°Р·С‹РІР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹Рµ РїРѕР·РёС†РёРё, Р° РЅРµ Р·Р°РІРµСЂС€С‘РЅРЅС‹Рµ СЃРґРµР»РєРё.')
+    M.text('Автоматизация выставляет товары. Счётчик показывает подтверждённые позиции, а не завершённые сделки.')
     if DSP.auto.progress then
         local p=DSP.auto.progress
-        M.text('РћР±СЂР°Р±РѕС‚Р°РЅРѕ '..tostring(p.done or 0)..' РёР· '..tostring(p.total or 0)..' | РћС€РёР±РѕРє '..tostring(p.failed or 0))
+        M.text('Обработано '..tostring(p.done or 0)..' из '..tostring(p.total or 0)..' | Ошибок '..tostring(p.failed or 0))
     end
     for _,kind in ipairs({'buy','sell'}) do
         local running=kind=='buy' and DSP.auto.buy_running or kind=='sell' and DSP.auto.sell_running
-        local label=kind=='buy' and 'РЎРљРЈРџРљР' or 'РџР РћР”РђР–Р'
+        local label=kind=='buy' and 'СКУПКИ' or 'ПРОДАЖИ'
         M.title(label)
-        M.text('РџРѕР·РёС†РёР№: '..DSP.presets.active_count(kind))
-        if M.button((running and 'РЎРўРћРџ ' or 'РЎРўРђР Рў ')..label,'auto_'..kind,400,running) then
+        M.text('Позиций: '..DSP.presets.active_count(kind))
+        if M.button((running and 'СТОП ' or 'СТАРТ ')..label,'auto_'..kind,400,running) then
             if kind=='buy' then
-                if running then DSP.auto.stop_buy() else DSP.auto.start_buy() end
+                if running then DSP.auto.stop_buy() else DSP.auto.safe_start('buy') end
             else
-                if running then DSP.auto.stop_sell() else DSP.auto.start_sell() end
+                if running then DSP.auto.stop_sell() else DSP.auto.safe_start('sell') end
             end
         end
     end
-    M.toggle('РўРµСЃС‚ Р±РµР· РѕС‚РїСЂР°РІРєРё',DSP.settings,'dry_run',true)
-    M.text('РџРѕСЃР»РµРґРЅРёРµ СЃРѕР±С‹С‚РёСЏ')
+    M.toggle('Тест без отправки',DSP.settings,'dry_run',true)
+    M.text('Последние события')
     for i=1,math.min(15,#DSP.log) do M.text((DSP.log[i].t or '')..' '..tostring(DSP.log[i].text)) end
 end

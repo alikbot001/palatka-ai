@@ -14,6 +14,31 @@ if DSP.settings.overlay_shop == nil then DSP.settings.overlay_shop = true end
 if DSP.settings.overlay_trade == nil then DSP.settings.overlay_trade = true end
 if DSP.settings.overlay_top == nil then DSP.settings.overlay_top = true end
 
+DSP.settings.ui_windows=DSP.settings.ui_windows or {}
+local function load_overlay_state(key)
+    local v=DSP.settings.ui_windows[key]
+    if type(v)=='table' and tonumber(v.x) and tonumber(v.y) then
+        return {x=tonumber(v.x),y=tonumber(v.y),w=tonumber(v.w),h=tonumber(v.h)}
+    end
+end
+DSP.overlay.trade_pos=DSP.overlay.trade_pos or load_overlay_state('overlay_trade')
+DSP.overlay.shop_pos=DSP.overlay.shop_pos or load_overlay_state('overlay_shop')
+local function save_overlay_state(key,state_key)
+    local st=DSP.overlay[state_key];if type(st)~='table'then return end
+    local prev=DSP.settings.ui_windows[key] or {}
+    if math.abs((tonumber(prev.x)or-99999)-(tonumber(st.x)or 0))>.5 or math.abs((tonumber(prev.y)or-99999)-(tonumber(st.y)or 0))>.5
+        or math.abs((tonumber(prev.w)or-99999)-(tonumber(st.w)or 0))>.5 or math.abs((tonumber(prev.h)or-99999)-(tonumber(st.h)or 0))>.5 then
+        DSP.settings.ui_windows[key]={x=st.x,y=st.y,w=st.w,h=st.h}
+        if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save() end
+    end
+end
+local function capture_overlay(key,state_key)
+    if not(imgui.GetWindowPos and imgui.GetWindowSize)then return end
+    local wh=imgui.GetWindowSize();local st=DSP.overlay[state_key]
+    if not st then local p=imgui.GetWindowPos();st={x=p.x,y=p.y};DSP.overlay[state_key]=st end
+    st.w,st.h=wh.x,wh.y;save_overlay_state(key,state_key)
+end
+
 local function d()
     return tonumber(DSP.ui and DSP.ui.d) or tonumber(DSP.settings.dpi) or 1.25
 end
@@ -41,7 +66,7 @@ local function base_label()
     local cur = tonumber(DSP.market.state and DSP.market.state.sid) or 0
     local fresh = DSP.db.freshness()
     if sid > 0 and cur > 0 and sid ~= cur then
-        return 'M' .. sid .. ' (С‚РµРєСѓС‰РёР№ M' .. cur .. ')'
+        return 'M' .. sid .. ' (текущий M' .. cur .. ')'
     end
     return sid > 0 and ('M' .. sid .. ' ' .. fresh) or fresh
 end
@@ -83,6 +108,7 @@ function DSP.overlay.trade_ratio()
 end
 
 function DSP.overlay.show_trade()
+    if DSP.settings.fps_saver then return false end
     if DSP.settings.overlay_trade == false then return false end
     local t = DSP.live.trade
     if not t or (t.opened or 0) == 0 then return false end
@@ -95,6 +121,7 @@ function DSP.overlay.show_trade()
 end
 
 function DSP.overlay.show_shop()
+    if DSP.settings.fps_saver then return false end
     if DSP.settings.overlay_shop == false then return false end
     local s = DSP.live.shop
     if not s or (s.opened or 0) == 0 then return false end
@@ -102,6 +129,45 @@ function DSP.overlay.show_shop()
     if (s.menu_closed or 0) > 0 then return false end
     if DSP.live.shop_age() > 300 then return false end
     return #(s.sell or {}) > 0 or #(s.buy or {}) > 0
+end
+
+-- Allow dragging overlays ONLY by their header, never by the content.
+-- The fixed screen coordinates are clamped to keep the close button reachable.
+local function overlay_drag_bar(label,id,width,height,state_key)
+    imgui.PushStyleColor(imgui.Col.Button,imgui.ImVec4(0,0,0,0))
+    imgui.PushStyleColor(imgui.Col.ButtonHovered,imgui.ImVec4(0,0,0,.08))
+    imgui.PushStyleColor(imgui.Col.ButtonActive,imgui.ImVec4(0,0,0,.12))
+    imgui.PushStyleColor(imgui.Col.Text,BLUE)
+    imgui.Button(u(label)..'##drag_overlay_'..id,imgui.ImVec2(math.max(55,width),height or 42))
+    local active=imgui.IsItemActive()
+    imgui.PopStyleColor(4)
+    local io=imgui.GetIO()
+    if active and io and io.MouseDelta and imgui.GetWindowPos and imgui.GetWindowSize then
+        local dx,dy=io.MouseDelta.x or 0,io.MouseDelta.y or 0
+        if dx~=0 or dy~=0 then
+            local pos,wh=imgui.GetWindowPos(),imgui.GetWindowSize()
+            DSP.overlay[state_key]={
+                x=math.max(0,math.min(pos.x+dx,math.max(0,io.DisplaySize.x-wh.x))),
+                y=math.max(0,math.min(pos.y+dy,math.max(0,io.DisplaySize.y-wh.y))),
+                w=wh.x,h=wh.y }
+            save_overlay_state(state_key=='trade_pos' and 'overlay_trade' or 'overlay_shop',state_key)
+        end
+    end
+end
+local function overlay_next_pos(key,default_x,default_y,pivot,sw,sh,w,h)
+    local pos=DSP.overlay[key]
+    if pos then
+        -- For auto-sized trade overlays use the real measured window size,
+        -- not a large estimate that makes the window jump on the next frame.
+        local measured_w=tonumber(pos.w) or w
+        local measured_h=tonumber(pos.h) or h
+        local x=math.max(0,math.min(pos.x,math.max(0,sw-measured_w)))
+        local y=math.max(0,math.min(pos.y,math.max(0,sh-measured_h)))
+        pos.x,pos.y=x,y
+        imgui.SetNextWindowPos(imgui.ImVec2(x,y),imgui.Cond.Always)
+    else
+        imgui.SetNextWindowPos(imgui.ImVec2(default_x,default_y),imgui.Cond.FirstUseEver,pivot)
+    end
 end
 
 local function close_btn(id)
@@ -117,7 +183,7 @@ local function trade_item_row(it, kind)
     if imgui.TextWrapped then imgui.TextWrapped(u(disp .. '  x' .. tostring(qty)))
     else imgui.Text(u(disp .. '  x' .. tostring(qty))) end
     if not e or not e.sell or not e.sell.min or e.sell.min <= 0 then
-        imgui.TextColored(GRAY, u('РЅРµС‚ Р±Р°Р·С‹'))
+        imgui.TextColored(GRAY, u('нет базы'))
         return
     end
     local unit = e.sell.min
@@ -127,7 +193,7 @@ local function trade_item_row(it, kind)
     imgui.TextColored(GRAY, u('=' .. DSP.money(sum)))
     if kind == 'get' then
         imgui.SameLine(0, 6 * d())
-        imgui.TextDisabled(u('СЂС‹РЅРѕРє ' .. DSP.money(e.sell.med or unit)))
+        imgui.TextDisabled(u('рынок ' .. DSP.money(e.sell.med or unit)))
     end
 end
 
@@ -135,77 +201,85 @@ function DSP.overlay.draw_trade()
     refresh_palette()
     local t = DSP.live.trade
     local sw, sh = imgui.GetIO().DisplaySize.x, imgui.GetIO().DisplaySize.y
-    local w = math.min(sw * 0.34, 640 * d())
-    imgui.SetNextWindowPos(imgui.ImVec2(sw - 8 * d(), 76 * d()), imgui.Cond.FirstUseEver, imgui.ImVec2(1, 0))
-    imgui.SetNextWindowSize(imgui.ImVec2(w, 0), imgui.Cond.FirstUseEver)
+    local saved=DSP.overlay.trade_pos
+    local w = math.min(sw-16,math.max(250,tonumber(saved and saved.w) or math.min(sw*.38,540*d())))
+    local hh=math.min(sh-16,math.max(180,tonumber(saved and saved.h) or math.max(270,sh*.57)))
+    overlay_next_pos('trade_pos',sw-8*d(),76*d(),imgui.ImVec2(1,0),sw,sh,w,hh)
+    imgui.SetNextWindowSize(imgui.ImVec2(w,hh),imgui.Cond.FirstUseEver)
     if DSP.settings.overlay_top ~= false then imgui.SetNextWindowFocus() end
     imgui.SetNextWindowBgAlpha(DSP.theme.opacity)
     local ncol = DSP.theme.push_overlay(0.95)
     local open = imgui.new.bool(true)
-    local flags = imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize
-        + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoSavedSettings
+    local flags = imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoMove
+        + imgui.WindowFlags.NoSavedSettings
         + imgui.WindowFlags.NoFocusOnAppearing + imgui.WindowFlags.NoNav
     if imgui.Begin('##dsp_trade_overlay', open, flags) then
-        imgui.TextColored(BLUE, u('РўР Р•Р™Р”  ' .. (t.partner ~= '' and t.partner or '?')))
+        local top_width=math.max(1,imgui.GetContentRegionAvail().x)
+        overlay_drag_bar('ТРЕЙД  ' .. (t.partner ~= '' and t.partner or '?'),
+            'trade',math.max(55,top_width-80*d()),44,'trade_pos')
         if close_btn('dsp_trade_close') then DSP.overlay.trade_closed = t.opened end
-        imgui.SameLine(0, 12 * d())
-        imgui.TextDisabled(u('Р±Р°Р·Р°: ' .. base_label()))
+        imgui.TextDisabled(u('база: ' .. base_label()))
         imgui.Separator()
 
         local total_get, total_give, delta, pct, miss_get, miss_give, get_v, give_v = DSP.overlay.trade_sum()
         local ratio, mode = DSP.overlay.trade_ratio()
-        local vc, vt = YELLOW, 'РќРћР Рњ'
+        local vc, vt = YELLOW, 'НОРМ'
         if miss_get + miss_give > 0 and total_get == 0 and total_give == 0 then
-            vc, vt = GRAY, 'РќР•Рў Р‘РђР—Р«'
+            vc, vt = GRAY, 'НЕТ БАЗЫ'
         elseif miss_get + miss_give > 0 and total_get == 0 then
-            vc, vt = GRAY, 'РќР•Рў Р¦Р•РќР« РџРћР›РЈР§РђР•РњРћР“Рћ'
+            vc, vt = GRAY, 'НЕТ ЦЕНЫ ПОЛУЧАЕМОГО'
         elseif ratio then
-            if ratio >= 1.10 then vc, vt = GREEN, 'Р’Р«Р“РћР”РќРћ'
-            elseif ratio < 0.90 then vc, vt = RED, 'РќР•Р’Р«Р“РћР”РќРћ' end
+            if ratio >= 1.10 then vc, vt = GREEN, 'ВЫГОДНО'
+            elseif ratio < 0.90 then vc, vt = RED, 'НЕВЫГОДНО' end
         end
-        imgui.TextColored(vc, u(vt .. (ratio and string.format('  %.0f%% СЂС‹РЅРєР°', ratio * 100) or '')))
-        imgui.Text(u('РџРѕР»СѓС‡Р°РµС‚Рµ: ' .. DSP.money(total_get) .. '   РћС‚РґР°С‘С‚Рµ: ' .. DSP.money(total_give)))
+        imgui.TextColored(vc, u(vt .. (ratio and string.format('  %.0f%% рынка', ratio * 100) or '')))
+        imgui.Text(u('Получаете: ' .. DSP.money(total_get) .. '   Отдаёте: ' .. DSP.money(total_give)))
         imgui.TextColored(delta >= 0 and GREEN or RED,
-            u('РС‚РѕРі: ' .. (delta >= 0 and '+' or '') .. DSP.money(delta) .. string.format('  (%+.0f%%)', pct)))
+            u('Итог: ' .. (delta >= 0 and '+' or '') .. DSP.money(delta) .. string.format('  (%+.0f%%)', pct)))
         if (t.money_get or 0) > 0 and (t.money_give or 0) == 0 and give_v > 0 then
             local r = (t.money_get or 0) / give_v
             local c, s
-            if r < 0.85 then c, s = RED, 'РЎРљРЈРџ РќРР–Р• Р Р«РќРљРђ'
-            elseif r <= 1.10 then c, s = YELLOW, 'РќРћР Рњ Р¦Р•РќРђ'
-            else c, s = GREEN, 'РћР’Р•Р  - Р’Р«Р“РћР”РќРћ Р’РђРњ' end
-            imgui.TextColored(c, u(string.format('РЎРєСѓРї: %.0f%% СЂС‹РЅРєР° - %s', r * 100, s)))
+            if r < 0.85 then c, s = RED, 'СКУП НИЖЕ РЫНКА'
+            elseif r <= 1.10 then c, s = YELLOW, 'НОРМ ЦЕНА'
+            else c, s = GREEN, 'ОВЕР - ВЫГОДНО ВАМ' end
+            imgui.TextColored(c, u(string.format('Скуп: %.0f%% рынка - %s', r * 100, s)))
         elseif (t.money_give or 0) > 0 and (t.money_get or 0) == 0 and get_v > 0 then
             local r = (t.money_give or 0) / get_v
             local c, s
-            if r < 0.85 then c, s = GREEN, 'Р”Р•РЁР•Р’Рћ - Р‘Р РђРўР¬'
-            elseif r <= 1.10 then c, s = YELLOW, 'РќРћР Рњ Р¦Р•РќРђ'
-            else c, s = RED, 'РћР’Р•Р  - РџР•Р Р•РџР›РђРўРђ' end
-            imgui.TextColored(c, u(string.format('РџРѕРєСѓРїРєР°: %.0f%% СЂС‹РЅРєР° - %s', r * 100, s)))
+            if r < 0.85 then c, s = GREEN, 'ДЕШЕВО - БРАТЬ'
+            elseif r <= 1.10 then c, s = YELLOW, 'НОРМ ЦЕНА'
+            else c, s = RED, 'ОВЕР - ПЕРЕПЛАТА' end
+            imgui.TextColored(c, u(string.format('Покупка: %.0f%% рынка - %s', r * 100, s)))
         end
         imgui.Separator()
 
-        local half = math.floor((w - 28 * d()) / 2)
-        local h = math.min(230 * d(), sh * 0.38)
-        imgui.BeginChild('##dsp_trade_give', imgui.ImVec2(half, h), true)
-        imgui.TextColored(RED, u('Р’Р« РћРўР”РђРЃРўР•'))
+        local avail=imgui.GetContentRegionAvail()
+        local narrow=avail.x<440
+        local half=math.max(55,math.floor((avail.x-8*d())/2))
+        local child_width=narrow and -1 or half
+        local h=math.max(70,math.min(230*d(),math.max(90,avail.y-(narrow and 100 or 55))))
+        if narrow then h=math.max(70,math.floor(h*.54))end
+        imgui.BeginChild('##dsp_trade_give', imgui.ImVec2(child_width, h), true)
+        imgui.TextColored(RED, u('ВЫ ОТДАЁТЕ'))
         for _, it in ipairs(t.give or {}) do trade_item_row(it, 'give') end
-        if (t.money_give or 0) > 0 then imgui.TextColored(RED, u('Р”РµРЅСЊРіРё: -' .. DSP.money(t.money_give))) end
-        if #(t.give or {}) == 0 and (t.money_give or 0) == 0 then imgui.TextDisabled(u('вЂ”')) end
+        if (t.money_give or 0) > 0 then imgui.TextColored(RED, u('Деньги: -' .. DSP.money(t.money_give))) end
+        if #(t.give or {}) == 0 and (t.money_give or 0) == 0 then imgui.TextDisabled(u('—')) end
         imgui.EndChild()
-        imgui.SameLine(0, 8 * d())
-        imgui.BeginChild('##dsp_trade_get', imgui.ImVec2(half, h), true)
-        imgui.TextColored(GREEN, u('Р’Р« РџРћР›РЈР§РђР•РўР•'))
+        if not narrow then imgui.SameLine(0, 8 * d())end
+        imgui.BeginChild('##dsp_trade_get', imgui.ImVec2(child_width, h), true)
+        imgui.TextColored(GREEN, u('ВЫ ПОЛУЧАЕТЕ'))
         for _, it in ipairs(t.get or {}) do trade_item_row(it, 'get') end
-        if (t.money_get or 0) > 0 then imgui.TextColored(GREEN, u('Р”РµРЅСЊРіРё: +' .. DSP.money(t.money_get))) end
-        if #(t.get or {}) == 0 and (t.money_get or 0) == 0 then imgui.TextDisabled(u('вЂ”')) end
+        if (t.money_get or 0) > 0 then imgui.TextColored(GREEN, u('Деньги: +' .. DSP.money(t.money_get))) end
+        if #(t.get or {}) == 0 and (t.money_get or 0) == 0 then imgui.TextDisabled(u('—')) end
         imgui.EndChild()
         if miss_get + miss_give > 0 then
-            imgui.TextColored(YELLOW, u('РќРµС‚ Р±Р°Р·С‹: ' .. tostring(miss_get + miss_give) .. ' РїРѕР·. - РѕР±РЅРѕРІРё СЂС‹РЅРѕРє'))
+            imgui.TextColored(YELLOW, u('Нет базы: ' .. tostring(miss_get + miss_give) .. ' поз. - обнови рынок'))
         end
-        if imgui.SmallButton(u('РћР‘РќРћР’РРўР¬ Р‘РђР—РЈ##dsp_trade_refresh')) then
+        if imgui.SmallButton(u('ОБНОВИТЬ БАЗУ##dsp_trade_refresh')) then
             DSP.market.pull(DSP.market.state.sid)
         end
     end
+    capture_overlay('overlay_trade','trade_pos')
     imgui.End()
     imgui.PopStyleColor(ncol)
     if not open[0] then DSP.overlay.trade_closed = t.opened end
@@ -251,64 +325,147 @@ function DSP.overlay.shop_market_reference(name,ench,shop_num,side)
     return reference
 end
 local function evaluate_lavka(price,reference,side)
-    if not reference then return GRAY,'РќР•Рў РЎР’Р•Р–РРҐ Р§РЈР–РРҐ Р¦Р•Рќ' end
+    if not reference then return GRAY,'НЕТ СВЕЖИХ ЧУЖИХ ЦЕН' end
     local median=reference.med or 0
-    if median<=0 then return GRAY,'РќР•Рў РЎР РђР’РќР•РќРРЇ' end
+    if median<=0 then return GRAY,'НЕТ СРАВНЕНИЯ' end
     if reference.shops<2 then
-        return YELLOW,'РњРђР›Рћ Р”РђРќРќР«РҐ (1 Р›РђР’РљРђ)'
+        return YELLOW,'МАЛО ДАННЫХ (1 ЛАВКА)'
     end
     -- Demand and supply are DIFFERENT quote series. Never treat one as a
     -- completed trade, or a favorable price as guaranteed stock/demand.
     if side=='sell' then
-        if price<=median*.95 then return GREEN,'РќРР–Р• Р”Р РЈР“РРҐ >=5%'end
-        if price<=median*1.05 then return YELLOW,'РќРђ РЈР РћР’РќР• Р Р«РќРљРђ'end
-        return RED,'Р”РћР РћР–Р• Р”Р РЈР“РРҐ'
+        if price<=median*.95 then return GREEN,'НИЖЕ ДРУГИХ >=5%'end
+        if price<=median*1.05 then return YELLOW,'НА УРОВНЕ РЫНКА'end
+        return RED,'ДОРОЖЕ ДРУГИХ'
     end
-    if price>=median*1.05 then return GREEN,'РЎРљРЈРџРђР•Рў Р”РћР РћР–Р• Р”Р РЈР“РРҐ'end
-    if price>=median*.95 then return YELLOW,'РќРђ РЈР РћР’РќР• РЎРљРЈРџРљР'end
-    return RED,'РЎРљРЈРџРђР•Рў Р”Р•РЁР•Р’Р›Р• Р”Р РЈР“РРҐ'
+    if price>=median*1.05 then return GREEN,'СКУПАЕТ ДОРОЖЕ ДРУГИХ'end
+    if price>=median*.95 then return YELLOW,'НА УРОВНЕ СКУПКИ'end
+    return RED,'СКУПАЕТ ДЕШЕВЛЕ ДРУГИХ'
+end
+-- Receipt and recommendations are refreshed only when market evidence changes.
+local shop_footer_cache={}
+function DSP.overlay.shop_scan_footer(shop)
+    local arb=DSP.local_arb
+    local scan=DSP.live and DSP.live.auto_scan or {}
+    local timestamp=os.time()
+    local valid=tonumber(shop.num) and tostring(scan.shop)==tostring(shop.num)
+        and tonumber(scan.server)==tonumber(shop.server)
+        and tonumber(scan.generation)==tonumber(shop.generation)
+        and tonumber(scan.at or 0)>=tonumber(shop.opened or math.huge)
+    local scan_state,observed=DSP.live and DSP.live.scan_state and DSP.live.scan_state(shop)
+    imgui.Separator()
+    if valid and scan_state=='saved' then
+        imgui.TextColored(GREEN,u('СКАН: УСПЕШНО  #'..tostring(shop.num)))
+        imgui.TextDisabled(u('Продажа: '..tostring(scan.sell or 0)..' · Скупка: '..tostring(scan.buy or 0)))
+        if arb and arb._dirty then
+        imgui.TextDisabled(u('Ожидает записи базы на диск'))
+        end
+    elseif scan_state and scan_state~='pending' and scan_state~='saved' then
+        local messages={
+            disabled='Автоскан выключен. Включи его в «Мои сканы».',
+            empty='Нет распознанных товаров в открытой лавке.',
+            server='Сервер лавки не совпал с текущим сервером.',
+            number='Товары прочитаны, но игра не передала номер лавки. В базу не сохранено.',
+            owner='Номер есть, но имя владельца не распознано. В базу не сохранено.',
+            error='Ошибка сохранения скана. Проверь standalone.log.',
+            not_saved='Скан пока не подтверждён.',
+        }
+        imgui.TextDisabled(u(messages[scan_state] or messages.not_saved))
+        imgui.TextDisabled(u('Распознано сейчас: '..tostring(observed or 0)))
+    elseif DSP.settings.auto_shop_scan==false then
+        imgui.TextDisabled(u('Автоскан выключен'))
+    elseif DSP.live and DSP.live._auto_scan_pending then
+        imgui.TextDisabled(u('Скан: получение товаров...'))
+    else
+        imgui.TextDisabled(u('Скан: нет подтверждения сохранения'))
+    end
+    local stats=arb and arb.stats and arb.stats(timestamp) or {shops=0,offers=0,server=0}
+    imgui.TextDisabled(u('Мои сканы: '..tostring(stats.shops)..' лавок · '..tostring(stats.offers)..' предложений'))
+    if scan_state~='saved' or not arb or not arb.routes then return end
+    local sig=table.concat({tostring(stats.server),tostring(arb.revision or 0),
+        tostring(math.floor(timestamp/30)),tostring(DSP.settings.tax_bp or 200),
+        tostring(DSP.market and DSP.market.missing_revision or 0),tostring(shop.num)},':')
+    if shop_footer_cache.sig~=sig then
+        shop_footer_cache={sig=sig}
+        for _,r in ipairs(arb.routes(timestamp))do
+            if tostring(r.seller_shop)==tostring(shop.num)
+                and (not shop_footer_cache.buy or r.profit_unit>shop_footer_cache.buy.profit_unit)then
+                shop_footer_cache.buy=r
+            end
+            if tostring(r.buyer_shop)==tostring(shop.num)
+                and (not shop_footer_cache.sell or r.profit_unit>shop_footer_cache.sell.profit_unit)then
+                shop_footer_cache.sell=r
+            end
+        end
+    end
+    if shop_footer_cache.buy then
+        local r=shop_footer_cache.buy
+        imgui.TextColored(GREEN,u('Купить: '..tostring(r.name or ('ID '..tostring(r.id)))..
+            ' · ~ +'..DSP.money(r.profit_unit)..'/шт. to #'..tostring(r.buyer_shop)))
+    end
+    if shop_footer_cache.sell then
+        local r=shop_footer_cache.sell
+        imgui.TextColored(GREEN,u('Продать: '..tostring(r.name or ('ID '..tostring(r.id)))..
+            ' · ~ +'..DSP.money(r.profit_unit)..'/шт. from #'..tostring(r.seller_shop)))
+    end
+    if not shop_footer_cache.buy and not shop_footer_cache.sell then
+        imgui.TextDisabled(u('Выгодных локальных связок пока нет'))
+    end
+    imgui.TextDisabled(u('Прогноз, не гарантированная прибыль'))
 end
 function DSP.overlay.draw_shop()
     refresh_palette()
     local s=DSP.live.shop
     local sw,sh=imgui.GetIO().DisplaySize.x,imgui.GetIO().DisplaySize.y
-    local w=math.min(sw-20,math.max(sw*.71,540*d()))
-    local h=math.min(sh-16,math.max(sh*.76,400*d()))
-    imgui.SetNextWindowPos(imgui.ImVec2(sw-10*d(),sh*.09),imgui.Cond.FirstUseEver,imgui.ImVec2(1,0))
+    local saved=DSP.overlay.shop_pos
+    local w=math.min(sw-16,math.max(math.min(sw*.53,590*d()),math.min(sw-16,tonumber(saved and saved.w) or 340*d())))
+    local h=math.min(sh-16,math.max(180,tonumber(saved and saved.h) or math.max(sh*.61,310*d())))
+    overlay_next_pos('shop_pos',sw-10*d(),sh*.09,imgui.ImVec2(1,0),sw,sh,w,h)
     imgui.SetNextWindowSize(imgui.ImVec2(w,h),imgui.Cond.FirstUseEver)
     imgui.SetNextWindowBgAlpha(DSP.theme.opacity)
     local ncol=DSP.theme.push_overlay(.9)
     local open=imgui.new.bool(true)
-    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoScrollbar
+    -- Window scroll remains enabled; resizing must never permanently hide controls.
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove
         +imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoFocusOnAppearing
     if imgui.Begin('##dsp_shop_overlay',open,flags)then
-        imgui.TextColored(BLUE,u('Р›РђР’РљРђ #'..tostring(s.num or '?')..'  '..tostring(s.owner or '?')))
-        if imgui.Button(u('Р—РђРљР Р«РўР¬  X##shop_close_big'),imgui.ImVec2(150,50))then
+        local width=math.max(1,imgui.GetContentRegionAvail().x)
+        local compact=width<430
+        local close_width=compact and 60 or 130
+        overlay_drag_bar('ЛАВКА #'..tostring(s.num or '?')..'  '..tostring(s.owner or '?'),
+            'shop',math.max(55,width-close_width-12),44,'shop_pos')
+        imgui.SameLine(0,8)
+        if imgui.Button(u((compact and 'X' or 'ЗАКРЫТЬ X')..'##shop_close_big'),imgui.ImVec2(close_width,44))then
             DSP.overlay.shop_closed=s.opened
         end
         imgui.Separator()
         local sell_n,buy_n=#(s.sell or{}),#(s.buy or{})
-        local bw=math.max(140,(w-40)/2)
-        if imgui.Button(u('РџР РћР”РђР®Рў ('..sell_n..')##shop_sell'),imgui.ImVec2(bw,54))then
+        local bw=math.max(50,math.floor((imgui.GetContentRegionAvail().x-8)/2))
+        if imgui.Button(u('ПРОДАЮТ ('..sell_n..')##shop_sell'),imgui.ImVec2(bw,54))then
             DSP.overlay.shop_tab=1;DSP.overlay.shop_page=1
         end
         imgui.SameLine(0,8)
-        if imgui.Button(u('РЎРљРЈРџРђР®Рў ('..buy_n..')##shop_buy'),imgui.ImVec2(bw,54))then
+        if imgui.Button(u('СКУПАЮТ ('..buy_n..')##shop_buy'),imgui.ImVec2(bw,54))then
             DSP.overlay.shop_tab=2;DSP.overlay.shop_page=1
         end
-        imgui.TextDisabled(u('РЎРЅРёРјРѕРє API РЅРµ СЂР°РІРµРЅ РѕСЃС‚Р°С‚РєСѓ РІ РёРіСЂРµ. РЎСЂР°РІРЅРµРЅРёРµ С‚РѕР»СЊРєРѕ СЃ РґСЂСѓРіРёРјРё Р»Р°РІРєР°РјРё.'))
+        imgui.TextDisabled(u('Снимок API не равен остатку в игре. Сравнение только с другими лавками.'))
         local list=DSP.overlay.shop_tab==1 and (s.sell or{})or(s.buy or{})
         if DSP.overlay.shop_last_open~=s.opened then
             DSP.overlay.shop_last_open=s.opened;DSP.overlay.shop_page=1
         end
         -- Cards have a predictable height; a page must not contain items
         -- hidden below the small child scroll region on a compact phone.
-        local list_h=math.max(100,math.min(h-250,400*d()))
-        local per_page=math.max(1,math.floor(list_h/(110*d())))
+        local measured=imgui.GetWindowSize and imgui.GetWindowSize() or {x=w,y=h}
+        local body=imgui.GetContentRegionAvail()
+        -- Reserve screen space for navigation and receipt, with outer window scroll
+        -- as a fallback on phones too small to display everything at once.
+        local reserved=compact and 220 or 200
+        local list_h=math.max(65,math.min(340*d(),measured.y*.43,math.max(75,body.y-reserved)))
+        local per_page=math.max(1,math.floor(list_h/(compact and 136*d() or 114*d())))
         local pages=math.max(1,math.ceil(#list/per_page))
         DSP.overlay.shop_page=math.max(1,math.min(pages,DSP.overlay.shop_page or 1))
         if imgui.BeginChild('##dsp_shop_cards',imgui.ImVec2(-1,list_h),true)then
-            if #list==0 then imgui.TextDisabled(u('РќРµС‚ РЅР°Р±Р»СЋРґР°РµРјС‹С… РїРѕР·РёС†РёР№'))end
+            if #list==0 then imgui.TextDisabled(u('Нет наблюдаемых позиций'))end
             for i=(DSP.overlay.shop_page-1)*per_page+1,math.min(#list,DSP.overlay.shop_page*per_page)do
                 local it=list[i]
                 local side=DSP.overlay.shop_tab==1 and 'sell'or'buy'
@@ -316,33 +473,35 @@ function DSP.overlay.draw_shop()
                 local color,verdict=evaluate_lavka(tonumber(it.price)or 0,ref,side)
                 imgui.TextColored(color,u(verdict))
                 local quantity=(it.qty_known==false or it.qty==nil)
-                    and '  В· РєРѕР»-РІРѕ РЅРµРёР·РІРµСЃС‚РЅРѕ' or '  x'..tostring(it.qty)
+                    and '  · кол-во неизвестно' or '  x'..tostring(it.qty)
                 local name=u(DSP.item_name(it.name,it.ench)..quantity)
                 if imgui.TextWrapped then imgui.TextWrapped(name)else imgui.Text(name)end
-                imgui.TextColored(BLUE,u((side=='sell'and 'Р’С‹ РїРѕРєСѓРїР°РµС‚Рµ: 'or'Р’С‹ РїСЂРѕРґР°С‘С‚Рµ: ')
-                    ..DSP.money(it.price)..'/С€С‚.'))
+                imgui.TextColored(BLUE,u((side=='sell'and 'Вы покупаете: 'or'Вы продаёте: ')
+                    ..DSP.money(it.price)..'/шт.'))
                 if ref then
-                    imgui.TextDisabled(u('Р”СЂСѓРіРёРµ Р»Р°РІРєРё: '..DSP.money(ref.low)..'вЂ“'..DSP.money(ref.high)
-                        ..' В· РјРµРґРёР°РЅР° '..DSP.money(ref.med)..' В· '..ref.shops..' Р»Р°РІРѕРє'))
+                    imgui.TextDisabled(u('Другие лавки: '..DSP.money(ref.low)..'–'..DSP.money(ref.high)
+                        ..' · медиана '..DSP.money(ref.med)..' · '..ref.shops..' лавок'))
                 else
-                    imgui.TextDisabled(u('РЎРІРµР¶РёС… РїСЂРµРґР»РѕР¶РµРЅРёР№ РґСЂСѓРіРёС… Р»Р°РІРѕРє РЅРµС‚'))
+                    imgui.TextDisabled(u('Свежих предложений других лавок нет'))
                 end
                 imgui.Separator()
             end
         end
         imgui.EndChild()
-        if imgui.Button(u('<  РќРђР—РђР”##shop_page_prev'),imgui.ImVec2(bw,54))then
+        if imgui.Button(u('<  НАЗАД##shop_page_prev'),imgui.ImVec2(bw,54))then
             DSP.overlay.shop_page=math.max(1,DSP.overlay.shop_page-1)
         end
         imgui.SameLine(0,8)
-        if imgui.Button(u('Р’РџР•Р РЃР”  >##shop_page_next'),imgui.ImVec2(bw,54))then
+        if imgui.Button(u('ВПЕРЁД  >##shop_page_next'),imgui.ImVec2(bw,54))then
             DSP.overlay.shop_page=math.min(pages,DSP.overlay.shop_page+1)
         end
-        imgui.TextDisabled(u('РЎС‚СЂР°РЅРёС†Р° '..DSP.overlay.shop_page..' / '..pages))
-        if imgui.SmallButton(u('РћР±РЅРѕРІРёС‚СЊ СЂС‹РЅРѕРє##dsp_shop_refresh'))then
+        imgui.TextDisabled(u('Страница '..DSP.overlay.shop_page..' / '..pages))
+        if imgui.SmallButton(u('Обновить рынок##dsp_shop_refresh'))then
             DSP.market.pull(DSP.market.state.sid)
         end
+        DSP.overlay.shop_scan_footer(s)
     end
+    capture_overlay('overlay_shop','shop_pos')
     imgui.End()
     imgui.PopStyleColor(ncol)
     if not open[0]then DSP.overlay.shop_closed=s.opened end

@@ -65,28 +65,28 @@ end
 -- original API number visible, and discard this correction on the next pull.
 function M.confirm_offer_quantity(row,kind,offer,value,source)
     if not row or (kind~='buy' and kind~='sell') or not offer then
-        return false,'РЅРµРІРµСЂРЅРѕРµ РїСЂРµРґР»РѕР¶РµРЅРёРµ'
+        return false,'неверное предложение'
     end
     if not M.state.by_key or M.state.by_key[row.key]~=row then
-        return false,'РїСЂРµРґР»РѕР¶РµРЅРёРµ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє СѓСЃС‚Р°СЂРµРІС€РµРјСѓ СЃРЅРёРјРєСѓ'
+        return false,'предложение относится к устаревшему снимку'
     end
     local n=tonumber(value)
     if not n or n~=n or n<0 or n>1000000000 or n~=math.floor(n) then
-        return false,'РІРІРµРґРёС‚Рµ РєРѕР»РёС‡РµСЃС‚РІРѕ РѕС‚ 0 РґРѕ 1 000 000 000'
+        return false,'введите количество от 0 до 1 000 000 000'
     end
     local side=row[kind]
     local found=false
     for _,o in ipairs(side.offers or {}) do
         if o==offer then found=true; break end
     end
-    if not found then return false,'РїСЂРµРґР»РѕР¶РµРЅРёРµ СѓСЃС‚Р°СЂРµР»Рѕ' end
+    if not found then return false,'предложение устарело' end
     -- A UI button may be clicked while a new game packet replaces the opened
     -- shop. Do not promote a previously displayed quantity to "game-verified"
     -- unless it is STILL visible for this exact shop/server/item/price now.
     if source=='game' then
         local observed=M.live_offer_quantity and M.live_offer_quantity(row,kind,offer)
         if observed~=n then
-            return false,'РёРіСЂРѕРІРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ РёР·РјРµРЅРёР»РѕСЃСЊ РёР»Рё Р»Р°РІРєР° Р·Р°РєСЂС‹С‚Р°; РїСЂРѕРІРµСЂСЊС‚Рµ Р·Р°РЅРѕРІРѕ'
+            return false,'игровое количество изменилось или лавка закрыта; проверьте заново'
         end
     end
     if offer.snapshot_qty==nil then offer.snapshot_qty=qty(offer.qty) end

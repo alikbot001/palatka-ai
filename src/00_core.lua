@@ -1,7 +1,7 @@
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.2.11'
+DSP.version = '2.4.2'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -108,13 +108,27 @@ DSP.settings = {
     undercut = 2,
     only_profit = false,
     liquid = false,
-    dry_run = true,
-    refresh_seconds = 60,
+    dry_run = false,
+    refresh_seconds = 300, -- avoid excessive requests to a third-party API
     per_page = 20,
     auto_buy_qty = 1,
     dpi = 1.25,
     overlay_trade = true,
     overlay_shop = true,
+    auto_shop_scan = true, -- scan every opened stall automatically
+    safe_autoscan_migrated_22171 = true,
+    v230_migrated = false,
+    trade_mode = 'real',
+    own_shop_num_saved = 0,
+    shop_identity_memory = {},
+    max_local_shops = 80,
+    local_offer_ttl_minutes = 60,
+    price_history_days = 7,
+    scan_quiet_ms = 650,
+    identity_grace_ms = 1500,
+    ui_windows = {},
+    v240_migrated = false,
+    fps_saver = false, -- optional: skip texture thumbnails and extra overlay windows
     overlay_top = true,
     stats_mode = 'day',
     tg_bot_token = '',
@@ -125,8 +139,8 @@ DSP.settings = {
     trades = {},
     stalls = {},
     crates = {},
-    buy_preset = { name = 'Скупка', items = {} },
-    sell_preset = { name = 'Продажа', items = {} },
+    buy_preset = { name = '', items = {} },
+    sell_preset = { name = '', items = {} },
     -- v1.2 additions
     theme = 'ocean_blue',
     opacity = 0.97,
@@ -135,7 +149,7 @@ DSP.settings = {
     crag_pos = nil,
     -- v1.2 Stage 2 additions: CR tax + arbitrage filters
     -- tax_bp is in basis points: 100=1%, 200=2%, 300=3%, 400=4%
-    -- Default 200 (Titan/Premium). Set in Settings -> Комиссия ЦР.
+    -- Default 200 (Titan/Premium). Set in Settings ->  .
     tax_bp = 200,
     arb_filters = {
         budget = 0,         -- 0 = no budget filter
@@ -147,6 +161,11 @@ DSP.settings = {
         safety_pct = 10, -- leave 10% of unverified buy demand uncommitted
         allow_partial = true,
         include_unknown = false,
+        tax_bp = 200,        -- arbitrage-specific commission in basis points (100 = 1%)
+        min_unit_profit = 0,
+        max_buy_price = 0,  -- zero disables limit
+        min_stock = 0,      -- verified? no; API quantity lower bound
+        shop_mode = 0,      -- 0 any, 1 same shop, 2 different shops
     },
     -- v1.2 Stage 3 additions: craglog + telegram payday
     craglog = {
@@ -182,10 +201,10 @@ function DSP.load_settings()
     if not ok or type(d) ~= 'table' then return false end
     for k, v in pairs(d) do DSP.settings[k] = v end
     if type(DSP.settings.buy_preset) ~= 'table' then
-        DSP.settings.buy_preset = { name = 'Скупка', items = {} }
+        DSP.settings.buy_preset = { name = '', items = {} }
     end
     if type(DSP.settings.sell_preset) ~= 'table' then
-        DSP.settings.sell_preset = { name = 'Продажа', items = {} }
+        DSP.settings.sell_preset = { name = '', items = {} }
     end
     DSP.settings.buy_preset.items = DSP.settings.buy_preset.items or {}
     DSP.settings.sell_preset.items = DSP.settings.sell_preset.items or {}
@@ -193,6 +212,7 @@ function DSP.load_settings()
     if type(DSP.settings.opacity) ~= 'number' then DSP.settings.opacity = 0.97 end
     if type(DSP.settings.screen) ~= 'string' then DSP.settings.screen = 'palatka' end
     if type(DSP.settings.tax_bp) ~= 'number' then DSP.settings.tax_bp = 200 end
+    DSP.settings.refresh_seconds = math.max(180, math.floor(tonumber(DSP.settings.refresh_seconds) or 300))
     if type(DSP.settings.arb_filters) ~= 'table' then
         DSP.settings.arb_filters = { budget = 0, min_profit = 0, min_roi = 0, sort = 1 }
     else
@@ -207,6 +227,13 @@ function DSP.load_settings()
     af.safety_pct = math.max(0, math.min(90, tonumber(af.safety_pct) or 10))
     if af.max_age == nil then af.max_age = 600 end
     if af.include_unknown == nil then af.include_unknown = false end
+    if af.allow_partial == nil then af.allow_partial = true end
+    af.max_age = math.max(0, math.min(2592000, math.floor(tonumber(af.max_age) or 600)))
+    af.tax_bp = math.max(0, math.min(10000, math.floor(tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)))
+    af.min_unit_profit = math.max(0, math.floor(tonumber(af.min_unit_profit) or 0))
+    af.max_buy_price = math.max(0, math.floor(tonumber(af.max_buy_price) or 0))
+    af.min_stock = math.max(0, math.floor(tonumber(af.min_stock) or 0))
+    af.shop_mode = math.max(0, math.min(2, math.floor(tonumber(af.shop_mode) or 0)))
     -- v1.2 Stage 3: craglog state
     if type(DSP.settings.craglog) ~= 'table' then
         DSP.settings.craglog = { open = false, minimized = false, pinned = false, filter = 'all' }
@@ -220,6 +247,32 @@ function DSP.load_settings()
     end
     if type(DSP.settings.tg_payday_last) ~= 'number' then DSP.settings.tg_payday_last = 0 end
     if type(DSP.settings.tg_payday_enabled) ~= 'boolean' then DSP.settings.tg_payday_enabled = false end
+    -- v2.3.0 one-time migration. Previous SAFE releases could persist
+    -- auto_shop_scan=false and dry_run=true, making the UI look functional
+    -- while neither scans nor real listing were executed. The new default is
+    -- explicit REAL mode + automatic stall capture; after this migration the
+    -- user's later toggles are preserved normally.
+    if d.v230_migrated ~= true then
+        DSP.settings.auto_shop_scan = true
+        DSP.settings.dry_run = false
+        DSP.settings.trade_mode = 'real'
+        DSP.settings.v230_migrated = true
+        DSP.settings.safe_autoscan_migrated_22171 = true
+        DSP.save_settings()
+    end
+    DSP.settings.trade_mode = DSP.settings.dry_run and 'preview' or 'real'
+    if type(DSP.settings.shop_identity_memory) ~= 'table' then DSP.settings.shop_identity_memory = {} end
+    DSP.settings.own_shop_num_saved = math.max(0, math.floor(tonumber(DSP.settings.own_shop_num_saved) or 0))
+    DSP.settings.max_local_shops = math.max(20, math.min(300, math.floor(tonumber(DSP.settings.max_local_shops) or 80)))
+    DSP.settings.local_offer_ttl_minutes = math.max(5, math.min(1440, math.floor(tonumber(DSP.settings.local_offer_ttl_minutes) or 60)))
+    DSP.settings.price_history_days = math.max(1, math.min(30, math.floor(tonumber(DSP.settings.price_history_days) or 7)))
+    DSP.settings.scan_quiet_ms = math.max(250, math.min(2500, math.floor(tonumber(DSP.settings.scan_quiet_ms) or 650)))
+    DSP.settings.identity_grace_ms = math.max(0, math.min(5000, math.floor(tonumber(DSP.settings.identity_grace_ms) or 1500)))
+    if type(DSP.settings.ui_windows) ~= 'table' then DSP.settings.ui_windows = {} end
+    if d.v240_migrated ~= true then
+        DSP.settings.v240_migrated = true
+        DSP.save_settings()
+    end
     return true
 end
 
@@ -238,7 +291,7 @@ local function hex(s)
 end
 
 function DSP.enc_selftest()
-    local cp = DSP.to_u8('Тест')
+    local cp = DSP.to_u8('')
     local utf = DSP.to_cp(string.char(0xD0,0xA2,0xD0,0xB5,0xD1,0x81,0xD1,0x82))
     DSP.flog('enc cp=' .. hex(cp) .. ' utf=' .. hex(utf))
 end
@@ -384,7 +437,7 @@ function DSP.theme.set(name)
         DSP.theme.current = name
         DSP.settings.theme = name
         DSP.save_settings()
-        DSP.add_log('Тема: ' .. DSP.theme.list[name].name)
+        DSP.add_log(': ' .. DSP.theme.list[name].name)
     end
 end
 

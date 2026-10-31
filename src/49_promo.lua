@@ -22,15 +22,15 @@ function P.lines(text)
     return rows
 end
 function P.validate(text)
-    if type(text)~='string' or #text<5 or #text>720 then return false,'С‚РµРєСЃС‚ 5вЂ“720 Р±Р°Р№С‚' end
-    if text:find('[%z\1-\8\11\12\14-\31]') then return false,'Р·Р°РїСЂРµС‰С‘РЅ СѓРїСЂР°РІР»СЏСЋС‰РёР№ СЃРёРјРІРѕР»' end
+    if type(text)~='string' or #text<5 or #text>720 then return false,'текст 5–720 байт' end
+    if text:find('[%z\1-\8\11\12\14-\31]') then return false,'запрещён управляющий символ' end
     local lines=P.lines(text)
-    if #lines==0 or #lines>6 then return false,'РѕС‚ 1 РґРѕ 6 СЃС‚СЂРѕРє СЂРµРєР»Р°РјС‹' end
+    if #lines==0 or #lines>6 then return false,'от 1 до 6 строк рекламы' end
     for _,line in ipairs(lines) do
-        if #line>200 then return false,'СЃС‚СЂРѕРєР° РїСЂРµРІС‹С€Р°РµС‚ 200 Р±Р°Р№С‚' end
+        if #line>200 then return false,'строка превышает 200 байт' end
         local command=line:match('^/([%a]+)%s+%S')
         if not (command and P.ALLOWED[command]) then
-            return false,'СЃС‚СЂРѕРєР° РґРѕР»Р¶РЅР° РЅР°С‡РёРЅР°С‚СЊСЃСЏ СЃ /vr, /s, /ad, /fam РёР»Рё /gd'
+            return false,'строка должна начинаться с /vr, /s, /ad, /fam или /gd'
         end
     end
     return true
@@ -38,43 +38,49 @@ end
 function P.own_shop_number()
     local s=P.settings()
     local manual=tonumber(s.shop_number)
-    if manual and manual>=1 and manual<=99999 and manual%1==0 then return math.floor(manual),'РІ РЅР°СЃС‚СЂРѕР№РєР°С…' end
+    if manual and manual>=1 and manual<=99999 and manual%1==0 then return math.floor(manual),'в настройках' end
+    if DSP.shop_identity and DSP.shop_identity.own_shop_number then
+        local ok,n,src=pcall(DSP.shop_identity.own_shop_number)
+        if ok and n then return n,'авто: '..tostring(src or 'identity') end
+    end
+    local saved=tonumber(DSP.settings and DSP.settings.own_shop_num_saved)
+    if saved and saved>=1 and saved<=99999 and saved%1==0 then return math.floor(saved),'запомнен автоматически' end
     local shop=DSP.live and DSP.live.shop
     local nickname=DSP.player_nick and DSP.player_nick() or ''
     local id=shop and tonumber(shop.num)
-    if nickname~='' and shop and shop.owner==nickname and id and id>=1 and id<=99999 and id%1==0 then
-        return math.floor(id),'СЃРІРѕСЏ РѕС‚РєСЂС‹С‚Р°СЏ Р»Р°РІРєР°'
+    if nickname~='' and shop and DSP.lower(tostring(shop.owner or ''))==DSP.lower(nickname) and id and id>=1 and id<=99999 and id%1==0 then
+        return math.floor(id),'своя открытая лавка'
     end
-    return nil,'РЅРѕРјРµСЂ СЃРІРѕРµР№ Р»Р°РІРєРё РЅРµРёР·РІРµСЃС‚РµРЅ'
+    return nil,'номер своей лавки пока не определён'
 end
 function P.set_shop_number(n)
     n=tonumber(n)
-    if not n or n%1~=0 or n<0 or n>99999 then return false,'РЅРѕРјРµСЂ: 0вЂ“99999' end
+    if not n or n%1~=0 or n<0 or n>99999 then return false,'номер: 0–99999' end
     local s=P.settings();local before=s.shop_number
     s.shop_number=n
-    if not DSP.save_settings() then s.shop_number=before;return false,'РЅРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ' end
+    if not DSP.save_settings() then s.shop_number=before;return false,'не удалось сохранить' end
     return true
 end
 function P.expand(text)
-    if not (text:find('{Р»Р°РІРєР°}',1,true) or text:find('{shop}',1,true) or text:find('[Р›РђР’РљРђ]',1,true) or text:find('{РЅРѕРјРµСЂ}',1,true)) then return text end
+    if not (text:find('{лавка}',1,true) or text:find('{shop}',1,true) or text:find('[ЛАВКА]',1,true) or text:find('{номер}',1,true)) then return text end
     local num,err=P.own_shop_number()
     if not num then return nil,err end
     local clickable=':lavka'..tostring(num)..':'
-    return (text:gsub('{Р»Р°РІРєР°}',clickable):gsub('{shop}',clickable):gsub('%[Р›РђР’РљРђ%]',clickable):gsub('{РЅРѕРјРµСЂ}',tostring(num)))
+    return (text:gsub('{лавка}',clickable):gsub('{shop}',clickable):gsub('%[ЛАВКА%]',clickable):gsub('{номер}',tostring(num)))
 end
 function P.add(name,text,interval)
     local s=P.settings()
-    if #s.templates>=8 then return false,'РјР°РєСЃРёРјСѓРј 8 С€Р°Р±Р»РѕРЅРѕРІ' end
+    if #s.templates>=8 then return false,'максимум 8 шаблонов' end
     local ok,err=P.validate(text);if not ok then return false,err end
-    local item={name=tostring(name or 'РћР±СЉСЏРІР»РµРЅРёРµ'):sub(1,48),text=text,
+    local item={name=tostring(name or 'Объявление'):sub(1,48),text=text,
         interval=math.max(P.MIN_INTERVAL,math.min(3600,math.floor(tonumber(interval)or 300))),auto=false}
     s.templates[#s.templates+1]=item
-    if not DSP.save_settings() then table.remove(s.templates);return false,'РѕС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ' end
+    if not DSP.save_settings() then table.remove(s.templates);return false,'ошибка сохранения' end
     return true
 end
 function P.update(index,name,text,interval)
     local item=P.settings().templates[index]
-    if not item then return false,'С€Р°Р±Р»РѕРЅ РЅРµ РЅР°Р№РґРµРЅ' end
+    if not item then return false,'шаблон не найден' end
     local ok,err=P.validate(text);if not ok then return false,err end
     local previous={name=item.name,text=item.text,interval=item.interval,auto=item.auto}
     item.name=tostring(name or ''):sub(1,48)
@@ -82,7 +88,7 @@ function P.update(index,name,text,interval)
     item.interval=math.max(P.MIN_INTERVAL,math.min(3600,math.floor(tonumber(interval)or 300)))
     if not DSP.save_settings() then
         for k,v in pairs(previous)do item[k]=v end
-        return false,'РѕС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ'
+        return false,'ошибка сохранения'
     end
     return true
 end
@@ -101,20 +107,20 @@ end
 function P.send_once(index,now,send,online)
     now=now or os.time()
     local item=P.settings().templates[index]
-    if not item then return false,'С€Р°Р±Р»РѕРЅ РЅРµ РЅР°Р№РґРµРЅ' end
+    if not item then return false,'шаблон не найден' end
     local ok,err=P.validate(item.text);if not ok then return false,err end
-    if P.session_count>=P.MAX_SESSION then P.running=false;return false,'Р»РёРјРёС‚ Р·Р° СЃРµСЃСЃРёСЋ РґРѕСЃС‚РёРіРЅСѓС‚' end
-    if P.last_sent>0 and now-P.last_sent<P.MIN_INTERVAL then return false,'РїРѕРґРѕР¶РґРёС‚Рµ РґРѕ СЃР»РµРґСѓСЋС‰РµР№ РѕС‚РїСЂР°РІРєРё' end
+    if P.session_count>=P.MAX_SESSION then P.running=false;return false,'лимит за сессию достигнут' end
+    if P.last_sent>0 and now-P.last_sent<P.MIN_INTERVAL then return false,'подождите до следующей отправки' end
     if online==nil then online=online_check() end
-    if not online then return false,'РЅРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ РёРіСЂРѕР№' end
+    if not online then return false,'нет соединения с игрой' end
     local sender=send or sampSendChat
     local lines=P.lines(item.text)
     local index=(tonumber(item.line_index) or 0)%#lines+1
     local resolved,expand_err=P.expand(lines[index])
     if not resolved then return false,expand_err end
-    if #resolved>200 then return false,'РїРѕСЃР»Рµ РїРѕРґСЃС‚Р°РЅРѕРІРєРё С‚РµРєСЃС‚ СЃР»РёС€РєРѕРј РґР»РёРЅРЅС‹Р№' end
+    if #resolved>200 then return false,'после подстановки текст слишком длинный' end
     local sent,response=pcall(sender,resolved)
-    if not sent or response==false then return false,'РєРѕРјР°РЅРґР° РЅРµ РѕС‚РїСЂР°РІР»РµРЅР°' end
+    if not sent or response==false then return false,'команда не отправлена' end
     P.last_sent=now;P.session_count=P.session_count+1
     item.last_sent=now
     item.line_index=index
@@ -123,11 +129,11 @@ function P.send_once(index,now,send,online)
     return true
 end
 function P.start()
-    if #P.settings().templates==0 then return false,'СЃРЅР°С‡Р°Р»Р° СЃРѕР·РґР°Р№С‚Рµ С€Р°Р±Р»РѕРЅ' end
+    if #P.settings().templates==0 then return false,'сначала создайте шаблон' end
     local active=false
     for _,t in ipairs(P.settings().templates)do if t.auto then active=true end end
-    if not active then return false,'РІС‹Р±РµСЂРёС‚Рµ С€Р°Р±Р»РѕРЅ РґР»СЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРѕР№ РѕС‚РїСЂР°РІРєРё' end
-    if P.session_count>=P.MAX_SESSION then return false,'Р»РёРјРёС‚ Р·Р° СЃРµСЃСЃРёСЋ РёСЃС‡РµСЂРїР°РЅ' end
+    if not active then return false,'выберите шаблон для автоматической отправки' end
+    if P.session_count>=P.MAX_SESSION then return false,'лимит за сессию исчерпан' end
     P.running=true
     P.last_error=nil
     P.started=os.time()
@@ -139,7 +145,7 @@ function P.tick(now,send,online)
     now=now or os.time()
     if P.session_count>=P.MAX_SESSION then P.stop();return false end
     if online==false or (online==nil and not online_check()) then
-        P.last_error='Р°РІС‚Рѕ-РїРёР°СЂ РѕСЃС‚Р°РЅРѕРІР»РµРЅ: СЃРѕРµРґРёРЅРµРЅРёРµ РїРѕС‚РµСЂСЏРЅРѕ'
+        P.last_error='авто-пиар остановлен: соединение потеряно'
         P.stop();return false
     end
     if P.last_sent>0 and now-P.last_sent<P.MIN_INTERVAL then return false end
@@ -155,6 +161,12 @@ end
 function P.install()
     if P.installed then return end
     P.installed=true
+    -- Resume only templates explicitly marked auto by the user. This is not
+    -- a new opt-in: the persisted per-template flag is the user's choice.
+    for _,t in ipairs(P.settings().templates) do
+        if t.auto then P.running=true; break end
+    end
+    P.session_count=0
     if not lua_thread or not wait then return end
     lua_thread.create(function()
         while true do

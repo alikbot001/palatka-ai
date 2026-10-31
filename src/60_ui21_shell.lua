@@ -5,21 +5,62 @@ local V={screen='home',kind='sell',tab='items',source='inventory',nav=false,
     pages={},searches={},scrolls={},cache={},errors={}}
 DSP.ui21=V;DSP.ui22=V
 local function u(s)return DSP.utf8(tostring(s or ''))end
-function V.inline(gap)imgui.SameLine(0,gap or 6)end
+-- Keep controls from escaping the right side of narrow windows. A SameLine
+-- is only allowed if there is room for the next touch target.
+function V.inline(gap,next_width)
+    local room=imgui.GetContentRegionAvail and imgui.GetContentRegionAvail().x or 9999
+    if room >= (next_width or 100) then imgui.SameLine(0,gap or 6) end
+end
+function V.compact(width) return (tonumber(width) or (imgui.GetContentRegionAvail().x)) < 430 end
+-- Responsive action flow; prevents the buttons in toolbars disappearing offscreen.
+function V.actions(items)
+    local total=math.max(1,imgui.GetContentRegionAvail().x)
+    local room,first=total,true
+    local result={}
+    for i,a in ipairs(items) do
+        local desired=a.width or 110
+        local width=math.max(60,math.min(desired,total))
+        if not first and room < width+8 then
+            room=total
+        elseif not first then
+            imgui.SameLine(0,6)
+        end
+        local hit=V.button(a.label,a.id,width,a.active,a.primary,a.height)
+        if hit then result[a.id]=true end
+        room=math.max(0,imgui.GetContentRegionAvail().x)
+        first=false
+    end
+    return result
+end
 function V.text(s)imgui.Text(u(s))end
 function V.muted(s)imgui.TextDisabled(u(s))end
 function V.green(s)imgui.TextColored(DSP.theme.col('good',1),u(s))end
 function V.red(s)imgui.TextColored(DSP.theme.col('bad',1),u(s))end
+-- Measure overflowing text with binary search, not one full ImGui text
+-- measurement per removed character on every frame. A bounded cache is
+-- keyed by font size and available width for rotation/theme changes.
+local fit_cache,fit_cache_size={},0
 function V.fit(s,width)
     s=tostring(s or '')
     if not imgui.CalcTextSize then return s end
-    if imgui.CalcTextSize(u(s)).x<=width then return s end
-    -- Source is CP1251 on device, UTF-8 in headless tests: truncate at a boundary.
-    local cut=s
-    while #cut>0 and imgui.CalcTextSize(u(cut..'...')).x>width do
-        cut=cut:sub(1,-2)
+    width=math.max(1,tonumber(width) or 1)
+    local font=imgui.GetFontSize and imgui.GetFontSize() or (V.font_pixels or 18)
+    local key=s..'\0'..tostring(math.floor(width*10))..':'..tostring(math.floor(font*10))
+    local hit=fit_cache[key]
+    if hit~=nil then return hit end
+    local result=s
+    if imgui.CalcTextSize(u(s)).x>width then
+        local lo,hi=0,#s
+        while lo<hi do
+            local mid=math.floor((lo+hi+1)/2)
+            if imgui.CalcTextSize(u(s:sub(1,mid)..'...')).x<=width then lo=mid
+            else hi=mid-1 end
+        end
+        result=s:sub(1,lo)..'...'
     end
-    return cut..'...'
+    if fit_cache_size>=256 then fit_cache={};fit_cache_size=0 end
+    fit_cache[key]=result;fit_cache_size=fit_cache_size+1
+    return result
 end
 function V.button(label,id,width,active,primary,height)
     if active or primary then imgui.PushStyleColor(imgui.Col.Button,DSP.theme.col('accent',primary and 1 or .30))end
@@ -57,8 +98,12 @@ function V.heading(title,right,width)
     V.apply_font((V.font_pixels or 18)*1.13)
     V.text(title)
     V.apply_font()
-    if right then V.at(x+math.max(0,avail-width),y);right()end
-    V.at(x,y+46)
+    local second=right and avail<(width or 0)+128
+    if right then
+        V.at(second and x or x+math.max(0,avail-(width or 0)),second and y+43 or y)
+        right()
+    end
+    V.at(x,y+(second and 91 or 46))
 end
 function V.search(key,hint,width)
     local b=V.searches[key]
@@ -106,7 +151,9 @@ function V.list(key,draw,options)
     V.track_touch(imgui.GetIO())
     local o=options or {};local footer=o.footer~=false
     local avail=imgui.GetContentRegionAvail()
-    local h=o.height and o.height>0 and o.height or math.max(36,avail.y-(footer and (o.footer_height or 50) or 0))
+    local reserved=footer and (o.footer_height or 50) or 0
+    local max_height=math.max(30,avail.y-reserved)
+    local h=o.height and o.height>0 and math.min(o.height,max_height) or max_height
     local s=V.scrolls[key] or {pending=0,y=0};V.scrolls[key]=s;s.height=h
     local flags=imgui.WindowFlags.NoScrollbar
     if imgui.BeginChild('##v22_list_'..key,imgui.ImVec2(0,h),false,flags)then
@@ -126,7 +173,7 @@ function V.list(key,draw,options)
         if o.toolbar then o.toolbar(key)else
             V.scroll_buttons(key)
             if type(o.footer)=='function'then V.inline();o.footer()
-            elseif o.count then V.inline();V.muted(tostring(o.count)..' Р·Р°РїРёСЃРµР№')end
+            elseif o.count then V.inline();V.muted(tostring(o.count)..' записей')end
         end
     end
 end
@@ -141,7 +188,7 @@ function V.list_rows(key,rows,row_height,draw,options)
         end
         imgui.SetCursorPosY(start+#rows*row_height)
         imgui.Dummy(imgui.ImVec2(1,1))
-        if #rows==0 then imgui.SetCursorPosY(start);V.muted('РќРµС‚ Р·Р°РїРёСЃРµР№')end
+        if #rows==0 then imgui.SetCursorPosY(start);V.muted('Нет записей')end
     end,options)
 end
 function V.row(id,height,draw)
@@ -164,18 +211,74 @@ function V.at(x,y)imgui.SetCursorPos(imgui.ImVec2(x,y))end
 -- One consistent window chrome for every modal: close at the top-right.
 -- A modal can always be dismissed without traversing a sequence of Back buttons.
 -- Keep the native ImGui resize grip enabled (NoResize is intentionally absent).
+V.popup_positions=V.popup_positions or {}
 function V.popup(title,id,draw,size)
     size=size or {}
-    local sz=imgui.GetIO().DisplaySize
-    imgui.SetNextWindowPos(imgui.ImVec2(sz.x*.5,sz.y*.5),imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
-    imgui.SetNextWindowSize(imgui.ImVec2(math.min(size.w or 620,sz.x-24),math.min(size.h or 410,sz.y-24)),imgui.Cond.Appearing)
-    local flags=imgui.WindowFlags.NoTitleBar + (size.resizable and imgui.WindowFlags.NoScrollbar or 0)
+    local io=imgui.GetIO()
+    local sz=io.DisplaySize
+    DSP.settings.ui_windows=DSP.settings.ui_windows or {}
+    V.popup_sizes=V.popup_sizes or {}
+    local saved=DSP.settings.ui_windows[id]
+    local current=V.popup_positions[id]
+    if not current and type(saved)=='table' and tonumber(saved.x) and tonumber(saved.y) then
+        current={x=tonumber(saved.x),y=tonumber(saved.y)}
+        V.popup_positions[id]=current
+        if tonumber(saved.w) and tonumber(saved.h) then V.popup_sizes[id]={w=tonumber(saved.w),h=tonumber(saved.h)} end
+    end
+    if current then
+        -- Keep a dragged popup visible after resolution/orientation changes.
+        local live=V.popup_sizes and V.popup_sizes[id] or nil
+        local w=math.min((live and live.w) or size.w or 620,sz.x-16)
+        local h=math.min((live and live.h) or size.h or 410,sz.y-16)
+        current.x=DSP.clamp(current.x,0,math.max(0,sz.x-w))
+        current.y=DSP.clamp(current.y,0,math.max(0,sz.y-h))
+        imgui.SetNextWindowPos(imgui.ImVec2(current.x,current.y),imgui.Cond.Always)
+    else
+        imgui.SetNextWindowPos(imgui.ImVec2(sz.x*.5,sz.y*.5),imgui.Cond.Appearing,imgui.ImVec2(.5,.5))
+    end
+    local remembered=V.popup_sizes[id]
+    local initial_w=math.min((remembered and remembered.w) or size.w or 620,sz.x-24)
+    local initial_h=math.min((remembered and remembered.h) or size.h or 410,sz.y-24)
+    imgui.SetNextWindowSize(imgui.ImVec2(initial_w,initial_h),imgui.Cond.Appearing)
+    -- Native overflow scrolling stays enabled, including on resized small
+    -- popups. Window motion itself is still restricted to the title strip.
+    if imgui.SetNextWindowSizeConstraints then
+        imgui.SetNextWindowSizeConstraints(imgui.ImVec2(math.min(230,sz.x-16),math.min(165,sz.y-16)),
+            imgui.ImVec2(math.max(230,sz.x-8),math.max(165,sz.y-8)))
+    end
+    local flags=imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoMove
     if imgui.BeginPopupModal(u(title)..'##v22_'..id,nil,flags)then
+        if imgui.GetWindowSize then
+            local actual=imgui.GetWindowSize()
+            local native=imgui.GetWindowPos and imgui.GetWindowPos() or current
+            V.popup_sizes[id]={w=actual.x,h=actual.y}
+            if native and not V.popup_positions[id] then V.popup_positions[id]={x=native.x,y=native.y} end
+            local pos=V.popup_positions[id] or native
+            if pos then
+                local prev=DSP.settings.ui_windows[id] or {}
+                if math.abs((tonumber(prev.x)or-99999)-pos.x)>.5 or math.abs((tonumber(prev.y)or-99999)-pos.y)>.5
+                    or math.abs((tonumber(prev.w)or-99999)-actual.x)>.5 or math.abs((tonumber(prev.h)or-99999)-actual.y)>.5 then
+                    DSP.settings.ui_windows[id]={x=pos.x,y=pos.y,w=actual.x,h=actual.y}
+                    if M and M.defer_save then M.defer_save() end
+                end
+            end
+        end
         V.apply_font()
         local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
         local avail=imgui.GetContentRegionAvail().x
-        V.text(V.fit(title,math.max(60,avail-55)))
-        -- Position independent of the previous widgets; old 'Р—Р°РєСЂС‹С‚СЊ' buttons remain
+        -- Only this title strip can drag the popup. The invisible/native
+        -- window drag mechanism stays disabled via NoMove.
+        V.text_button(V.fit(title,math.max(60,avail-60)),'modal_drag_'..id,math.max(60,avail-52),false,36)
+        if imgui.IsItemActive() and io.MouseDelta and imgui.GetWindowPos and imgui.GetWindowSize then
+            local d=io.MouseDelta
+            if d.x~=0 or d.y~=0 then
+                local pos,wh=imgui.GetWindowPos(),imgui.GetWindowSize()
+                V.popup_positions[id]={
+                    x=DSP.clamp(pos.x+d.x,0,math.max(0,sz.x-wh.x)),
+                    y=DSP.clamp(pos.y+d.y,0,math.max(0,sz.y-wh.y))}
+            end
+        end
+        -- Position independent of the previous widgets; old 'Закрыть' buttons remain
         -- for compatibility, but every modal gets exactly the same close affordance.
         V.at(x+math.max(0,avail-42),y)
         local close=V.button('X','modal_x_'..id,40,false,false,34)
@@ -196,20 +299,20 @@ function V.open_popup(title,id)
     V.popup_pending={title=title,id=id}
 end
 function V.cancel(id)
-    if V.button('РћС‚РјРµРЅР°','cancel_'..id,120)then imgui.CloseCurrentPopup()end
+    if V.button('Отмена','cancel_'..id,120)then imgui.CloseCurrentPopup()end
 end
 function V.geometry(sw,sh)
     local p=DSP.settings.mobile_window or {}
-    local w=DSP.clamp(tonumber(p.w)or math.min(sw*.93,1120),math.min(sw,560),sw)
-    local h=DSP.clamp(tonumber(p.h)or sh*.88,math.min(sh,330),sh)
+    local w=DSP.clamp(tonumber(p.w)or math.min(sw*.93,1120),math.min(sw,380),sw)
+    local h=DSP.clamp(tonumber(p.h)or sh*.88,math.min(sh,275),sh)
     return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or (sw-w)*.5,0,math.max(0,sw-w)),
         y=DSP.clamp(tonumber(p.y)or (sh-h)*.35,0,math.max(0,sh-h))}
 end
-local nav={{'palatka','РўРѕСЂРіРѕРІР»СЏ'},{'lavki','Р›Р°РІРєРё'},{'arbitrage','РђСЂР±РёС‚СЂР°Р¶'},
- {'resale','РџРµСЂРµРїСЂРѕРґР°Р¶Р°'},{'promo','РђРІС‚Рѕ-РїРёР°СЂ'},{'scan','РЎРєР°РЅ Р»Р°РІРєРё'},
- {'search','РџРѕРёСЃРє С‚РѕРІР°СЂР°'},{'calculator','РљР°Р»СЊРєСѓР»СЏС‚РѕСЂ'},{'logs','Р–СѓСЂРЅР°Р»'},
- {'stats','РЎС‚Р°С‚РёСЃС‚РёРєР°'},{'notes','Р—Р°РјРµС‚РєРё'},{'storage','РҐСЂР°РЅРёР»РёС‰Р°'},
- {'market','Р С‹РЅРѕРє'},{'history','РСЃС‚РѕСЂРёСЏ'},{'settings','РќР°СЃС‚СЂРѕР№РєРё'}}
+local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'arbitrage','Арбитраж'},
+ {'resale','Перепродажа'},{'promo','Авто-пиар'},{'scan','Скан лавки'},
+ {'search','Поиск товара'},{'calculator','Калькулятор'},{'logs','Журнал'},
+ {'stats','Статистика'},{'notes','Заметки'},{'storage','Хранилища'},
+ {'market','Рынок'},{'history','История'},{'settings','Настройки'}}
 function V.set_screen(id)
     if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
     V.screen=id;V.nav=false
@@ -223,7 +326,8 @@ local function header(g,io)
     local menu_x=close_x-85
     if V.button('P','carbon_brand',40,false,true,36)then V.set_screen('home')end
     V.at(x0+47,y0)
-    if V.text_button('PALATKA AI','carbon_title',121,false,36)then V.set_screen('home')end
+    local title_width=math.max(65,math.min(155,menu_x-(x0+47)-8))
+    if V.text_button(g.w<540 and 'AI / MOVE' or 'PALATKA AI / MOVE','carbon_title',title_width,false,36)then V.set_screen('home')end
     if imgui.IsItemActive() and io.MouseDelta then
         local d=io.MouseDelta
         if d.x~=0 or d.y~=0 then
@@ -232,13 +336,13 @@ local function header(g,io)
             M.defer_save()
         end
     end
-    V.at(x0+175,y0+11);V.muted('v'..tostring(DSP.version or '2.2'))
+    if g.w>=630 then V.at(x0+207,y0+11);V.muted('v'..tostring(DSP.version or '2.2'))end
     if g.w>850 then
         V.at(math.max(x0+240,menu_x-244),y0+11)
-        V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' В· '..DSP.market.freshness(),230))
+        V.muted(V.fit('Arizona #'..tostring(DSP.market.state.sid or '?')..' · '..DSP.market.freshness(),230))
     end
     V.at(menu_x,y0)
-    if V.button('РњРµРЅСЋ','menu',78,V.nav,false,36)then V.nav=not V.nav end
+    if V.button('Меню','menu',78,V.nav,false,36)then V.nav=not V.nav end
     V.at(close_x,y0)
     if V.button('X','close',40,false,false,36)then
         U.set_open(false)
@@ -263,8 +367,8 @@ function V.resize_grip(g,io)
     if imgui.IsItemActive() and io.MouseDelta then
         local d=io.MouseDelta
         if d.x~=0 or d.y~=0 then
-            local w=DSP.clamp(g.w+d.x,math.min(560,io.DisplaySize.x),io.DisplaySize.x-g.x)
-            local h=DSP.clamp(g.h+d.y,math.min(330,io.DisplaySize.y),io.DisplaySize.y-g.y)
+            local w=DSP.clamp(g.w+d.x,math.min(380,io.DisplaySize.x),io.DisplaySize.x-g.x)
+            local h=DSP.clamp(g.h+d.y,math.min(275,io.DisplaySize.y),io.DisplaySize.y-g.y)
             DSP.settings.mobile_window={x=g.x,y=g.y,w=w,h=h}
             M.defer_save()
         end
@@ -284,7 +388,7 @@ function V.track_touch(io)
     V.was_down=down
 end
 function V.font_scale_for(base,width,dpi)
-    return 18*(tonumber(dpi)or 1.25)/1.25*math.min(1.35,math.max(1,width/1000))/math.max(1,base)
+    return 18*(tonumber(dpi)or 1.25)/1.25*math.min(1.35,math.max(.80,width/850))/math.max(1,base)
 end
 function U.draw()
     if DSP.carbon_draw then DSP.carbon_draw.begin_frame() end
@@ -306,7 +410,7 @@ function U.draw()
     imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
     imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,5)
     local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoMove+
-        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar
+        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar+(imgui.WindowFlags.NoScrollWithMouse or 0)
     M.flush_save(false)
     if imgui.Begin('##palatka_mobile',U.open_ref,flags)then
         -- Shared native atlases differ between loaders; normalize actual pixels.
@@ -317,24 +421,24 @@ function U.draw()
         local show_side=V.nav or wide
         local drawer_only=V.nav and not wide
         if show_side then
-            local h=imgui.GetContentRegionAvail().y-48
+            local h=math.max(30,imgui.GetContentRegionAvail().y-48)
             if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(182,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
                 V.apply_font()
-                V.muted('РќРђР’РР“РђР¦РРЇ')
-                if V.button('Р“Р»Р°РІРЅР°СЏ','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
+                V.muted('НАВИГАЦИЯ')
+                if V.button('Главная','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
                 V.list_rows('navigation',nav,44,function(e,i)
                     local symbols={palatka='= ',lavki='# ',arbitrage='> ',resale='* ',promo='@ ',scan='[] ',
                         search='? ',calculator='+ ',logs='| ',stats='% ',notes='- ',storage='[] ',market='$ ',history=': ',settings=': '}
                     if V.button((symbols[e[1]] or ' ')..e[2],'nav_'..i,-1,V.screen==e[1],V.screen==e[1],42)then V.set_screen(e[1])end
                 end,{height=math.max(70,imgui.GetContentRegionAvail().y-85),footer=true})
-                if imgui.GetContentRegionAvail().y>25 then V.muted('  PALATKA AI В· LIVE')end
+                if imgui.GetContentRegionAvail().y>25 then V.muted('  PALATKA AI · LIVE')end
             end
             imgui.EndChild()
             if not drawer_only then V.inline(4)end
         end
         if not drawer_only then
             -- Workspace and global footer are separate, as in the supplied Carbon HTML.
-            if imgui.BeginChild('##v22_workspace',imgui.ImVec2(0,-48),false,imgui.WindowFlags.NoScrollbar)then
+            if imgui.BeginChild('##v22_workspace',imgui.ImVec2(0,-48),false,0)then
                 V.apply_font()
                 local ok,err=xpcall(function()
                     if V.screen=='home'then V.home()
@@ -355,15 +459,15 @@ function U.draw()
                 if not ok then
                     V.last_error=err
                     if V.errors[V.screen]~=err then DSP.flog('UI22 '..err)end
-                    V.errors[V.screen]=err;V.red('РћС€РёР±РєР° СЌРєСЂР°РЅР°. РџРѕРґСЂРѕР±РЅРѕСЃС‚Рё РІ standalone.log')
+                    V.errors[V.screen]=err;V.red('Ошибка экрана. Подробности в standalone.log')
                 end
             end
             imgui.EndChild()
             imgui.Separator()
-            if V.button('РћРєРЅР°','carbon_windows',100,false,true,38)then V.nav=not V.nav end
+            if V.button('Окна','carbon_windows',100,false,true,38)then V.nav=not V.nav end
             V.inline()
             local remain=imgui.GetContentRegionAvail().x
-            V.muted(V.fit('Palatka AI В· '..tostring(DSP.market.state.status or 'offline')..' В· Р±РµР· Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРёС… СЃРґРµР»РѕРє',math.max(40,remain-6)))
+            V.muted(V.fit('Palatka AI · '..tostring(DSP.market.state.status or 'offline')..' · без автоматических сделок',math.max(40,remain-6)))
         end
         if V.popup_pending then
             local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(u(p.title)..'##v22_'..p.id)

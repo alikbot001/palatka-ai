@@ -16,25 +16,25 @@ function C.summarize_loot(entries,lookup)
     local map={}
     for _,e in ipairs(entries or{})do
         if e.kind=='item'or e.type=='crate'then
-            local name=tostring(e.item_name or e.item or '–ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π –ø—Ä–µ–¥–º–µ—Ç')
+            local name=tostring(e.item_name or e.item or 'ÕÂËÁ‚ÂÒÚÌ˚È ÔÂ‰ÏÂÚ')
             local ench=math.floor(number(e.ench));local qty=math.floor(number(e.qty or e.count or 1))
             local key=DSP.item_key(name,ench)
             if qty>0 then
                 local row=map[key]
                 if not row then row={key=key,name=name,ench=ench,qty=0,estimated=0,unpriced_qty=0,events={},sources={},receipts=0};map[key]=row;out.items[#out.items+1]=row end
                 local unit,origin,stamp
-                if lookup then unit,origin,stamp=lookup(name,ench,e)end
+                if not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e)) and lookup then unit,origin,stamp=lookup(name,ench,e)end
                 unit=number(unit)
-                if unit<=0 and e.price_known then
+                if unit<=0 and e.price_known and not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e)) then
                     unit=number(e.unit_price or e.price)
                     if unit<=0 and e.estimated_value then unit=number(e.estimated_value)/qty end
-                    origin='–û—Ü–µ–Ω–∫–∞ –ø—Ä–∏ –ø–æ–ª—É—á–µ–Ω–∏–∏';stamp=e.price_ts or e.ts
+                    origin='ŒˆÂÌÍ‡ ÔË ÔÓÎÛ˜ÂÌËË';stamp=e.price_ts or e.ts
                 end
                 if unit>0 then
-                    row.estimated=row.estimated+unit*qty;row.price_source=origin or '–†—ã–Ω–æ–∫';row.price_ts=tonumber(stamp)
+                    row.estimated=row.estimated+unit*qty;row.price_source=origin or '–˚ÌÓÍ';row.price_ts=tonumber(stamp)
                 else row.unpriced_qty=row.unpriced_qty+qty end
                 row.qty=row.qty+qty;row.receipts=row.receipts+1;row.events[#row.events+1]=e
-                local source=tostring(e.source or '–ò—Å—Ç–æ—á–Ω–∏–∫ –Ω–µ–∏–∑–≤–µ—Å—Ç–µ–Ω')
+                local source=tostring(e.source or '»ÒÚÓ˜ÌËÍ ÌÂËÁ‚ÂÒÚÂÌ')
                 row.sources[source]=(row.sources[source]or 0)+qty
                 out.qty=out.qty+qty;out.receipts=out.receipts+1
             end
@@ -61,13 +61,14 @@ function C.loot_summary(period,query)
     for _,e in ipairs(C.history('loot',query))do if(tonumber(e.ts)or 0)>=from then rows[#rows+1]=e end end
     local quotes={}
     local result=C.summarize_loot(rows,function(name,ench,event)
+        if DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(event)then return end
         if event.server and DSP.market and DSP.market.state.sid and tonumber(event.server)~=tonumber(DSP.market.state.sid)then return end
         local key=DSP.item_key(name,ench)
         if quotes[key]==nil then
             local row=DSP.db and DSP.db.get and DSP.db.get(name,ench)
             local unit=row and row.buy and tonumber(row.buy.max)
-            local origin='–°–∫—É–ø–∫–∞ —Ä—ã–Ω–∫–∞ (—Å–Ω–∏–º–æ–∫)'
-            if not unit or unit<=0 then unit=row and row.sell and tonumber(row.sell.min);origin='–ü—Ä–æ–¥–∞–∂–∞ —Ä—ã–Ω–∫–∞ (–æ–±—ä—è–≤–ª–µ–Ω–∏—è)'end
+            local origin='—ÍÛÔÍ‡ ˚ÌÍ‡ (ÒÌËÏÓÍ)'
+            if not unit or unit<=0 then unit=row and row.sell and tonumber(row.sell.min);origin='œÓ‰‡Ê‡ ˚ÌÍ‡ (Ó·˙ˇ‚ÎÂÌËˇ)'end
             quotes[key]=unit and unit>0 and{unit=unit,ts=row.updated,origin=origin}or false
         end
         local quote=quotes[key]
