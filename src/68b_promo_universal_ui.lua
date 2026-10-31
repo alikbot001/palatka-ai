@@ -21,6 +21,7 @@ local function open_editor(index)
     end
     V.mhpromo_edit={index=index,name=buff(t and t.name or'Новый шаблон',96),
         rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false,
+        waiting=imgui.new.float(t and tonumber(t.waiting) or 1.5),
         interval_min={value=t and t.interval_min or 0},interval_max={value=t and t.interval_max or 0},
         auto_limit={value=t and t.auto_limit or 0},random_line=t and t.random_line==true or false}
 end
@@ -84,7 +85,11 @@ local function editor(e)
             end
         end
     end
-    V.muted('Макрос {shop} вставляет кликабельную ссылку на свою лавку.')
+    V.muted('Макрос {shop} вставляет ссылку/номер своей лавки.')
+    V.muted('Пауза между строками одного ручного запуска, сек:')
+    imgui.SetNextItemWidth(150)
+    imgui.InputFloat('##mhpromo_waiting',e.waiting,.1,.5,'%.1f')
+    if e.waiting[0]<.5 then e.waiting[0]=.5 elseif e.waiting[0]>10 then e.waiting[0]=10 end
     if button(e.random_line and'Случайная строка: ВКЛ' or'Случайная строка: ВЫКЛ',
         'random',235,e.random_line)then e.random_line=not e.random_line end
     V.muted('Интервал повтора: 0 = индивидуальный интервал каждой строки.')
@@ -104,7 +109,7 @@ local function editor(e)
             local idx=e.index or #list
             local saved,err=P.save_template_options(idx,{
                 interval_min=e.interval_min.value,interval_max=e.interval_max.value,
-                auto_limit=e.auto_limit.value,random_line=e.random_line})
+                auto_limit=e.auto_limit.value,random_line=e.random_line,waiting=e.waiting[0]})
             if saved then V.mhpromo_edit=nil else e.error=tostring(err)end
         else e.error=tostring(reason)end
     end
@@ -137,25 +142,36 @@ function V.promo_screen()
         'resume',191,settings.resume_on_login)then
         P.set_option('resume_on_login',not settings.resume_on_login)
     end
+    local left=P.queue_left and P.queue_left()or nil
     V.muted('Отправлено: '..tostring(P.session_count)..
-        (settings.continuous and' | без лимита' or' / 12')..
-        ' | '..(P.running and(P.pause_reason or'работает')or'выключен'))
-    if V.mhpromo_error then V.red(V.mhpromo_error)end
+        (settings.continuous and' | без лимита'or' / 12')..
+        ' | '..(P.running and(P.pause_reason or'работает')or'выключен')..
+        (left and(' | следующая через '..left..'с')or''))
+    if V.mhpromo_error or P.last_error then V.red(tostring(V.mhpromo_error or P.last_error))end
     V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
     V.muted('Интерфейс Palatka MH / сборка 2.9.2')
-    V.list_rows('mhpromo_templates',settings.templates,96,function(t,i)
-        V.row('mhpromo_t_'..i,96,function(w,x,y)
+    V.list_rows('mhpromo_templates',settings.templates,124,function(t,i)
+        V.row('mhpromo_t_'..i,124,function(w,x,y)
+            local lo=tonumber(t.interval_min)or 0
+            local hi=tonumber(t.interval_max)or 0
+            local interval=lo>0 and(hi>lo and(lo..'-'..hi..'с')or(lo..'с'))
+                or tostring((t.rows and t.rows[1]and t.rows[1].interval)or 180)..'с'
             V.at(x,y);V.text(V.fit(t.name or'Шаблон',math.max(80,w-155)))
-            V.at(x,y+27);V.muted(#(t.rows or{})..' строк')
-            V.at(x,y+53)
-            if button(t.auto~=false and'Авто: ВКЛ' or'Авто: ВЫКЛ',
-                'enable_'..i,132,t.auto~=false)then
+            V.at(x,y+27);V.muted(V.fit(#(t.rows or{})..' строк · интервал '..interval..
+                ' · пауза '..tostring(t.waiting or 1.5)..'с',math.max(80,w-155)))
+            V.at(x,y+56)
+            if button(t.auto~=false and'Авто: ВКЛ'or'Авто: ВЫКЛ','enable_'..i,132,t.auto~=false)then
                 local was=t.auto;t.auto=not(t.auto~=false)
                 if DSP.save_settings and DSP.save_settings()==false then t.auto=was end
             end
+            V.inline(4)
+            if button(P.manual_busy and P.manual_template==i and'Отправка...'or'Отправить',
+                'send_'..i,116,P.manual_busy and P.manual_template==i)then
+                local ok,why=P.send_template_once(i);V.mhpromo_error=ok and nil or tostring(why)
+            end
             V.at(x+w-143,y+4)
             if button('Изменить','edit_'..i,140)then open_editor(i)end
-            V.at(x+w-143,y+52)
+            V.at(x+w-143,y+78)
             if button('Удалить','del_'..i,140)then
                 V.mhpromo_del=i;V.open_popup('Удалить шаблон','mhpromo_delete')
             end

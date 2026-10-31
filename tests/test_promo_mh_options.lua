@@ -10,9 +10,10 @@ assert(P.save_template(nil,'ЦР и семья',{
     {text='/gd Товар для банды',interval=240,auto=true}},true))
 local template=P.settings().templates[1]
 assert(#template.rows==3)
-assert(P.save_template_options(1,{interval_min=70,interval_max=90,auto_limit=2,random_line=false}))
+assert(P.save_template_options(1,{interval_min=70,interval_max=90,auto_limit=2,random_line=false,waiting=1.8}))
 assert(template.interval_min==70 and template.interval_max==90)
 assert(template.auto_limit==2)
+assert(math.abs(template.waiting-1.8)<0.001)
 assert(#P.steps()==3)
 local sent={}
 local function send(line)sent[#sent+1]=line;return true end
