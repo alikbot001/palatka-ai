@@ -4,7 +4,8 @@ local pressed,last_probe='', ''
 local labels={}
 DSP={ui21={},mobile={},to_cp=function(x)return x end,utf8=function(x)return tostring(x or '') end,
  money=tostring,lower=function(x)return string.lower(tostring(x or ''))end,
- trim=function(x)return tostring(x or ''):match('^%s*(.-)%s*
+ trim=function(x)return tostring(x or ''):match('^%s*(.-)%s*$')end,
+ storage={snapshots={},
     trunk_state=function()return {status='idle',received=0,autoscan_enabled=true}end,
     library=function()return{}end,
     begin_trunk_scan=function()return true end,
