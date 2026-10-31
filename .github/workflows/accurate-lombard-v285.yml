@@ -24,5 +24,7 @@ jobs:
         run: luajit tests/test_v285_lombard.lua
       - name: Check standalone build
         run: python3 build.py
+      - name: Full LuaJIT regression suite
+        run: python3 run_tests.py
       - name: Check OTA Lua syntax
         run: luajit -b updates/palatka_update.lua /dev/null
