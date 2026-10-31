@@ -128,7 +128,14 @@ for name in MODULES:
     path = SRC / name
     if not path.exists():
         sys.exit(f"missing module: {path}")
-    text = path.read_text(encoding="utf-8")
+    raw_source = path.read_bytes()
+    try:
+        text = raw_source.decode("utf-8")
+    except UnicodeDecodeError:
+        # Legacy Lua sources can already be CP1251. Normalize their text
+        # before concatenation; the final standalone is CP1251 as before.
+        text = raw_source.decode("cp1251")
+        print(f"legacy CP1251 module: {name}")
     fn = "__mod_" + name.replace(".lua", "").replace("-", "_")
     parts.append(f"local function {fn}()\n")
     parts.append(text)
