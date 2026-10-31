@@ -1,6 +1,128 @@
--- Palatka AI 2.8.2 simplified storage scanner beta. Native mimgui only.
-PALATKA_UPDATE_VERSION = '2.8.2'
+-- Palatka AI 2.8.3: compatible trunk sizes, suggestion dialog and settings protection.
+PALATKA_UPDATE_VERSION = '2.8.3'
 return function(DSP)
+  -- Install settings guard before any other overlay can save preferences.
+  local function module_settings_safety()
+-- Palatka Settings Safety: protect user preferences on every OTA update.
+-- Install after core; do not replace, reset or filter unknown setting keys.
+local G = DSP.settings_safety or {}
+DSP.settings_safety = G
+if not G.installed then
+    local path = DSP.settings_path
+    local original_save = DSP.save_settings
+
+    local function read_all(filename)
+        local f=io.open(filename,'rb')
+        if not f then return nil end
+        local data=f:read('*a')
+        f:close()
+        return data
+    end
+    local function valid_json(raw)
+        if type(raw)~='string' or #raw==0 then return false end
+        local ok,result=pcall(decodeJson,raw)
+        return ok and type(result)=='table'
+    end
+    local function write_bytes(filename,data)
+        local f,err=io.open(filename,'wb')
+        if not f then return false,tostring(err or 'cannot open') end
+        local wrote,e=f:write(data)
+        local closed,close_err=f:close()
+        if not wrote or not closed then return false,tostring(e or close_err) end
+        local copy=read_all(filename)
+        if copy~=data then return false,'verification mismatch' end
+        return true
+    end
+    local function backup_valid(source,target)
+        local raw=read_all(source)
+        if not raw or not valid_json(raw) then return false,'invalid source' end
+        local tmp=target..'.tmp'
+        local ok,err=write_bytes(tmp,raw)
+        if not ok then return false,err end
+        -- Moving the last valid backup aside must never delete it.
+        local existing=read_all(target)
+        if existing and valid_json(existing) then
+            local keep=target..'.previous'
+            pcall(os.remove,keep)
+            local moved= os.rename(target,keep)
+            if not moved then pcall(os.remove,tmp);return false,'cannot rotate backup' end
+        end
+        local renamed,e=os.rename(tmp,target)
+        if not renamed then
+            pcall(os.remove,tmp)
+            if existing and valid_json(existing) then pcall(os.rename,target..'.previous',target) end
+            return false,tostring(e or 'cannot store backup')
+        end
+        return true
+    end
+
+    -- Back up the last known-good settings, including fields from future
+    -- versions, BEFORE installing new default keys in any subsequent update.
+    function G.checkpoint(tag)
+        if type(path)~='string' then return false,'settings path missing' end
+        local raw=read_all(path)
+        if not raw then return true,'no settings yet' end
+        if not valid_json(raw) then return false,'settings invalid: no overwrite' end
+        local safe=tostring(tag or 'before_update'):gsub('[^%w_%-]','_')
+        local snapshot=path..'.checkpoint_'..safe
+        if read_all(snapshot) then return true,snapshot end
+        local ok,e=write_bytes(snapshot..'.tmp',raw)
+        if not ok then return false,e end
+        local renamed,err=os.rename(snapshot..'.tmp',snapshot)
+        if not renamed then return false,tostring(err or 'checkpoint rename failed') end
+        return true,snapshot
+    end
+
+    -- File may be corrupt after a crash: NEVER save defaults over it.
+    function DSP.save_settings()
+        if type(path)~='string' or type(DSP.settings)~='table' then
+            return false,'invalid settings state'
+        end
+        local existing=read_all(path)
+        if existing and not valid_json(existing) then
+            if DSP.flog then pcall(DSP.flog,'SETTINGS SAFETY: existing JSON corrupt; refusing overwrite') end
+            return false,'Existing settings invalid; preserved for recovery'
+        end
+        local ok,json=pcall(encodeJson,DSP.settings)
+        if not ok or not valid_json(json) then return false,'settings encoding invalid' end
+        local temp=path..'.safe_new'
+        local wrote,err=write_bytes(temp,json)
+        if not wrote then return false,err end
+        if existing then
+            local saved,why=backup_valid(path,path..'.bak')
+            if not saved then pcall(os.remove,temp);return false,'backup failed: '..tostring(why) end
+            -- Android does not guarantee rename-over-existing.
+            local old=path..'.old'
+            pcall(os.remove,old)
+            local moved,why2=os.rename(path,old)
+            if not moved then pcall(os.remove,temp);return false,'cannot move old settings: '..tostring(why2) end
+            local placed,why3=os.rename(temp,path)
+            if not placed then
+                pcall(os.rename,old,path)
+                pcall(os.remove,temp)
+                return false,'cannot replace settings: '..tostring(why3)
+            end
+            pcall(os.remove,old)
+        else
+            local placed,why=os.rename(temp,path)
+            if not placed then pcall(os.remove,temp);return false,'cannot install settings: '..tostring(why) end
+        end
+        return true
+    end
+
+    -- Old files can contain a richer schema than the current build.
+    -- Do not enumerate or discard unknown settings during an update.
+    G.installed=true
+    G.original_save=original_save
+    local ok,detail=G.checkpoint('v283')
+    if DSP.flog then
+        pcall(DSP.flog,'SETTINGS SAFETY checkpoint: '..tostring(ok)..' '..tostring(detail))
+    end
+end
+
+  end
+  module_settings_safety()
+
   local function module_storage()
 -- Read-only inventory analysis for classic SA-MP cabinet/trunk dialogs.
 -- Does not issue game commands, move items, infer missing counts or inspect memory.
@@ -96,7 +218,7 @@ function S.accept(kind,title,text,ts,source)
     snap.id=tostring(ts or os.time())..'_'..tostring(#S.snapshots+1)
     snap.server=DSP.market and DSP.market.state and DSP.market.state.sid or nil
     table.insert(S.snapshots,1,snap)
-    while #S.snapshots>8 do table.remove(S.snapshots)end
+    while #S.snapshots>S.max_saved+1 do table.remove(S.snapshots)end
     S.last_signature=signature;S.last_snapshot=snap;S.last_ts=ts or os.time();S.last_error=nil
     if DSP.settings and DSP.save_settings then
         DSP.settings.storage_snapshots=S.snapshots
@@ -161,6 +283,11 @@ function S.set_snapshot_label(snapshot,label)
     if type(label)~='string' then return false,'invalid label' end
     label=DSP.trim(DSP.clean_text(label))
     if #label>66 or label=='' then return false,'name must be 1-66 bytes' end
+    -- Live scans are deliberately NOT in S.snapshots. Allow naming only the
+    -- current live result; stale objects from previous scans are rejected.
+    if snapshot.source=='packet220_trunk' and S.trunk and S.trunk.snapshot==snapshot then
+        return S.save_named_trunk(snapshot,label)
+    end
     local found=false
     for _,saved in ipairs(S.snapshots or{})do if saved==snapshot then found=true;break end end
     if not found then return false,'stale snapshot' end
@@ -265,6 +392,7 @@ end
 S.trunk = S.trunk or {status='idle', received=0, last_error=nil}
 local T = S.trunk
 local TRUNK_TYPE, TRUNK_SLOTS = 8, 180
+local VALID_CAPACITY = {[30]=true,[60]=true,[90]=true,[120]=true,[150]=true,[180]=true}
 local PENDING_TIMEOUT = 15       -- seconds to receive the 180-slot full snapshot
 -- Partial slot changes are intentionally not applied without vehicle identity.
 
@@ -305,7 +433,9 @@ local function parse_payload(raw)
         used[sl.slot] = true
         normalized[#normalized+1] = sl
     end
-    return normalized
+    local capacity=tonumber(obj.capacity or obj.slotCount or obj.totalSlots)
+    if not VALID_CAPACITY[capacity] then capacity=nil end
+    return normalized,capacity
 end
 
 local function active_snapshot()
@@ -315,9 +445,9 @@ local function active_snapshot()
     return nil
 end
 
-local function build_rows(slots)
+local function build_rows(slots, capacity)
     local rows, count, occupied = {}, 0, 0
-    for i=0,TRUNK_SLOTS-1 do
+    for i=0,(capacity or TRUNK_SLOTS)-1 do
         local v = slots[i+1]
         if v and v.item_id and v.item_id > 0 then
             local name = DSP.items and DSP.items.name and DSP.items.name(v.item_id)
@@ -334,40 +464,30 @@ local function build_rows(slots)
     return rows,count,occupied
 end
 
-local function save_snapshot(slots, source_reason)
+local function save_snapshot(slots, source_reason, capacity)
     local ts=os.time()
-    local rows, total, occupied = build_rows(slots)
-    local previous = active_snapshot()
+    capacity=capacity or TRUNK_SLOTS
+    local rows, total, occupied = build_rows(slots,capacity)
     local requested_at=T.requested_at
     local update_target_id=T.update_target_id
     local snap={
-        id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
+        id='trunk_live_'..tostring(ts)..'_'..tostring((T.scan_generation or 0)+1),
         kind='trunk',
         -- No persistent vehicle identity in observed packet. This is ALWAYS the last opened trunk.
         title='\207\238\241\235\229\228\237\232\233 \238\242\234\240\251\242\251\233 \225\224\227\224\230\237\232\234',
         source='packet220_trunk', identity_verified=false,
         observed_at=ts, updated_at=ts, server=DSP.market and DSP.market.state and DSP.market.state.sid or nil,
-        slots_count=TRUNK_SLOTS, occupied_slots=occupied,count_known=total,
+        slots_count=capacity, occupied_slots=occupied,count_known=total,
         rows=rows, slots=slots, update_kind=source_reason,
     }
-    -- One latest trunk, not a fabricated history of unique cars. Preserve manual and legacy snapshots.
-    local new_list={snap}
-    for _, old in ipairs(S.snapshots or {}) do
-        if old.source ~= 'packet220_trunk' then
-            new_list[#new_list+1]=old
-            if #new_list >= 8 then break end
-        end
-    end
-    -- Keep the old verified snapshot until the new one is safely persisted.
-    local old_list=S.snapshots
-    local old_saved=DSP.settings and DSP.settings.storage_snapshots
-    local old_snap,old_updated=T.snapshot,T.last_update
-    local old_occ,old_total=T.occupied,T.total
-    local old_saved_at,old_completed_at=T.last_saved_at,T.last_completed_request_at
-    S.snapshots=new_list
-    if DSP.settings then DSP.settings.storage_snapshots=new_list end
-    T.snapshot=snap;T.last_update=ts;T.status='saved';T.received=TRUNK_SLOTS
-    T.occupied=occupied;T.total=total
+    -- A scan is IN MEMORY ONLY. A user-named copy is the sole path to the
+    -- persistent library. Never write an unnamed scan to storage_snapshots.
+    T.snapshot=snap
+    T.last_update=ts
+    T.status='saved'
+    T.received=capacity
+    T.occupied=occupied
+    T.total=total
     T.last_saved_at=ts
     if requested_at then
         T.last_completed_request_at=ts
@@ -375,26 +495,12 @@ local function save_snapshot(slots, source_reason)
         T.completed_update_target_id=update_target_id
         T.update_target_id=nil
     end
-    if DSP.save_settings then
-        local called,ok,err=pcall(DSP.save_settings)
-        if not called or not ok then
-            S.snapshots=old_list
-            if DSP.settings then DSP.settings.storage_snapshots=old_saved end
-            T.snapshot=old_snap;T.last_update=old_updated
-            T.occupied=old_occ;T.total=old_total
-            T.last_saved_at=old_saved_at
-            T.last_completed_request_at=old_completed_at
-            T.requested_at=requested_at
-            T.update_target_id=update_target_id
-            T.completed_update_target_id=nil
-            T.status='save_error'
-            T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
-            if DSP.flog then DSP.flog('TRUNK save failed: '..T.last_error) end
-            return false
-        end
-    end
     T.last_error=nil
-    if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots=180 occupied='..occupied..' count='..total) end
+    T.last_warning=nil
+    T.scan_generation=(T.scan_generation or 0)+1
+    T.review_generation=T.scan_generation
+    T.review_needed=true
+    if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots='..capacity..' occupied='..occupied..' count='..total) end
     return true
 end
 
@@ -410,7 +516,7 @@ function S.on_inventory_packet(sub, raw)
     T.raw_packet_events=(T.raw_packet_events or 0)+1
     T.last_raw_packet_at=os.time()
     if not (T.autoscan_enabled or T.requested_at) then return false end
-    local items=parse_payload(raw)
+    local items,declared_capacity=parse_payload(raw)
     if not items or #items == 0 then
         T.invalid_packet_events=(T.invalid_packet_events or 0)+1
         T.last_error='type 8 received; payload could not be decoded'
@@ -430,24 +536,35 @@ function S.on_inventory_packet(sub, raw)
     local explicit_restart=(T.pending and #items>5 and items[1] and items[1].slot==0 and T.pending.seen[0])
     local stale_restart=(T.pending and #items>5 and T.pending.last_at and (ts-T.pending.last_at)>3)
     if starts_capture or explicit_restart or stale_restart then
-        T.pending={slots={},seen={},count=0,started=ts,last_at=ts}
+        T.pending={slots={},seen={},count=0,started=ts,last_at=ts,
+            capacity=declared_capacity or T.selected_capacity or TRUNK_SLOTS}
         T.status='receiving';T.received=0;T.last_error=nil
     end
     if T.pending then
         local p=T.pending
         p.last_at=ts
+        if declared_capacity then p.capacity=declared_capacity end
+        -- Never finalize a user-selected 30-slot scan if the packet explicitly
+        -- includes slots outside its capacity: the observed layout is larger.
+        for _,v in ipairs(items) do
+            if v.slot>=p.capacity then
+                p.capacity=TRUNK_SLOTS
+            end
+        end
         for _,v in ipairs(items) do
             if not p.seen[v.slot] then p.seen[v.slot]=true;p.count=p.count+1 end
             p.slots[v.slot+1]=v
         end
         T.received=p.count
-        if p.count==TRUNK_SLOTS then
-            -- Full snapshot is committed only after ALL slots 0..179 were seen.
+        if p.count>=p.capacity then
+            -- Full means all expected slots in THIS layout were seen. If the
+            -- server does not declare capacity, the player explicitly chooses
+            -- their car's capacity (30/180), not automatic guessing.
             local complete=true
-            for i=1,TRUNK_SLOTS do if not p.slots[i] then complete=false;break end end
+            for i=1,p.capacity do if not p.slots[i] then complete=false;break end end
             if complete then
                 T.pending=nil
-                save_snapshot(p.slots,'full')
+                save_snapshot(p.slots,'full',p.capacity)
             end
         end
         return true
@@ -461,8 +578,9 @@ function S.on_inventory_packet(sub, raw)
             T.status='need_reopen'
             T.last_error='\207\238\235\237\251\233 \241\237\232\236\238\234 \237\229 \239\240\232\248\184\235. \199\224\234\240\238\233 \225\224\227\224\230\237\232\234 \232 \238\242\234\240\238\233 \229\227\238 \231\224\237\238\226\238.'
         elseif T.snapshot then
-            T.status='unverified_delta'
-            T.last_error='\215\224\241\242\232\247\237\238\229 \232\231\236\229\237\229\237\232\229 \239\240\238\239\243\249\229\237\238: ID \236\224\248\232\237\251 \237\229\232\231\226\229\241\242\229\237.'
+            -- Do not hide a previously valid full scan just because a single
+            -- slot changed while the player was inside the trunk.
+            T.last_warning='\200\231\236\229\237\229\237\232\229 \238\242\228\229\235\252\237\251\245 \241\235\238\242\238\226 \237\229 \239\240\232\236\229\237\229\237\238. \196\235\255 \237\238\226\251\245 \228\224\237\237\251\245 \238\242\234\240\238\233 \225\224\227\224\230\237\232\234 \231\224\237\238\226\238.'
         end
         return false
     end
@@ -474,9 +592,30 @@ function S.on_inventory_packet(sub, raw)
 end
 
 -- Load the most recently persisted trunk as read-only history after restart.
-T.snapshot=active_snapshot()
+-- Old versions may have stored a nameless live scan. Do not resurrect it
+-- in the new unsaved session; named library entries remain untouched.
+T.snapshot=nil
 T.autoscan_enabled=not (DSP.settings and DSP.settings.storage_trunk_autoscan==false)
-if T.snapshot then T.status='saved_from_disk';T.occupied=T.snapshot.occupied_slots;T.total=T.snapshot.count_known end
+T.selected_capacity=VALID_CAPACITY[tonumber(DSP.settings and DSP.settings.storage_trunk_capacity)]
+    and tonumber(DSP.settings.storage_trunk_capacity) or 180
+
+function S.set_trunk_capacity(cap)
+    cap=tonumber(cap)
+    if not VALID_CAPACITY[cap] then return false,'\205\229\228\238\239\243\241\242\232\236\224\255 \226\236\229\241\242\232\236\238\241\242\252' end
+    if T.requested_at then return false,'\209\237\224\247\224\235\224 \238\241\242\224\237\238\226\232 \242\229\234\243\249\232\233 \241\234\224\237' end
+    local previous=T.selected_capacity
+    T.selected_capacity=cap
+    if DSP.settings then DSP.settings.storage_trunk_capacity=cap end
+    if DSP.save_settings then
+        local ok,saved,err=pcall(DSP.save_settings)
+        if not ok or not saved then
+            T.selected_capacity=previous
+            if DSP.settings then DSP.settings.storage_trunk_capacity=previous end
+            return false,tostring(err or saved or '\206\248\232\225\234\224 \241\238\245\240\224\237\229\237\232\255')
+        end
+    end
+    return true
+end
 
 -- The normal UI uses these methods; no additional game commands are needed.
 function S.set_trunk_autoscan(enabled)
@@ -507,6 +646,7 @@ function S.begin_trunk_scan(update_target_id)
     T.last_error=nil
     T.last_completed_request_at=nil
     T.completed_update_target_id=nil
+    T.review_needed=false
     T.update_target_id=update_target_id
     T.requested_at=os.time()
     T.scan_started_at=T.requested_at
@@ -603,6 +743,59 @@ function S.library()
     return rows
 end
 
+-- Candidate detection is only a suggestion, never a vehicle identifier.
+-- Compare item IDs and enchantments across slots, not slot positions or amounts.
+-- Only fully saved, named type-8 trunk snapshots are eligible.
+local function trunk_types(snapshot)
+    local keys, count={},0
+    for _,row in ipairs(snapshot and snapshot.rows or {}) do
+        local id=tonumber(row.id)
+        if id and id>0 and id%1==0 then
+            local enchant=tonumber(row.ench) or 0
+            local key=tostring(id)..':'..tostring(enchant)
+            if not keys[key] then keys[key]=true;count=count+1 end
+        end
+    end
+    return keys,count
+end
+
+function S.match_saved_trunks(snapshot)
+    if type(snapshot)~='table' or snapshot.kind~='trunk'
+        or snapshot.source~='packet220_trunk' or not VALID_CAPACITY[snapshot.slots_count]
+        or type(snapshot.rows)~='table' then return {} end
+    local current,total=trunk_types(snapshot)
+    if total==0 then return {} end
+    local matches={}
+    for _,saved in ipairs(S.snapshots or {}) do
+        if saved.source=='packet220_trunk_named' and saved.kind=='trunk'
+            and type(saved.rows)=='table'
+            and (snapshot.server==nil or saved.server==nil
+                 or tostring(snapshot.server)==tostring(saved.server)) then
+            local previous,count=trunk_types(saved)
+            if count>0 then
+                local common=0
+                for key in pairs(current)do if previous[key] then common=common+1 end end
+                if common>0 then
+                    local union=total+count-common
+                    matches[#matches+1]={
+                        id=saved.id,title=saved.title,shared=common,
+                        current_types=total,saved_types=count,
+                        similarity=math.floor(100*common/math.max(1,union)+.5),
+                        observed_at=tonumber(saved.observed_at) or 0
+                    }
+                end
+            end
+        end
+    end
+    table.sort(matches,function(a,b)
+        if a.similarity~=b.similarity then return a.similarity>b.similarity end
+        if a.shared~=b.shared then return a.shared>b.shared end
+        if a.observed_at~=b.observed_at then return a.observed_at>b.observed_at end
+        return tostring(a.id)<tostring(b.id)
+    end)
+    return matches
+end
+
 -- Keep manually named copies independent from the latest automatically opened
 -- vehicle. The packet has no trusted vehicle ID: do NOT auto-assign old labels
 -- when a different trunk is opened.
@@ -610,7 +803,7 @@ function S.save_named_trunk(snapshot,label)
     if type(snapshot)~='table' or snapshot.source~='packet220_trunk' then
         return false,'select a confirmed full trunk snapshot'
     end
-    if not snapshot.rows or snapshot.slots_count~=TRUNK_SLOTS then
+    if not snapshot.rows or not VALID_CAPACITY[snapshot.slots_count] then
         return false,'incomplete trunk snapshot'
     end
     local name=DSP.trim(DSP.clean_text(tostring(label or '')))
@@ -628,7 +821,7 @@ function S.save_named_trunk(snapshot,label)
         title=name,kind='trunk',source='packet220_trunk_named',
         identity_verified=false,complete_verified=true,
         observed_at=snapshot.observed_at,server=snapshot.server,
-        slots_count=TRUNK_SLOTS,occupied_slots=snapshot.occupied_slots,
+        slots_count=snapshot.slots_count,occupied_slots=snapshot.occupied_slots,
         count_known=snapshot.count_known,rows=rows}
     for _,existing in ipairs(S.snapshots or {}) do
         if existing.source~='packet220_trunk' and DSP.lower(tostring(existing.title or ''))==DSP.lower(name) then
@@ -637,15 +830,13 @@ function S.save_named_trunk(snapshot,label)
     end
     local prior=S.snapshots
     local prior_saved=DSP.settings and DSP.settings.storage_snapshots
-    local fresh={}
-    if prior[1] and prior[1].source=='packet220_trunk' then
-        fresh[#fresh+1]=prior[1]
-    end
-    fresh[#fresh+1]=named
+    local fresh={named}
     for _,existing in ipairs(prior) do
-        if existing~=named and existing~=fresh[1] then
+        -- Old releases wrote a nameless live scan into settings. Keep ONLY
+        -- deliberately saved user records in the persistent library.
+        if existing.source~='packet220_trunk' then
             fresh[#fresh+1]=existing
-            if #fresh>=S.max_saved+1 then break end
+            if #fresh>=S.max_saved then break end
         end
     end
     S.snapshots=fresh
@@ -659,6 +850,7 @@ function S.save_named_trunk(snapshot,label)
         end
     end
     T.completed_update_target_id=nil
+    T.review_needed=false
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,named
 end
@@ -666,7 +858,7 @@ end
 function S.apply_latest_to_saved(target_id)
     local live=T.snapshot
     local target=S.find_snapshot(target_id)
-    if not live or live.source~='packet220_trunk' or live.slots_count~=TRUNK_SLOTS then
+    if not live or live.source~='packet220_trunk' or not VALID_CAPACITY[live.slots_count] then
         return false,'\205\229\242 \239\238\235\237\238\227\238 \237\238\226\238\227\238 \241\234\224\237\224'
     end
     if not target or target.source~='packet220_trunk_named' then
@@ -688,7 +880,7 @@ function S.apply_latest_to_saved(target_id)
     target.server=live.server
     target.occupied_slots=live.occupied_slots
     target.count_known=live.count_known
-    target.slots_count=TRUNK_SLOTS
+    target.slots_count=live.slots_count
     if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
     if DSP.save_settings then
         local called,ok,err=pcall(DSP.save_settings)
@@ -699,6 +891,7 @@ function S.apply_latest_to_saved(target_id)
         end
     end
     T.completed_update_target_id=nil
+    T.review_needed=false
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,target
 end
@@ -1132,6 +1325,22 @@ function V.storage_screen()
             end
 
             local t=(S.trunk_state and S.trunk_state()) or S.trunk or {}
+            -- A review appears once per NEW completed 180-slot scan, and only
+            -- when existing saved trunks share at least one item ID/enchant.
+            if t.review_needed and t.review_generation
+                and V.storage_match_generation~=t.review_generation
+                and t.snapshot and t.status=='saved' and S.match_saved_trunks then
+                V.storage_match_generation=t.review_generation
+                local matches=S.match_saved_trunks(t.snapshot)
+                if #matches>0 then
+                    V.storage_match_review={
+                        generation=t.review_generation, matches=matches, selected=1
+                    }
+                    V.open_popup('\207\238\245\238\230\232\233 \225\224\227\224\230\237\232\234','storage_match_confirm')
+                else
+                    t.review_needed=false
+                end
+            end
             local active=t.requested_at~=nil or t.status=='waiting_open' or
                 t.status=='receiving' or t.status=='need_reopen'
 
@@ -1178,6 +1387,7 @@ function V.storage_screen()
             if t.snapshot and t.status=='saved' then
                 imgui.Separator()
                 V.green('\195\206\210\206\194\206 \183 180 / 180')
+                if t.last_warning then V.muted(V.fit(t.last_warning,w)) end
                 V.text('\199\224\237\255\242\238 \241\235\238\242\238\226: '..tostring(t.snapshot.occupied_slots or 0))
                 V.text('\194\241\229\227\238 \239\240\229\228\236\229\242\238\226: '..tostring(t.snapshot.count_known or 0))
                 local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
@@ -1187,6 +1397,12 @@ function V.storage_screen()
                     V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
                 end
 
+                if t.review_needed and V.storage_match_review
+                    and V.storage_match_review.generation==t.review_generation then
+                    if b('\207\206\213\206\198\200\197 \193\192\195\192\198\205\200\202\200','show_matches',math.min(w,290),false,true)then
+                        V.open_popup('\207\238\245\238\230\232\233 \225\224\227\224\230\237\232\234','storage_match_confirm')
+                    end
+                end
                 local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
                 if update_target then
                     V.text('\206\225\237\238\226\232\242\252: '..tostring(update_target.title))
@@ -1247,27 +1463,57 @@ function V.storage_screen()
             V.reset_list('storage_scan_panel')
             return
         end
-        if #library==0 then
-            V.muted('\207\238\234\224 \237\232\247\229\227\238 \237\229 \241\238\245\240\224\237\229\237\238.')
-            V.muted('\207\240\238\241\234\224\237\232\240\243\233 \225\224\227\224\230\237\232\234 \232 \226\251\225\229\240\232 \171\209\238\245\240\224\237\232\242\252 \234\224\234 \237\238\226\238\229\187.')
+        V.muted('\207\206\200\209\202: \239\238 \237\224\231\226\224\237\232\254 \245\240\224\237\232\235\232\249\224 \232\235\232 \239\240\229\228\236\229\242\224')
+        local query=V.search and V.search('storage_all','\205\224\231\226\224\237\232\229 \232\235\232 \239\240\229\228\236\229\242...',math.min(380,width)) or ''
+        query=DSP.lower(DSP.trim(query or ''))
+        local filtered={}
+        local grand,missing=0,0
+        for _,entry in ipairs(library)do
+            local snap=entry.snapshot
+            local found=query=='' or DSP.lower(tostring(snap.title or '')):find(query,1,true)~=nil
+            if not found then
+                for _,it in ipairs(snap.rows or {})do
+                    if DSP.lower(tostring(it.name or '')):find(query,1,true)then found=true;break end
+                end
+            end
+            if found then filtered[#filtered+1]=entry end
+            local value=S.evaluate(snap)
+            if value.cross_server then missing=missing+1
+            else grand=grand+(value.sell_to_buyers or 0) end
+        end
+        V.text('\213\240\224\237\232\235\232\249: '..#library..' | \237\224\233\228\229\237\238: '..#filtered)
+        V.green('\209\243\236\236\224 \238\246\229\237\238\234: '..DSP.money(grand))
+        if missing>0 then V.muted('\193\229\231 \238\246\229\237\234\232: '..missing..' (\228\240\243\227\238\233 \241\229\240\226\229\240)') end
+        V.muted('\221\242\238 \241\243\236\236\224 \238\246\229\237\238\234 \241\237\232\236\234\238\226, \237\229 \240\229\224\235\252\237\224\255 \239\240\232\225\251\235\252.')
+        if #filtered==0 then
+            V.muted(query=='' and '\207\238\234\224 \237\229\242 \241\238\245\240\224\237\184\237\237\251\245 \245\240\224\237\232\235\232\249.' or '\205\232\247\229\227\238 \237\229 \237\224\233\228\229\237\238.')
             return
         end
-        V.list_rows('storage_library',library,88,function(entry,i)
+        V.list_rows('storage_library',filtered,95,function(entry,i)
             local snap=entry.snapshot
             local kind=snap.kind=='trunk'and'\193\224\227\224\230\237\232\234' or snap.kind=='cabinet'and'\216\234\224\244'
                 or snap.kind=='warehouse'and'\209\234\235\224\228' or'\213\240\224\237\232\235\232\249\229'
-            V.row('storage_library_'..i,88,function(rw,x,y)
+            V.row('storage_library_'..i,95,function(rw,x,y)
                 V.at(x,y)
-                V.apply_font((V.font_pixels or 18)*1.16)
-                if V.text_button(V.fit(tostring(snap.title or kind),rw),'storage_library_open_'..i,rw,false,36)then
+                V.apply_font((V.font_pixels or 18)*1.12)
+                V.text(V.fit(tostring(snap.title or kind),rw))
+                V.apply_font()
+                V.at(x,y+43)
+                local value=S.evaluate(snap)
+                V.muted(V.fit(kind..' \183 '..tostring(snap.count_known or 0)..' \248\242. \183 '..
+                    DSP.money(value.sell_to_buyers),rw))
+                V.at(x,y)
+                local hit
+                if imgui.InvisibleButton then
+                    hit=imgui.InvisibleButton('##open_storage_card',imgui.ImVec2(rw,84))
+                else
+                    hit=V.text_button(tostring(snap.title or kind),'storage_open_fallback',rw,false,84)
+                end
+                if hit and not V.dragged then
                     V.storage_selected=entry.index
                     V.storage_library_page='detail'
                     V.reset_list('storage_items')
                 end
-                V.apply_font()
-                V.at(x,y+43)
-                local info=S.evaluate(snap)
-                V.muted(V.fit(kind..' \183 '..tostring(snap.count_known or 0)..' \248\242. \183 '..DSP.money(info.sell_to_buyers),rw))
             end)
         end,{footer=function()V.muted('\209\238\245\240\224\237\229\237\238: '..#library..' / '..tostring(S.max_saved or 20))end})
         return
@@ -1303,7 +1549,7 @@ function V.storage_screen()
         V.storage_label_buf=imgui.new.char[128]()
         ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
         V.storage_label_error=nil
-        V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename')
+        V.open_popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename_v283')
     end
     if b('\211\196\192\203\200\210\220','delete_one',math.min(150,width))then
         V.storage_delete_target=current
@@ -1352,6 +1598,72 @@ function V.popups()
         if b('\206\242\236\229\237\224','beta_rollback_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_rollback_error then V.red(V.fit(V.storage_rollback_error,imgui.GetContentRegionAvail().x))end
     end,{w=480,h=260})
+    V.popup('\207\238\245\238\230\232\233 \225\224\227\224\230\237\232\234','storage_match_confirm',function()
+        local review=V.storage_match_review
+        local t=S.trunk_state()
+        if not review or not t.snapshot or not t.review_needed
+            or review.generation~=t.review_generation then
+            V.muted('\221\242\238\242 \241\234\224\237 \243\230\229 \238\225\240\224\225\238\242\224\237 \232\235\232 \231\224\236\229\237\184\237 \237\238\226\251\236.')
+            if b('\199\224\234\240\251\242\252','match_stale',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        local matches=review.matches or {}
+        if #matches==0 then
+            V.muted('\209\238\245\240\224\237\184\237\237\251\245 \239\238\245\238\230\232\245 \225\224\227\224\230\237\232\234\238\226 \237\229\242.')
+            if b('\199\224\234\240\251\242\252','match_empty',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        review.selected=math.max(1,math.min(#matches,review.selected or 1))
+        local match=matches[review.selected]
+        local saved=S.find_snapshot(match.id)
+        if not saved then
+            V.red('\221\242\224 \241\238\245\240\224\237\184\237\237\224\255 \231\224\239\232\241\252 \243\228\224\235\229\237\224.')
+            if b('\199\224\234\240\251\242\252','match_deleted',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        V.apply_font((V.font_pixels or 18)*1.22)
+        V.text(V.fit(tostring(saved.title or '\193\224\227\224\230\237\232\234'),imgui.GetContentRegionAvail().x))
+        V.apply_font()
+        V.text('\221\242\238 \242\238\242 \230\229 \225\224\227\224\230\237\232\234?')
+        V.green('\209\238\226\239\224\228\224\229\242 \242\232\239\238\226 \239\240\229\228\236\229\242\238\226: '..match.shared)
+        V.muted('\207\238\245\238\230\229\241\242\252 \241\238\241\242\224\226\224: '..match.similarity..'% \183 \253\242\238 \205\197 \226\229\240\238\255\242\237\238\241\242\252 \232 \237\229 ID \236\224\248\232\237\251.')
+        V.muted('\207\238\228\242\226\229\240\228\232\242\252, \234\224\234\224\255 \236\224\248\232\237\224 \238\242\234\240\251\242\224, \236\238\230\229\248\252 \242\238\235\252\234\238 \242\251.')
+        if #matches>1 then
+            V.muted('\194\224\240\232\224\237\242 '..review.selected..' \232\231 '..#matches)
+            if b('\196\208\211\195\206\201 \207\206\213\206\198\200\201','match_next',math.min(230,imgui.GetContentRegionAvail().x))then
+                review.selected=review.selected%#matches+1
+            end
+        end
+        imgui.Separator()
+        if b('\196\192, \221\210\206 '..tostring(saved.title),'match_yes',math.min(310,imgui.GetContentRegionAvail().x),false,true)then
+            local ok,updated=S.apply_latest_to_saved(saved.id)
+            if ok then
+                local _,idx=S.find_snapshot(updated.id)
+                V.storage_selected=idx or 1
+                V.storage_library_page='detail'
+                V.storage_tab='library'
+                V.storage_match_error=nil
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_match_error=tostring(updated)
+            end
+        end
+        if b('\205\197\210, \221\210\206 \205\206\194\219\201','match_no_new',math.min(280,imgui.GetContentRegionAvail().x))then
+            local snap=t.snapshot
+            V.storage_name_target=snap
+            V.storage_name_buf=imgui.new.char[128]()
+            V.storage_name_error=nil
+            t.review_needed=false
+            imgui.CloseCurrentPopup()
+            V.open_popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name')
+        end
+        if b('\205\197 \211\194\197\208\197\205 \183 \207\206\199\198\197','match_later',math.min(240,imgui.GetContentRegionAvail().x))then
+            imgui.CloseCurrentPopup()
+        end
+        if V.storage_match_error then
+            V.red(V.fit(V.storage_match_error,imgui.GetContentRegionAvail().x))
+        end
+    end,{w=495,h=410})
     V.popup('\209\238\245\240\224\237\232\242\252 \225\224\227\224\230\237\232\234','storage_trunk_name',function()
         local target=V.storage_name_target
         if not target then V.red('\205\229\242 \239\238\235\237\238\227\238 \241\237\232\236\234\224 \225\224\227\224\230\237\232\234\224.');return end
@@ -1393,7 +1705,7 @@ function V.popups()
         V.inline();if b('\206\242\236\229\237\224','price_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_price_error then V.red(V.storage_price_error)end
     end,{w=460,h=260})
-    V.popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename',function()
+    V.popup('\205\224\231\226\224\237\232\229 \241\237\232\236\234\224','storage_rename_v283',function()
         local target=V.storage_label_target
         if not target then return end
         V.muted('\221\242\238 \232\236\255 \242\238\235\252\234\238 \228\235\255 \241\237\232\236\234\224. ID \236\224\248\232\237\251 \224\226\242\238\236\224\242\232\247\229\241\234\232 \237\229 \238\239\240\229\228\229\235\255\229\242\241\255.')
@@ -1415,7 +1727,7 @@ function V.popups()
         end
         V.inline();if b('\206\242\236\229\237\224','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
-    end,{w=460,h=240})
+    end,{w=640,h=300})
     V.popup('\211\228\224\235\232\242\252 \245\240\224\237\232\235\232\249\229','storage_delete_one',function()
         local target=V.storage_delete_target
         if not target then V.muted('\213\240\224\237\232\235\232\249\229 \243\230\229 \237\229 \226\251\225\240\224\237\238.');return end
@@ -1460,6 +1772,7 @@ end
   end
   module_storage_ui()
 
+  -- Read-only cabinet/warehouse observation alongside unchanged trade hooks.
   do
     local live=DSP.live
     if live and type(live.handle)=='function' and not live._storage_probe_wrapped then
@@ -1493,7 +1806,7 @@ end
     end
   end
 
-  DSP.version='2.8.2'
-  if DSP.flog then DSP.flog('Simplified storage beta 2.8.2 loaded; menu rollback -> 2.7.0') end
+  DSP.version='2.8.3'
+  if DSP.flog then DSP.flog('Scanner beta v2.8.3 with settings safety; CRR rollback -> 2.7.0') end
   return true
 end
