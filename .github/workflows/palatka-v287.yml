@@ -1,4 +1,4 @@
-name: Palatka 2.8.7 production build
+name: Palatka 2.8.8 production build
 on:
   pull_request:
     paths:
@@ -34,6 +34,8 @@ jobs:
         run: luajit tests/test_arbitrage_session.lua
       - name: Check missing shop and item handling
         run: luajit tests/test_arbitrage_status.lua
+      - name: Test universal promotion scheduler
+        run: luajit tests/test_promo_universal.lua
       - name: Verify OTA Lua syntax
         run: luajit -b updates/palatka_update.lua /dev/null
       - name: Verify OTA version and byte size
@@ -43,9 +45,9 @@ jobs:
           from pathlib import Path
           release=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert release['version']=='2.8.7'
+          assert release['version']=='2.8.8'
           assert len(ota)==release['size'], (len(ota),release['size'])
-          assert b"PALATKA_UPDATE_VERSION = '2.8.7'" in ota
+          assert b"PALATKA_UPDATE_VERSION = '2.8.8'" in ota
           assert b'local function _v286_mcr_classic()' not in ota
           print('OTA version and size verified:',len(ota))
           PY
@@ -56,7 +58,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.8.7' in data[:1000]
+          assert b'Palatka AI v2.8.8' in data[:1000]
           assert b'##palatka_arbitrage_agent' in data
           assert b'MCR CLASSIC  /  PALATKA AI' not in data
           assert b'##palatka_mobile' in data
@@ -71,7 +73,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Full script already up to date"
           else
-            git commit -m "release: publish Palatka AI v2.8.7 standalone Lua"
+            git commit -m "release: publish Palatka AI v2.8.8 standalone Lua"
             git push origin HEAD:main
           fi
       - name: Upload verified standalone artifact
