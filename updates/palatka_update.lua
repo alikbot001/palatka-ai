@@ -1,5 +1,5 @@
 -- Palatka AI 2.8.3: compatible trunk sizes, suggestion dialog and settings protection.
-PALATKA_UPDATE_VERSION = '2.8.9'
+PALATKA_UPDATE_VERSION = '2.9.0'
 return function(DSP)
   -- v2.8.6: Independent, additive UI + multi-deal arbitration patch.
   local function install_v286()
@@ -2324,211 +2324,147 @@ return true
       _v288_promo_model()
 
       local function _v288_promo_ui()
--- Native Palatka promo: template = name + multiple individually timed commands.
+-- Market Helper pattern: template title and editable chat commands in one panel.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
-local function b(s,id,w,on)return V.button(s,'unipromo_'..id,w,on)end
-local function fit(s,w)return V.fit(tostring(s or''),math.max(60,w))end
-local function fill(buf,value,max)
-    local raw=DSP.to_u8(tostring(value or''))
-    ffi.fill(buf,max);ffi.copy(buf,raw:sub(1,max-1))
+local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
+local function txt(s)return DSP.utf8(tostring(s or''))end
+local function buff(str,n)
+    local b=imgui.new.char[n]()
+    local raw=DSP.to_u8(tostring(str or''))
+    ffi.fill(b,n);ffi.copy(b,raw:sub(1,n-1))
+    return b
 end
-local function input(id,hint,buffer,length)
-    imgui.SetNextItemWidth(-1)
-    return imgui.InputTextWithHint('##unipromo_'..id,DSP.utf8(hint),buffer,length)
-end
-local function save()
-    if DSP.save_settings then return DSP.save_settings()~=false end
-    return false
-end
-local function begin_template(index)
+local function open_editor(index)
     local t=P.settings().templates[index]
-    V.unipromo_editor=true;V.unipromo_edit_index=index
-    V.unipromo_name=V.unipromo_name or imgui.new.char[128]()
-    fill(V.unipromo_name,t and t.name or'',128)
     local rows={}
-    for _,v in ipairs(t and t.rows or{})do
-        rows[#rows+1]={text=v.text,interval=v.interval,auto=v.auto~=false}
+    local buffers={}
+    for i,r in ipairs(t and t.rows or{})do
+        rows[i]={text=r.text,interval=r.interval,auto=r.auto~=false}
+        buffers[i]=buff(r.text,512)
     end
-    V.unipromo_draft={rows=rows,auto=(t==nil or t.auto~=false)}
-    V.unipromo_error=nil
+    V.mhpromo_edit={index=index,name=buff(t and t.name or'\205\238\226\251\233 \248\224\225\235\238\237',96),
+        rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false}
 end
-local function begin_line(index)
-    V.unipromo_line_index=index
-    V.unipromo_line=V.unipromo_line or imgui.new.char[512]()
-    local row=V.unipromo_draft.rows[index]
-    fill(V.unipromo_line,row and row.text or'/vr ',512)
-    V.unipromo_line_interval={value=row and row.interval or 180}
-    V.unipromo_line_enabled=(row==nil or row.auto~=false)
-    V.unipromo_line_error=nil
-    V.open_popup('\209\242\240\238\234\224 \240\229\234\235\224\236\251','unipromo_line')
-end
-local function summary(settings)
-    if P.running then
-        if b('\206\209\210\192\205\206\194\200\210\220','stop',170,true)then P.stop()end
-    else
-        if b('\199\192\207\211\209\210\200\210\220','start',170,true)then
-            local ok,err=P.start()
-            V.unipromo_error=ok and nil or tostring(err)
-        end
-    end
-    V.inline(5)
-    if b(settings.continuous and'\214\232\234\235: \193\197\199 \203\200\204\200\210\192' or'\214\232\234\235: 12 \241\238\238\225\249\229\237\232\233',
-        'continuous',216,settings.continuous)then
-        local ok,err=P.set_option('continuous',not settings.continuous)
-        if not ok then V.unipromo_error=err end
-    end
-    if b(settings.resume_on_login and'\207\238\241\235\229 \226\245\238\228\224: \194\202\203' or'\207\238\241\235\229 \226\245\238\228\224: \194\219\202\203',
-        'resume',216,settings.resume_on_login)then
-        local ok,err=P.set_option('resume_on_login',not settings.resume_on_login)
-        if not ok then V.unipromo_error=err end
-    end
-    V.inline(5)
-    V.muted('\199\224\228\229\240\230\234\224 \239\229\240\229\228 \241\242\224\240\242\238\236: '..tostring(settings.start_delay)..' \241\229\234.')
-    for i,n in ipairs({10,20,30,60})do
-        if b(n..'\241','startup_'..i,62,settings.start_delay==n)then
-            local ok,err=P.set_option('start_delay',n)
-            if not ok then V.unipromo_error=err end
-        end
-        if i<4 then V.inline(4)end
-    end
-    V.muted('\209\242\224\242\243\241: '..(P.running and(P.pause_reason or'\240\224\225\238\242\224\229\242')or'\238\241\242\224\237\238\226\235\229\237'))
-    V.muted('\209\238\238\225\249\229\237\232\233: '..tostring(P.session_count)..
-        (settings.continuous and' | \225\229\231 \235\232\236\232\242\224' or' / 12')..
-        '  \183  \241\235\229\228\243\254\249\232\233 \248\224\227 \247\229\240\229\231 '..math.max(0,(P.next_at or 0)-os.time())..'\241')
-end
-local function template_editor()
-    local draft=V.unipromo_draft
-    V.heading(V.unipromo_edit_index and'\208\229\228\224\234\242\232\240\238\226\224\237\232\229 \248\224\225\235\238\237\224' or'\209\238\231\228\224\237\232\229 \248\224\225\235\238\237\224',function()
-        if b('\205\224\231\224\228','back',112)then V.unipromo_editor=false end
-    end,135)
+local function editor(e)
+    V.heading('\207\232\224\240 / \208\229\228\224\234\242\238\240',function()
+        if button('\205\224\231\224\228','back',120)then V.mhpromo_edit=nil end
+    end,142)
     V.text('\205\224\231\226\224\237\232\229 \248\224\225\235\238\237\224')
-    input('template_name','\205\224\239\240\232\236\229\240: \208\229\234\235\224\236\224 \214\208',V.unipromo_name,128)
-    V.muted('\196\238\225\224\226\252 \238\242\228\229\235\252\237\243\254 \241\242\240\238\234\243 \237\224 \234\224\230\228\251\233 \232\227\240\238\226\238\233 \247\224\242 \232\235\232 \234\238\236\224\237\228\243.')
-    if b('+ \196\238\225\224\226\232\242\252 \241\242\240\238\234\243','add_line',205,true)then begin_line(nil)end
-    V.inline(6)
-    if b('\209\238\245\240\224\237\232\242\252 \248\224\225\235\238\237','save_template',205,true)then
-        local name=DSP.to_cp(ffi.string(V.unipromo_name)):match('^%s*(.-)%s*$')
-        local ok,why=P.save_template(V.unipromo_edit_index,name,draft.rows,draft.auto)
-        if ok then V.unipromo_editor=false;V.unipromo_error=nil
-        else V.unipromo_error=tostring(why)end
-    end
-    if V.unipromo_error then V.red(V.unipromo_error)end
-    if #draft.rows==0 then
-        V.muted('\194 \248\224\225\235\238\237\229 \239\238\234\224 \237\229\242 \241\242\240\238\234. \205\224\230\236\232 \171\196\238\225\224\226\232\242\252 \241\242\240\238\234\243\187.')
-    else
-        V.muted('\194 \248\224\225\235\238\237\229 '..#draft.rows..' \241\242\240\238\234. \206\242\239\240\224\226\234\224 \239\238 \238\247\229\240\229\228\232 \241 \240\224\231\237\251\236\232 \232\237\242\229\240\226\224\235\224\236\232.')
-    end
-    V.list_rows('unipromo_template_lines',draft.rows,112,function(row,i)
-        V.row('unipromo_step_'..i,112,function(w,x,y)
-            V.at(x,y)
-            V.text(fit(i..'. '..(row.text or''),w-170))
-            V.at(x,y+29)
-            V.muted('\200\237\242\229\240\226\224\235 \239\238\241\235\229: '..tostring(row.interval or 180)..' \241\229\234.')
-            V.at(x,y+61)
-            if b(row.auto~=false and'\194\202\203' or'\194\219\202\203','row_toggle_'..i,67,row.auto~=false)then
+    imgui.SetNextItemWidth(-1)
+    imgui.InputText('##mhpromo_name',e.name,96)
+    V.muted('\202\224\230\228\224\255 \241\242\240\238\234\224 \151 \238\242\228\229\235\252\237\224\255 \232\227\240\238\226\224\255 \234\238\236\224\237\228\224; \238\242\239\240\224\226\235\255\254\242\241\255 \239\238 \238\247\229\240\229\228\232.')
+    local rm=nil
+    if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,300),true)then
+        for i,row in ipairs(e.rows)do
+            imgui.PushID(i)
+            V.muted('\209\242\240\238\234\224 '..i)
+            imgui.SetNextItemWidth(-1)
+            if imgui.InputTextWithHint('##line',txt('/vr \210\229\234\241\242 \240\229\234\235\224\236\251'),
+                e.buffers[i],512)then
+                row.text=DSP.to_cp(ffi.string(e.buffers[i]))
+            end
+            V.muted('\207\224\243\231\224 \239\238\241\235\229, \241\229\234\243\237\228')
+            M.compact_number(row,'interval','mhpromo_delay_'..i,145,60)
+            V.inline(4)
+            if button(row.auto~=false and '\194\202\203' or '\194\219\202\203','on_'..i,68,row.auto~=false)then
                 row.auto=not(row.auto~=false)
             end
             V.inline(4)
-            if b('\194\226\229\240\245','row_up_'..i,69)and i>1 then
-                draft.rows[i],draft.rows[i-1]=draft.rows[i-1],draft.rows[i]
+            if button('\211\228\224\235\232\242\252','rm_'..i,94)then rm=i end
+            imgui.Separator()
+            imgui.PopID()
+        end
+    end
+    imgui.EndChild()
+    if rm then table.remove(e.rows,rm);table.remove(e.buffers,rm)end
+    if button('+ \196\238\225\224\226\232\242\252 \241\242\240\238\234\243','add',225,true)then
+        if #e.rows<24 then
+            e.rows[#e.rows+1]={text='/vr ',interval=180,auto=true}
+            e.buffers[#e.buffers+1]=buff('/vr ',512)
+        else e.error='\205\229 \225\238\235\229\229 24 \241\242\240\238\234'end
+    end
+    V.inline(6)
+    if button('\194\241\242\224\226\232\242\252 \235\224\226\234\243','shop',160)then
+        local i=#e.rows
+        if i>0 then
+            local value=ffi.string(e.buffers[i])
+            if #value<495 then
+                e.buffers[i]=buff(DSP.to_cp(value..' {shop}'),512)
+                e.rows[i].text=DSP.to_cp(ffi.string(e.buffers[i]))
             end
-            V.inline(4)
-            if b('\194\237\232\231','row_down_'..i,69)and i<#draft.rows then
-                draft.rows[i],draft.rows[i+1]=draft.rows[i+1],draft.rows[i]
-            end
-            V.at(x+w-150,y+6)
-            if b('\200\231\236\229\237\232\242\252','row_edit_'..i,146)then begin_line(i)end
-            V.at(x+w-150,y+60)
-            if b('\211\228\224\235\232\242\252','row_remove_'..i,146)then
-                table.remove(draft.rows,i)
-            end
-        end)
-    end,{footer=function()
-        V.muted('\207\240\232\236\229\240: /vr \207\240\238\228\224\236 \242\238\226\224\240\251 \183 /fam \207\240\238\228\224\236 \242\238\226\224\240\251 \183 /gd \207\240\238\228\224\236 \242\238\226\224\240\251')
-    end})
+        end
+    end
+    V.muted('\204\224\234\240\238\241 {shop} \226\241\242\224\226\235\255\229\242 \234\235\232\234\224\225\229\235\252\237\243\254 \241\241\251\235\234\243 \237\224 \241\226\238\254 \235\224\226\234\243.')
+    if e.error then V.red(e.error)end
+    if button('\209\206\213\208\192\205\200\210\220 \216\192\193\203\206\205','save',250,true)then
+        local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
+        local ok,reason=P.save_template(e.index,name,e.rows,e.enabled)
+        if ok then V.mhpromo_edit=nil else e.error=tostring(reason)end
+    end
+    V.inline(4)
+    if button('\206\242\236\229\237\224','cancel',120)then V.mhpromo_edit=nil end
 end
 function V.promo_screen()
+    if V.mhpromo_edit then
+        return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end)
+    end
     local settings=P.settings()
-    if V.unipromo_editor then return template_editor()end
-    V.heading('\192\226\242\238\239\232\224\240 \183 Palatka AI',function()
-        if b('+ \209\238\231\228\224\242\252 \248\224\225\235\238\237','new_template',195,true)then begin_template(nil)end
-    end,211)
-    V.muted('\206\228\232\237 \248\224\225\235\238\237 \241\238\228\229\240\230\232\242 \237\229\241\234\238\235\252\234\238 \241\242\240\238\234 \240\229\234\235\224\236\251 \228\235\255 \240\224\231\237\251\245 \247\224\242\238\226.')
-    summary(settings)
-    if V.unipromo_error then V.red(V.unipromo_error)end
-    V.muted('\216\224\225\235\238\237\251: '..#settings.templates..' / '..P.MAX_TEMPLATES)
-    V.list_rows('unipromo_templates',settings.templates,119,function(t,i)
-        V.row('unipromo_template_'..i,119,function(w,x,y)
-            local count=#(t.rows or{})
-            V.at(x,y)
-            V.text(fit(t.name or'\193\229\231 \237\224\231\226\224\237\232\255',w-162))
-            V.at(x,y+28)
-            V.muted('\209\242\240\238\234: '..count..' \183 '..(t.auto~=false and'\224\234\242\232\226\229\237' or'\226\251\234\235\254\247\229\237'))
-            if count>0 then
-                V.at(x,y+53)
-                V.muted(fit((t.rows[1]or{}).text or'',w-170))
+    V.heading('\192\226\242\238\239\232\224\240 \183 Palatka',function()
+        if button('+ \216\224\225\235\238\237','new',155,true)then open_editor(nil)end
+    end,172)
+    if P.running then
+        if button('\209\210\206\207','stop',127,true)then P.stop()end
+    else
+        if button('\207\211\209\202','start',127,true)then
+            local ok,why=P.start()
+            V.mhpromo_error=ok and nil or tostring(why)
+        end
+    end
+    V.inline(5)
+    if button(settings.continuous and '\214\232\234\235: \194\202\203' or '\214\232\234\235: \194\219\202\203',
+        'loop',152,settings.continuous)then
+        P.set_option('continuous',not settings.continuous)
+    end
+    V.inline(5)
+    if button(settings.resume_on_login and'\207\240\232 \226\245\238\228\229: \194\202\203' or'\207\240\232 \226\245\238\228\229: \194\219\202\203',
+        'resume',191,settings.resume_on_login)then
+        P.set_option('resume_on_login',not settings.resume_on_login)
+    end
+    V.muted('\206\242\239\240\224\226\235\229\237\238: '..tostring(P.session_count)..
+        (settings.continuous and' | \225\229\231 \235\232\236\232\242\224' or' / 12')..
+        ' | '..(P.running and(P.pause_reason or'\240\224\225\238\242\224\229\242')or'\226\251\234\235\254\247\229\237'))
+    if V.mhpromo_error then V.red(V.mhpromo_error)end
+    V.muted('\216\224\225\235\238\237\251 \241\238 \241\242\240\238\234\224\236\232 /vr, /fam, /gd, /s, /ad \232 \228\240\243\227\232\245 \247\224\242\238\226.')
+    V.list_rows('mhpromo_templates',settings.templates,96,function(t,i)
+        V.row('mhpromo_t_'..i,96,function(w,x,y)
+            V.at(x,y);V.text(V.fit(t.name or'\216\224\225\235\238\237',math.max(80,w-155)))
+            V.at(x,y+27);V.muted(#(t.rows or{})..' \241\242\240\238\234')
+            V.at(x,y+53)
+            if button(t.auto~=false and'\192\226\242\238: \194\202\203' or'\192\226\242\238: \194\219\202\203',
+                'enable_'..i,132,t.auto~=false)then
+                local was=t.auto;t.auto=not(t.auto~=false)
+                if DSP.save_settings and DSP.save_settings()==false then t.auto=was end
             end
-            V.at(x,y+81)
-            if b(t.auto~=false and'\194\202\203' or'\194\219\202\203','template_toggle_'..i,79,t.auto~=false)then
-                t.auto=not(t.auto~=false)
-                if not save()then t.auto=not(t.auto~=false)end
+            V.at(x+w-143,y+4)
+            if button('\200\231\236\229\237\232\242\252','edit_'..i,140)then open_editor(i)end
+            V.at(x+w-143,y+52)
+            if button('\211\228\224\235\232\242\252','del_'..i,140)then
+                V.mhpromo_del=i;V.open_popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','mhpromo_delete')
             end
-            V.inline(5)
-            if b('\211\228\224\235\232\242\252','template_remove_'..i,91)then
-                V.unipromo_delete=i;V.open_popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','unipromo_delete')
-            end
-            V.at(x+w-150,y+10)
-            if b('\205\224\241\242\240\238\232\242\252','template_edit_'..i,146,true)then begin_template(i)end
         end)
-    end,{footer=function()
-        V.muted('\193\229\241\234\238\237\229\247\237\251\233 \246\232\234\235 \232 \224\226\242\238\226\238\231\238\225\237\238\226\235\229\237\232\229 \226\234\235\254\247\224\254\242\241\255 \242\238\235\252\234\238 \226\240\243\247\237\243\254.')
-    end})
+    end)
 end
-local old_popups=V.popups
+local previous=V.popups
 function V.popups()
-    if old_popups then old_popups()end
-    V.popup('\209\242\240\238\234\224 \240\229\234\235\224\236\251','unipromo_line',function()
-        V.text('\202\238\236\224\237\228\224 / \241\238\238\225\249\229\237\232\229 \226 \238\228\237\243 \241\242\240\238\234\243')
-        input('line_command','/vr \207\240\238\228\224\236 \242\238\226\224\240\251 \237\224 \214\208',V.unipromo_line,512)
-        V.muted('\205\224\239\240\232\236\229\240: /vr ..., /fam ..., /gd ..., /f ..., /ad ...')
-        V.text('\200\237\242\229\240\226\224\235 \239\238\241\235\229 \253\242\238\233 \241\242\240\238\234\232, \241\229\234\243\237\228')
-        for i,n in ipairs({60,120,180,300,600})do
-            if b(n..'\241','interval_'..i,61,V.unipromo_line_interval.value==n)then
-                V.unipromo_line_interval.value=n
-            end
-            if i<5 then V.inline(5)end
+    if previous then previous()end
+    V.popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','mhpromo_delete',function()
+        V.text('\211\228\224\235\232\242\252 \248\224\225\235\238\237 \241\238 \226\241\229\236\232 \241\242\240\238\234\224\236\232?')
+        if button('\196\224','yes',105)then
+            if P.remove(V.mhpromo_del)then imgui.CloseCurrentPopup()end
         end
-        M.compact_number(V.unipromo_line_interval,'value','unipromo_line_interval',190,60)
-        if V.unipromo_line_error then V.red(V.unipromo_line_error)end
-        if b('\196\238\225\224\226\232\242\252 / \241\238\245\240\224\237\232\242\252','line_save',225,true)then
-            local command=DSP.to_cp(ffi.string(V.unipromo_line)):match('^%s*(.-)%s*$')
-            local ok,err=P.validate(command)
-            if ok and #P.lines(command)==1 then
-                local row={text=command,interval=math.max(60,math.min(3600,
-                    math.floor(tonumber(V.unipromo_line_interval.value)or 180))),
-                    auto=V.unipromo_line_enabled~=false}
-                if V.unipromo_line_index then
-                    V.unipromo_draft.rows[V.unipromo_line_index]=row
-                else
-                    V.unipromo_draft.rows[#V.unipromo_draft.rows+1]=row
-                end
-                V.unipromo_line_error=nil
-                imgui.CloseCurrentPopup()
-            else
-                V.unipromo_line_error=err or'\206\228\237\224 \234\238\236\224\237\228\224 \237\224 \241\242\240\238\234\243'
-            end
-        end
-        V.inline(6);V.cancel('unipromo_line')
-    end,{w=660,h=400,resizable=true})
-    V.popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','unipromo_delete',function()
-        V.text('\211\228\224\235\232\242\252 \248\224\225\235\238\237 \246\229\235\232\234\238\236 \226\236\229\241\242\229 \241\238 \241\242\240\238\234\224\236\232?')
-        if b('\196\224, \243\228\224\235\232\242\252','remove_template',160)then
-            local ok=P.remove(V.unipromo_delete)
-            if ok then imgui.CloseCurrentPopup()else V.unipromo_error='\206\248\232\225\234\224 \241\238\245\240\224\237\229\237\232\255'end
-        end
-        V.inline(6);V.cancel('unipromo_delete')
-    end,{w=460,h=250})
+        V.inline(5);V.cancel('mhpromo_delete')
+    end,{w=415,h=225})
 end
 return true
 
@@ -2550,6 +2486,206 @@ return true
     if DSP._v289_installed then DSP.version='2.8.9';return true end
     DSP._v289_installed=true
     DSP.version='2.8.9'
+    return true
+  end
+  -- 2.9.0: Market Helper-inspired inline promo and minimalist trade journal.
+  local function install_v290()
+    if not install_v289() then return false end
+    if DSP._v290_installed then DSP.version='2.9.0';return true end
+    local ok,err=pcall(function()
+      local function _v290_mh_journal()
+-- Market Helper inspired trading log: simple movable translucent feed.
+-- Uses original Palatka journal events; never fabricates trade receipts.
+local C=DSP.craglog
+local function t(s)return DSP.utf8(tostring(s or''))end
+local function prefs()
+    DSP.settings.craglog=DSP.settings.craglog or{}
+    local s=DSP.settings.craglog
+    if not s.mh_log_style_v1 then
+        s.w,s.h=445,210
+        s.mh_log_style_v1=true
+    end
+    s.mh_log_lines=math.max(3,math.min(16,math.floor(tonumber(s.mh_log_lines)or 8)))
+    s.mh_log_alpha=math.max(.12,math.min(.95,tonumber(s.mh_log_alpha)or .58))
+    return s
+end
+local function is_trade(e)
+    return e.type=='market'and(e.direction=='sell'or e.direction=='buy')
+end
+function C.trade_feed(limit)
+    limit=math.max(1,math.min(40,math.floor(tonumber(limit)or 8)))
+    local rows={}
+    -- Oldest to newest ring order; render newest first without touching ledger.
+    for _,e in ipairs(C.ring_recent(C.ring_count))do
+        if is_trade(e)and(not C.event_visible or C.event_visible(e))then
+            rows[#rows+1]=e
+        end
+    end
+    local result={}
+    for i=#rows,math.max(1,#rows-limit+1),-1 do result[#result+1]=rows[i]end
+    return result
+end
+function C.trade_feed_line(e)
+    local selling=e.direction=='sell'
+    local label=selling and'\207\240\238\228\224\230\224' or'\209\234\243\239\234\224'
+    local sign=selling and'+' or'-'
+    local qty=tonumber(e.qty)or tonumber(e.count)
+    local name=tostring(e.item_name or e.item or'?')
+    return os.date('%H:%M',tonumber(e.ts)or os.time())..'  '..label..
+        ': '..name..(qty and (' x'..math.floor(qty))or'')..
+        '  '..sign..DSP.money(e.amount or 0)
+end
+local function trade_geometry(sw,sh,s)
+    local maxw=math.max(180,sw-12)
+    local maxh=math.max(90,sh-12)
+    local w=math.min(maxw,math.max(math.min(maxw,250),tonumber(s.w)or math.min(445,maxw)))
+    local h=math.min(maxh,math.max(math.min(maxh,120),tonumber(s.h)or math.min(210,maxh)))
+    local x=math.max(4,math.min(tonumber(s.x)or 18,sw-w-4))
+    local y=math.max(4,math.min(tonumber(s.y)or math.max(14,sh*.24),sh-h-4))
+    return{x=x,y=y,w=w,h=s.minimized and 33 or h,
+        max_x=math.max(4,sw-w-4),max_y=math.max(4,sh-h-4)}
+end
+function C.draw()
+    local s=prefs()
+    local io=imgui.GetIO()
+    local g=trade_geometry(io.DisplaySize.x,io.DisplaySize.y,s)
+    C.active_geometry=g
+    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.FirstUseEver)
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoCollapse+imgui.WindowFlags.NoSavedSettings
+    if s.minimized then
+        imgui.SetNextWindowSize(imgui.ImVec2(g.w,37),imgui.Cond.Always)
+        flags=flags+imgui.WindowFlags.NoResize
+    end
+    imgui.SetNextWindowBgAlpha(s.mh_log_alpha)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,5))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(4,4))
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,4)
+    if imgui.Begin('##palatka_trade_feed',nil,flags)then
+        local avail=imgui.GetContentRegionAvail().x
+        if imgui.Button(t('\210\206\208\195\206\194\219\201 \198\211\208\205\192\203')..'##trade_feed_drag',
+            imgui.ImVec2(math.max(70,avail-56),26))then end
+        if imgui.IsItemActive()and imgui.IsMouseDragging(0)and not s.pinned then
+            local d=io.MouseDelta;C.drag(d.x,d.y)
+        end
+        if not imgui.IsMouseDown(0)then C.end_drag()end
+        imgui.SameLine(0,4)
+        if imgui.Button((s.minimized and'+'or'-')..'##trade_feed_fold',imgui.ImVec2(24,26))then
+            C.set_minimized(not s.minimized)
+        end
+        imgui.SameLine(0,3)
+        if imgui.Button('x##trade_feed_close',imgui.ImVec2(24,26))then
+            s.open=false;DSP.save_settings()
+        end
+        if not s.minimized then
+            imgui.Separator()
+            if imgui.BeginChild('##trade_feed_lines',imgui.ImVec2(0,-2),false)then
+                local entries=C.trade_feed(s.mh_log_lines)
+                if #entries==0 then
+                    imgui.TextDisabled(t('\207\240\238\228\224\230\232 \232 \241\234\243\239\234\224 \239\238\255\226\255\242\241\255 \231\228\229\241\252 \239\238\241\235\229 \239\238\228\242\226\229\240\230\228\229\237\232\255 \232\227\240\238\233'))
+                end
+                for _,e in ipairs(entries)do
+                    local color=e.direction=='sell'
+                        and imgui.ImVec4(.40,.94,.48,1)
+                        or imgui.ImVec4(.40,.73,1,1)
+                    imgui.TextColored(color,t(C.trade_feed_line(e)))
+                end
+            end
+            imgui.EndChild()
+            if imgui.GetWindowSize then
+                local p=imgui.GetWindowSize()
+                if not s.pinned and
+                    (math.abs((s.w or 0)-p.x)>1 or math.abs((s.h or 0)-p.y)>1)then
+                    s.w=math.floor(p.x+.5);s.h=math.floor(p.y+.5)
+                    C.size_dirty=true
+                end
+            end
+        end
+    end
+    imgui.End()
+    imgui.PopStyleVar(3)
+    C.end_resize()
+end
+return true
+
+      end
+      _v290_mh_journal()
+
+      local function _v290_mh_journal_tab()
+-- Trade-first journal tab, adapted from Market Helper log list.
+-- Original reward/payday detail UI remains reachable if needed.
+local V,M,C=DSP.ui22,DSP.mobile,DSP.craglog
+local original=V.journal
+local function b(label,id,width,on)
+    return V.button(label,'tradelog_'..id,width,on)
+end
+local function line(e)
+    if C.trade_feed_line then return C.trade_feed_line(e)end
+    return tostring(e.item_name or'')..' '..DSP.money(e.amount or 0)
+end
+function V.journal()
+    if V.trade_full_history and original then
+        if b('\210\238\240\227\238\226\251\233 \230\243\240\237\224\235','trade_tab',200,true)then V.trade_full_history=false end
+        return original()
+    end
+    local s=DSP.settings.craglog or{}
+    DSP.settings.craglog=s
+    V.heading('\210\238\240\227\238\226\251\233 \230\243\240\237\224\235',function()
+        if b(s.open and'\209\234\240\251\242\252 \238\234\237\238' or'\207\238\234\224\231\224\242\252 \238\234\237\238','toggle',161,s.open)then
+            if C.toggle then C.toggle()end
+        end
+    end,175)
+    V.muted('\210\238\235\252\234\238 \239\238\228\242\226\229\240\230\228\184\237\237\251\229 \239\240\238\228\224\230\232 \232 \239\238\234\243\239\234\232, \225\229\231 \240\224\241\247\184\242\237\251\245 \241\228\229\235\238\234 \224\240\225\232\242\240\224\230\224.')
+    if b('\194\241\229','all',88,V.trade_filter=='all' or not V.trade_filter)then V.trade_filter='all'end
+    V.inline(5)
+    if b('\207\240\238\228\224\230\232','sell',112,V.trade_filter=='sell')then V.trade_filter='sell'end
+    V.inline(5)
+    if b('\209\234\243\239\234\224','buy',112,V.trade_filter=='buy')then V.trade_filter='buy'end
+    V.inline(5)
+    if b('\207\238\228\240\238\225\237\224\255 \232\241\242\238\240\232\255','full',183)then V.trade_full_history=true end
+    V.muted('\207\235\224\226\224\254\249\232\233 \235\238\227: \239\240\238\231\240\224\247\237\238\241\242\252 '..math.floor((tonumber(s.mh_log_alpha)or .58)*100)..'%')
+    for _,pct in ipairs({25,45,60,80})do
+        if b(pct..'%','opacity_'..pct,72,math.floor((s.mh_log_alpha or .58)*100)==pct)then
+            s.mh_log_alpha=pct/100;DSP.save_settings()
+        end
+        V.inline(4)
+    end
+    V.muted('\209\242\240\238\234 \226 \239\235\224\226\224\254\249\229\236 \238\234\237\229: '..tostring(s.mh_log_lines or 8))
+    for _,n in ipairs({5,8,12})do
+        if b(tostring(n),'lines_'..n,68,(s.mh_log_lines or 8)==n)then
+            s.mh_log_lines=n;DSP.save_settings()
+        end
+        V.inline(4)
+    end
+    local all=C.trade_feed and C.trade_feed(40)or{}
+    local rows={}
+    for _,e in ipairs(all)do
+        if not V.trade_filter or V.trade_filter=='all' or e.direction==V.trade_filter then
+            rows[#rows+1]=e
+        end
+    end
+    if #rows==0 then V.muted('\199\224\239\232\241\229\233 \239\240\238\228\224\230\232 \232 \241\234\243\239\234\232 \239\238\234\224 \237\229\242.')end
+    V.list_rows('tradelog_entries',rows,53,function(e,i)
+        V.row('trade_'..i,53,function(w,x,y)
+            V.at(x,y+2)
+            if e.direction=='sell' then V.green(V.fit(line(e),w-8))
+            else V.muted(V.fit(line(e),w-8))end
+        end)
+    end,{footer=function()V.muted('\209\238\225\251\242\232\255 \241\238\245\240\224\237\255\254\242\241\255 \248\242\224\242\237\251\236 \230\243\240\237\224\235\238\236 Palatka.')end})
+end
+return true
+
+      end
+      _v290_mh_journal_tab()
+
+    end)
+    if not ok then
+      if DSP.flog then DSP.flog('Palatka 2.9.0 MH trade journal: '..tostring(err)) end
+      return false
+    end
+    DSP._v290_installed=true
+    DSP.version='2.9.0'
     return true
   end
   -- Install settings guard before any other overlay can save preferences.
@@ -4602,7 +4738,7 @@ end
 
   -- Palatka AI 2.8.5: accurate trade and passive pawnshop read-only scanner.
   if DSP._v285_installed then
-    return install_v289()
+    return install_v290()
   end
   local applied,err=pcall(function()
     do
@@ -5802,5 +5938,5 @@ return true
   DSP._v285_installed=true
   DSP.version='2.8.5'
   if DSP.flog then DSP.flog('Palatka 2.8.5 Accurate Trade / Lombard beta installed') end
-  return install_v289()
+  return install_v290()
 end
