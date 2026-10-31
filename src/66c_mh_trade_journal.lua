@@ -1,6 +1,8 @@
 -- Market Helper-inspired trade log: concise receipts and totals, no loot/stat dashboard.
 -- All events originate from Palatka's verified journal; no invented transactions.
 local C,V=DSP.craglog,DSP.ui22
+if C._trade291_installed then return true end
+C._trade291_installed=true
 local function u(s)return DSP.utf8(tostring(s or''))end
 local function b(s,id,w,active)return V.button(s,'trade291_'..id,w,active,false,38)end
 local function money(n)return DSP.money(math.floor(tonumber(n)or 0))end
