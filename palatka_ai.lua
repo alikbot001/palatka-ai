@@ -1,7 +1,7 @@
--- Palatka AI v2.4.2: mobile release
+-- Palatka AI v2.2.11 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.4.2')
+script_version('2.2.11')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,7 +25137,7 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1629460
+DSP.item_icon_blob_offset = 1734666
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
@@ -25394,9 +25394,10 @@ function DSP.load_settings()
     -- explicit REAL mode + automatic stall capture; after this migration the
     -- user's later toggles are preserved normally.
     if d.v230_migrated ~= true then
-        DSP.settings.auto_shop_scan = true
-        DSP.settings.dry_run = false
-        DSP.settings.trade_mode = 'real'
+        -- Preserve the user's switches even when upgrading from old builds.
+        -- A migration may ADD fields, never silently switch live trading on.
+        if d.auto_shop_scan == nil then DSP.settings.auto_shop_scan=true end
+        if d.dry_run == nil and d.trade_mode=='preview' then DSP.settings.dry_run=true end
         DSP.settings.v230_migrated = true
         DSP.settings.safe_autoscan_migrated_22171 = true
         DSP.save_settings()
@@ -25692,20 +25693,194 @@ end
 
 DSP.load_settings()
 DSP.load_ui_state()
--- Migrate the stock 1.3.x amber look on first v1.4 launch. Respect custom themes.
+-- Never overwrite a personal theme during startup/migration.
 if not DSP.settings.ui_v14_migrated then
-    if DSP.settings.theme=='ocean_blue' then DSP.settings.theme='carbon_trade' end
     DSP.settings.ui_v14_migrated=true
     DSP.save_settings()
 end
 DSP.theme.current = DSP.settings.theme or 'carbon_trade'
-DSP.save_ui_state()
 DSP.theme.opacity = DSP.clamp(DSP.settings.opacity or 0.97, 0.65, 1.00)
+-- save_ui_state intentionally NOT called on startup: the saved UI position,
+-- theme and opacity belong to the user, not to a fresh script instance.
 DSP.flog('--- load v' .. DSP.version .. ' theme=' .. DSP.theme.current .. ' opacity=' .. tostring(DSP.theme.opacity) .. ' ---')
 DSP.enc_selftest()
 
 end
 __mod_00_core()
+
+local function __mod_00a_settings_safety()
+-- Palatka Settings Safety: protect user preferences on every OTA update.
+-- Install after core; do not replace, reset or filter unknown setting keys.
+local G = DSP.settings_safety or {}
+DSP.settings_safety = G
+if not G.installed then
+    local path = DSP.settings_path
+    local release=tostring(PALATKA_UPDATE_VERSION or DSP.version or 'before_update')
+        :gsub('[^%w_%-]','_')
+    local original_save = DSP.save_settings
+
+    local function read_all(filename)
+        local f=io.open(filename,'rb')
+        if not f then return nil end
+        local data=f:read('*a')
+        f:close()
+        return data
+    end
+    local function valid_json(raw)
+        if type(raw)~='string' or #raw==0 then return false end
+        local ok,result=pcall(decodeJson,raw)
+        return ok and type(result)=='table'
+    end
+    local function write_bytes(filename,data)
+        local f,err=io.open(filename,'wb')
+        if not f then return false,tostring(err or 'cannot open') end
+        local wrote,e=f:write(data)
+        local closed,close_err=f:close()
+        if not wrote or not closed then return false,tostring(e or close_err) end
+        local copy=read_all(filename)
+        if copy~=data then return false,'verification mismatch' end
+        return true
+    end
+    local function backup_valid(source,target)
+        local raw=read_all(source)
+        if not raw or not valid_json(raw) then return false,'invalid source' end
+        local tmp=target..'.tmp'
+        local ok,err=write_bytes(tmp,raw)
+        if not ok then return false,err end
+        -- Moving the last valid backup aside must never delete it.
+        local existing=read_all(target)
+        if existing and valid_json(existing) then
+            local keep=target..'.previous'
+            pcall(os.remove,keep)
+            local moved= os.rename(target,keep)
+            if not moved then pcall(os.remove,tmp);return false,'cannot rotate backup' end
+        end
+        local renamed,e=os.rename(tmp,target)
+        if not renamed then
+            pcall(os.remove,tmp)
+            if existing and valid_json(existing) then pcall(os.rename,target..'.previous',target) end
+            return false,tostring(e or 'cannot store backup')
+        end
+        return true
+    end
+
+    -- Back up the last known-good settings, including fields from future
+    -- versions, BEFORE installing new default keys in any subsequent update.
+    function G.checkpoint(tag)
+        if type(path)~='string' then return false,'settings path missing' end
+        local raw=read_all(path)
+        if not raw then return true,'no settings yet' end
+        if not valid_json(raw) then return false,'settings invalid: no overwrite' end
+        local safe=tostring(tag or 'before_update'):gsub('[^%w_%-]','_')
+        local snapshot=path..'.checkpoint_'..safe
+        if read_all(snapshot) then return true,snapshot end
+        local ok,e=write_bytes(snapshot..'.tmp',raw)
+        if not ok then return false,e end
+        local renamed,err=os.rename(snapshot..'.tmp',snapshot)
+        if not renamed then return false,tostring(err or 'checkpoint rename failed') end
+        return true,snapshot
+    end
+
+    -- File may be corrupt after a crash: NEVER save defaults over it.
+    function DSP.save_settings()
+        if type(path)~='string' or type(DSP.settings)~='table' then
+            return false,'invalid settings state'
+        end
+        local existing=read_all(path)
+        if existing and not valid_json(existing) then
+            if DSP.flog then pcall(DSP.flog,'SETTINGS SAFETY: existing JSON corrupt; refusing overwrite') end
+            return false,'Existing settings invalid; preserved for recovery'
+        end
+        local ok,json=pcall(encodeJson,DSP.settings)
+        if not ok or not valid_json(json) then return false,'settings encoding invalid' end
+        local temp=path..'.safe_new'
+        local wrote,err=write_bytes(temp,json)
+        if not wrote then return false,err end
+        if existing then
+            local saved,why=backup_valid(path,path..'.bak')
+            if not saved then pcall(os.remove,temp);return false,'backup failed: '..tostring(why) end
+            -- Android does not guarantee rename-over-existing.
+            local old=path..'.old'
+            pcall(os.remove,old)
+            local moved,why2=os.rename(path,old)
+            if not moved then pcall(os.remove,temp);return false,'cannot move old settings: '..tostring(why2) end
+            local placed,why3=os.rename(temp,path)
+            if not placed then
+                pcall(os.rename,old,path)
+                pcall(os.remove,temp)
+                return false,'cannot replace settings: '..tostring(why3)
+            end
+            pcall(os.remove,old)
+        else
+            local placed,why=os.rename(temp,path)
+            if not placed then pcall(os.remove,temp);return false,'cannot install settings: '..tostring(why) end
+        end
+        return true
+    end
+
+    -- Protect the second settings file too: window position, CR button
+    -- placement, theme and opacity must survive application updates.
+    if type(DSP.ui_state_path)=='string' then
+        local ui_path=DSP.ui_state_path
+        local ui_raw=read_all(ui_path)
+        if ui_raw and valid_json(ui_raw) then
+            local checkpoint=ui_path..'.checkpoint_'..release
+            if not read_all(checkpoint) then
+                local copied=write_bytes(checkpoint..'.tmp',ui_raw)
+                if copied then pcall(os.rename,checkpoint..'.tmp',checkpoint) end
+            end
+        end
+        DSP.save_ui_state=function()
+            local previous=read_all(ui_path)
+            if previous and not valid_json(previous) then
+                return false,'Existing UI state corrupt; preserving file'
+            end
+            local pack={
+                cr_pos=DSP.settings.cr_pos or {x=28,y=215},
+                screen=DSP.settings.screen or 'palatka',
+                theme=(DSP.theme and DSP.theme.current) or DSP.settings.theme,
+                opacity=(DSP.theme and DSP.theme.opacity) or DSP.settings.opacity,
+                saved_at=os.time()
+            }
+            local encoded,body=pcall(encodeJson,pack)
+            if not encoded or not valid_json(body) then return false,'Invalid UI state JSON' end
+            local temp=ui_path..'.safe_new'
+            local wrote,err=write_bytes(temp,body)
+            if not wrote then return false,err end
+            if previous then
+                local backed,why=backup_valid(ui_path,ui_path..'.bak')
+                if not backed then pcall(os.remove,temp);return false,'UI backup failed: '..tostring(why) end
+                local old=ui_path..'.old'
+                pcall(os.remove,old)
+                local moved,why2=os.rename(ui_path,old)
+                if not moved then pcall(os.remove,temp);return false,'UI move failed: '..tostring(why2) end
+                local renamed,why3=os.rename(temp,ui_path)
+                if not renamed then
+                    pcall(os.rename,old,ui_path)
+                    pcall(os.remove,temp)
+                    return false,'UI write failed: '..tostring(why3)
+                end
+                pcall(os.remove,old)
+            else
+                local renamed,why=os.rename(temp,ui_path)
+                if not renamed then pcall(os.remove,temp);return false,tostring(why) end
+            end
+            return true
+        end
+    end
+
+    -- Old files can contain a richer schema than the current build.
+    -- Do not enumerate or discard unknown settings during an update.
+    G.installed=true
+    G.original_save=original_save
+    local ok,detail=G.checkpoint(release)
+    if DSP.flog then
+        pcall(DSP.flog,'SETTINGS SAFETY checkpoint: '..tostring(ok)..' '..tostring(detail))
+    end
+end
+
+end
+__mod_00a_settings_safety()
 
 local function __mod_05_items()
 -- Item catalog: numeric item id -> CP1251 name.
@@ -27546,6 +27721,10 @@ local function after_tax(gross, tax_bp)
     return math.floor(gross / 10000) * factor + math.floor((gross % 10000) * factor / 10000)
 end
 
+local function offer_qty(row,side,offer,now)
+    if M.offer_quantity then return M.offer_quantity(row,side,offer,now) end
+    return integer(offer.qty),{source='api'}
+end
 local function fresh(offer, now, filters)
     if M.state.status=='cache' or M.state.status=='error' then return false end
     if M.is_shop_missing(offer.shop,now,offer.ts) then return false end
@@ -27576,10 +27755,12 @@ local function opportunities(filters, now, rows, selections)
     for _, row in ipairs(rows or M.state.rows or {}) do
         for _, seller in ipairs(row.sell.offers or {}) do
             if (not selections or selections.sell[seller]) and fresh(seller, now, filters) then
-                sellers_left[seller] = integer(seller.qty)
+                local seller_qty,seller_meta=offer_qty(row,'sell',seller,now)
+                sellers_left[seller] = seller_qty
                 for _, buyer in ipairs(row.buy.offers or {}) do
                     checkpoint()
                     local p_buy, p_sell = integer(seller.price), integer(buyer.price)
+                    local buyer_qty,buyer_meta=offer_qty(row,'buy',buyer,now)
                     if (not selections or selections.buy[buyer])
                         and (seller.ench or 0) == (buyer.ench or 0)
                         and fresh(buyer, now, filters)
@@ -27588,9 +27769,9 @@ local function opportunities(filters, now, rows, selections)
                         and (shop_mode == 0
                             or (shop_mode == 1 and tostring(seller.shop)==tostring(buyer.shop))
                             or (shop_mode == 2 and tostring(seller.shop)~=tostring(buyer.shop)))
-                        and integer(seller.qty) >= math.max(1, min_stock)
-                        and integer(buyer.qty) >= math.max(1, min_stock) then
-                        local demand_qty = integer(buyer.qty)
+                        and seller_qty >= math.max(1, min_stock)
+                        and buyer_qty >= math.max(1, min_stock) then
+                        local demand_qty = buyer_qty
                         if not buyer.verified_at then
                             local factor=100-reserve_pct
                             -- Exact up to 2^53: do not overflow precision by multiplying
@@ -27601,16 +27782,21 @@ local function opportunities(filters, now, rows, selections)
                         -- On a one-unit quote, a 10% reserve cannot be a
                         -- fractional item. Retain 1 as a *potential* trade,
                         -- not as a guarantee that the order still exists.
-                        if integer(buyer.qty)>0 and reserve_pct<100 then
+                        if buyer_qty>0 and reserve_pct<100 then
                             demand_qty=math.max(1,demand_qty)
                         end
-                        buyers_left[buyer] = demand_qty
+                        -- Several sellers can share one buyer. Do not replenish
+                        -- the same demand pool for every candidate!
+                        if buyers_left[buyer]==nil then buyers_left[buyer] = demand_qty end
                         -- Tax is rounded on the batch, not on each individual item.
                         local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
                         local unit_profit = after_tax(p_sell, tax_bp) - p_buy + fraction
                         if unit_profit > 0 and unit_profit >= min_unit_profit then
                             candidates[#candidates+1] = {
                                 row=row, seller=seller, buyer=buyer,
+                                qty_seller=seller_qty,qty_buyer=buyer_qty,
+                                seller_source=seller_meta and seller_meta.source or 'api',
+                                buyer_source=buyer_meta and buyer_meta.source or 'api',
                                 p_buy=p_buy, p_sell=p_sell, unit_profit=unit_profit,
                                 unit_roi=unit_profit / p_buy,
                             }
@@ -27661,12 +27847,13 @@ local function opportunities(filters, now, rows, selections)
                         row=c.row, name=c.row.display, ench=c.row.ench,
                         sell_offer=seller, buy_offer=buyer,
                         p_buy=c.p_buy, p_sell=c.p_sell,
-                        qty_seller=integer(seller.qty), qty_buyer=integer(buyer.qty),
+                        qty_seller=c.qty_seller, qty_buyer=c.qty_buyer,
+                        seller_source=c.seller_source, buyer_source=c.buyer_source,
                         available_qty=available, tradable_qty=qty, partial=qty<available,
                         total_cost=cost, net_revenue=revenue, net_profit=profit,
                         roi=roi, unit_profit=c.unit_profit,
                         sell_age=seller.ts or 0, buy_age=buyer.ts or 0,
-                        shared_stock=available<math.min(integer(seller.qty),integer(buyer.qty)),
+                        shared_stock=available<math.min(c.qty_seller,c.qty_buyer),
                         same_shop=tostring(seller.shop)==tostring(buyer.shop),
                         demand_verified=(tonumber(buyer.verified_at) or 0)>0,
                         reserve_pct=(tonumber(buyer.verified_at) or 0)>0 and 0 or reserve_pct,
@@ -27759,6 +27946,7 @@ function M.arbitrage_filtered()
         f.tax_bp or 'global',f.min_unit_profit or 0,f.max_buy_price or 0,
         f.min_stock or 0,f.shop_mode or 0,M.missing_revision or 0}, '|')
     if cache and sig == signature and not M.arb_dirty and now < expires then return cache end
+    M.accuracy_next_expiry=nil
     cache, signature = opportunities(f, now), sig
     expires = math.huge
     local max_age = integer(f.max_age,300)
@@ -27776,6 +27964,7 @@ function M.arbitrage_filtered()
                 end
             end
     end
+    if M.accuracy_next_expiry then expires=math.min(expires,M.accuracy_next_expiry) end
     M.arb_dirty = false
     return cache
 end
@@ -27855,6 +28044,97 @@ end
 
 end
 __mod_11_arbitrage()
+
+local function __mod_11a_accuracy()
+-- Market quantity reconciliation. No network calls, no packet writes.
+-- API figures remain immutable; an observed game quantity is temporary evidence,
+-- never a guarantee that a different player has not traded in the meantime.
+local M=DSP.market
+M.accuracy=M.accuracy or {}
+local A=M.accuracy
+A.ttl_seconds=90
+local function unsigned(value)
+    local n=tonumber(value)
+    if n and n==n and n>=0 and n<=1000000000 and n%1==0 then return n end
+end
+local function equal(a,b)
+    return DSP.lower(DSP.trim(tostring(a or '')))==DSP.lower(DSP.trim(tostring(b or '')))
+end
+local function rows_quantity(rows,row,side,offer)
+    local wanted=row.key or DSP.item_key(row.name or '',row.ench or 0)
+    local count,found=0,0
+    for _,item in ipairs(rows or {})do
+        if DSP.item_key(item.name or '',item.ench or 0)==wanted
+            and tonumber(item.price)==tonumber(offer.price) then
+            found=found+1
+            if item.qty_known~=true then return nil end
+            local q=unsigned(item.qty)
+            if not q then return nil end
+            count=count+q
+            if count>1000000000 then return nil end
+        end
+    end
+    if found>0 then return count,found end
+end
+-- Only confirmed packet quantities for the *same shop, server, owner, item, price, side*.
+-- Completeness is not claimed: only observed matching rows are counted.
+function A.quantity(row,side,offer,now)
+    if not row or (side~='sell' and side~='buy') or not offer then return nil end
+    now=tonumber(now) or os.time()
+    local sid=tonumber(M.state and M.state.sid)
+    local shop=tonumber(offer.shop)
+    local owner=tostring(offer.owner or '')
+    -- Never join anonymous API stalls to live scans by numeric id alone.
+    if not sid or not shop or owner=='' or owner=='?' then return nil end
+    local live=DSP.live and DSP.live.shop
+    -- Recompute the market once a currently-loading native fragment has
+    -- settled, even on clients without the optional shop-store worker.
+    if live and tonumber(live.server)==sid and tonumber(live.num)==shop
+        and (live.menu_closed or 0)==0 and equal(live.owner,offer.owner) then
+        local stamp=tonumber(live.items_updated) or 0
+        if stamp>0 and now-stamp>=0 and now-stamp<2
+            and live.scan_complete~=true then
+            M.accuracy_next_expiry=math.min(M.accuracy_next_expiry or math.huge,stamp+2)
+        end
+    end
+    if live and tonumber(live.server)==sid
+        -- Native pages can arrive as fragments: wait for the 2-second quiet
+        -- window unless the existing scan worker already marked it stable.
+        and (live.scan_complete==true or now-(tonumber(live.items_updated) or now)>=2)
+        and tonumber(live.num)==shop and (live.menu_closed or 0)==0
+        and equal(live.owner,offer.owner)
+        and now-(tonumber(live.items_updated) or 0)>=0
+        and now-(tonumber(live.items_updated) or 0)<=A.ttl_seconds then
+        local n,slots=rows_quantity(live[side],row,side,offer)
+        if n then
+            local seen=tonumber(live.items_updated) or now
+            M.accuracy_next_expiry=math.min(M.accuracy_next_expiry or math.huge,seen+A.ttl_seconds+1)
+            return n,{source='game_observed',at=seen,slots=slots,complete=false}
+        end
+    end
+    local store=DSP.shop_store
+    local saved=store and store.get_by_num and store.get_by_num(shop,sid)
+    if saved and equal(saved.owner,offer.owner) then
+        local at=tonumber(saved.at) or 0
+        if at>0 and now-at>=0 and now-at<=A.ttl_seconds then
+            local n,slots=rows_quantity(saved[side],row,side,offer)
+            if n then
+                M.accuracy_next_expiry=math.min(M.accuracy_next_expiry or math.huge,at+A.ttl_seconds+1)
+                return n,{source='recent_scan',at=at,slots=slots,complete=false}
+            end
+        end
+    end
+end
+function M.offer_quantity(row,side,offer,now)
+    local game,meta=A.quantity(row,side,offer,now)
+    if game~=nil then return game,meta end
+    local api=unsigned(offer and offer.qty)
+    return api or 0,{source='api',at=offer and offer.ts or 0,complete=false}
+end
+return true
+
+end
+__mod_11a_accuracy()
 
 local function __mod_12_arbitrage_groups()
 -- Item-centric market view. This module NEVER substitutes a planned trade
@@ -33915,143 +34195,6 @@ end
 end
 __mod_39_trade_runtime()
 
-local function __mod_39b_trade_probe()
--- Opt-in, read-only trade protocol trace. Never sends packets or replies to dialogs.
--- This diagnoses Arizona client versions whose UI IDs differ from the preset engine.
-DSP.trade_probe = DSP.trade_probe or {}
-local P = DSP.trade_probe
-P.active, P.until_at, P.events = false, 0, 0
-P.limit = 100
-local function log(s)
-    if DSP.flog then DSP.flog('TRADE TRACE: ' .. tostring(s)) end
-end
-local function enabled()
-    if not P.active then return false end
-    if os.time() >= P.until_at or P.events >= P.limit then
-        P.active = false
-        log('STOP auto: timed out or 100 event limit')
-        return false
-    end
-    return true
-end
-local function record(s)
-    if not enabled() then return end
-    P.events = P.events + 1
-    log(('#%d %s'):format(P.events, tostring(s)))
-end
-function P.stop()
-    P.active = false
-    log('STOP manual; recorded='..tostring(P.events))
-    if DSP.notify then DSP.notify('РўСЂР°СЃСЃРёСЂРѕРІРєР° С‚РѕСЂРіРѕРІР»Рё РѕСЃС‚Р°РЅРѕРІР»РµРЅР°. Р›РѕРі: PalatkaAI/standalone.log') end
-end
-function P.start()
-    P.active = true
-    P.until_at = os.time() + 120
-    P.events = 0
-    log('START for 120 seconds: manually open your own stall, sale and buy UI; then /crrtrace')
-    if DSP.notify then DSP.notify('РўСЂР°СЃСЃРёСЂРѕРІРєР° 120 СЃРµРє. РћС‚РєСЂРѕР№ Р»Р°РІРєСѓ, Р·Р°С‚РµРј РІСЂСѓС‡РЅСѓСЋ РїСЂРѕРґР°Р¶Сѓ Рё СЃРєСѓРїРєСѓ. /crrtrace = СЃС‚РѕРї') end
-end
-function P.toggle()
-    if enabled() then P.stop() else P.start() end
-end
--- Passive packet hook: ONLY capture the 220/63 message envelope and slots.
--- Never log text/JSON payload, never mutate packet data, restore read cursor.
-function P.outgoing_packet(id, bs)
-    if not enabled() or tonumber(id) ~= 220 then return end
-    local get, set = raknetBitStreamGetReadOffset, raknetBitStreamSetReadOffset
-    local read8, read32 = raknetBitStreamReadInt8, raknetBitStreamReadInt32
-    if type(get)~='function' or type(set)~='function'
-        or type(read8)~='function' or type(read32)~='function' then
-        record('outgoing packet id=220 (metadata API unavailable)')
-        return
-    end
-    local ok, info = pcall(function()
-        local original = get(bs)
-        local parsed_ok, parsed = pcall(function()
-            set(bs, 0)
-            local msg = read8(bs)
-            local marker = read8(bs)
-            if msg~=220 or marker~=63 then return 'packet=220 marker='..tostring(marker) end
-            local iface = read8(bs)
-            local slot = read32(bs)
-            local subid = read32(bs)
-            return ('packet=220 marker=63 interface=%s slot=%s subid=%s'):format(tostring(iface),tostring(slot),tostring(subid))
-        end)
-        set(bs, original)
-        if parsed_ok then return parsed end
-        return 'packet=220 parse-error (cursor restored)'
-    end)
-    if ok then record('OUT ' .. tostring(info)) else record('OUT packet=220 (read error)') end
-end
--- Snapshot diagnostics, not a synthetic scan. Helps distinguish packets seen,
--- a saved local quote, missing stall metadata and trade preview mode.
-function P.diagnostics()
-    local live=DSP.live or {}
-    local shop=live.shop or {}
-    local state,visible='unknown',0
-    if live.scan_state then
-        local ok,a,b=pcall(live.scan_state,shop)
-        if ok then state,visible=a,b or 0 else state='state_error' end
-    end
-    local stats={shops=0,offers=0}
-    if DSP.local_arb and DSP.local_arb.stats then
-        local ok,s=pcall(DSP.local_arb.stats)
-        if ok and type(s)=='table' then stats=s end
-    end
-    local auto=(DSP.settings and DSP.settings.auto_shop_scan~=false) and 'on' or 'off'
-    local mode=(DSP.settings and DSP.settings.dry_run) and 'TEST' or 'REAL'
-    local sid=DSP.settings and DSP.settings.server or 0
-    local tr=DSP.trade_runtime and DSP.trade_runtime.snapshot and DSP.trade_runtime.snapshot() or {phase='idle'}
-    local lst=DSP.lombard and DSP.lombard.stats and DSP.lombard.stats() or {items=0,pages=0,history_items=0}
-    local report=('server=%s autoscan=%s state=%s shop=%s visible=%d sell=%d buy=%d db_shops=%d db_offers=%d db_pending_disk=%s trade=%s phase=%s lombard=%d/%d hist=%d')
-      :format(tostring(sid),auto,tostring(state),tostring(shop.num or '?'),tonumber(visible) or 0,
-        #(shop.sell or {}),#(shop.buy or {}),tonumber(stats.shops) or 0,
-        tonumber(stats.offers) or 0,tostring(DSP.local_arb and DSP.local_arb._dirty==true),mode,tostring(tr.phase or 'idle'),tonumber(lst.items) or 0,tonumber(lst.pages) or 0,tonumber(lst.history_items) or 0)
-    if DSP.flog then DSP.flog('FULL DIAG: '..report) end
-    if DSP.notify then DSP.notify('[Palatka] '..report) end
-    return report
-end
-function P.install()
-    if P.installed then return end
-    P.installed = true
-    if sampRegisterChatCommand then
-        local ok, err = pcall(sampRegisterChatCommand, 'crrtrace', P.toggle)
-        log('command /crrtrace registered='..tostring(ok)..(not ok and ' '..tostring(err) or ''))
-        local diag_ok,diag_err=pcall(sampRegisterChatCommand,'crrdiag',P.diagnostics)
-        log('command /crrdiag registered='..tostring(diag_ok)..(not diag_ok and ' '..tostring(diag_err) or ''))
-    end
-    if addEventHandler then
-        local ok, err = pcall(addEventHandler, 'onSendPacket', P.outgoing_packet)
-        log('onSendPacket registered='..tostring(ok)..(not ok and ' '..tostring(err) or ''))
-        local rpc_ok, rpc_err = pcall(addEventHandler, 'onSendRpc', function(id)
-            if enabled() then record('OUT RPC id='..tostring(id)) end
-        end)
-        log('onSendRpc registered='..tostring(rpc_ok)..(not rpc_ok and ' '..tostring(rpc_err) or ''))
-    end
-    local ok, sampev = pcall(require, 'samp.events')
-    if ok and type(sampev)=='table' then
-        local prev_show = sampev.onShowDialog
-        sampev.onShowDialog = function(id, style, title, b1, b2, content)
-            if enabled() then
-                -- Title and length only; never log contents, inputs, or credentials.
-                local safe_title = tostring(title or ''):gsub('[\r\n]', ' '):sub(1, 70)
-                record(('IN DIALOG id=%s style=%s title=%s size=%s'):format(tostring(id),tostring(style),safe_title,#tostring(content or '')))
-            end
-            if prev_show then return prev_show(id, style, title, b1, b2, content) end
-        end
-        local prev_response = sampev.onSendDialogResponse
-        sampev.onSendDialogResponse = function(id, button, list, input)
-            if enabled() then record(('OUT DIALOG id=%s button=%s row=%s input_length=%d')
-                :format(tostring(id),tostring(button),tostring(list),#tostring(input or ''))) end
-            if prev_response then return prev_response(id, button, list, input) end
-        end
-        log('dialog metadata hooks installed')
-    else
-        log('samp.events unavailable; dialog trace disabled')
-    end
-end
-end
-__mod_39b_trade_probe()
 local function __mod_40_auto()
 -- Auto-buy / auto-sell engines: inventory scan + server dialogs.
 DSP.auto = DSP.auto or {}
@@ -35215,6 +35358,7 @@ end
 return true
 end
 __mod_44_item_registry()
+
 local function __mod_45_live()
 -- Live game hooks: trade (iface 57) and lavka (iface 60/52) parsing.
 DSP.live = DSP.live or {}
@@ -35530,6 +35674,9 @@ function L.commit_shop_autoscan(defer_io)
     row=row or saved_row
     if not verified then scan_diag('error',s,'missing saved snapshot');return false,'error' end
     L._auto_scan_pending=false;L._auto_scan_stable_ticks=0;s.scan_complete=true
+    -- Recalculate plans once a stable shop scan has been observed.
+    -- Never mutate API stock and never claim a complete authoritative snapshot.
+    if DSP.market and DSP.market.invalidate_arbitrage then DSP.market.invalidate_arbitrage() end
     L.auto_scan.shop=tostring((row and row.num)or s.num or '')
     L.auto_scan.identity=tostring((row and row.identity)or s.local_identity or '')
     L.auto_scan.owner=tostring((row and row.owner)or s.owner or '')
@@ -35677,7 +35824,19 @@ function L.handle_shop_owner(raw)
     if (s.items_updated or 0)>0 then L.queue_shop_autoscan() end
 end
 
+-- Mark the source hook so OTA overlays cannot double-subscribe it.
+L._lombard_packet_hooked=true
 function L.handle(iface, sub, raw)
+    -- Passive pawnshop packet observation; never consumes existing game events.
+    if DSP.lombard and DSP.lombard.on_packet then
+        local ok,err=pcall(DSP.lombard.on_packet,iface,sub,raw)
+        if not ok and DSP.flog then DSP.flog('LOMBARD probe: '..tostring(err)) end
+    end
+    -- Passive discovery subscriber. Never consumes the packet or changes trade logic.
+    if iface==52 and DSP.storage_probe and DSP.storage_probe.on_packet then
+        local ok,err=pcall(DSP.storage_probe.on_packet,sub,raw)
+        if not ok and DSP.flog then DSP.flog('STORAGE probe error: '..tostring(err)) end
+    end
     -- Own-stall inventory acknowledgement. Real sale listing must first open
     -- the stall inventory, just like the native UI does.
     if iface==52 and sub==2 and DSP.auto then
@@ -35721,7 +35880,10 @@ function L.handle(iface, sub, raw)
         -- Finalize pending game data before the menu becomes closed. The save
         -- itself is deferred; disk writes during a network callback cause lag.
         if L._auto_scan_pending then L.commit_shop_autoscan(L._auto_scan_worker==true) end
-        if L.shop and (L.shop.menu_closed or 0)==0 then L.shop.menu_closed=now();shop_changed(L.shop) end
+        if L.shop and (L.shop.menu_closed or 0)==0 then
+            L.shop.menu_closed=now();shop_changed(L.shop)
+            if DSP.market and DSP.market.invalidate_arbitrage then DSP.market.invalidate_arbitrage() end
+        end
         if DSP.local_arb and DSP.local_arb.flush and not L._auto_scan_worker then
             -- Test/fallback hosts do not run the background save coroutine.
             local ok,err=pcall(DSP.local_arb.flush)
@@ -36258,6 +36420,7 @@ end
 return true
 end
 __mod_45a_shop_identity()
+
 local function __mod_46_shop_scan()
 -- Observed current-stall prices stay separate from the world market snapshot.
 local S={};DSP.shop_scan=S
@@ -36722,6 +36885,7 @@ end
 return true
 end
 __mod_46a_shop_store()
+
 local function __mod_46b_local_arbitrage()
 -- Compatibility facade over the central ShopStore.
 DSP.local_arb = DSP.local_arb or {}
@@ -36793,17 +36957,25 @@ function A.routes(timestamp)
     local shops=DSP.shop_store and DSP.shop_store.active and DSP.shop_store.active(sid(),timestamp) or {}
     for _,shop in ipairs(shops) do
         if num(shop.num,1) and not (market and market.is_shop_missing and market.is_shop_missing(shop.num,timestamp)) then
-            for _,pair in ipairs({{shop.sell,sellers},{shop.buy,buyers}}) do
+            for _,pair in ipairs({{shop.sell,sellers,'sell'},{shop.buy,buyers,'buy'}}) do
                 for _,offer in ipairs(pair[1] or {}) do
                     local id=num(offer.id,1)
                     local ench=num(offer.ench or 0,0,10000)
                     local price=num(offer.price,1)
                     if id and ench and price then
                         local k=tostring(id)..':'..tostring(ench)
-                        local bucket=pair[2][k]
-                        if not bucket then bucket={};pair[2][k]=bucket end
-                        bucket[#bucket+1]={num=shop.num,owner=shop.owner,at=shop.at,id=id,ench=ench,
-                            name=offer.name,price=price,qty=num(offer.qty,1,1000000000)}
+                        local available=num(offer.qty,1,1000000000)
+                        if available and DSP.arb_agent and DSP.arb_agent.remaining then
+                            available=DSP.arb_agent.remaining({key=k},pair[3],
+                                {shop=shop.num,owner=shop.owner,price=price,ts=shop.at},
+                                available,{source='recent_scan',at=shop.at})
+                        end
+                        if available==nil or available>0 then
+                            local bucket=pair[2][k]
+                            if not bucket then bucket={};pair[2][k]=bucket end
+                            bucket[#bucket+1]={num=shop.num,owner=shop.owner,at=shop.at,id=id,ench=ench,
+                                name=offer.name,price=price,qty=available}
+                        end
                     end
                 end
             end
@@ -36869,6 +37041,522 @@ end
 return true
 end
 __mod_46b_local_arbitrage()
+
+local function __mod_46c_lombard()
+-- Long-lived pawnshop scanner. Pawnshop data is intentionally separate from
+-- the 80-row local ShopStore LRU: a pawnshop is a server economy source, not a stall.
+DSP.lombard = DSP.lombard or {}
+local L=DSP.lombard
+L.schema=1
+L.path=(DSP.dir or '.')..'/lombard_store_v1.json'
+L.data=L.data or {schema=L.schema,servers={}}
+L.session=L.session or nil
+L.auto_scan=false
+L._dirty=false
+L._installed=false
+L._last_dialog=nil
+L.history_days=365
+L.max_history_per_item=512
+local MAX=9007199254740991
+local CP_LOMBARD='\xeb\xee\xec\xe1\xe0\xf0\xe4'
+local UTF_LOMBARD='\208\187\208\190\208\188\208\177\208\176\209\128\208\180'
+local CP_NEXT='\xf1\xeb\xe5\xe4\xf3\xfe\xf9'
+local CP_MORE='\xe4\xe0\xeb\xe5\xe5'
+local CP_PREV='\xef\xf0\xe5\xe4\xfb\xe4'
+local CP_SEARCH='\xef\xee\xe8\xf1\xea'
+local CP_BALANCE='\xe1\xe0\xeb\xe0\xed\xf1'
+local CP_EXIT='\xe2\xfb\xf5\xee\xe4'
+local CP_BACK='\xed\xe0\xe7\xe0\xe4'
+local CP_BUY='\xf1\xea\xf3\xef'      -- skyp / skypka prefix
+local CP_PURCHASE='\xef\xee\xea\xf3\xef' -- pokup prefix
+local CP_SELL='\xef\xf0\xee\xe4\xe0' -- proda prefix
+local CP_GIVE='\xf1\xe4\xe0\xf2\xfc' -- sdat (hand over / pawn)
+local CP_ITEM='\xef\xf0\xe5\xe4\xec\xe5\xf2' -- predmet
+local function lower(v)
+    local x=tostring(v or '')
+    return DSP.lower and DSP.lower(x) or x:lower()
+end
+local function clean(v)
+    local x=tostring(v or '')
+    if DSP.clean_text then x=DSP.clean_text(x) else x=x:gsub('{%x+}','') end
+    x=x:gsub('\r',''):gsub('^%s+',''):gsub('%s+$','')
+    return x
+end
+local function current_sid()
+    local s=tonumber(DSP.market and DSP.market.state and DSP.market.state.sid)
+    if s==nil then s=tonumber(DSP.settings and DSP.settings.server) end
+    return math.floor(s or 0)
+end
+local function srv(server_id)
+    local k=tostring(tonumber(server_id) or current_sid())
+    local root=L.data.servers
+    if type(root[k])~='table' then root[k]={latest={at=0,items={}},history={},scans={}} end
+    local r=root[k]
+    if type(r.latest)~='table' then r.latest={at=0,items={}} end
+    if type(r.latest.items)~='table' then r.latest.items={} end
+    if type(r.history)~='table' then r.history={} end
+    if type(r.scans)~='table' then r.scans={} end
+    return r,k
+end
+local function is_lombard_text(v)
+    local q=lower(clean(v))
+    return q:find(CP_LOMBARD,1,true)~=nil or q:find(UTF_LOMBARD,1,true)~=nil or q:find('pawn',1,true)~=nil
+end
+function L.is_dialog(title,text)
+    if is_lombard_text(title) or is_lombard_text(text) then return true end
+    -- Nested pawnshop screens may be titled "Choose item" without "Lombard".
+    -- Only trust them for an already recognized, recent pawnshop session.
+    local sess=L.session
+    if not sess or not sess.pawn_context or os.time()-(sess.last or 0)>20 then return false end
+    local header=lower(clean(title))
+    return header:find(CP_ITEM,1,true)~=nil or header:find(CP_GIVE,1,true)~=nil
+end
+local function side_from(title,text)
+    local q=lower(clean(title)..' '..clean(text))
+    if q:find(CP_GIVE,1,true) or q:find(CP_BUY,1,true) or q:find(CP_PURCHASE,1,true) then return 'buy' end
+    if q:find(CP_SELL,1,true) then return 'sell' end
+    return 'quote'
+end
+local function parse_price(v)
+    if DSP.market and DSP.market.parse_cr_price then
+        local ok,p=pcall(DSP.market.parse_cr_price,v)
+        if ok and tonumber(p) and p>0 then return math.floor(p) end
+    end
+    local q=tostring(v or ''):gsub('{%x+}',''):gsub('%s','')
+    q=q:gsub('^%$',''):gsub('%$$',''):gsub('[,.]','')
+    local p=tonumber(q);if p and p>0 and p<=MAX then return math.floor(p) end
+end
+local function normalize_name(v)
+    local n=clean(v)
+    n=n:gsub('^%[%d+%]%s*',''):gsub('^%d+[%.%)]%s*','')
+    n=n:gsub('%s+%(%s*ID%s*:%s*%d+%s*%)%s*$','')
+    n=n:gsub('%s+%[[xX]%d+%]%s*$','')
+    n=n:gsub('%s+[xX]%s*%d+%s*$','')
+    n=n:gsub('^%s+',''):gsub('%s+$','')
+    return n
+end
+local function skip_line(line)
+    local q=lower(clean(line))
+    if q=='' then return true end
+    if q:find(CP_LOMBARD,1,true) or q:find(UTF_LOMBARD,1,true) then return true end
+    if q:find(CP_NEXT,1,true) or q:find(CP_MORE,1,true) or q:find(CP_PREV,1,true)
+        or q:find(CP_SEARCH,1,true) or q:find(CP_BALANCE,1,true)
+        or q:find(CP_EXIT,1,true) or q:find(CP_BACK,1,true) then return true end
+    if q=='>>' or q=='<<' then return true end
+    return false
+end
+local function fields(line)
+    local t={}
+    for x in tostring(line or ''):gmatch('[^\t]+') do t[#t+1]=clean(x) end
+    return t
+end
+local function parse_line(line,title)
+    local raw=clean(line)
+    if skip_line(raw) then return nil end
+    local fs=fields(raw)
+    local price,price_i
+    if #fs>1 then
+        for i=#fs,2,-1 do
+            local p=parse_price(fs[i])
+            if p then price,price_i=p,i;break end
+        end
+    end
+    local name
+    if price then
+        local acc={};for i=1,price_i-1 do if fs[i]~='' then acc[#acc+1]=fs[i] end end
+        name=table.concat(acc,' ')
+    else
+        local prefix,token=raw:match('^(.-)%s+(:CASH:[%d%.,]+)%s*$')
+        if not prefix then prefix,token=raw:match('^(.-)%s+(%$[%d%.,]+)%s*$') end
+        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*%s*[KkMm])%s*$') end
+        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*)%s*$') end
+        if prefix and token then price=parse_price(token);name=prefix end
+    end
+    name=normalize_name(name or '')
+    if not price or name=='' or #name<2 then return nil end
+    -- Avoid treating pure service/menu labels as items.
+    if name:match('^%d+$') then return nil end
+    local ench=tonumber(name:match('%(%+(%d+)%)')) or 0
+    local base=name:gsub('%s*%(%+%d+%)%s*$','')
+    local id=nil
+    if DSP.items and DSP.items.id_for_name then
+        local ok,v=pcall(DSP.items.id_for_name,base);if ok then id=tonumber(v) end
+    end
+    local side=side_from(title,raw)
+    local key=(DSP.item_key and DSP.item_key(base,ench) or lower(base)..':'..ench)..':'..side
+    return {name=name,base_name=base,item_id=id,ench=ench,price=price,side=side,key=key,raw_index=0}
+end
+function L.parse_dialog(title,text)
+    local out,seen={},{}
+    local idx=0
+    for line in tostring(text or ''):gmatch('[^\n]+') do
+        local r=parse_line(line,title);if r then
+            r.raw_index=idx
+            local k=r.key..':'..tostring(r.price)
+            if not seen[k] then seen[k]=true;out[#out+1]=r end
+        end
+        idx=idx+1
+    end
+    return out
+end
+local function page_hash(title,text)
+    local s=clean(title)..'\n'..clean(text)
+    local h=2166136261
+    for i=1,#s do h=(h*16777619+s:byte(i))%4294967296 end
+    return string.format('%08x',h)
+end
+local function new_session(id,title)
+    L.session={id=tonumber(id) or -1,title=clean(title),started=os.time(),last=os.time(),pages={},items={},order={},history_seen={},pawn_context=true}
+    return L.session
+end
+local function get_session(id,title)
+    local now=os.time();local s=L.session
+    if not s or now-(s.last or 0)>20 or
+        (s.id~=tonumber(id) and tonumber(id)~=nil and not s.pawn_context) then
+        s=new_session(id,title)
+    end
+    s.id=tonumber(id) or s.id
+    s.last=now;if clean(title)~='' then s.title=clean(title) end
+    return s
+end
+local function history_add(root,item,at,session)
+    if session.history_seen[item.key] then return end
+    session.history_seen[item.key]=true
+    local h=root.history[item.key]
+    if type(h)~='table' then h={name=item.name,side=item.side,item_id=item.item_id,ench=item.ench,points={}};root.history[item.key]=h end
+    if type(h.points)~='table' then h.points={} end
+    h.name=item.name;h.side=item.side;h.item_id=item.item_id or h.item_id;h.ench=item.ench or h.ench
+    local prev=h.points[#h.points]
+    if prev and prev.price==item.price and at-(prev.at or 0)<21600 then prev.at=at
+    else h.points[#h.points+1]={at=at,price=item.price} end
+    local cutoff=at-(tonumber(L.history_days) or 365)*86400
+    while #h.points>0 and ((h.points[1].at or 0)<cutoff or #h.points>(tonumber(L.max_history_per_item) or 512)) do table.remove(h.points,1) end
+end
+local function commit_session(session,source)
+    if not session then return false,'session' end
+    local root,skey=srv(current_sid());local at=os.time();local items={}
+    for _,k in ipairs(session.order) do local r=session.items[k];if r then items[#items+1]=r;history_add(root,r,at,session) end end
+    table.sort(items,function(a,b) if a.name~=b.name then return a.name<b.name end;if a.side~=b.side then return a.side<b.side end;return a.price<b.price end)
+    root.latest={at=at,started=session.started,title=session.title,items=items,pages=session.page_count or 0,source=source or 'dialog'}
+    root.scans[#root.scans+1]={at=at,count=#items,pages=session.page_count or 0,source=source or 'dialog'}
+    while #root.scans>180 do table.remove(root.scans,1) end
+    L._dirty=true
+    if DSP.flog then DSP.flog(('LOMBARD commit sid=%s items=%d pages=%d'):format(skey,#items,session.page_count or 0)) end
+    return true,#items
+end
+function L.observe_dialog(id,style,title,b1,b2,text)
+    if not L.is_dialog(title,text) then return false end
+    L._last_dialog={id=id,style=style,title=title,b1=b1,b2=b2,text=text,at=os.time()}
+    local s=get_session(id,title);local h=page_hash(title,text)
+    if not s.pages[h] then
+        s.pages[h]=true;s.page_count=(s.page_count or 0)+1
+        local rows=L.parse_dialog(title,text)
+        for _,r in ipairs(rows) do
+            local k=r.key
+            local old=s.items[k]
+            if not old then s.items[k]=r;s.order[#s.order+1]=k
+            elseif r.price~=old.price then
+                -- Same item can legitimately appear more than once at different prices.
+                local k2=k..':p'..tostring(r.price)
+                if not s.items[k2] then r.key=k2;s.items[k2]=r;s.order[#s.order+1]=k2 end
+            end
+        end
+        if #rows>0 then commit_session(s,L.auto_scan and 'auto_pages' or 'passive') end
+    end
+    return true
+end
+local function next_index(text)
+    local i=0
+    for line in tostring(text or ''):gmatch('[^\n]+') do
+        local q=lower(clean(line))
+        if q:find(CP_NEXT,1,true) or q:find(CP_MORE,1,true) or q=='>>' then return i end
+        i=i+1
+    end
+    return nil
+end
+local function schedule_next(id,text)
+    if not L.auto_scan then return end
+    local idx=next_index(text);if idx==nil then
+        L.auto_scan=false
+        if DSP.notify then DSP.notify('Lombard scan complete: '..tostring(L.stats().items)..' items') end
+        return
+    end
+    if not lua_thread or not lua_thread.create or not wait then return end
+    lua_thread.create(function()
+        wait(120)
+        if L.auto_scan and sampIsDialogActive and sampIsDialogActive() and sampGetCurrentDialogId and sampGetCurrentDialogId()==id then
+            pcall(sampSendDialogResponse,id,1,idx,'')
+        end
+    end)
+end
+function L.stats(server_id)
+    local root=srv(server_id);local hist=0;for _ in pairs(root.history) do hist=hist+1 end
+    return {items=#(root.latest.items or {}),last=root.latest.at or 0,pages=root.latest.pages or 0,history_items=hist,scans=#root.scans,server=tonumber(server_id) or current_sid()}
+end
+function L.search(query,server_id)
+    local root=srv(server_id);local q=lower(clean(query));local out={}
+    for _,r in ipairs(root.latest.items or {}) do
+        if q=='' or lower(r.name):find(q,1,true) then out[#out+1]=r end
+    end
+    table.sort(out,function(a,b) if a.name~=b.name then return a.name<b.name end;return a.price<b.price end)
+    return out
+end
+function L.history(item_key,server_id)
+    local root=srv(server_id);local h=root.history[item_key];return h and h.points or {}
+end
+function L.links(query,server_id)
+    local out={};if not DSP.shop_store or not DSP.shop_store.search then return out end
+    local sidv=tonumber(server_id) or current_sid()
+    for _,p in ipairs(L.search(query,sidv)) do
+        local refs=DSP.shop_store.search(p.base_name or p.name,nil,sidv)
+        local best_sell,best_buy
+        for _,ref in ipairs(refs or {}) do
+            local price=tonumber(ref.offer and ref.offer.price)
+            if price then
+                if ref.side=='sell' and (not best_sell or price<best_sell.price) then best_sell={price=price,shop=ref.shop and ref.shop.num,owner=ref.shop and ref.shop.owner} end
+                if ref.side=='buy' and (not best_buy or price>best_buy.price) then best_buy={price=price,shop=ref.shop and ref.shop.num,owner=ref.shop and ref.shop.owner} end
+            end
+        end
+        out[#out+1]={pawn=p,best_shop_sell=best_sell,best_shop_buy=best_buy,
+            diff_from_shop_sell=best_sell and (p.price-best_sell.price) or nil,
+            diff_to_shop_buy=best_buy and (best_buy.price-p.price) or nil}
+    end
+    return out
+end
+function L.flush()
+    if not L._dirty then return true end
+    local ok,json=pcall(encodeJson,L.data);if not ok or type(json)~='string' then return false,'encode' end
+    local tmp=L.path..'.tmp';local f=io.open(tmp,'wb');if not f then return false,'open' end
+    local a,b=f:write(json),f:close();if not a or not b then return false,'write' end
+    local r,e=os.rename(tmp,L.path);if not r then return false,e end
+    L._dirty=false;return true
+end
+function L.load()
+    local f=io.open(L.path,'rb');if not f then return false end
+    local raw=f:read('*a') or '';f:close();local ok,d=pcall(decodeJson,raw)
+    if ok and type(d)=='table' and type(d.servers)=='table' then L.data=d;L.data.schema=L.schema;return true end
+    return false
+end
+function L.command(param)
+    param=clean(param or '')
+    local st=L.stats()
+    if param=='' then
+        if DSP.notify then DSP.notify(('Lombard: items=%d pages=%d history=%d scans=%d'):format(st.items,st.pages,st.history_items,st.scans)) end
+        return
+    end
+    local rows=L.search(param);if DSP.notify then DSP.notify('Lombard search "'..param..'": '..#rows) end
+    for i=1,math.min(#rows,5) do local r=rows[i];if DSP.notify then DSP.notify((r.side or 'quote')..' '..r.name..' '..DSP.money(r.price)) end end
+end
+-- Store only an explicitly reviewed native observation, not an automatic trade.
+function L.save_observation(rows,source)
+    if type(rows)~='table' or #rows==0 or #rows>180 then return false,'no rows' end
+    local session=new_session(-1,'Lombard native observation')
+    session.page_count=1
+    for _,item in ipairs(rows) do
+        if type(item)=='table' and type(item.name)=='string'
+            and tonumber(item.price) and tonumber(item.price)>0 then
+            local key=tostring(item.key or item.name..':'..item.price)
+            if not session.items[key] then
+                session.items[key]=item
+                session.order[#session.order+1]=key
+            end
+        end
+    end
+    if #session.order==0 then return false,'no recognized items' end
+    return commit_session(session,source or 'packet_unverified')
+end
+function L.start_auto()
+    if not sampIsDialogActive or not sampIsDialogActive() then
+        if L.packet_probe and L.packet_probe.arm then
+            L.packet_probe.arm(35)
+            if DSP.notify then DSP.notify('Lombard: listening for native pawnshop menu (35 sec)')end
+            return true
+        end
+        return false
+    end
+    local id=sampGetCurrentDialogId and sampGetCurrentDialogId() or -1
+    local title=sampGetDialogTitle and sampGetDialogTitle() or ''
+    local text=sampGetDialogText and sampGetDialogText() or ''
+    if not L.is_dialog(title,text) then if DSP.notify then DSP.notify('Lombard: current dialog not recognized') end;return false end
+    L.session=nil;L.auto_scan=true;L.observe_dialog(id,0,title,'','',text);schedule_next(id,text)
+    if DSP.notify then DSP.notify('Lombard auto scan started') end;return true
+end
+function L.install()
+    if L._installed then return end;L._installed=true
+    pcall(L.load)
+    if sampRegisterChatCommand then
+        pcall(sampRegisterChatCommand,'crrlombard',L.command)
+        pcall(sampRegisterChatCommand,'crrlombardscan',function() L.start_auto() end)
+        pcall(sampRegisterChatCommand,'crrlombardui',function()
+            if DSP.ui21 and DSP.ui21.set_screen then DSP.ui21.set_screen('lombard') end
+        end)
+    end
+    local ok,sampev=pcall(require,'samp.events')
+    if ok and sampev then
+        local prev=sampev.onShowDialog
+        sampev.onShowDialog=function(id,style,title,b1,b2,text)
+            local seen=false;local good,ret=pcall(L.observe_dialog,id,style,title,b1,b2,text);if good then seen=ret end
+            if seen then schedule_next(id,text) end
+            if prev then return prev(id,style,title,b1,b2,text) end
+        end
+    end
+    if lua_thread and lua_thread.create and wait then
+        lua_thread.create(function() while true do wait(2500);if L._dirty then pcall(L.flush) end end end)
+    end
+end
+return true
+end
+__mod_46c_lombard()
+
+local function __mod_46d_lombard_packets()
+-- Passive native pawnshop menu inspection. The packet layout is NOT
+-- verified against a real pawnshop dump; all entries are observational only.
+local L=DSP.lombard
+if not L then return false end
+local P={active=false,status='idle',until_ts=0,packets=0,tagged=0,
+    ignored=0,candidates={},items={},order={},verified_label=false}
+L.packet_probe=P
+local MAX_BYTES,MAX_ROWS,MAX_CANDIDATES=100000,180,12
+local function int(v,cap)
+    local n=tonumber(v)
+    if n and n==n and n>=0 and n<=cap and n%1==0 then return n end
+end
+local function lower(s)
+    s=tostring(s or '')
+    return DSP.lower and DSP.lower(s) or s:lower()
+end
+local function pawn_text(s)
+    s=lower(s)
+    return s:find('\xeb\xee\xec\xe1\xe0\xf0\xe4',1,true)~=nil
+        or s:find('\208\187\208\190\208\188\208\177\208\176\209\128\208\180',1,true)~=nil
+        or s:find('pawnshop',1,true)~=nil or s:find('pawn',1,true)~=nil
+end
+function P.arm(seconds)
+    local duration=int(seconds or 35,60) or 35
+    if duration<5 then duration=35 end
+    P.active=true;P.status='listening';P.until_ts=os.time()+duration
+    P.packets=0;P.tagged=0;P.ignored=0;P.candidates={};P.items={};P.order={}
+    P.verified_label=false
+    return true
+end
+function P.stop()
+    P.active=false;P.status='review';return true
+end
+function P.state()
+    if P.active and os.time()>P.until_ts then P.stop() end
+    return P
+end
+local function has_known_game_name(item)
+    return type(item)=='table' and type(item.name)=='string' and item.name~=''
+end
+local function recognize(item,index,tag)
+    if type(item)~='table' then return nil end
+    local explicit_price=int(item.price or item.cost or item.unit_price or item.unitPrice,9007199254740991)
+    if not explicit_price or explicit_price<1 then return nil end
+    local row
+    if DSP.item_registry and DSP.item_registry.from_node then
+        local ok,value=pcall(DSP.item_registry.from_node,item,'buy',index)
+        if ok and value then row=value end
+    end
+    if not row and has_known_game_name(item) and L.parse_dialog then
+        local lines=L.parse_dialog(tag or '',item.name..'\t'..tostring(explicit_price))
+        row=lines[1]
+    end
+    if not row then return nil end
+    row.side='buy'
+    row.price=explicit_price
+    return row
+end
+local function nodes(obj)
+    if type(obj)~='table' then return nil end
+    if type(obj.items)=='table' then return obj.items end
+    if type(obj.rows)=='table' then return obj.rows end
+    if type(obj.data)=='table' then
+        if type(obj.data.items)=='table' then return obj.data.items end
+        if type(obj.data.rows)=='table' then return obj.data.rows end
+    end
+end
+function L.on_packet(iface,sub,raw)
+    local active=P.state().active
+    if type(raw)~='string' or #raw<2 or #raw>MAX_BYTES then return false end
+    -- A labeled pawnshop packet may be observed passively. Unknown packet
+    -- layouts are explored only during the explicit 35-second scan window.
+    if not active and not pawn_text(raw) then return false end
+    local ok,obj=pcall(decodeJson,raw:gsub('%z+$',''))
+    if not ok or type(obj)~='table' then return false end
+    local packet_type=int(obj.type,255)
+    if packet_type==8 or packet_type==13 or packet_type==28 or
+        (packet_type==1 and tonumber(sub)==2) or tonumber(iface)==57 then
+        P.ignored=P.ignored+1;return false
+    end
+    local label=tostring(obj.title or obj.header or obj.caption or obj.name or
+        (type(obj.data)=='table' and obj.data.title) or '')
+    local labeled=pawn_text(label)
+    if not active and not labeled then return false end
+    local slot_list=nodes(obj)
+    if not slot_list then
+        if active then
+            P.packets=P.packets+1
+            if #P.candidates<MAX_CANDIDATES then
+                P.candidates[#P.candidates+1]={iface=tonumber(iface),sub=tonumber(sub),
+                    type=packet_type,rows=0,label=labeled}
+            end
+        end
+        return false
+    end
+    if #slot_list>MAX_ROWS then return false end
+    P.packets=P.packets+1
+    if labeled then P.tagged=P.tagged+1;P.verified_label=true end
+    local accepted=0
+    for i,item in ipairs(slot_list)do
+        local row=recognize(item,i,label)
+        if row then
+            local key=tostring(row.key or row.name)..':'..tostring(row.price)
+            if not P.items[key] then P.order[#P.order+1]=key end
+            P.items[key]=row;accepted=accepted+1
+        end
+    end
+    if #P.candidates<MAX_CANDIDATES then
+        P.candidates[#P.candidates+1]={iface=tonumber(iface),sub=tonumber(sub),
+            type=packet_type,rows=accepted,label=labeled}
+    end
+    -- Never write any native observation automatically: the server has not
+    -- supplied a proven end-of-list marker or stable pawnshop session ID.
+    if accepted>0 then P.status='preview_ready' end
+    return accepted>0
+end
+function P.preview()
+    local rows={}
+    for _,key in ipairs(P.order)do
+        local row=P.items[key]
+        if row then rows[#rows+1]=row end
+    end
+    return rows
+end
+function P.save()
+    if P.state().active then return false,'stop the scan first' end
+    local rows=P.preview()
+    if #rows==0 then return false,'no recognized priced items' end
+    if not L.save_observation then return false,'pawnshop store unavailable' end
+    local ok,result=L.save_observation(rows,'packet_unverified')
+    if ok then P.status='saved_unverified' end
+    return ok,result
+end
+function P.report()
+    -- Metadata only; never include names, IDs, raw JSON or account data.
+    local candidates={}
+    for _,c in ipairs(P.candidates)do
+        candidates[#candidates+1]={iface=c.iface,sub=c.sub,
+            type=c.type,rows=c.rows,labeled=c.label}
+    end
+    return {schema=1,packets=P.packets,tagged=P.tagged,ignored=P.ignored,
+        candidates=candidates}
+end
+return true
+
+end
+__mod_46d_lombard_packets()
+
 local function __mod_47_shop_marker()
 -- Local world-anchored stall label. Coordinates come from server markers/labels.
 DSP.shop_marker={cache={}}
@@ -37006,6 +37694,7 @@ local S = DSP.storage
 S.snapshots = S.snapshots or (DSP.settings and DSP.settings.storage_snapshots) or {}
 S.last_error = nil
 S.max_rows = 180
+S.max_saved = 20
 
 local function normal(s)
     s = DSP.clean_text(tostring(s or ''))
@@ -37021,6 +37710,7 @@ local function int(s)
 end
 local function kind_of(title)
     local s=DSP.lower(normal(title))
+    if s:find('инвентарь',1,true) or s:find('Инвентарь',1,true) then return 'inventory' end
     if s:find('багажник',1,true) or s:find('Багажник',1,true) then return 'trunk' end
     if s:find('шкаф',1,true) or s:find('Шкаф',1,true) then return 'cabinet' end
     if s:find('склад',1,true) or s:find('Склад',1,true) or s:find('хранилище',1,true) or s:find('Хранилище',1,true) then return 'warehouse' end
@@ -37091,7 +37781,7 @@ function S.accept(kind,title,text,ts,source)
     snap.id=tostring(ts or os.time())..'_'..tostring(#S.snapshots+1)
     snap.server=DSP.market and DSP.market.state and DSP.market.state.sid or nil
     table.insert(S.snapshots,1,snap)
-    while #S.snapshots>8 do table.remove(S.snapshots)end
+    while #S.snapshots>S.max_saved+1 do table.remove(S.snapshots)end
     S.last_signature=signature;S.last_snapshot=snap;S.last_ts=ts or os.time();S.last_error=nil
     if DSP.settings and DSP.save_settings then
         DSP.settings.storage_snapshots=S.snapshots
@@ -37156,9 +37846,20 @@ function S.set_snapshot_label(snapshot,label)
     if type(label)~='string' then return false,'invalid label' end
     label=DSP.trim(DSP.clean_text(label))
     if #label>66 or label=='' then return false,'name must be 1-66 bytes' end
+    -- Live scans are deliberately NOT in S.snapshots. Allow naming only the
+    -- current live result; stale objects from previous scans are rejected.
+    if snapshot.source=='packet220_trunk' and S.trunk and S.trunk.snapshot==snapshot then
+        return S.save_named_trunk(snapshot,label)
+    end
     local found=false
-    for _,s in ipairs(S.snapshots or{})do if s==snapshot then found=true;break end end
+    for _,saved in ipairs(S.snapshots or{})do if saved==snapshot then found=true;break end end
     if not found then return false,'stale snapshot' end
+    -- The live trunk is disposable by design. Renaming it must create a
+    -- persistent library entry, otherwise the next scan would erase the name.
+    if snapshot.source=='packet220_trunk' then
+        if not S.save_named_trunk then return false,'archive function unavailable' end
+        return S.save_named_trunk(snapshot,label)
+    end
     local previous=snapshot.title
     snapshot.title=label
     if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
@@ -37166,7 +37867,7 @@ function S.set_snapshot_label(snapshot,label)
         local called,ok,err=pcall(DSP.save_settings)
         if not called or not ok then snapshot.title=previous;return false,tostring(err or ok or 'save error')end
     end
-    return true
+    return true,snapshot
 end
 function S.evaluate(snapshot,lookup)
     lookup=lookup or market_lookup
@@ -37254,6 +37955,7 @@ end
 S.trunk = S.trunk or {status='idle', received=0, last_error=nil}
 local T = S.trunk
 local TRUNK_TYPE, TRUNK_SLOTS = 8, 180
+local VALID_CAPACITY = {[30]=true,[60]=true,[90]=true,[120]=true,[150]=true,[180]=true}
 local PENDING_TIMEOUT = 15       -- seconds to receive the 180-slot full snapshot
 -- Partial slot changes are intentionally not applied without vehicle identity.
 
@@ -37294,7 +37996,9 @@ local function parse_payload(raw)
         used[sl.slot] = true
         normalized[#normalized+1] = sl
     end
-    return normalized
+    local capacity=tonumber(obj.capacity or obj.slotCount or obj.totalSlots)
+    if not VALID_CAPACITY[capacity] then capacity=nil end
+    return normalized,capacity
 end
 
 local function active_snapshot()
@@ -37304,9 +38008,9 @@ local function active_snapshot()
     return nil
 end
 
-local function build_rows(slots)
+local function build_rows(slots, capacity)
     local rows, count, occupied = {}, 0, 0
-    for i=0,TRUNK_SLOTS-1 do
+    for i=0,(capacity or TRUNK_SLOTS)-1 do
         local v = slots[i+1]
         if v and v.item_id and v.item_id > 0 then
             local name = DSP.items and DSP.items.name and DSP.items.name(v.item_id)
@@ -37323,52 +38027,43 @@ local function build_rows(slots)
     return rows,count,occupied
 end
 
-local function save_snapshot(slots, source_reason)
+local function save_snapshot(slots, source_reason, capacity)
     local ts=os.time()
-    local rows, total, occupied = build_rows(slots)
-    local previous = active_snapshot()
+    capacity=capacity or TRUNK_SLOTS
+    local rows, total, occupied = build_rows(slots,capacity)
+    local requested_at=T.requested_at
+    local update_target_id=T.update_target_id
     local snap={
-        id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
+        id='trunk_live_'..tostring(ts)..'_'..tostring((T.scan_generation or 0)+1),
         kind='trunk',
         -- No persistent vehicle identity in observed packet. This is ALWAYS the last opened trunk.
-        title=DSP.to_cp and DSP.to_cp('РџРѕСЃР»РµРґРЅРёР№ РѕС‚РєСЂС‹С‚С‹Р№ Р±Р°РіР°Р¶РЅРёРє') or 'Last opened trunk',
+        title='Последний открытый багажник',
         source='packet220_trunk', identity_verified=false,
         observed_at=ts, updated_at=ts, server=DSP.market and DSP.market.state and DSP.market.state.sid or nil,
-        slots_count=TRUNK_SLOTS, occupied_slots=occupied,count_known=total,
+        slots_count=capacity, occupied_slots=occupied,count_known=total,
         rows=rows, slots=slots, update_kind=source_reason,
     }
-    -- One latest trunk, not a fabricated history of unique cars. Preserve manual and legacy snapshots.
-    local new_list={snap}
-    for _, old in ipairs(S.snapshots or {}) do
-        if old.source ~= 'packet220_trunk' then
-            new_list[#new_list+1]=old
-            if #new_list >= 8 then break end
-        end
-    end
-    -- Keep the old verified snapshot until the new one is safely persisted.
-    local old_list=S.snapshots
-    local old_saved=DSP.settings and DSP.settings.storage_snapshots
-    local old_snap,old_updated=T.snapshot,T.last_update
-    local old_occ,old_total=T.occupied,T.total
-    S.snapshots=new_list
-    if DSP.settings then DSP.settings.storage_snapshots=new_list end
-    T.snapshot=snap;T.last_update=ts;T.status='saved';T.received=TRUNK_SLOTS
-    T.occupied=occupied;T.total=total
-    if DSP.save_settings then
-        local called,ok,err=pcall(DSP.save_settings)
-        if not called or not ok then
-            S.snapshots=old_list
-            if DSP.settings then DSP.settings.storage_snapshots=old_saved end
-            T.snapshot=old_snap;T.last_update=old_updated
-            T.occupied=old_occ;T.total=old_total
-            T.status='save_error'
-            T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
-            if DSP.flog then DSP.flog('TRUNK save failed: '..T.last_error) end
-            return false
-        end
+    -- A scan is IN MEMORY ONLY. A user-named copy is the sole path to the
+    -- persistent library. Never write an unnamed scan to storage_snapshots.
+    T.snapshot=snap
+    T.last_update=ts
+    T.status='saved'
+    T.received=capacity
+    T.occupied=occupied
+    T.total=total
+    T.last_saved_at=ts
+    if requested_at then
+        T.last_completed_request_at=ts
+        T.requested_at=nil
+        T.completed_update_target_id=update_target_id
+        T.update_target_id=nil
     end
     T.last_error=nil
-    if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots=180 occupied='..occupied..' count='..total) end
+    T.last_warning=nil
+    T.scan_generation=(T.scan_generation or 0)+1
+    T.review_generation=T.scan_generation
+    T.review_needed=true
+    if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots='..capacity..' occupied='..occupied..' count='..total) end
     return true
 end
 
@@ -37381,54 +38076,402 @@ function S.on_inventory_packet(sub, raw)
     -- Real trunk full snapshots use subid=0. subid=2 carries a separate slot
     -- namespace for other inventory blocks; never merge it with trunk slots.
     if tonumber(sub)~=0 then return false end
-    local items=parse_payload(raw)
-    if not items or #items == 0 then return false end
+    T.raw_packet_events=(T.raw_packet_events or 0)+1
+    T.last_raw_packet_at=os.time()
+    if not (T.autoscan_enabled or T.requested_at) then return false end
+    local items,declared_capacity=parse_payload(raw)
+    if not items or #items == 0 then
+        T.invalid_packet_events=(T.invalid_packet_events or 0)+1
+        T.last_error='type 8 received; payload could not be decoded'
+        return false
+    end
     local ts=os.time()
+    -- Observed incoming payload; do not claim the trunk window is open.
+    T.packet_events=(T.packet_events or 0)+1
+    T.last_packet_at=ts
     if T.pending and (ts-T.pending.started)>PENDING_TIMEOUT then
         T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
     end
-    local starts_full=(sub==0 and #items>=8 and items[1].slot==0)
-    if starts_full then
-        T.pending={slots={},seen={},count=0,started=ts}
+    -- A trunk may arrive in chunks whose first chunk is not slot 0.
+    -- type=8 is already the confirmed trunk namespace; large batches start a
+    -- fresh capture, while tiny <=5 slot deltas remain ignored.
+    local starts_capture=(not T.pending and #items>5)
+    local explicit_restart=(T.pending and #items>5 and items[1] and items[1].slot==0 and T.pending.seen[0])
+    local stale_restart=(T.pending and #items>5 and T.pending.last_at and (ts-T.pending.last_at)>3)
+    if starts_capture or explicit_restart or stale_restart then
+        T.pending={slots={},seen={},count=0,started=ts,last_at=ts,
+            capacity=declared_capacity or T.selected_capacity or TRUNK_SLOTS}
         T.status='receiving';T.received=0;T.last_error=nil
     end
     if T.pending then
         local p=T.pending
+        p.last_at=ts
+        if declared_capacity then p.capacity=declared_capacity end
+        -- Never finalize a user-selected 30-slot scan if the packet explicitly
+        -- includes slots outside its capacity: the observed layout is larger.
+        for _,v in ipairs(items) do
+            if v.slot>=p.capacity then
+                p.capacity=TRUNK_SLOTS
+            end
+        end
         for _,v in ipairs(items) do
             if not p.seen[v.slot] then p.seen[v.slot]=true;p.count=p.count+1 end
             p.slots[v.slot+1]=v
         end
         T.received=p.count
-        if p.count==TRUNK_SLOTS then
-            -- Full snapshot is committed only after ALL slots 0..179 were seen.
+        if p.count>=p.capacity then
+            -- Full means all expected slots in THIS layout were seen. If the
+            -- server does not declare capacity, the player explicitly chooses
+            -- their car's capacity (30/180), not automatic guessing.
             local complete=true
-            for i=1,TRUNK_SLOTS do if not p.slots[i] then complete=false;break end end
+            for i=1,p.capacity do if not p.slots[i] then complete=false;break end end
             if complete then
                 T.pending=nil
-                save_snapshot(p.slots,'full')
+                save_snapshot(p.slots,'full',p.capacity)
             end
         end
         return true
     end
-    -- Small updates cannot be assigned to the current vehicle reliably.
-    -- Leave the last complete 180-slot snapshot untouched.
-    if #items<=5 and T.snapshot then
-        T.status='unverified_delta'
-        T.last_error='Частичное изменение пропущено: ID машины неизвестен. Открой багажник заново.'
+    -- If the user started a new scan while the trunk was already open,
+    -- the game usually sends only tiny slot deltas when an item moves. Those
+    -- deltas are not a full second trunk and must never replace the old scan.
+    if #items<=5 then
+        if T.requested_at then
+            T.saw_delta_after_request=true
+            T.status='need_reopen'
+            T.last_error='Полный снимок не пришёл. Закрой багажник и открой его заново.'
+        elseif T.snapshot then
+            -- Do not hide a previously valid full scan just because a single
+            -- slot changed while the player was inside the trunk.
+            T.last_warning='Изменение отдельных слотов не применено. Для новых данных открой багажник заново.'
+        end
         return false
     end
-    T.status='unknown_partial'
+    T.status=T.requested_at and 'need_reopen' or 'unknown_partial'
+    if T.requested_at then
+        T.last_error='Получена только часть. Закрой багажник и открой заново.'
+    end
     return false
 end
 
 -- Load the most recently persisted trunk as read-only history after restart.
-T.snapshot=active_snapshot()
-if T.snapshot then T.status='saved_from_disk';T.occupied=T.snapshot.occupied_slots;T.total=T.snapshot.count_known end
+-- Old versions may have stored a nameless live scan. Do not resurrect it
+-- in the new unsaved session; named library entries remain untouched.
+T.snapshot=nil
+T.autoscan_enabled=not (DSP.settings and DSP.settings.storage_trunk_autoscan==false)
+T.selected_capacity=VALID_CAPACITY[tonumber(DSP.settings and DSP.settings.storage_trunk_capacity)]
+    and tonumber(DSP.settings.storage_trunk_capacity) or 180
+
+function S.set_trunk_capacity(cap)
+    cap=tonumber(cap)
+    if not VALID_CAPACITY[cap] then return false,'Недопустимая вместимость' end
+    if T.requested_at then return false,'Сначала останови текущий скан' end
+    local previous=T.selected_capacity
+    T.selected_capacity=cap
+    if DSP.settings then DSP.settings.storage_trunk_capacity=cap end
+    if DSP.save_settings then
+        local ok,saved,err=pcall(DSP.save_settings)
+        if not ok or not saved then
+            T.selected_capacity=previous
+            if DSP.settings then DSP.settings.storage_trunk_capacity=previous end
+            return false,tostring(err or saved or 'Ошибка сохранения')
+        end
+    end
+    return true
+end
+
+-- The normal UI uses these methods; no additional game commands are needed.
+function S.set_trunk_autoscan(enabled)
+    local value=not not enabled
+    local prior=T.autoscan_enabled
+    T.autoscan_enabled=value
+    if DSP.settings then DSP.settings.storage_trunk_autoscan=value end
+    if DSP.save_settings then
+        local ok,saved,err=pcall(DSP.save_settings)
+        if not ok or not saved then
+            T.autoscan_enabled=prior
+            if DSP.settings then DSP.settings.storage_trunk_autoscan=prior end
+            return false,tostring(err or saved or 'save failed')
+        end
+    end
+    if not value and not T.requested_at then
+        T.pending=nil
+        T.status='disabled'
+    elseif value and T.status=='disabled' then
+        T.status='idle'
+    end
+    return true
+end
+
+function S.begin_trunk_scan(update_target_id)
+    T.pending=nil
+    T.received=0
+    T.last_error=nil
+    T.last_completed_request_at=nil
+    T.completed_update_target_id=nil
+    T.review_needed=false
+    T.update_target_id=update_target_id
+    T.requested_at=os.time()
+    T.scan_started_at=T.requested_at
+    T.scan_raw_start=T.raw_packet_events or 0
+    T.scan_packet_start=T.packet_events or 0
+    T.saw_delta_after_request=false
+    T.status='waiting_open'
+    return true
+end
+
+function S.cancel_trunk_scan()
+    T.pending=nil
+    T.received=0
+    T.requested_at=nil
+    T.update_target_id=nil
+    T.completed_update_target_id=nil
+    T.saw_delta_after_request=false
+    T.status=T.autoscan_enabled and 'idle' or 'disabled'
+    T.last_error=nil
+    return true
+end
+
+function S.find_snapshot(id)
+    if not id then return nil end
+    for i,saved in ipairs(S.snapshots or {}) do
+        if tostring(saved.id)==tostring(id) then return saved,i end
+    end
+    return nil
+end
+
+function S.delete_snapshot(snapshot)
+    if type(snapshot)~='table' then return false,'Хранилище не выбрано' end
+    if snapshot.source=='packet220_trunk' then
+        return S.clear_live_snapshot()
+    end
+    local index=nil
+    for i,saved in ipairs(S.snapshots or {})do
+        if saved==snapshot then index=i;break end
+    end
+    if not index then return false,'Хранилище уже удалено' end
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={}
+    for i,saved in ipairs(prior)do if i~=index then fresh[#fresh+1]=saved end end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true
+end
+
+function S.clear_live_snapshot()
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={}
+    for _,saved in ipairs(prior or {})do
+        if saved.source~='packet220_trunk' then fresh[#fresh+1]=saved end
+    end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    local old_state={snapshot=T.snapshot,occupied=T.occupied,total=T.total,received=T.received,
+        last_saved_at=T.last_saved_at,last_completed_request_at=T.last_completed_request_at,
+        status=T.status}
+    T.snapshot=nil;T.occupied=nil;T.total=nil;T.received=0
+    T.last_saved_at=nil;T.last_completed_request_at=nil
+    if not T.requested_at then T.status=T.autoscan_enabled and 'idle' or 'disabled' end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            for k,v in pairs(old_state)do T[k]=v end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true
+end
+
+function S.library()
+    local rows={}
+    for i,saved in ipairs(S.snapshots or {}) do
+        if saved.source~='packet220_trunk' then
+            rows[#rows+1]={snapshot=saved,index=i}
+        end
+    end
+    return rows
+end
+
+-- Candidate detection is only a suggestion, never a vehicle identifier.
+-- Compare item IDs and enchantments across slots, not slot positions or amounts.
+-- Only fully saved, named type-8 trunk snapshots are eligible.
+local function trunk_types(snapshot)
+    local keys, count={},0
+    for _,row in ipairs(snapshot and snapshot.rows or {}) do
+        local id=tonumber(row.id)
+        if id and id>0 and id%1==0 then
+            local enchant=tonumber(row.ench) or 0
+            local key=tostring(id)..':'..tostring(enchant)
+            if not keys[key] then keys[key]=true;count=count+1 end
+        end
+    end
+    return keys,count
+end
+
+function S.match_saved_trunks(snapshot)
+    if type(snapshot)~='table' or snapshot.kind~='trunk'
+        or snapshot.source~='packet220_trunk' or not VALID_CAPACITY[snapshot.slots_count]
+        or type(snapshot.rows)~='table' then return {} end
+    local current,total=trunk_types(snapshot)
+    if total==0 then return {} end
+    local matches={}
+    for _,saved in ipairs(S.snapshots or {}) do
+        if saved.source=='packet220_trunk_named' and saved.kind=='trunk'
+            and type(saved.rows)=='table'
+            and (snapshot.server==nil or saved.server==nil
+                 or tostring(snapshot.server)==tostring(saved.server)) then
+            local previous,count=trunk_types(saved)
+            if count>0 then
+                local common=0
+                for key in pairs(current)do if previous[key] then common=common+1 end end
+                if common>0 then
+                    local union=total+count-common
+                    matches[#matches+1]={
+                        id=saved.id,title=saved.title,shared=common,
+                        current_types=total,saved_types=count,
+                        similarity=math.floor(100*common/math.max(1,union)+.5),
+                        observed_at=tonumber(saved.observed_at) or 0
+                    }
+                end
+            end
+        end
+    end
+    table.sort(matches,function(a,b)
+        if a.similarity~=b.similarity then return a.similarity>b.similarity end
+        if a.shared~=b.shared then return a.shared>b.shared end
+        if a.observed_at~=b.observed_at then return a.observed_at>b.observed_at end
+        return tostring(a.id)<tostring(b.id)
+    end)
+    return matches
+end
+
+-- Keep manually named copies independent from the latest automatically opened
+-- vehicle. The packet has no trusted vehicle ID: do NOT auto-assign old labels
+-- when a different trunk is opened.
+function S.save_named_trunk(snapshot,label)
+    if type(snapshot)~='table' or snapshot.source~='packet220_trunk' then
+        return false,'select a confirmed full trunk snapshot'
+    end
+    if not snapshot.rows or not VALID_CAPACITY[snapshot.slots_count] then
+        return false,'incomplete trunk snapshot'
+    end
+    local name=DSP.trim(DSP.clean_text(tostring(label or '')))
+    if name=='' or #name>66 or name:find('[%c]') then
+        return false,'name must contain 1-66 characters without controls'
+    end
+    S._named_seq=(S._named_seq or 0)+1
+    local ts=os.time()
+    local rows={}
+    for i,r in ipairs(snapshot.rows) do
+        rows[i]={slot=r.slot,id=r.id,name=r.name,ench=r.ench,
+            qty=r.qty,quantity_confirmed=r.quantity_confirmed}
+    end
+    local named={id='trunk_saved_'..tostring(ts)..'_'..tostring(S._named_seq),
+        title=name,kind='trunk',source='packet220_trunk_named',
+        identity_verified=false,complete_verified=true,
+        observed_at=snapshot.observed_at,server=snapshot.server,
+        slots_count=snapshot.slots_count,occupied_slots=snapshot.occupied_slots,
+        count_known=snapshot.count_known,rows=rows}
+    for _,existing in ipairs(S.snapshots or {}) do
+        if existing.source~='packet220_trunk' and DSP.lower(tostring(existing.title or ''))==DSP.lower(name) then
+            return false,'Такое название уже есть. Открой его и выбери «Обновить».'
+        end
+    end
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={named}
+    for _,existing in ipairs(prior) do
+        -- Old releases wrote a nameless live scan into settings. Keep ONLY
+        -- deliberately saved user records in the persistent library.
+        if existing.source~='packet220_trunk' then
+            fresh[#fresh+1]=existing
+            if #fresh>=S.max_saved then break end
+        end
+    end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    if DSP.save_settings then
+        local ok,saved,err=pcall(DSP.save_settings)
+        if not ok or not saved then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            return false,tostring(err or saved or 'save failed')
+        end
+    end
+    T.completed_update_target_id=nil
+    T.review_needed=false
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true,named
+end
+
+function S.apply_latest_to_saved(target_id)
+    local live=T.snapshot
+    local target=S.find_snapshot(target_id)
+    if not live or live.source~='packet220_trunk' or not VALID_CAPACITY[live.slots_count] then
+        return false,'Нет полного нового скана'
+    end
+    if not target or target.source~='packet220_trunk_named' then
+        return false,'Сохранённый багажник не найден'
+    end
+    local backup={
+        rows=target.rows,observed_at=target.observed_at,server=target.server,
+        occupied_slots=target.occupied_slots,count_known=target.count_known,
+        slots_count=target.slots_count,updated_at=target.updated_at
+    }
+    local rows={}
+    for i,row in ipairs(live.rows or {}) do
+        rows[i]={slot=row.slot,id=row.id,name=row.name,ench=row.ench,
+            qty=row.qty,quantity_confirmed=row.quantity_confirmed}
+    end
+    target.rows=rows
+    target.observed_at=live.observed_at
+    target.updated_at=os.time()
+    target.server=live.server
+    target.occupied_slots=live.occupied_slots
+    target.count_known=live.count_known
+    target.slots_count=live.slots_count
+    if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            for k,v in pairs(backup) do target[k]=v end
+            if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    T.completed_update_target_id=nil
+    T.review_needed=false
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true,target
+end
 
 -- Refresh timeout status when the scanner panel is drawn, even if no more packets arrive.
 function S.trunk_state()
-    if T.pending and os.time()-T.pending.started>PENDING_TIMEOUT then
+    local now=os.time()
+    if T.pending and now-T.pending.started>PENDING_TIMEOUT then
         T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
+    end
+    if T.requested_at and now-T.requested_at>45 then
+        T.requested_at=nil
+        T.update_target_id=nil
+        if T.status=='waiting_open' or T.status=='receiving' or T.status=='need_reopen' then
+            T.status='no_packets'
+            T.last_error='Полный снимок 180/180 не получен. Запусти скан и заново открой багажник.'
+        end
     end
     return T
 end
@@ -37540,6 +38583,257 @@ end
 
 end
 __mod_47a_storage_textdraw()
+
+local function __mod_47b_storage_probe()
+-- Opt-in, read-only observer for unknown InventoryScreen containers.
+-- Does not send packets, click slots or assume undocumented type => kind mappings.
+local S = DSP.storage
+local P = {armed=false, status='idle', entries={}, order={}, observed=0, ignored_trunk=0, ignored_stall=0}
+DSP.storage_probe = P
+local MAX_SECONDS, MAX_SLOTS, MAX_SAMPLES, MAX_BYTES = 60, 180, 8, 100000
+local allowed = {cabinet=true, warehouse=true}
+
+local function integer(value, maximum, minimum)
+    local n=tonumber(value)
+    minimum=minimum or 0
+    if n and n==n and n%1==0 and n>=minimum and n<=maximum then return n end
+    return nil
+end
+local function observed_slot(item)
+    if type(item)~='table' then return nil end
+    local slot=integer(item.slot,MAX_SLOTS-1)
+    local id=integer(item.item or item.id,2000000000)
+    if not slot or not id then return nil end
+    local qty=id==0 and 0 or integer(item.amount or item.count,2000000000)
+    local ench=integer(item.enchant or item.ench or 0,100) or 0
+    return {slot=slot,id=id,qty=qty,ench=ench}
+end
+local function decode_candidate(raw)
+    if type(raw)~='string' or #raw<2 or #raw>MAX_BYTES then return nil end
+    local ok,obj=pcall(decodeJson,raw:gsub('%z+$',''))
+    if not ok or type(obj)~='table' or type(obj.items)~='table' then return nil end
+    local packet_type=integer(obj.type,255)
+    if not packet_type or #obj.items<1 or #obj.items>MAX_SLOTS then return nil end
+    local slots,seen={},{}
+    for _,item in ipairs(obj.items)do
+        local v=observed_slot(item)
+        if not v or seen[v.slot] then return nil end
+        seen[v.slot]=true
+        slots[#slots+1]=v
+    end
+    -- A declared capacity is diagnostic metadata, not proof of identity.
+    local cap=integer(obj.capacity or obj.slotCount or obj.totalSlots,MAX_SLOTS,1)
+    return packet_type,slots,cap
+end
+
+function P.arm(kind, seconds)
+    if not allowed[kind] then return false,'unknown kind' end
+    local dur=integer(seconds or 40,MAX_SECONDS,5) or 40
+    P.armed=true;P.status='armed';P.kind=kind;P.started=os.time()
+    P.until_ts=P.started+dur;P.entries={};P.order={}
+    P.observed=0;P.ignored_trunk=0;P.ignored_stall=0;P.last_error=nil
+    return true
+end
+function P.stop()
+    if P.armed then P.armed=false;P.status='review';return true end
+    return false
+end
+function P.state()
+    if P.armed and os.time()>P.until_ts then P.armed=false;P.status='review' end
+    return P
+end
+function P.on_packet(sub,raw)
+    if not P.state().armed then return false end
+    local namespace=integer(sub,255)
+    if namespace~=0 and namespace~=2 then return false end
+    local typ,slots,capacity=decode_candidate(raw)
+    if not typ then return false end
+    -- type 8 is the independently observed vehicle trunk, never a cupboard.
+    if typ==8 then P.ignored_trunk=P.ignored_trunk+1;return false end
+    -- The existing trade handler identifies type 1/sub 2 as stall inventory.
+    if typ==1 and namespace==2 then P.ignored_stall=P.ignored_stall+1;return false end
+    local key=tostring(typ)..'/'..tostring(namespace)
+    local row=P.entries[key]
+    if not row then
+        if #P.order>=MAX_SAMPLES then return false end
+        row={type=typ,sub=namespace,slots={},seen={},count=0,packet_count=0,
+             capacity=capacity,started=os.time(),last_at=os.time()}
+        P.entries[key]=row;P.order[#P.order+1]=row
+    end
+    -- A fresh batch starting with slot 0 cannot silently merge with an old view.
+    if row.seen[0] and slots[1].slot==0 and #slots>=8 then
+        row.slots={};row.seen={};row.count=0;row.started=os.time()
+    end
+    if capacity and row.capacity and row.capacity~=capacity then
+        row.slots={};row.seen={};row.count=0;row.started=os.time()
+    end
+    row.capacity=capacity or row.capacity
+    row.packet_count=row.packet_count+1
+    row.last_at=os.time()
+    for _,v in ipairs(slots) do
+        if not row.seen[v.slot] then row.seen[v.slot]=true;row.count=row.count+1 end
+        row.slots[v.slot]=v
+    end
+    P.observed=P.observed+1
+    return true
+end
+function P.preview(index)
+    local entry=P.order[tonumber(index) or 0]
+    if not entry then return nil,'candidate not found' end
+    local rows,occupied,known,missing={},0,0,0
+    for i=0,MAX_SLOTS-1 do
+        local v=entry.slots[i]
+        if v and v.id>0 then
+            occupied=occupied+1
+            local name=DSP.items and DSP.items.name and DSP.items.name(v.id)
+                or ('ID:'..tostring(v.id))
+            if type(name)~='string' or name=='' then name='ID:'..tostring(v.id) end
+            rows[#rows+1]={slot=i,id=v.id,ench=v.ench,name=name,
+                qty=v.qty,quantity_confirmed=v.qty~=nil}
+            if v.qty==nil then missing=missing+1 else known=known+v.qty end
+        end
+    end
+    return {entry=entry,rows=rows,occupied=occupied,known=known,unknown_qty=missing,
+        complete_unverified=entry.capacity~=nil and entry.count==entry.capacity}
+end
+function P.save(index)
+    if P.state().armed then return false,'stop capture before saving' end
+    local view,err=P.preview(index)
+    if not view then return false,err end
+    if #view.rows==0 then return false,'no occupied items observed' end
+    if not allowed[P.kind] then return false,'unknown kind' end
+    local titles={cabinet='Шкаф',warehouse='Склад'}
+    local now=os.time()
+    local snap={id='probe_'..tostring(now)..'_'..tostring(index),
+        kind=P.kind,title=titles[P.kind]..' (наблюдение; не проверено)',
+        source='packet220_probe',identity_verified=false,complete_verified=false,
+        observed_at=now,server=DSP.market and DSP.market.state and DSP.market.state.sid,
+        packet_type=view.entry.type,packet_sub=view.entry.sub,
+        slots_observed=view.entry.count,slots_reported=view.entry.capacity,
+        rows=view.rows,count_known=view.known,occupied_slots=view.occupied}
+    local previous=S.snapshots
+    local previous_saved=DSP.settings and DSP.settings.storage_snapshots
+    -- Keep explicitly saved observations (including their chosen names).
+    -- They are history, never proof that the same cabinet was opened again.
+    local replacement={snap}
+    for _,old in ipairs(previous or {})do
+        replacement[#replacement+1]=old
+        if #replacement>=(S.max_saved or 20)+1 then break end
+    end
+    S.snapshots=replacement
+    if DSP.settings then DSP.settings.storage_snapshots=replacement end
+    if DSP.save_settings then
+        local ok,saved,save_error=pcall(DSP.save_settings)
+        if not ok or not saved then
+            S.snapshots=previous
+            if DSP.settings then DSP.settings.storage_snapshots=previous_saved end
+            return false,tostring(save_error or saved or 'save failed')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true,snap
+end
+
+-- Explicit local diagnostics export. Metadata only: no raw JSON, item names,
+-- item IDs, account identifiers, chat, tokens or individual item quantities.
+function P.export_report()
+    if P.state().armed then return false,'stop capture before export' end
+    if type(encodeJson)~='function' or type(DSP.dir)~='string' then
+        return false,'JSON export unavailable'
+    end
+    local candidates={}
+    for _,e in ipairs(P.order)do
+        candidates[#candidates+1]={type=e.type,sub=e.sub,slots_observed=e.count,
+            declared_slots=e.capacity,packets=e.packet_count}
+    end
+    local report={schema=1,source='Palatka AI read-only probe',kind_label=P.kind,
+        duration_seconds=math.max(0,(P.until_ts or 0)-(P.started or 0)),
+        packets=P.observed,ignored_trunk=P.ignored_trunk,
+        ignored_stall=P.ignored_stall,candidates=candidates}
+    local ok,body=pcall(encodeJson,report)
+    if not ok or type(body)~='string' then return false,'JSON encoding failed' end
+    local path=DSP.dir..'/storage_probe_report.json'
+    local file,err=io.open(path,'wb')
+    if not file then return false,tostring(err or 'cannot open report') end
+    local wrote,write_err=file:write(body)
+    file:close()
+    if not wrote then return false,tostring(write_err or 'write failed') end
+    return true,path
+end
+
+end
+__mod_47b_storage_probe()
+
+local function __mod_47c_storage_search()
+-- Search saved containers by item name; all totals are scoped to the
+-- user's query, never the entire trunk. Works only with user-saved snapshots.
+local S=DSP.storage
+
+function S.search_library(query,lookup)
+    local needle=DSP.lower(DSP.trim(query or ''))
+    local report={
+        query=needle, results={},storage_count=0,match_groups=0,
+        known_qty=0,unknown_slots=0,priced_value=0,unpriced_groups=0,
+        different_server=0
+    }
+    if needle=='' then return report end
+    for _,entry in ipairs(S.library())do
+        local snap=entry.snapshot
+        local info=S.evaluate(snap,lookup)
+        local hits={}
+        local qty,unknown,value,unpriced=0,0,0,0
+        for _,item in ipairs(info.rows or {})do
+            if DSP.lower(tostring(item.name or '')):find(needle,1,true) then
+                local known=tonumber(item.qty) or 0
+                local missing=tonumber(item.unknown_slots) or 0
+                local bid=not info.cross_server and tonumber(item.bid) or nil
+                local estimated=bid and known*bid or nil
+                hits[#hits+1]={
+                    name=item.name, key=item.key,id=item.id,ench=item.ench,
+                    qty=known,unknown_slots=missing,
+                    unit_buy=bid,total_buy=estimated,
+                    market_unavailable=info.cross_server
+                }
+                qty=qty+known
+                unknown=unknown+missing
+                if estimated then value=value+estimated
+                elseif known>0 then unpriced=unpriced+1 end
+            end
+        end
+        table.sort(hits,function(a,b)
+            if a.qty~=b.qty then return a.qty>b.qty end
+            return tostring(a.name)<tostring(b.name)
+        end)
+        local title_hit=DSP.lower(tostring(snap.title or '')):find(needle,1,true)~=nil
+        if #hits>0 or title_hit then
+            local line={
+                index=entry.index,snapshot=snap,matched_items=hits,title_only=title_hit and #hits==0,
+                known_qty=qty,unknown_slots=unknown,
+                priced_value=value,unpriced_groups=unpriced,
+                cross_server=info.cross_server
+            }
+            report.results[#report.results+1]=line
+            report.storage_count=report.storage_count+1
+            report.match_groups=report.match_groups+#hits
+            report.known_qty=report.known_qty+qty
+            report.unknown_slots=report.unknown_slots+unknown
+            report.priced_value=report.priced_value+value
+            report.unpriced_groups=report.unpriced_groups+unpriced
+            if info.cross_server and #hits>0 then
+                report.different_server=report.different_server+1
+            end
+        end
+    end
+    table.sort(report.results,function(a,b)
+        if a.title_only~=b.title_only then return not a.title_only end
+        if a.known_qty~=b.known_qty then return a.known_qty>b.known_qty end
+        return tostring(a.snapshot.title)<tostring(b.snapshot.title)
+    end)
+    return report
+end
+
+end
+__mod_47c_storage_search()
 
 local function __mod_48_flip_intel()
 -- v2.2.4: independent resale workstation. All values are estimates from market
@@ -38813,20 +40107,24 @@ end
 function C.end_drag() if C.drag_dirty then persist(); C.drag_dirty=false end end
 function C.geometry(sw,sh)
     local s=settings()
-    local default_w=math.min(700,sw*.45)
-    local default_h=math.min(620,sh*.69)
-    local w=math.max(360,math.min(tonumber(s.w) or default_w,math.max(360,sw-16)))
-    local expanded=math.max(280,math.min(tonumber(s.h) or default_h,math.max(280,sh-16)))
-    local x=math.max(8,math.min(tonumber(s.x) or 24,math.max(8,sw-w-8)))
-    local y=math.max(8,math.min(tonumber(s.y) or 120,math.max(8,sh-expanded-8)))
-    return {x=x,y=y,w=w,h=s.minimized and 84 or expanded,touch=54,
+    -- Compact MCR-style log is the default; a drag always persists its anchor.
+    if s.compact==nil then s.compact=true end
+    if s.alpha==nil then s.alpha=.28 end
+    s.lines=math.max(2,math.min(8,math.floor(tonumber(s.lines)or 4)))
+    local wide=math.max(250,sw-16)
+    local w=math.max(250,math.min(tonumber(s.w)or math.min(440,sw*.48),wide))
+    local desired=s.compact and (49+25*s.lines) or (tonumber(s.h)or math.min(340,sh*.58))
+    local expanded=math.max(80,math.min(desired,math.max(80,sh-16)))
+    local x=math.max(8,math.min(tonumber(s.x)or 24,math.max(8,sw-w-8)))
+    local y=math.max(8,math.min(tonumber(s.y)or (sh-expanded-50),math.max(8,sh-expanded-8)))
+    return {x=x,y=y,w=w,h=s.minimized and 45 or expanded,touch=32,
         max_x=math.max(8,sw-w-8),max_y=math.max(8,sh-expanded-8)}
 end
 function C.remember_size(w,h)
     local s=settings(); if s.minimized then return false end
-    w=math.floor((tonumber(w) or 0)+0.5);h=math.floor((tonumber(h) or 0)+0.5)
-    if w<360 or h<280 then return false end
-    if math.abs((tonumber(s.w) or 0)-w)<1 and math.abs((tonumber(s.h) or 0)-h)<1 then return false end
+    w=math.floor((tonumber(w)or 0)+.5);h=math.floor((tonumber(h)or 0)+.5)
+    if w<250 or h<80 then return false end
+    if math.abs((tonumber(s.w)or 0)-w)<1 and math.abs((tonumber(s.h)or 0)-h)<1 then return false end
     s.w,s.h=w,h;C.size_dirty=true;return true
 end
 function C.end_resize()
@@ -38907,108 +40205,127 @@ end
 __mod_55_craglog()
 
 local function __mod_56_mini_journal()
--- Phone journal: one stable anchor, fixed controls, and readable event cards.
+-- Compact MCR-inspired trade overlay; journal/event semantics stay in Palatka.
 local C=DSP.craglog
-local function cp(s) return DSP.utf8(tostring(s or '')) end
-local function text(s) imgui.TextWrapped(cp(s)) end
-local function button(label,id,w,active)
-    if active then imgui.PushStyleColor(imgui.Col.Button,DSP.theme.col('accent',.7)) end
-    local hit=imgui.Button(cp(label)..'##mini_'..id,imgui.ImVec2(w,54))
-    if active then imgui.PopStyleColor(1) end
-    return hit
+local function cp(s)return DSP.utf8(tostring(s or ''))end
+local function state()
+    DSP.settings.craglog=DSP.settings.craglog or {}
+    return DSP.settings.craglog
 end
-local function inline() imgui.SameLine(0,8) end
-local function state() return DSP.settings.craglog end
-local function header(g)
-    local s=state()
-    local handle=s.pinned and 'ЖУРНАЛ / ЗАКРЕПЛЁН' or 'ЖУРНАЛ / ПЕРЕТАЩИТЬ'
-    button(handle,'handle',g.w-300,false)
-    if not s.pinned and imgui.IsItemActive() and imgui.IsMouseDragging(0) then
-        local delta=imgui.GetIO().MouseDelta
-        C.drag(delta.x,delta.y)
+local function changed()if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end end
+local function button(label,id,w)
+    return imgui.Button(cp(label)..'##compact_log_'..id,imgui.ImVec2(w,28))
+end
+local function short(s,max_width)
+    s=tostring(s or '')
+    if not imgui.CalcTextSize then return s end
+    if imgui.CalcTextSize(cp(s)).x<=max_width then return s end
+    local l,r=0,#s
+    while l<r do
+        local m=math.floor((l+r+1)/2)
+        if imgui.CalcTextSize(cp(s:sub(1,m)..'...')).x<=max_width then l=m else r=m-1 end
     end
-    if not imgui.IsMouseDown(0) then C.end_drag() end
-    inline()
-    if button(s.pinned and 'PIN: ДА' or 'PIN: НЕТ','pin',120,s.pinned) then C.set_pinned(not s.pinned) end
-    inline()
-    if button(s.minimized and '+' or '-','collapse',60) then C.set_minimized(not s.minimized) end
-    inline()
-    if button('X','close',60) then s.open=false; DSP.save_settings() end
+    return s:sub(1,l)..'...'
 end
-local function filters(g)
-    local s=state()
-    for i,pair in ipairs({{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
-                           {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}) do
-        if button(pair[2],'filter_'..pair[1],(g.w-42)/3,s.filter==pair[1]) then
-            s.filter=pair[1]; C.scroll=0; DSP.save_settings()
+local function draw_header(s,g)
+    local width=imgui.GetContentRegionAvail().x
+    local right=s.click_through and 0 or 116
+    if button(s.minimized and 'J  /  ОТКРЫТЬ' or 'J  /  ТОРГОВЫЙ ЖУРНАЛ',
+        'drag',math.max(65,width-right))then
+        if s.minimized then C.set_minimized(false)end
+    end
+    if not s.pinned and not s.click_through and imgui.IsItemActive() and imgui.GetIO().MouseDelta then
+        local d=imgui.GetIO().MouseDelta
+        if d.x~=0 or d.y~=0 then C.drag(d.x,d.y)end
+    end
+    if not imgui.IsMouseDown(0)then C.end_drag()end
+    if not s.click_through then
+        imgui.SameLine(0,4)
+        if button(s.minimized and '+' or '-','collapse',33)then C.set_minimized(not s.minimized)end
+        imgui.SameLine(0,4)
+        if button('X','close',33)then s.open=false;changed()end
+    end
+end
+local function draw_compact(s,g)
+    local events=C.filtered(s.filter or 'all')
+    local n=#events
+    local lines=s.lines or 4
+    if n==0 then
+        imgui.TextDisabled(cp('Нет новых событий. История сохранена в Palatka AI.'))
+    end
+    for i=n,math.max(1,n-lines+1),-1 do
+        local e=events[i]
+        if e then
+            local when=os.date('%H:%M',e.ts or os.time())
+            local desc=C.describe(e)
+            local label=when..'  '..desc
+            imgui.Text(cp(short(label,math.max(80,imgui.GetContentRegionAvail().x-8))))
         end
-        if i%3~=0 then inline() end
+    end
+    if C.last_error then
+        imgui.TextColored(DSP.theme.col('bad',1),cp(short('Журнал: '..C.last_error,g.w-16)))
     end
 end
-local function row_card(entry)
-    local kind=entry.kind or entry.type
-    local tag=kind=='item' and 'НАГРАДА' or kind=='cash' and 'ДЕНЬГИ' or kind=='opening' and 'ТАЙНИК'
-        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'ДОХОД' or 'СДЕЛКА'
-    imgui.TextColored(DSP.theme.col('accent',1),cp(os.date('%H:%M:%S',entry.ts or 0)..'  '..tag))
-    text(C.describe(entry))
-    if entry.source then
-        text('Источник: '..entry.source..(entry.association=='inferred' and ' (по чату)' or ''))
+local function draw_expanded(s,g)
+    local summary=C.summary('day')
+    imgui.TextDisabled(cp('Приход '..DSP.money(summary.income)..' | Расход '..DSP.money(summary.expense)))
+    imgui.TextColored(DSP.theme.col('good',1),cp('Итог за сегодня: '..DSP.money(summary.net)))
+    for _,row in ipairs({{'all','Все'},{'sales','Продажи'},{'buys','Скупка'},{'loot','Добыча'}})do
+        if button(row[2],'filter_'..row[1],92)then s.filter=row[1];changed()end
+        imgui.SameLine(0,4)
     end
-    imgui.Separator()
+    imgui.NewLine()
+    if imgui.BeginChild('##compact_log_events',imgui.ImVec2(0,0),false)then
+        draw_compact(s,g)
+    end
+    imgui.EndChild()
 end
 function C.draw()
+    local s=state()
+    if s.compact==nil then s.compact=true end
+    if s.alpha==nil then s.alpha=.28 end
+    s.alpha=math.max(.08,math.min(1,tonumber(s.alpha)or .28))
     local io=imgui.GetIO()
     local g=C.geometry(io.DisplaySize.x,io.DisplaySize.y)
-    local s=state()
     C.active_geometry=g
     imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
-    local force_size=(not C._window_size_initialized) or C._last_minimized~=s.minimized
-    if force_size then imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always) end
-    if not s.minimized and imgui.SetNextWindowSizeConstraints then
-        imgui.SetNextWindowSizeConstraints(imgui.ImVec2(360,280),imgui.ImVec2(math.max(360,io.DisplaySize.x-16),math.max(280,io.DisplaySize.y-16)))
-    end
-    C._window_size_initialized=true;C._last_minimized=s.minimized
-    imgui.SetNextWindowBgAlpha(.96)
-    local colors=DSP.theme.push_overlay(.98)
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,16)
-    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,9)
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(12,12))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(8,8))
-    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove
-        +imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+imgui.WindowFlags.NoFocusOnAppearing
-    if imgui.Begin('##palatka_mini_journal',nil,flags) then
-        if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.15) end
-        header(g)
-        if not s.minimized then
-            filters(g)
-            local events=C.filtered(s.filter or 'all')
-            local per=3
-            C.scroll=math.max(0,math.min(C.scroll,math.max(0,#events-per)))
-            local start=#events-C.scroll
-            text('Последние события: '..#events..' / '..C.ring_cap..'   |   PIN фиксирует положение')
-            if button('ВВЕРХ / НОВЕЕ','up',(g.w-40)/2,C.scroll>0) then C.scroll=math.max(0,C.scroll-per) end
-            inline()
-            if button('ВНИЗ / СТАРШЕ','down',(g.w-40)/2,start>per) then C.scroll=math.min(math.max(0,#events-per),C.scroll+per) end
-            start=#events-C.scroll
-            local shown=imgui.BeginChild('##mini_cards',imgui.ImVec2(0,0),false)
-            if shown then
-                if #events==0 then
-                    text('Здесь появятся сделки, деньги и награды из игрового чата.')
-                    text('Полная история доступна в главном меню.')
-                end
-                for i=start,math.max(1,start-per+1),-1 do if events[i] then row_card(events[i]) end end
-                if C.last_error then text('Ошибка записи: '..C.last_error) end
-            end
-            imgui.EndChild()
+    if s.compact or s.minimized or not C._window_size_initialized then
+        imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
+    else
+        imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Appearing)
+        if imgui.SetNextWindowSizeConstraints then
+            imgui.SetNextWindowSizeConstraints(imgui.ImVec2(250,100),
+                imgui.ImVec2(math.max(250,io.DisplaySize.x-16),math.max(100,io.DisplaySize.y-16)))
         end
     end
-    if not s.minimized and imgui.GetWindowSize then
-        local ws=imgui.GetWindowSize();C.remember_size(ws.x,ws.y)
+    C._window_size_initialized=true
+    local colors=DSP.theme.push_overlay(1)
+    imgui.SetNextWindowBgAlpha(s.alpha)
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,5))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(4,2))
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+
+        imgui.WindowFlags.NoFocusOnAppearing
+    if s.compact or s.minimized then flags=flags+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar end
+    if s.click_through then flags=flags+imgui.WindowFlags.NoInputs end
+    if imgui.Begin('##palatka_mini_journal',nil,flags)then
+        if imgui.SetWindowFontScale then
+            local base=imgui.GetFontSize and imgui.GetFontSize()or 16
+            imgui.SetWindowFontScale(math.min(1,14/math.max(1,base)))
+        end
+        if not s.click_through then draw_header(s,g)end
+        if not s.minimized then
+            if s.compact then draw_compact(s,g)else draw_expanded(s,g)end
+        end
+    end
+    if not s.compact and not s.minimized and imgui.GetWindowSize then
+        local wh=imgui.GetWindowSize();C.remember_size(wh.x,wh.y)
     end
     C.end_resize()
     imgui.End()
-    imgui.PopStyleVar(4)
-    if colors and colors>0 then imgui.PopStyleColor(colors) end
+    imgui.PopStyleVar(3)
+    if colors and colors>0 then imgui.PopStyleColor(colors)end
 end
 return true
 
@@ -39772,13 +41089,19 @@ function V.geometry(sw,sh)
     return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or (sw-w)*.5,0,math.max(0,sw-w)),
         y=DSP.clamp(tonumber(p.y)or (sh-h)*.35,0,math.max(0,sh-h))}
 end
-local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'arbitrage','Арбитраж'},
- {'resale','Перепродажа'},{'promo','Авто-пиар'},{'scan','Скан лавки'},
- {'search','Поиск товара'},{'calculator','Калькулятор'},{'logs','Журнал'},
- {'stats','Статистика'},{'notes','Заметки'},{'storage','Хранилища'},
- {'market','Рынок'},{'history','История'},{'settings','Настройки'}}
+local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'storage','Хранилища'},
+ {'arbitrage','Арбитраж'},{'resale','Перепродажа'},{'promo','Автопиар'},
+ {'scan','Скан лавки'},{'search','Поиск товара'},{'calculator','Калькулятор'},
+ {'logs','Журнал'},{'stats','Статистика'},{'notes','Заметки'},
+ {'market','Рынок'},{'lombard','Ломбард'},{'history','История'},{'settings','Настройки'}}
 function V.set_screen(id)
     if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
+    if id=='storage' then
+        -- Never strand the user on the legacy manual "Save" page on entry.
+        V.storage_tab='scan'
+        V.storage_scan_mode=V.storage_scan_mode or 'trunk'
+        V.reset_list('storage_scan_panel')
+    end
     V.screen=id;V.nav=false
     if DSP.screens and DSP.screens.set then DSP.screens.set(id)end
 end
@@ -39930,6 +41253,10 @@ function U.draw()
             imgui.Separator()
             if V.button('Окна','carbon_windows',100,false,true,38)then V.nav=not V.nav end
             V.inline()
+            if V.button('MCR','switch_to_mcr',76,false,false,38)then
+                DSP.settings.ui_style='mcr';M.defer_save()
+            end
+            V.inline()
             local remain=imgui.GetContentRegionAvail().x
             V.muted(V.fit('Palatka AI · '..tostring(DSP.market.state.status or 'offline')..' · без автоматических сделок',math.max(40,remain-6)))
         end
@@ -40053,131 +41380,539 @@ local function b(s,id,w,on,primary)return V.button(s,'storage_'..id,w,on,primary
 -- previous giant fixed header which pushed the item list off small screens.
 function V.storage_screen()
     V.heading('Хранилища',function()
-        if b('Очистить','clear',105)then V.open_popup('Очистить снимки?','storage_clear')end
-    end,109)
-    local capstate,capcount,caperr=S.textdraw_state()
-    V.storage_tab=V.storage_tab or (#S.snapshots>0 and 'snapshots' or 'scan')
-    local w=imgui.GetContentRegionAvail().x
-    local tabw=math.max(78,(w-12)/3)
-    for i,tab in ipairs({{'scan','Скан'}, {'snapshots','Снимки'}, {'manual','Ввод'}})do
-        if b(tab[2],'tab_'..tab[1],tabw,V.storage_tab==tab[1],V.storage_tab==tab[1])then
-            V.storage_tab=tab[1];V.reset_list('storage_scan_panel')
+        if DSP.storage_beta_rollback and b('CRR ОТКАТ','beta_rollback',145,false,true) then
+            V.open_popup('CRR откат','storage_beta_rollback')
         end
-        if i<3 then V.inline(5)end
+    end,DSP.storage_beta_rollback and 149 or 0)
+
+    -- Old versions used "snapshots/manual". Collapse them into the two-task UI.
+    if V.storage_tab=='snapshots' then V.storage_tab='library' end
+    if V.storage_tab=='manual' then V.storage_tab='scan' end
+    V.storage_tab=V.storage_tab or 'scan'
+    V.storage_scan_mode=(V.storage_scan_mode=='inventory') and 'trunk' or (V.storage_scan_mode or 'trunk')
+    V.storage_library_page=V.storage_library_page or 'list'
+
+    local width=imgui.GetContentRegionAvail().x
+    local tabw=math.max(120,(width-6)/2)
+    for i,tab in ipairs({{'scan','СКАН'},{'library','МОИ ХРАНИЛИЩА'}})do
+        if b(tab[2],'tab_'..tab[1],tabw,V.storage_tab==tab[1],V.storage_tab==tab[1])then
+            V.storage_tab=tab[1]
+            if tab[1]=='library' then V.storage_library_page='list' end
+            V.reset_list('storage_scan_panel')
+        end
+        if i==1 then V.inline(6)end
     end
     imgui.Separator()
+
     if V.storage_tab=='scan' then
-        V.list('storage_scan_panel',function(width)
-            V.text('Автоматический сканер багажника')
-            V.muted('Packet 220 / marker 84 / iface 52 / type 8.')
-            V.muted('Открой багажник обычным способом. Сканер работает автоматически.')
-            V.muted('Снимок сохраняется только после получения всех 180 слотов.')
-            V.muted('Без ID машины частичные изменения не применяются. Для обновления открой багажник заново.')
+        V.list('storage_scan_panel',function(w)
+            local options={{'trunk','Багажник'},{'cabinet','Шкаф'},{'warehouse','Склад'}}
+            local bw=math.max(92,(w-12)/3)
+            for i,item in ipairs(options)do
+                if b(item[2],'choose_'..item[1],bw,V.storage_scan_mode==item[1],V.storage_scan_mode==item[1])then
+                    if S.cancel_trunk_scan and V.storage_scan_mode=='trunk' and item[1]~='trunk' then
+                        S.cancel_trunk_scan()
+                    end
+                    V.storage_scan_mode=item[1]
+                    V.probe_error=nil
+                    V.reset_list('storage_scan_panel')
+                end
+                if i<3 then V.inline(6)end
+            end
+            imgui.Separator()
+
+            if V.storage_scan_mode~='trunk' then
+                if V.storage_probe_panel then V.storage_probe_panel(w,V.storage_scan_mode)
+                else V.red('Сканер этого хранилища недоступен.') end
+                return
+            end
+
             local t=(S.trunk_state and S.trunk_state()) or S.trunk or {}
-            local statuses={idle='ожидает',receiving='получение снимка',
-                saved='сохранено',saved_from_disk='загружен последний снимок',
-                incomplete='неполный снимок',unknown_partial='неопознанный фрагмент',
-                unverified_delta='Частичное изменение пропущено', save_error='ошибка сохранения'}
-            V.text('Статус: '..(statuses[t.status] or tostring(t.status or '?')))
-            V.muted('Получено слотов: '..tostring(t.received or 0)..' / 180')
-            if t.occupied then
-                V.text('Занято: '..tostring(t.occupied)..' | Предметов: '..tostring(t.total or 0))
+            -- A review appears once per NEW completed 180-slot scan, and only
+            -- when existing saved trunks share at least one item ID/enchant.
+            if t.review_needed and t.review_generation
+                and V.storage_match_generation~=t.review_generation
+                and t.snapshot and t.status=='saved' and S.match_saved_trunks then
+                V.storage_match_generation=t.review_generation
+                local matches=S.match_saved_trunks(t.snapshot)
+                if #matches>0 then
+                    V.storage_match_review={
+                        generation=t.review_generation, matches=matches, selected=1
+                    }
+                    V.open_popup('Похожий багажник','storage_match_confirm')
+                else
+                    t.review_needed=false
+                end
             end
-            if t.last_error then V.red(V.fit(tostring(t.last_error),width)) end
-            V.muted('Без ID машины: хранится именно последний открытый багажник.')
-            V.muted('Шкафы и склады пока не сканируются этим обработчиком.')
-            if b('Показать сохраненный снимок','open_snap',math.min(width,280),false,true)then
-                V.storage_tab='snapshots';V.storage_selected=1
+            local active=t.requested_at~=nil or t.status=='waiting_open' or
+                t.status=='receiving' or t.status=='need_reopen'
+
+            V.apply_font((V.font_pixels or 18)*1.18)
+            V.text('НОВЫЙ СКАН БАГАЖНИКА')
+            V.apply_font()
+
+            if active then
+                if t.status=='receiving' then
+                    V.green('ПОЛУЧАЮ ДАННЫЕ: '..tostring(t.received or 0)..' / 180')
+                    V.muted('Не закрывай багажник, пока не будет 180 / 180.')
+                elseif t.status=='need_reopen' then
+                    V.red('НУЖНО ЗАНОВО ОТКРЫТЬ БАГАЖНИК')
+                    V.text('Закрой багажник полностью и открой его ещё раз.')
+                    V.muted('Перемещение предметов внутри уже открытого багажника даёт только частичные изменения.')
+                else
+                    V.green('СКАН ЗАПУЩЕН')
+                    V.text('Если багажник уже открыт — закрой его.')
+                    V.text('Затем открой багажник заново обычным способом.')
+                    V.muted('Жду полный снимок 180 / 180 слотов.')
+                end
+                V.muted('Получено: '..tostring(t.received or 0)..' / 180')
+                if b('ОТМЕНИТЬ СКАН','cancel_trunk',math.min(w,240))then
+                    S.cancel_trunk_scan()
+                end
+                V.muted('Предыдущий результат во время нового скана не показывается.')
+                return
             end
-        end,{footer=function()V.muted('Чтение только входящих данных. Предметы в игре не перемещаются.')end})
-        return
-    end
-    if V.storage_tab=='manual' then
-        V.list('storage_manual_panel',function(width)
-            V.muted('Если игровой интерфейс не выдаёт содержимое через события,')
-            V.muted('можно вставить список вручную — это не игровой скан.')
-            V.storage_manual_kind=V.storage_manual_kind or 'trunk'
-            local bw=math.max(72,(width-12)/3)
-            for i,t in ipairs({{'trunk','Багажник'},{'cabinet','Шкаф'},{'warehouse','Склад'}})do
-                if b(t[2],'manual_'..t[1],bw,V.storage_manual_kind==t[1])then V.storage_manual_kind=t[1]end
-                if i<3 then V.inline(5)end
+
+            if t.status=='no_packets' or t.status=='incomplete' then
+                V.red('НОВЫЙ СКАН НЕ ПОЛУЧЕН')
+                V.text('Закрой багажник, нажми «Начать новый скан» и открой его заново.')
+            elseif t.last_error and t.status~='saved' then
+                V.red(V.fit(tostring(t.last_error),w))
             end
-            V.storage_input=V.storage_input or imgui.new.char[8192]()
-            V.muted('Формат: Дрова x45000  или  Дрова (45000 шт.)')
-            imgui.InputTextMultiline('##storage_text',V.storage_input,8192,imgui.ImVec2(-1,100))
-            if b('Сохранить снимок','manual_accept',math.min(width,220),false,true)then
-                local kind=V.storage_manual_kind
-                local title=kind=='trunk'and'Багажник (ручной список)' or kind=='cabinet'and'Шкаф (ручной список)' or 'Склад (ручной список)'
-                local ok,err=S.accept(kind,title,DSP.to_cp(ffi.string(V.storage_input)),nil,'manual')
-                if ok then V.storage_tab='snapshots';V.storage_selected=1;V.storage_error=nil
-                else V.storage_error=err end
+
+            if b('НАЧАТЬ НОВЫЙ СКАН','start_trunk',math.min(w,320),false,true)then
+                S.begin_trunk_scan()
+                V.storage_error=nil
+                return
             end
-            if V.storage_error then V.red(tostring(V.storage_error))end
+            V.muted('Важно: скан запускается ДО повторного открытия багажника.')
+
+            if t.snapshot and t.status=='saved' then
+                imgui.Separator()
+                V.green('ГОТОВО · 180 / 180')
+                if t.last_warning then V.muted(V.fit(t.last_warning,w)) end
+                V.text('Занято слотов: '..tostring(t.snapshot.occupied_slots or 0))
+                V.text('Всего предметов: '..tostring(t.snapshot.count_known or 0))
+                local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
+                    tostring(DSP.market and DSP.market.state and DSP.market.state.version or '')
+                local info=V.memo('storage_trunk_summary',sig,function()return S.evaluate(t.snapshot)end)
+                if not info.cross_server then
+                    V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
+                end
+
+                if t.review_needed and V.storage_match_review
+                    and V.storage_match_review.generation==t.review_generation then
+                    if b('ПОХОЖИЕ БАГАЖНИКИ','show_matches',math.min(w,290),false,true)then
+                        V.open_popup('Похожий багажник','storage_match_confirm')
+                    end
+                end
+                local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
+                if update_target then
+                    V.text('Обновить: '..tostring(update_target.title))
+                    if b('ПРИМЕНИТЬ К '..tostring(update_target.title),'apply_update',math.min(w,320),false,true)then
+                        local ok,updated=S.apply_latest_to_saved(update_target.id)
+                        if ok then
+                            local _,idx=S.find_snapshot(updated.id)
+                            V.storage_selected=idx or 1
+                            V.storage_library_page='detail'
+                            V.storage_tab='library'
+                            return
+                        else V.storage_error=tostring(updated) end
+                    end
+                    if b('СОХРАНИТЬ КАК НОВОЕ','save_update_new',math.min(w,290))then
+                        V.storage_name_target=t.snapshot
+                        V.storage_name_buf=imgui.new.char[128]()
+                        V.storage_name_error=nil
+                        V.open_popup('Сохранить багажник','storage_trunk_name')
+                    end
+                else
+                    if b('СОХРАНИТЬ КАК НОВОЕ','save_new',math.min(w,290),false,true)then
+                        V.storage_name_target=t.snapshot
+                        V.storage_name_buf=imgui.new.char[128]()
+                        V.storage_name_error=nil
+                        V.open_popup('Сохранить багажник','storage_trunk_name')
+                    end
+                end
+                if b('ОЧИСТИТЬ ПОСЛЕДНИЙ СКАН','clear_live',math.min(w,290))then
+                    local ok,err=S.clear_live_snapshot()
+                    if not ok then V.storage_error=tostring(err) end
+                end
+            end
+
+            if V.storage_error then V.red(V.fit(V.storage_error,w)) end
+            imgui.Separator()
+            if b((t.autoscan_enabled and 'Автоскан: ВКЛ' or 'Автоскан: ВЫКЛ'),
+                 'toggle_auto',math.min(w,210),t.autoscan_enabled)then
+                local ok,err=S.set_trunk_autoscan(not t.autoscan_enabled)
+                if not ok then V.storage_error=tostring(err) end
+            end
+            V.muted('Автоскан ловит полный снимок при открытии багажника. Он не угадывает машину по посадке в авто.')
         end,{footer=false})
         return
     end
-    local snapshots=S.snapshots
-    if #snapshots==0 then
-        V.muted('Снимков нет: обычный игровой диалог пока не распознан.')
-        if b('Открыть диагностику','scan_open',220,false,true)then V.storage_tab='scan'end
+
+    local snapshots=S.snapshots or {}
+    local library=S.library and S.library() or {}
+
+    if V.storage_library_page=='list' then
+        V.apply_font((V.font_pixels or 18)*1.24)
+        V.text('МОИ ХРАНИЛИЩА')
+        V.apply_font()
+        V.muted('Только сохранённые записи. Последний скан сюда не подмешивается.')
+        if b('+ НОВЫЙ СКАН','library_new_scan',math.min(230,width),false,true)then
+            V.storage_tab='scan'
+            V.storage_scan_mode='trunk'
+            S.begin_trunk_scan()
+            V.reset_list('storage_scan_panel')
+            return
+        end
+        V.muted('ПОИСК: по названию хранилища или предмета')
+        local query=V.search and V.search('storage_all','Название или предмет...',math.min(380,width)) or ''
+        query=DSP.lower(DSP.trim(query or ''))
+        -- Search results are item-centric: show quantities of matched
+        -- items per named container. Do NOT show the entire trunk count/value.
+        if query~='' and S.search_library then
+            local report=S.search_library(query)
+            V.apply_font((V.font_pixels or 18)*1.12)
+            V.text('НАЙДЕНО В '..tostring(report.storage_count)..' ХРАНИЛИЩАХ')
+            V.apply_font()
+            V.text('Подтверждено по запросу: '..tostring(report.known_qty)..' шт.')
+            if report.unknown_slots>0 then
+                V.red('Без точного количества: '..tostring(report.unknown_slots)..' слотов')
+            end
+            V.green('Оценка найденных предметов: '..DSP.money(report.priced_value))
+            if report.unpriced_groups>0 then
+                V.muted('Без цены: '..report.unpriced_groups..' видов предметов')
+            end
+            if report.different_server>0 then
+                V.muted('С другого сервера: '..report.different_server..' хранилищ (без цены)')
+            end
+            V.muted('Сумма по сохранённым снимкам. Возможны повторные учёты.')
+            local matches={}
+            for _,entry in ipairs(report.results)do
+                if entry.title_only then
+                    matches[#matches+1]={entry=entry}
+                else
+                    for _,it in ipairs(entry.matched_items)do
+                        matches[#matches+1]={entry=entry,item=it}
+                    end
+                end
+            end
+            if #matches==0 then
+                V.muted('Таких предметов или хранилищ нет.')
+                return
+            end
+            V.list_rows('storage_search_results',matches,136,function(match,i)
+                local entry=match.entry
+                local snap=entry.snapshot
+                local it=match.item
+                V.row('storage_result_'..i,136,function(rw,x,y)
+                    V.at(x,y)
+                    V.apply_font((V.font_pixels or 18)*1.09)
+                    V.text(V.fit(tostring(snap.title or 'Без названия'),rw))
+                    V.apply_font()
+                    if it then
+                        V.at(x,y+31)
+                        V.text(V.fit(tostring(it.name or 'Предмет'),rw))
+                        V.at(x,y+60)
+                        local qty=tostring(it.qty)..' шт.'
+                        if it.unknown_slots>0 then
+                            qty=qty..' + ? ('..it.unknown_slots..' сл.)'
+                        end
+                        V.muted('Количество: '..qty)
+                        V.at(x,y+88)
+                        if it.total_buy then
+                            V.green(V.fit('Скупка: '..DSP.money(it.total_buy)..
+                                ' · '..DSP.money(it.unit_buy)..'/шт.',rw))
+                        else
+                            V.muted('Скупка: нет актуальной цены')
+                        end
+                    else
+                        V.at(x,y+40)
+                        V.muted('Совпало название хранилища, не название предмета')
+                        V.at(x,y+75)
+                        V.muted('Нажми, чтобы посмотреть содержимое')
+                    end
+                    V.at(x,y)
+                    local pressed
+                    if imgui.InvisibleButton then
+                        pressed=imgui.InvisibleButton('##storage_search_open',
+                            imgui.ImVec2(rw,124))
+                    else
+                        pressed=V.text_button('Открыть','storage_search_fallback',rw,false,124)
+                    end
+                    if pressed and not V.dragged then
+                        V.storage_selected=entry.index
+                        V.storage_detail_key=it and it.key or nil
+                        V.storage_library_page='detail'
+                        V.reset_list('storage_items')
+                    end
+                end)
+            end,{footer=function()
+                V.muted('Результатов: '..#matches..' · нажми карточку для просмотра')
+            end})
+            return
+        end
+        local filtered={}
+        local grand,missing=0,0
+        for _,entry in ipairs(library)do
+            local snap=entry.snapshot
+            local found=query=='' or DSP.lower(tostring(snap.title or '')):find(query,1,true)~=nil
+            if not found then
+                for _,it in ipairs(snap.rows or {})do
+                    if DSP.lower(tostring(it.name or '')):find(query,1,true)then found=true;break end
+                end
+            end
+            if found then filtered[#filtered+1]=entry end
+            local value=S.evaluate(snap)
+            if value.cross_server then missing=missing+1
+            else grand=grand+(value.sell_to_buyers or 0) end
+        end
+        V.text('Хранилищ: '..#library..' | найдено: '..#filtered)
+        V.green('Сумма оценок: '..DSP.money(grand))
+        if missing>0 then V.muted('Без оценки: '..missing..' (другой сервер)') end
+        V.muted('Это сумма оценок снимков, не реальная прибыль.')
+        if #filtered==0 then
+            V.muted(query=='' and 'Пока нет сохранённых хранилищ.' or 'Ничего не найдено.')
+            return
+        end
+        V.list_rows('storage_library',filtered,95,function(entry,i)
+            local snap=entry.snapshot
+            local kind=snap.kind=='trunk'and'Багажник' or snap.kind=='cabinet'and'Шкаф'
+                or snap.kind=='warehouse'and'Склад' or'Хранилище'
+            V.row('storage_library_'..i,95,function(rw,x,y)
+                V.at(x,y)
+                V.apply_font((V.font_pixels or 18)*1.12)
+                V.text(V.fit(tostring(snap.title or kind),rw))
+                V.apply_font()
+                V.at(x,y+43)
+                local value=S.evaluate(snap)
+                V.muted(V.fit(kind..' · '..tostring(snap.count_known or 0)..' шт. · '..
+                    DSP.money(value.sell_to_buyers),rw))
+                V.at(x,y)
+                local hit
+                if imgui.InvisibleButton then
+                    hit=imgui.InvisibleButton('##open_storage_card',imgui.ImVec2(rw,84))
+                else
+                    hit=V.text_button(tostring(snap.title or kind),'storage_open_fallback',rw,false,84)
+                end
+                if hit and not V.dragged then
+                    V.storage_selected=entry.index
+                    V.storage_detail_key=nil
+                    V.storage_library_page='detail'
+                    V.reset_list('storage_items')
+                end
+            end)
+        end,{footer=function()V.muted('Сохранено: '..#library..' / '..tostring(S.max_saved or 20))end})
         return
     end
-    V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
-    local current=snapshots[V.storage_selected]
-    local controlw=math.max(90,(imgui.GetContentRegionAvail().x-8)/2)
-    if b('Снимок '..V.storage_selected..' / '..#snapshots,'next',controlw)then
-        V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
+
+    local current=snapshots[V.storage_selected or 1]
+    if not current or current.source=='packet220_trunk' then
+        V.storage_library_page='list'
+        return
     end
-    V.inline(7)
-    if b(V.storage_sort=='value'and'Оценка'or V.storage_sort=='qty'and'Количество'
-        or V.storage_sort=='price'and'Цена'or V.storage_sort=='category'and'Категории' or 'А–Я',
-        'sort',controlw)then
-        V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
-            or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value'
-        V.reset_list('storage_items')
+    if b('< МОИ ХРАНИЛИЩА','library_back',math.min(230,width))then
+        V.storage_library_page='list'
+        return
     end
-    if b('Название снимка','rename',math.min(190,imgui.GetContentRegionAvail().x))then
+
+    V.apply_font((V.font_pixels or 18)*1.34)
+    V.text(V.fit(tostring(current.title or 'Без названия'),width))
+    V.apply_font()
+    local kind=current.kind=='trunk'and'Багажник' or current.kind=='cabinet'and'Шкаф'
+        or current.kind=='warehouse'and'Склад' or'Хранилище'
+    V.muted(kind..' · '..os.date('%d.%m.%Y %H:%M',current.observed_at or os.time()))
+
+    if current.source=='packet220_trunk_named' then
+        if b('ОБНОВИТЬ СКАН','library_update',math.min(240,width),false,true)then
+            S.begin_trunk_scan(current.id)
+            V.storage_tab='scan'
+            V.storage_scan_mode='trunk'
+            return
+        end
+    end
+    if b('Переименовать','rename',math.min(180,width))then
         V.storage_label_target=current
         V.storage_label_buf=imgui.new.char[128]()
         ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
         V.storage_label_error=nil
-        V.open_popup('Название снимка','storage_rename')
+        V.open_popup('Название снимка','storage_rename_v283')
     end
+    if b('УДАЛИТЬ','delete_one',math.min(150,width))then
+        V.storage_delete_target=current
+        V.storage_delete_error=nil
+        V.open_popup('Удалить хранилище','storage_delete_one')
+    end
+
     local rows,info=S.sorted(current,V.storage_sort)
-    V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
-        (current.source=='packet220_trunk'and' · Packet 220' or current.source=='manual'and' · вручную' or current.source=='textdraw'and' · TextDraw' or' · Dialog'),imgui.GetContentRegionAvail().x))
-    V.text('Подтверждено: '..info.total_qty..' шт. · неизвестно: '..info.unknown_qty..' строк')
-    if current.source=='packet220_trunk' then
-        V.muted('180 слотов | '..tostring(current.occupied_slots or #current.rows)..' занято | ID авто не подтвержден')
+    if V.storage_detail_key then
+        local only={}
+        for _,it in ipairs(rows)do
+            if it.key==V.storage_detail_key then only[#only+1]=it end
+        end
+        if #only>0 then
+            rows=only
+            V.muted('Показан найденный предмет · '..tostring(only[1].name))
+            if b('ПОКАЗАТЬ ВСЁ','show_all_contents',math.min(200,width))then
+                V.storage_detail_key=nil
+                V.reset_list('storage_items')
+            end
+        else
+            V.storage_detail_key=nil
+        end
     end
-    V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
-    V.muted('Не прибыль · продажа по объявлениям: '..DSP.money(info.ask_value))
-    if info.cross_server then V.red('Другой сервер: цены скрыты')end
-    V.muted('В одной строке — все стаки одного предмета и улучшения.')
-    V.list_rows('storage_items',rows,94,function(it,i)
-        V.row('storage_item_'..i,94,function(ww,x,y)
-            local textwidth=math.max(80,ww-118)
-            V.at(x,y);V.text(V.fit(it.name,textwidth))
-            V.at(x,y+27);V.muted(V.fit('Количество: '..(it.qty and tostring(it.qty)..' шт.'or'неизвестно')..' / '..tostring(it.slots or 1)..' слотов',textwidth))
+    if V.storage_detail_key then
+        V.text('Найдено: '..tostring(rows[1].qty or 0)..' шт.')
+        if (rows[1].unknown_slots or 0)>0 then
+            V.muted('Есть слоты без подтверждённого количества: '..rows[1].unknown_slots)
+        end
+    else
+        V.text('Предметов: '..info.total_qty..' шт.')
+    end
+    if current.kind=='trunk' then
+        V.muted('Занято слотов: '..tostring(current.occupied_slots or #current.rows)..
+            ' / '..tostring(current.slots_count or 180))
+    elseif current.source=='packet220_probe' then
+        V.red('Предварительный снимок: полный формат этого хранилища ещё проверяется.')
+    end
+    if V.storage_detail_key and #rows==1 then
+        local item=rows[1]
+        if not info.cross_server and item.bid then
+            V.green('Оценка этого предмета: '..DSP.money((item.qty or 0)*item.bid))
+            V.muted('Цена скупки: '..DSP.money(item.bid)..' / шт.')
+        else
+            V.muted('Нет актуальной цены скупки для найденного предмета.')
+        end
+    else
+        V.green('Оценка скупки всего хранилища: '..DSP.money(info.sell_to_buyers))
+        V.muted('По объявлениям: '..DSP.money(info.ask_value)..' · не чистая прибыль')
+    end
+
+    V.list_rows('storage_items',rows,82,function(it,i)
+        V.row('storage_item_'..i,82,function(rw,x,y)
+            V.at(x,y);V.text(V.fit(it.name,rw))
+            V.at(x,y+30)
+            V.muted(V.fit('Количество: '..(it.qty and tostring(it.qty)..' шт.'or'неизвестно'),rw))
             V.at(x,y+56)
             local total=(it.bid and it.qty)and DSP.money(it.bid*it.qty)or'нет оценки'
-            V.muted(V.fit((it.manual_price and 'Своя цена: ' or 'Скупают: ')..(it.bid and DSP.money(it.bid)or'?')..' / шт. · '..total,textwidth))
-            V.at(x+math.max(0,ww-107),y+16)
-            if b('Своя цена','edit_price_'..i,106,it.manual_price)then
-                V.storage_price_target=current
-                V.storage_price_row=it
-                V.storage_price_buf={value=it.manual_price and it.bid or 0}
-                V.storage_price_error=nil
-                V.open_popup('Своя цена','storage_price')
-            end
+            V.muted(V.fit('Скупают: '..(it.bid and DSP.money(it.bid)or'?')..' / шт. · '..total,rw))
         end)
-    end,{footer=function()V.muted('Только сортировка Palatka AI, не предметов игры.')end})
+    end,{footer=false})
 end
 
 -- Deletion is a real modal confirmation; cancellation never changes snapshots.
 local old_popups=V.popups
 function V.popups()
     if old_popups then old_popups()end
+    V.popup('CRR откат','storage_beta_rollback',function()
+        V.text('Вернуть стабильную Palatka AI с обычным интерфейсом?')
+        V.muted('Тестовый сканер будет отключён. Настройки, пресеты и снимки не удаляются.')
+        if b('ПОДТВЕРДИТЬ ОТКАТ','beta_rollback_confirm',230,false,true)then
+            local ok,err=DSP.storage_beta_rollback()
+            if ok then
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_rollback_error=tostring(err)
+            end
+        end
+        V.inline()
+        if b('Отмена','beta_rollback_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_rollback_error then V.red(V.fit(V.storage_rollback_error,imgui.GetContentRegionAvail().x))end
+    end,{w=480,h=260})
+    V.popup('Похожий багажник','storage_match_confirm',function()
+        local review=V.storage_match_review
+        local t=S.trunk_state()
+        if not review or not t.snapshot or not t.review_needed
+            or review.generation~=t.review_generation then
+            V.muted('Этот скан уже обработан или заменён новым.')
+            if b('Закрыть','match_stale',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        local matches=review.matches or {}
+        if #matches==0 then
+            V.muted('Сохранённых похожих багажников нет.')
+            if b('Закрыть','match_empty',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        review.selected=math.max(1,math.min(#matches,review.selected or 1))
+        local match=matches[review.selected]
+        local saved=S.find_snapshot(match.id)
+        if not saved then
+            V.red('Эта сохранённая запись удалена.')
+            if b('Закрыть','match_deleted',120)then imgui.CloseCurrentPopup()end
+            return
+        end
+        V.apply_font((V.font_pixels or 18)*1.22)
+        V.text(V.fit(tostring(saved.title or 'Багажник'),imgui.GetContentRegionAvail().x))
+        V.apply_font()
+        V.text('Это тот же багажник?')
+        V.green('Совпадает типов предметов: '..match.shared)
+        V.muted('Похожесть состава: '..match.similarity..'% · это НЕ вероятность и не ID машины.')
+        V.muted('Подтвердить, какая машина открыта, можешь только ты.')
+        if #matches>1 then
+            V.muted('Вариант '..review.selected..' из '..#matches)
+            if b('ДРУГОЙ ПОХОЖИЙ','match_next',math.min(230,imgui.GetContentRegionAvail().x))then
+                review.selected=review.selected%#matches+1
+            end
+        end
+        imgui.Separator()
+        if b('ДА, ЭТО '..tostring(saved.title),'match_yes',math.min(310,imgui.GetContentRegionAvail().x),false,true)then
+            local ok,updated=S.apply_latest_to_saved(saved.id)
+            if ok then
+                local _,idx=S.find_snapshot(updated.id)
+                V.storage_selected=idx or 1
+                V.storage_library_page='detail'
+                V.storage_tab='library'
+                V.storage_match_error=nil
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_match_error=tostring(updated)
+            end
+        end
+        if b('НЕТ, ЭТО НОВЫЙ','match_no_new',math.min(280,imgui.GetContentRegionAvail().x))then
+            local snap=t.snapshot
+            V.storage_name_target=snap
+            V.storage_name_buf=imgui.new.char[128]()
+            V.storage_name_error=nil
+            t.review_needed=false
+            imgui.CloseCurrentPopup()
+            V.open_popup('Сохранить багажник','storage_trunk_name')
+        end
+        if b('НЕ УВЕРЕН · ПОЗЖЕ','match_later',math.min(240,imgui.GetContentRegionAvail().x))then
+            imgui.CloseCurrentPopup()
+        end
+        if V.storage_match_error then
+            V.red(V.fit(V.storage_match_error,imgui.GetContentRegionAvail().x))
+        end
+    end,{w=495,h=410})
+    V.popup('Сохранить багажник','storage_trunk_name',function()
+        local target=V.storage_name_target
+        if not target then V.red('Нет полного снимка багажника.');return end
+        V.text('Введи своё название сохранённого снимка')
+        V.muted('Например: Моя машина с ларцами / Машина с ресурсами.')
+        V.muted('Следующее открытие другого багажника НЕ будет иметь это название автоматически.')
+        imgui.SetNextItemWidth(-1)
+        imgui.InputText('##storage_trunk_named_input',V.storage_name_buf,128)
+        if b('Сохранить под названием','save_named_trunk',math.min(240,imgui.GetContentRegionAvail().x),false,true)then
+            local name=DSP.to_cp(ffi.string(V.storage_name_buf))
+            local ok,snapshot=S.save_named_trunk(target,name)
+            if ok then
+                V.storage_name_target=nil
+                V.storage_name_error=nil
+                V.storage_tab='library'
+                V.storage_library_page='detail'
+                for i,saved in ipairs(S.snapshots or {})do
+                    if saved==snapshot then V.storage_selected=i;break end
+                end
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_name_error=tostring(snapshot)
+            end
+        end
+        if b('Отмена','cancel_named_trunk',120)then imgui.CloseCurrentPopup()end
+        if V.storage_name_error then V.red(V.fit(V.storage_name_error,imgui.GetContentRegionAvail().x))end
+    end,{w=460,h=330})
     V.popup('Своя цена','storage_price',function()
         local target,row=V.storage_price_target,V.storage_price_row
         if not target or not row then V.muted('Нет выбранного предмета');return end
@@ -40192,7 +41927,7 @@ function V.popups()
         V.inline();if b('Отмена','price_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_price_error then V.red(V.storage_price_error)end
     end,{w=460,h=260})
-    V.popup('Название снимка','storage_rename',function()
+    V.popup('Название снимка','storage_rename_v283',function()
         local target=V.storage_label_target
         if not target then return end
         V.muted('Это имя только для снимка. ID машины автоматически не определяется.')
@@ -40200,19 +41935,46 @@ function V.popups()
         imgui.InputText('##storage_name_input',V.storage_label_buf,128)
         if b('Сохранить','rename_apply',135,false,true)then
             local label=DSP.to_cp(ffi.string(V.storage_label_buf))
-            local ok,err=S.set_snapshot_label(target,label)
-            if ok then V.storage_label_target=nil;imgui.CloseCurrentPopup()
-            else V.storage_label_error=err end
+            local ok,result=S.set_snapshot_label(target,label)
+            if ok then
+                V.storage_label_target=nil
+                if type(result)=='table' then
+                    for i,saved in ipairs(S.snapshots or {})do
+                        if saved==result then V.storage_selected=i;break end
+                    end
+                    V.storage_library_page='detail'
+                end
+                imgui.CloseCurrentPopup()
+            else V.storage_label_error=result end
         end
         V.inline();if b('Отмена','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
-    end,{w=460,h=240})
+    end,{w=640,h=300})
+    V.popup('Удалить хранилище','storage_delete_one',function()
+        local target=V.storage_delete_target
+        if not target then V.muted('Хранилище уже не выбрано.');return end
+        V.text('Удалить «'..tostring(target.title or 'Без названия')..'»?')
+        V.muted('Удаляется только запись Palatka AI. Предметы в игре не меняются.')
+        if b('УДАЛИТЬ','delete_one_confirm',150,false,true)then
+            local ok,err=S.delete_snapshot(target)
+            if ok then
+                V.storage_delete_target=nil
+                V.storage_delete_error=nil
+                V.storage_selected=1
+                V.storage_library_page='list'
+                imgui.CloseCurrentPopup()
+            else V.storage_delete_error=tostring(err) end
+        end
+        V.inline()
+        if b('Отмена','delete_one_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_delete_error then V.red(V.storage_delete_error)end
+    end,{w=470,h=250})
     V.popup('Очистить снимки?','storage_clear',function()
         V.text('Удалить сохранённые снимки шкафов и багажников?')
         V.muted('Предметы в игре останутся без изменений.')
         if b('Удалить снимки','confirm_clear',170,false,true)then
             local old=S.snapshots
-            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1
+            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1;V.storage_library_page='list'
             local old_trunk=S.trunk and S.trunk.snapshot
             if S.trunk then S.trunk.snapshot=nil;S.trunk.pending=nil;S.trunk.status='idle';S.trunk.received=0 end
             if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
@@ -40231,6 +41993,111 @@ end
 
 end
 __mod_60b_carbon_storage()
+
+local function __mod_60e_storage_probe_ui()
+-- Simplified read-only cabinet / warehouse observer.
+-- Personal inventory scan intentionally removed from the UI.
+local V = DSP.ui21
+local P = DSP.storage_probe
+local labels={cabinet='ШКАФ',warehouse='СКЛАД'}
+local descriptions={cabinet='шкаф',warehouse='склад'}
+local function button(label,id,width,active,primary)
+    return V.button(label,'probe_'..id,width,active,primary)
+end
+
+function V.storage_probe_panel(width,kind)
+    width=math.max(190,tonumber(width) or 300)
+    local w=math.min(width,315)
+    if not P then V.red('Сканер этого контейнера недоступен.');return end
+    if not labels[kind] then V.red('Неизвестный тип хранилища.');return end
+    local state=P.state()
+
+    V.apply_font((V.font_pixels or 18)*1.15)
+    V.text(labels[kind])
+    V.apply_font()
+
+    if state.armed and state.kind~=kind then
+        V.red('Сейчас идёт скан другого хранилища.')
+        if button('Остановить текущий скан','stop_other',w,false,true)then P.stop()end
+        return
+    end
+
+    if state.kind~=kind and not state.armed then
+        V.muted('Нажми «Начать скан», затем закрой Palatka AI и открой '..descriptions[kind]..' в игре.')
+        if button('НАЧАТЬ СКАН','arm_'..kind,w,false,true)then
+            P.arm(kind,40)
+            V.probe_selected=1
+            V.probe_error=nil
+        end
+        return
+    end
+
+    if state.armed then
+        V.green('СКАН ЗАПУЩЕН')
+        V.muted('Открой '..descriptions[kind]..' в игре. После этого вернись сюда.')
+        V.muted('Осталось: '..math.max(0,state.until_ts-os.time())..' сек.')
+        if button('ЗАВЕРШИТЬ И ПОКАЗАТЬ','stop',w,false,true)then P.stop()end
+        return
+    end
+
+    if #state.order==0 then
+        V.red('Содержимое не распознано.')
+        V.muted('Попробуй запустить скан ещё раз и заново открыть '..descriptions[kind]..'.')
+        if button('ПОВТОРИТЬ СКАН','arm_'..kind,w,false,true)then
+            P.arm(kind,40);V.probe_selected=1;V.probe_error=nil
+        end
+        return
+    end
+
+    V.probe_selected=math.max(1,math.min(#state.order,V.probe_selected or 1))
+    local selected=V.probe_selected
+    if #state.order>1 then
+        V.muted('Найдено несколько вариантов: '..selected..' / '..#state.order)
+        if button('Следующий вариант','next',w)then
+            selected=selected%#state.order+1
+            V.probe_selected=selected
+        end
+    end
+
+    local info,err=P.preview(selected)
+    if not info then V.red(tostring(err));return end
+
+    V.green('НАЙДЕНО: '..tostring(info.occupied)..' занятых слотов')
+    V.text('Подтверждено предметов: '..tostring(info.known))
+    if info.unknown_qty>0 then
+        V.muted('Без точного количества: '..tostring(info.unknown_qty)..' строк')
+    end
+
+    if DSP.storage and DSP.storage.evaluate then
+        local estimate=DSP.storage.evaluate({kind=kind,rows=info.rows,
+            server=DSP.market and DSP.market.state and DSP.market.state.sid})
+        if not estimate.cross_server then
+            V.green('Оценка скупки: '..DSP.money(estimate.sell_to_buyers))
+            if estimate.missing_prices>0 then
+                V.muted('Нет цен для '..estimate.missing_prices..' строк')
+            end
+        end
+    end
+
+    V.red('Пока это предварительный скан: полный формат '..descriptions[kind]..' ещё проверяется.')
+    if button('СОХРАНИТЬ РЕЗУЛЬТАТ','save',w,false,true)then
+        local ok,saved=P.save(selected)
+        if ok then
+            V.probe_error=nil
+            V.storage_tab='library'
+            V.storage_library_page='list'
+        else
+            V.probe_error=tostring(saved)
+        end
+    end
+    if button('ПОВТОРИТЬ СКАН','arm_'..kind,w)then
+        P.arm(kind,40);V.probe_selected=1;V.probe_error=nil
+    end
+    if V.probe_error then V.red(V.fit(V.probe_error,width))end
+end
+
+end
+__mod_60e_storage_probe_ui()
 
 local function __mod_60c_carbon_draw()
 -- Carbon Trade lightweight skin primitives; existing ImGui handles input and clipping.
@@ -40262,135 +42129,6 @@ end
 end
 __mod_60c_carbon_draw()
 
-local function __mod_60d_v230_dashboard()
--- v2.3.0 unified dashboard. Keep the useful subsystems, but make the home
--- screen answer the questions a trader has immediately: which stall, was it
--- scanned, what can I do next, and what happened recently.
-local V=DSP.ui21
-local function metric(period)
-    local ok,r=pcall(function() return DSP.craglog.summary(period or 'day') end)
-    return ok and type(r)=='table' and r or {}
-end
-local function identity_status()
-    local shop=DSP.live and DSP.live.shop or {}
-    if DSP.shop_identity and DSP.shop_identity.resolve and (#(shop.sell or {})+#(shop.buy or {}))>0 then
-        pcall(DSP.shop_identity.resolve,shop)
-    end
-    local n=tonumber(shop.num)
-    local owner=tostring(shop.owner or '')
-    if n then return '#'..tostring(n),tostring(shop.num_source or 'packet'),owner end
-    if DSP.shop_identity and DSP.shop_identity.own_shop_number then
-        local ok,num,src=pcall(DSP.shop_identity.own_shop_number)
-        if ok and num then return '#'..tostring(num),tostring(src or 'saved'),owner end
-    end
-    return '—','не определён',owner
-end
-local function scan_stats()
-    if DSP.local_arb and DSP.local_arb.stats then
-        local ok,r=pcall(DSP.local_arb.stats,os.time())
-        if ok and type(r)=='table' then return r end
-    end
-    return {shops=0,offers=0,mapped=0,unmapped=0}
-end
-local function small_card(id,title,value,sub,w)
-    if imgui.BeginChild('##v230_card_'..id,imgui.ImVec2(w,84),true,imgui.WindowFlags.NoScrollbar) then
-        V.apply_font()
-        V.muted(V.fit(title,w-18))
-        V.green(V.fit(value,w-18))
-        V.muted(V.fit(sub or '',w-18))
-    end
-    imgui.EndChild()
-end
-function V.home()
-    V.heading('Palatka AI · Центр',function()
-        if V.button('Обновить рынок','v230_refresh',126,false,true) and DSP.market and DSP.market.state.status~='loading' then
-            DSP.market.pull(DSP.detect_server() or DSP.market.state.sid or DSP.settings.server)
-        end
-    end,140)
-    V.list('v230_home',function(w)
-        local stall,stall_src,owner=identity_status()
-        local ss=scan_stats()
-        local r=metric('day')
-        local compact=V.compact(w)
-        local cols=compact and 2 or 4
-        local gap=6
-        local cw=math.max(92,(w-gap*(cols-1))/cols)
-        local cards={
-            {'stall','Текущая лавка',stall,stall_src},
-            {'scans','Мои сканы',tostring(ss.shops or 0)..' лавок',tostring(ss.offers or 0)..' предложений'},
-            {'mapped','С номерами',tostring(ss.mapped or 0),tostring(ss.unmapped or 0)..' без ID'},
-            {'net','Учёт сегодня',r.net and DSP.money(r.net) or '—','чистый денежный итог'},
-        }
-        for i,c in ipairs(cards) do
-            small_card(c[1],c[2],c[3],c[4],cw)
-            if i%cols~=0 and i<#cards then V.inline(gap,cw) end
-        end
-
-        imgui.Spacing()
-        local live=DSP.live and DSP.live.shop or {}
-        local state,items=DSP.live and DSP.live.scan_state and DSP.live.scan_state(live)
-        if state=='saved' then V.green('Автоскан: сохранено · '..tostring(items or 0)..' позиций')
-        elseif state=='saved_unmapped' then V.green('Автоскан: сохранено без номера · '..tostring(items or 0)..' позиций')
-        elseif state=='pending' then V.muted('Автоскан: получаю пакет лавки...')
-        elseif state=='disabled' then V.red('Автоскан выключен')
-        elseif (items or 0)>0 then V.muted('Автоскан: '..tostring(state or 'ожидание')..' · '..tostring(items)..' позиций')
-        else V.muted('Подойди к лавке и открой её — скан сохранится автоматически') end
-        if owner~='' then V.muted(V.fit('Владелец: '..owner,w)) end
-
-        imgui.Separator()
-        V.text('Основные действия')
-        local actions={
-            {'Торговля','palatka'},{'Мои сканы','scan'},{'Арбитраж','arbitrage'},
-            {'Моя лавка','lavki'},{'Авто-пиар','promo'},{'Журнал','logs'},
-        }
-        local acols=compact and 2 or 3
-        local aw=math.max(90,(w-gap*(acols-1))/acols)
-        for i,a in ipairs(actions) do
-            if V.button(a[1],'v230_go_'..a[2],aw,a[2]=='palatka',a[2]=='palatka') then V.set_screen(a[2]) end
-            if i%acols~=0 and i<#actions then V.inline(gap,aw) end
-        end
-
-        imgui.Separator()
-        V.text('Торговля')
-        local mode=(DSP.settings and DSP.settings.dry_run) and 'ТЕСТ' or 'РЕАЛЬНО'
-        local inv=#((DSP.auto and DSP.auto.inv) or {})
-        local trade=DSP.auto and DSP.auto.status or 'готово'
-        V.muted(V.fit('Режим: '..mode..' · инвентарь: '..tostring(inv)..' · '..tostring(trade),w))
-        local tw=math.max(110,(w-6)/2)
-        if V.button('Продажа по пресету','v230_sell',tw,false,true) then
-            if DSP.auto and DSP.auto.safe_start then DSP.auto.safe_start('sell') end
-        end
-        V.inline(6,tw)
-        if V.button('Скупка по пресету','v230_buy',tw,false,true) then
-            if DSP.auto and DSP.auto.safe_start then DSP.auto.safe_start('buy') end
-        end
-
-        imgui.Separator()
-        V.text('Последние события')
-        local recent=DSP.craglog and DSP.craglog.ring_recent and DSP.craglog.ring_recent(compact and 3 or 5) or {}
-        if #recent==0 then V.muted('Пока нет записей в мини-журнале') end
-        for j=#recent,1,-1 do
-            local e=recent[j]
-            if e then
-                V.row('v230_evt_'..j,40,function(ww,x,y)
-                    V.at(x,y+2)
-                    local desc=(DSP.craglog.describe and DSP.craglog.describe(e)) or e.kind or 'Событие'
-                    V.muted(V.fit(os.date('%H:%M',e.ts or os.time())..' · '..tostring(desc),ww-6))
-                end)
-            end
-        end
-
-        imgui.Separator()
-        local st=DSP.market and DSP.market.state or {}
-        V.muted(V.fit('API: '..tostring(st.status or '?')..' · сервер: '..tostring(st.sid or '?')
-            ..' · авто-пиар: '..((DSP.promo and DSP.promo.running) and 'включён' or 'выключен'),w))
-    end,{footer=function()
-        V.muted('Palatka AI v'..tostring(DSP.version)..' · локальные сканы отдельно от API')
-    end})
-end
-return true
-end
-__mod_60d_v230_dashboard()
 local function __mod_61_ui21_trade()
 -- Trade view: two tabs, inline editing, fixed actions; execution stays in auto.
 local ffi=require('ffi')
@@ -40978,7 +42716,8 @@ function V.arb_plan(g)
         f.max_qty or 0,f.safety_pct or 0,f.tax_bp or 'global',
         f.min_unit_profit or 0,f.max_buy_price or 0,f.min_stock or 0,f.shop_mode or 0,
         tostring(f.allow_partial~=false),tostring(f.include_unknown~=false),
-        V.arb_extra_enabled and(V.arb_extra and V.arb_extra.value or 0)or 0,DSP.market.missing_revision or 0},'|')
+        V.arb_extra_enabled and(V.arb_extra and V.arb_extra.value or 0)or 0,
+        DSP.market.missing_revision or 0,DSP.arb_agent and DSP.arb_agent.revision or 0},'|')
     if os.time()>=(V.arb_plan_expiry or 0)then V.cache.arb_plan=nil end
     return V.memo('arb_plan',sig,function()
         local now,until_ts=os.time(),math.huge
@@ -41094,6 +42833,14 @@ local function details(g)
     end
     if V.arb_route then
         if b('< Предложения','back_offers',170)then V.arb_route=false end
+        V.inline()
+        if DSP.arb_agent and b('В МИНИ-АГЕНТ','route_to_agent',176,true)then
+            local ok,why=DSP.arb_agent.add_plan(p)
+            if ok then
+                DSP.arb_agent.show(true)
+                imgui.CloseCurrentPopup()
+            else DSP.notify('Агент: '..tostring(why))end
+        end
         V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
             if p.profit>=0 then V.green(DSP.money(p.profit)..' чистой прибыли')
             else V.red(DSP.money(p.profit)..' итогового убытка')end
@@ -41116,6 +42863,17 @@ end
 function V.arbitrage()
     local st=DSP.market.state
     V.text('Арбитраж');V.inline();V.muted('Снимок: '..DSP.market.freshness())
+    if DSP.arb_agent then
+        V.inline()
+        if b(DSP.arb_agent.active()and'МИНИ-АГЕНТ >'or'НАЧАТЬ СЕССИЮ','session_start',190,true)then
+            local ok,why
+            if DSP.arb_agent.active()then DSP.arb_agent.show(true);ok=true
+            else ok,why=DSP.arb_agent.start_market()end
+            if not ok then DSP.notify('Агент арбитража: '..tostring(why))end
+        end
+        local st_agent=DSP.arb_agent.stats()
+        if st_agent.routes>0 then V.muted('Сессия: '..st_agent.done..'/'..st_agent.routes..' маршрутов')end
+    end
     V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',120)then DSP.market.pull(st.sid)end
     V.arb_source=V.arb_source or 'api'
     if b('API','source_api',116,V.arb_source=='api')then
@@ -41381,7 +43139,7 @@ function V.local_arbitrage_view()
         V.muted('\xcf\xee\xe8\xf1\xea \xe2\xfb\xf8\xe5 \xe8\xe4\xb8\xf2 \xef\xee \xef\xee\xeb\xed\xee\xec\xf3 \xe8\xed\xe4\xe5\xea\xf1\xf3 \xf1\xea\xe0\xed\xee\xe2; \xed\xe8\xe6\xe5 -- \xf2\xee\xeb\xfc\xea\xee \xe2\xfb\xe3\xee\xe4\xed\xfb\xe5 \xe0\xf0\xe1\xe8\xf2\xf0\xe0\xe6\xed\xfb\xe5 \xef\xe0\xf0\xfb.')
     end
     local revision=table.concat({A.revision,math.floor(now/10),DSP.settings.tax_bp or 200,
-        M.missing_revision or 0,DSP.lower(query)},'|')
+        M.missing_revision or 0,DSP.arb_agent and DSP.arb_agent.revision or 0,DSP.lower(query)},'|')
     local routes=V.memo('local_arb_routes',revision,function()
         local all=A.routes(now)
         local q=DSP.lower(query)
@@ -41445,6 +43203,11 @@ function V.popups()
             V.muted('Количество неизвестно: итоговую прибыль не рассчитываем.')
         end
         V.red('Скан НЕ гарантирует, что предложение ещё существует!')
+        if DSP.arb_agent and r.qty and b('В МИНИ-АГЕНТ','local_to_agent',186)then
+            local ok,why=DSP.arb_agent.add_local_route(r)
+            if ok then DSP.arb_agent.show(true);imgui.CloseCurrentPopup()
+            else DSP.notify('Агент: '..tostring(why))end
+        end
         if b('Метка продавца','seller_marker',155) then M.mark_shop(r.seller_shop)end
         V.inline();if b('Метка скупщика','buyer_marker',155) then M.mark_shop(r.buyer_shop)end
         if b('Нет лавки #'..r.seller_shop,'seller_missing',195) then
@@ -41461,6 +43224,7 @@ end
 return true
 end
 __mod_63a_ui_local_arbitrage()
+
 local function __mod_64_ui21_journal_calc()
 -- Compact journal and iPhone-like keypad share the workspace touch primitives.
 local V,M,C=DSP.ui21,DSP.mobile,DSP.craglog
@@ -41929,6 +43693,34 @@ function V.journal()
         cycle_period();V.inline()
         if b('Мини-журнал','mini',150)then DSP.settings.craglog.open=true;M.defer_save()end
     end,296)
+    -- MCR-inspired mini-log controls: fully reversible, no action affects accounting.
+    local st=DSP.settings.craglog or {}
+    DSP.settings.craglog=st
+    if st.compact==nil then st.compact=true end
+    if st.alpha==nil then st.alpha=.28 end
+    if b(st.compact and 'Компактный лог' or 'Расширенный лог','mini_layout',174,st.compact)then
+        st.compact=not st.compact;M.defer_save()
+    end
+    V.inline()
+    if b(st.click_through and 'Касания: насквозь' or 'Касания: управление','mini_touch',208,st.click_through)then
+        st.click_through=not st.click_through;M.defer_save()
+    end
+    V.inline()
+    if b('Открыть лог','mini_open',124)then st.open=true;M.defer_save()end
+    if b(st.pinned and 'Разблокировать положение' or 'Закрепить положение','mini_pin',230,st.pinned)then
+        C.set_pinned(not st.pinned)
+    end
+    V.inline()
+    if b(st.minimized and 'Развернуть лог' or 'Свернуть лог','mini_collapse',150,st.minimized)then
+        C.set_minimized(not st.minimized)
+    end
+    V.muted('Окно сохраняет позицию после перетаскивания. Закреплять вручную не нужно.')
+    local alpha=imgui.new.float(tonumber(st.alpha)or .28)
+    imgui.SetNextItemWidth(math.min(260,imgui.GetContentRegionAvail().x))
+    if imgui.SliderFloat('##mini_alpha',alpha,.08,1)then
+        st.alpha=math.max(.08,math.min(1,alpha[0]));M.defer_save()
+    end
+    V.inline();V.muted('Непрозрачность: '..math.floor((st.alpha or .28)*100)..'%')
     local w=imgui.GetContentRegionAvail().x
     if b('Добыча','loot_mode',120,V.journal_mode=='loot')then V.journal_mode='loot'end
     V.inline();if b('События','events_mode',120,V.journal_mode=='events')then V.journal_mode='events'end
@@ -42671,331 +44463,987 @@ end
 end
 __mod_68_ui22_flip_promo()
 
-local function __mod_46c_lombard()
--- Long-lived pawnshop scanner. Pawnshop data is intentionally separate from
--- the 80-row local ShopStore LRU: a pawnshop is a server economy source, not a stall.
-DSP.lombard = DSP.lombard or {}
+local function __mod_60f_lombard_ui()
+-- Native mimgui pawnshop panel. No WebView and no item transfer actions.
+local V=DSP.ui21
 local L=DSP.lombard
-L.schema=1
-L.path=(DSP.dir or '.')..'/lombard_store_v1.json'
-L.data=L.data or {schema=L.schema,servers={}}
-L.session=L.session or nil
-L.auto_scan=false
-L._dirty=false
-L._installed=false
-L._last_dialog=nil
-L.history_days=365
-L.max_history_per_item=512
-local MAX=9007199254740991
-local CP_LOMBARD='\xeb\xee\xec\xe1\xe0\xf0\xe4'
-local UTF_LOMBARD='\208\187\208\190\208\188\208\177\208\176\209\128\208\180'
-local CP_NEXT='\xf1\xeb\xe5\xe4\xf3\xfe\xf9'
-local CP_MORE='\xe4\xe0\xeb\xe5\xe5'
-local CP_PREV='\xef\xf0\xe5\xe4\xfb\xe4'
-local CP_SEARCH='\xef\xee\xe8\xf1\xea'
-local CP_BALANCE='\xe1\xe0\xeb\xe0\xed\xf1'
-local CP_EXIT='\xe2\xfb\xf5\xee\xe4'
-local CP_BACK='\xed\xe0\xe7\xe0\xe4'
-local CP_BUY='\xf1\xea\xf3\xef'      -- skyp / skypka prefix
-local CP_PURCHASE='\xef\xee\xea\xf3\xef' -- pokup prefix
-local CP_SELL='\xef\xf0\xee\xe4\xe0' -- proda prefix
-local function lower(v)
-    local x=tostring(v or '')
-    return DSP.lower and DSP.lower(x) or x:lower()
+if not (V and L) then return false end
+local function button(label,id,w,active)
+    return V.button(label,'lombard_'..id,w,active)
 end
-local function clean(v)
-    local x=tostring(v or '')
-    if DSP.clean_text then x=DSP.clean_text(x) else x=x:gsub('{%x+}','') end
-    x=x:gsub('\r',''):gsub('^%s+',''):gsub('%s+$','')
-    return x
-end
-local function current_sid()
-    local s=tonumber(DSP.market and DSP.market.state and DSP.market.state.sid)
-    if s==nil then s=tonumber(DSP.settings and DSP.settings.server) end
-    return math.floor(s or 0)
-end
-local function srv(server_id)
-    local k=tostring(tonumber(server_id) or current_sid())
-    local root=L.data.servers
-    if type(root[k])~='table' then root[k]={latest={at=0,items={}},history={},scans={}} end
-    local r=root[k]
-    if type(r.latest)~='table' then r.latest={at=0,items={}} end
-    if type(r.latest.items)~='table' then r.latest.items={} end
-    if type(r.history)~='table' then r.history={} end
-    if type(r.scans)~='table' then r.scans={} end
-    return r,k
-end
-local function is_lombard_text(v)
-    local q=lower(clean(v))
-    return q:find(CP_LOMBARD,1,true)~=nil or q:find(UTF_LOMBARD,1,true)~=nil or q:find('pawn',1,true)~=nil
-end
-function L.is_dialog(title,text)
-    return is_lombard_text(title) or is_lombard_text(text)
-end
-local function side_from(title,text)
-    local q=lower(clean(title)..' '..clean(text))
-    if q:find(CP_BUY,1,true) or q:find(CP_PURCHASE,1,true) then return 'buy' end
-    if q:find(CP_SELL,1,true) then return 'sell' end
-    return 'quote'
-end
-local function parse_price(v)
-    if DSP.market and DSP.market.parse_cr_price then
-        local ok,p=pcall(DSP.market.parse_cr_price,v)
-        if ok and tonumber(p) and p>0 then return math.floor(p) end
-    end
-    local q=tostring(v or ''):gsub('{%x+}',''):gsub('%s','')
-    q=q:gsub('^%$',''):gsub('%$$',''):gsub('[,.]','')
-    local p=tonumber(q);if p and p>0 and p<=MAX then return math.floor(p) end
-end
-local function normalize_name(v)
-    local n=clean(v)
-    n=n:gsub('^%[%d+%]%s*','')
-    n=n:gsub('%s+%(%s*ID%s*:%s*%d+%s*%)%s*$','')
-    n=n:gsub('%s+%[[xX]%d+%]%s*$','')
-    n=n:gsub('%s+[xX]%s*%d+%s*$','')
-    n=n:gsub('^%s+',''):gsub('%s+$','')
-    return n
-end
-local function skip_line(line)
-    local q=lower(clean(line))
-    if q=='' then return true end
-    if q:find(CP_LOMBARD,1,true) or q:find(UTF_LOMBARD,1,true) then return true end
-    if q:find(CP_NEXT,1,true) or q:find(CP_MORE,1,true) or q:find(CP_PREV,1,true)
-        or q:find(CP_SEARCH,1,true) or q:find(CP_BALANCE,1,true)
-        or q:find(CP_EXIT,1,true) or q:find(CP_BACK,1,true) then return true end
-    if q=='>>' or q=='<<' then return true end
-    return false
-end
-local function fields(line)
-    local t={}
-    for x in tostring(line or ''):gmatch('[^\t]+') do t[#t+1]=clean(x) end
-    return t
-end
-local function parse_line(line,title)
-    local raw=clean(line)
-    if skip_line(raw) then return nil end
-    local fs=fields(raw)
-    local price,price_i
-    if #fs>1 then
-        for i=#fs,2,-1 do
-            local p=parse_price(fs[i])
-            if p then price,price_i=p,i;break end
-        end
-    end
-    local name
-    if price then
-        local acc={};for i=1,price_i-1 do if fs[i]~='' then acc[#acc+1]=fs[i] end end
-        name=table.concat(acc,' ')
+function V.lombard_screen()
+    V.heading('LOMBARD')
+    local P=L.packet_probe
+    local stats=L.stats and L.stats() or {items=0,pages=0}
+    V.text('Saved pawnshop quotes: '..tostring(stats.items or 0))
+    V.muted('Read-only: approach the pawnshop and choose the item hand-in menu.')
+    V.muted('Classic dialogs are captured automatically; native packets need validation.')
+    V.muted('No item hand-in, clicks or purchases are sent by Palatka.')
+    if not P then V.red('Native scanner unavailable');return end
+    local st=P.state()
+    if not st.active then
+        if button('Listen for native menu (35 sec)','start',280,false)then P.arm(35) end
     else
-        local prefix,token=raw:match('^(.-)%s+(:CASH:[%d%.,]+)%s*$')
-        if not prefix then prefix,token=raw:match('^(.-)%s+(%$[%d%.,]+)%s*$') end
-        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*%s*[KkMm])%s*$') end
-        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*)%s*$') end
-        if prefix and token then price=parse_price(token);name=prefix end
+        V.green('Observing native menu, seconds left: '..math.max(0,st.until_ts-os.time()))
+        if button('Stop and review','stop',280,true)then P.stop()end
     end
-    name=normalize_name(name or '')
-    if not price or name=='' or #name<2 then return nil end
-    -- Avoid treating pure service/menu labels as items.
-    if name:match('^%d+$') then return nil end
-    local ench=tonumber(name:match('%(%+(%d+)%)')) or 0
-    local base=name:gsub('%s*%(%+%d+%)%s*$','')
-    local id=nil
-    if DSP.items and DSP.items.id_for_name then
-        local ok,v=pcall(DSP.items.id_for_name,base);if ok then id=tonumber(v) end
+    V.muted('Packets: '..st.packets..' · candidate packets: '..#st.candidates..
+        ' · labelled: '..st.tagged)
+    local rows=P.preview()
+    V.text('Observed priced items: '..#rows)
+    if not st.verified_label and #rows>0 then
+        V.red('UNVERIFIED: menu identity and complete item list not confirmed.')
     end
-    local side=side_from(title,raw)
-    local key=(DSP.item_key and DSP.item_key(base,ench) or lower(base)..':'..ench)..':'..side
-    return {name=name,base_name=base,item_id=id,ench=ench,price=price,side=side,key=key,raw_index=0}
-end
-function L.parse_dialog(title,text)
-    local out,seen={},{}
-    local idx=0
-    for line in tostring(text or ''):gmatch('[^\n]+') do
-        local r=parse_line(line,title);if r then
-            r.raw_index=idx
-            local k=r.key..':'..tostring(r.price)
-            if not seen[k] then seen[k]=true;out[#out+1]=r end
+    if #rows>0 then
+        V.list_rows('lombard_preview',rows,60,function(item,i)
+            V.row('lombard_item_'..i,60,function(w,x,y)
+                V.at(x,y);V.text(V.fit(tostring(item.name or '?'),w-8))
+                V.at(x,y+27);V.muted('Pawnshop quote: '..DSP.money(item.price or 0))
+            end)
+        end,{height=math.min(330,math.max(120,imgui.GetContentRegionAvail().y*.55)),footer=false})
+        if not st.active and button('Save observed quotes (unverified)','save',280)then
+            local ok,err=P.save()
+            if ok then V.lombard_error=nil else V.lombard_error=tostring(err) end
         end
-        idx=idx+1
     end
-    return out
+    if V.lombard_error then V.red(V.lombard_error) end
+    if stats.items>0 then
+        V.text('Previously captured quotes')
+        local old=L.search and L.search('') or {}
+        for i=1,math.min(5,#old)do
+            local item=old[i]
+            V.muted(V.fit(item.name..' / '..DSP.money(item.price),280))
+        end
+    end
 end
-local function page_hash(title,text)
-    local s=clean(title)..'\n'..clean(text)
-    local h=2166136261
-    for i=1,#s do h=(h*16777619+s:byte(i))%4294967296 end
-    return string.format('%08x',h)
+-- Compatibility route for older OTA shells which do not have a Lombard nav entry.
+local previous_tools=V.tools
+V.tools=function(screen)
+    if screen=='lombard' then return V.lombard_screen() end
+    if previous_tools then return previous_tools(screen) end
 end
-local function new_session(id,title)
-    L.session={id=tonumber(id) or -1,title=clean(title),started=os.time(),last=os.time(),pages={},items={},order={},history_seen={}}
-    return L.session
+return true
+
 end
-local function get_session(id,title)
-    local now=os.time();local s=L.session
-    if not s or now-(s.last or 0)>20 or (s.id~=tonumber(id) and tonumber(id)~=nil) then s=new_session(id,title) end
-    s.last=now;if clean(title)~='' then s.title=clean(title) end
-    return s
-end
-local function history_add(root,item,at,session)
-    if session.history_seen[item.key] then return end
-    session.history_seen[item.key]=true
-    local h=root.history[item.key]
-    if type(h)~='table' then h={name=item.name,side=item.side,item_id=item.item_id,ench=item.ench,points={}};root.history[item.key]=h end
-    if type(h.points)~='table' then h.points={} end
-    h.name=item.name;h.side=item.side;h.item_id=item.item_id or h.item_id;h.ench=item.ench or h.ench
-    local prev=h.points[#h.points]
-    if prev and prev.price==item.price and at-(prev.at or 0)<21600 then prev.at=at
-    else h.points[#h.points+1]={at=at,price=item.price} end
-    local cutoff=at-(tonumber(L.history_days) or 365)*86400
-    while #h.points>0 and ((h.points[1].at or 0)<cutoff or #h.points>(tonumber(L.max_history_per_item) or 512)) do table.remove(h.points,1) end
-end
-local function commit_session(session,source)
-    if not session then return false,'session' end
-    local root,skey=srv(current_sid());local at=os.time();local items={}
-    for _,k in ipairs(session.order) do local r=session.items[k];if r then items[#items+1]=r;history_add(root,r,at,session) end end
-    table.sort(items,function(a,b) if a.name~=b.name then return a.name<b.name end;if a.side~=b.side then return a.side<b.side end;return a.price<b.price end)
-    root.latest={at=at,started=session.started,title=session.title,items=items,pages=session.page_count or 0,source=source or 'dialog'}
-    root.scans[#root.scans+1]={at=at,count=#items,pages=session.page_count or 0,source=source or 'dialog'}
-    while #root.scans>180 do table.remove(root.scans,1) end
-    L._dirty=true
-    if DSP.flog then DSP.flog(('LOMBARD commit sid=%s items=%d pages=%d'):format(skey,#items,session.page_count or 0)) end
-    return true,#items
-end
-function L.observe_dialog(id,style,title,b1,b2,text)
-    if not L.is_dialog(title,text) then return false end
-    L._last_dialog={id=id,style=style,title=title,b1=b1,b2=b2,text=text,at=os.time()}
-    local s=get_session(id,title);local h=page_hash(title,text)
-    if not s.pages[h] then
-        s.pages[h]=true;s.page_count=(s.page_count or 0)+1
-        local rows=L.parse_dialog(title,text)
-        for _,r in ipairs(rows) do
-            local k=r.key
-            local old=s.items[k]
-            if not old then s.items[k]=r;s.order[#s.order+1]=k
-            elseif r.price~=old.price then
-                -- Same item can legitimately appear more than once at different prices.
-                local k2=k..':p'..tostring(r.price)
-                if not s.items[k2] then r.key=k2;s.items[k2]=r;s.order[#s.order+1]=k2 end
+__mod_60f_lombard_ui()
+
+local function __mod_69_mcr_classic()
+-- Original MCR-inspired compact workspace. Palatka models and packet handlers remain authoritative.
+-- No third-party authentication, network requests or trade packet code is imported.
+local U,V,M,T = DSP.ui,DSP.ui22,DSP.mobile,DSP.trade_v16
+local Classic={source='inventory',search='',edit=nil}
+DSP.mcr_classic=Classic
+if DSP.settings.ui_style==nil then DSP.settings.ui_style='mcr' end
+if DSP.settings.mcr_classic_alpha==nil then DSP.settings.mcr_classic_alpha=.94 end
+local function cp(s)return DSP.utf8(tostring(s or ''))end
+local function button(s,id,w,active,h)return V.button(s,'mcr_'..id,w,active,false,h or 38)end
+local function save()if M and M.defer_save then M.defer_save()end end
+local function busy()return DSP.auto.sell_running or DSP.auto.buy_running end
+local function current()return V.kind=='sell' and DSP.settings.sell_preset or DSP.settings.buy_preset end
+local function navigate(id)V.set_screen(id);Classic.edit=nil end
+local navigation={
+ {'palatka','Торговля'},{'lavki','Лавки ЦР'},{'arbitrage','Арбитраж'},
+ {'resale','Перепродажа'},{'scan','Сканер'},{'market','Рынок'},
+ {'storage','Хранилища'},{'lombard','Ломбард'},{'logs','Журнал'},
+ {'calculator','Калькулятор'},{'stats','Статистика'},{'settings','Настройки'},
+ {'search','Поиск'},{'promo','Автопиар'},{'home','Обзор'}
+}
+local function side_panel(width,height)
+    if imgui.BeginChild('##mcr_left',imgui.ImVec2(width,height),true,imgui.WindowFlags.NoScrollbar)then
+        V.apply_font()
+        if button('P','home',-1,V.screen=='home',42)then navigate('home')end
+        V.muted('МЕНЮ')
+        V.list_rows('mcr_nav',navigation,43,function(entry,i)
+            local short=entry[2]
+            if width<110 then
+                local names={palatka='Торг.',lavki='Лавки',arbitrage='Арбитр.',resale='Перепр.',scan='Скан',
+                  market='Рынок',storage='Склад',lombard='Ломб.',logs='Логи',calculator='Счёт',
+                  stats='Стат.',settings='Опции',search='Поиск',promo='Пиар',home='Обзор'}
+                short=names[entry[1]] or short
             end
-        end
-        commit_session(s,L.auto_scan and 'auto_pages' or 'passive')
+            if button(short,'nav_'..i,-1,V.screen==entry[1],40)then navigate(entry[1])end
+        end,{height=math.max(60,imgui.GetContentRegionAvail().y-54),footer=true,footer_height=44})
     end
-    return true
+    imgui.EndChild()
 end
-local function next_index(text)
-    local i=0
-    for line in tostring(text or ''):gmatch('[^\n]+') do
-        local q=lower(clean(line))
-        if q:find(CP_NEXT,1,true) or q:find(CP_MORE,1,true) or q=='>>' then return i end
-        i=i+1
-    end
-    return nil
-end
-local function schedule_next(id,text)
-    if not L.auto_scan then return end
-    local idx=next_index(text);if idx==nil then
-        L.auto_scan=false
-        if DSP.notify then DSP.notify('Lombard scan complete: '..tostring(L.stats().items)..' items') end
-        return
-    end
-    if not lua_thread or not lua_thread.create or not wait then return end
-    lua_thread.create(function()
-        wait(120)
-        if L.auto_scan and sampIsDialogActive and sampIsDialogActive() and sampGetCurrentDialogId and sampGetCurrentDialogId()==id then
-            pcall(sampSendDialogResponse,id,1,idx,'')
+local function all_items(query)
+    local q=DSP.lower(query or '')
+    local source=Classic.source=='inventory' and (DSP.auto.inv or{}) or (DSP.items.by_id or{})
+    local sig=table.concat({Classic.source,tostring(source),tostring(#(DSP.auto.inv or{})),q},'|')
+    return V.memo('mcr_items',sig,function()
+        local rows={}
+        if Classic.source=='inventory'then
+            for _,it in ipairs(DSP.auto.inv or{})do
+                if q=='' or DSP.lower(it.name or''):find(q,1,true)then rows[#rows+1]=it end
+            end
+        else
+            for id,name in pairs(DSP.items.by_id or{})do
+                if type(name)=='string' and name~='-' and not name:find('DELETED',1,true)
+                    and(q=='' or DSP.lower(name):find(q,1,true) or tostring(id)==q)then
+                    rows[#rows+1]={id=id,name=name}
+                end
+            end
+            table.sort(rows,function(a,b)return a.name<b.name end)
         end
+        return rows
     end)
 end
-function L.stats(server_id)
-    local root=srv(server_id);local hist=0;for _ in pairs(root.history) do hist=hist+1 end
-    return {items=#(root.latest.items or {}),last=root.latest.at or 0,pages=root.latest.pages or 0,history_items=hist,scans=#root.scans,server=tonumber(server_id) or current_sid()}
+local function available_row(it,i)
+    V.row('mcr_available_'..i,52,function(w,x,y)
+        local title=V.fit(it.display or it.name or '?',math.max(40,w-12))
+        if V.text_button(title,'mcr_add_'..i,-1,false,27)and not busy()then
+            local ok,msg
+            if Classic.source=='inventory'then ok,msg=T.add_from_inventory(V.kind,it)
+            else ok,msg=T.add_from_catalog(V.kind,it)end
+            if not ok then DSP.notify(tostring(msg or 'Нельзя добавить'))end
+        end
+        V.at(x,y+26)
+        V.muted(Classic.source=='inventory'and('В наличии: '..tostring(it.count or it.qty or 0))or('ID '..tostring(it.id or '?')))
+    end)
 end
-function L.search(query,server_id)
-    local root=srv(server_id);local q=lower(clean(query));local out={}
-    for _,r in ipairs(root.latest.items or {}) do
-        if q=='' or lower(r.name):find(q,1,true) then out[#out+1]=r end
+local function selected_row(it,i)
+    V.row('mcr_selected_'..i,58,function(w,x,y)
+        local title=V.fit(it.name or '?',math.max(40,w-14))
+        if V.text_button(title,'mcr_edit_'..i,-1,false,28)then
+            Classic.edit=it;V.open_popup('Позиция','mcr_edit')
+        end
+        V.at(x,y+28)
+        local label=(it.enabled==false and '[OFF] 'or'')..
+            'x'..tostring(it.qty or'?')..' · '..DSP.money(tonumber(it.price)or 0)
+        V.muted(V.fit(label,math.max(40,w-14)))
+    end)
+end
+local function trade_panel()
+    local w=imgui.GetContentRegionAvail().x
+    V.heading('Торговля',function()
+        if button('Продажа','sell',91,V.kind=='sell')then V.kind='sell'end
+        V.inline()
+        if button('Скупка','buy',91,V.kind=='buy')then V.kind='buy'end
+    end,202)
+    local pres=current()
+    V.muted(V.fit('Набор: '..tostring(pres.name or 'Основной'),w))
+    local cols=w>=430
+    if cols then
+        local left=math.max(110,math.floor(w*.46))
+        local right=math.max(110,w-left-6)
+        if imgui.BeginChild('##mcr_stock',imgui.ImVec2(left,0),true)then
+            V.apply_font()
+            if button(Classic.source=='inventory'and'Инвентарь >'or'Каталог >','source',-1)then
+                Classic.source=Classic.source=='inventory'and'catalog'or'inventory'
+                V.reset_list('mcr_stock_list')
+            end
+            local query,edited=V.search('mcr_stock','Поиск предмета',-1)
+            if edited then V.reset_list('mcr_stock_list')end
+            V.list_rows('mcr_stock_list',all_items(query),52,available_row,{footer=true,footer_height=45})
+        end
+        imgui.EndChild()
+        V.inline(6,120)
+        if imgui.BeginChild('##mcr_preset',imgui.ImVec2(0,0),true)then
+            V.apply_font()
+            V.text('Выставляемые товары')
+            V.muted(tostring(#(pres.items or{}))..' позиций · нажми для правки')
+            V.list_rows('mcr_preset_list',pres.items or{},58,selected_row,{footer=true,footer_height=45})
+        end
+        imgui.EndChild()
+    else
+        Classic.tab=Classic.tab or 'stock'
+        if button('Инвентарь','stocktab',110,Classic.tab=='stock')then Classic.tab='stock'end
+        V.inline()
+        if button('Набор ('..#(pres.items or{})..')','presettab',120,Classic.tab=='preset')then Classic.tab='preset'end
+        if Classic.tab=='stock'then
+            if button(Classic.source=='inventory'and'Инвентарь >'or'Каталог >','source',-1)then
+                Classic.source=Classic.source=='inventory'and'catalog'or'inventory'
+            end
+            local query,edited=V.search('mcr_stock','Поиск предмета',-1)
+            if edited then V.reset_list('mcr_stock_list')end
+            V.list_rows('mcr_stock_list',all_items(query),52,available_row,{footer=true})
+        else
+            V.list_rows('mcr_preset_list',pres.items or{},58,selected_row,{footer=true})
+        end
     end
-    table.sort(out,function(a,b) if a.name~=b.name then return a.name<b.name end;return a.price<b.price end)
-    return out
 end
-function L.history(item_key,server_id)
-    local root=srv(server_id);local h=root.history[item_key];return h and h.points or {}
+local function action_panel(width,height)
+    if imgui.BeginChild('##mcr_right',imgui.ImVec2(width,height),true,imgui.WindowFlags.NoScrollbar)then
+        V.apply_font()
+        if V.screen=='palatka'then
+            V.muted('ДЕЙСТВИЯ')
+            if button('Наборы','presets',-1)then V.open_popup('Наборы','presets')end
+            if button('Скан','scan_inv',-1)then
+                if DSP.auto and DSP.auto.scan_inventory then DSP.auto.scan_inventory()end
+            end
+            if busy()then
+                if button('СТОП','stop',-1,true)then
+                    if DSP.auto.sell_running then DSP.auto.stop_sell()else DSP.auto.stop_buy()end
+                end
+            else
+                if button('Выставить','launch',-1,true,52)then V.open_popup('Выставление','launch')end
+            end
+            local r=T.totals(V.kind)
+            imgui.Separator()
+            V.muted(r.complete and (V.kind=='buy'and'Бюджет' or 'Выручка')or'Проверь цены')
+            if r.complete then
+                V.text(DSP.money(V.kind=='buy'and r.required_funds or r.gross))
+                if V.kind=='sell'then V.muted('Чистыми ~');V.text(DSP.money(r.net))end
+            end
+        else
+            V.muted('БЫСТРО')
+            if button('Торговля','to_trade',-1)then navigate('palatka')end
+            if button('Лавки','to_shops',-1)then navigate('lavki')end
+            if button('Журнал','to_logs',-1)then navigate('logs')end
+        end
+        imgui.Separator()
+        if button('Наш UI','carbon',-1)then DSP.settings.ui_style='carbon';save()end
+        if button('Мини-лог','mini',-1)then
+            DSP.settings.craglog.open=not DSP.settings.craglog.open;save()
+        end
+    end
+    imgui.EndChild()
 end
-function L.links(query,server_id)
-    local out={};if not DSP.shop_store or not DSP.shop_store.search then return out end
-    local sidv=tonumber(server_id) or current_sid()
-    for _,p in ipairs(L.search(query,sidv)) do
-        local refs=DSP.shop_store.search(p.base_name or p.name,nil,sidv)
-        local best_sell,best_buy
-        for _,ref in ipairs(refs or {}) do
-            local price=tonumber(ref.offer and ref.offer.price)
-            if price then
-                if ref.side=='sell' and (not best_sell or price<best_sell.price) then best_sell={price=price,shop=ref.shop and ref.shop.num,owner=ref.shop and ref.shop.owner} end
-                if ref.side=='buy' and (not best_buy or price>best_buy.price) then best_buy={price=price,shop=ref.shop and ref.shop.num,owner=ref.shop and ref.shop.owner} end
+local function other_panel()
+    local id=V.screen
+    if id=='home'then V.home()
+    elseif id=='lavki'then V.shops()
+    elseif id=='scan'then V.shops_source='scan';V.shops()
+    elseif id=='market'then V.shops_source='api';V.shops()
+    elseif id=='arbitrage'then V.arbitrage()
+    elseif id=='resale'then V.flip_screen()
+    elseif id=='storage'then V.storage_screen()
+    elseif id=='logs'then V.journal()
+    elseif id=='calculator'then V.calculator()
+    elseif id=='history'then V.journal_mode='events';V.journal()
+    elseif id=='promo'then V.promo_screen()
+    elseif V.tools then V.tools(id)
+    else DSP.screens.draw(id)end
+end
+local function edit_popup()
+    local it=Classic.edit
+    if not it then return end
+    V.text(tostring(it.name or '?'))
+    V.muted('Цена за штуку')
+    if not busy()then M.compact_number(it,'price','mcr_edit_price',190,0)
+    else V.text(DSP.money(it.price or 0))end
+    V.muted('Количество')
+    if not busy()then M.compact_number(it,'qty','mcr_edit_qty',160,1)
+    else V.text(tostring(it.qty or 0))end
+    if not busy()then
+        if button(it.enabled==false and'Включить' or 'Выключить','toggle_item',140,it.enabled~=false)then
+            it.enabled=it.enabled==false and(tonumber(it.price)or 0)>0 or false;save()
+        end
+        V.inline()
+        if button('Удалить','remove_item',130)then
+            V.remove_pending={kind=V.kind,item=it}
+            imgui.CloseCurrentPopup()
+            V.open_popup('Удалить позицию','remove')
+        end
+    end
+    if button('Готово','edit_done',130)then imgui.CloseCurrentPopup()end
+end
+local old_popups=V.popups
+function V.popups()
+    if old_popups then old_popups()end
+    V.popup('Позиция','mcr_edit',edit_popup,{w=470,h=310})
+end
+local function classic_geometry(sw,sh)
+    -- Independent from the Carbon shell: old full-screen geometry is not inherited.
+    local p=DSP.settings.mcr_window or {}
+    local maxw,maxh=math.max(200,sw-16),math.max(160,sh-16)
+    local w=DSP.clamp(tonumber(p.w)or math.min(780,sw*.92),math.min(320,maxw),maxw)
+    local h=DSP.clamp(tonumber(p.h)or math.min(455,sh*.82),math.min(230,maxh),maxh)
+    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w)*.5,0,math.max(0,sw-w)),
+        y=DSP.clamp(tonumber(p.y)or(sh-h)*.5,0,math.max(0,sh-h))}
+end
+local function resize_grip(g,io)
+    V.at(g.w-46,g.h-43)
+    button('//','resize_grip',31,false,29)
+    if imgui.IsItemActive()and io.MouseDelta then
+        local d=io.MouseDelta
+        if d.x~=0 or d.y~=0 then
+            local maxw,maxh=math.max(220,io.DisplaySize.x-g.x-8),math.max(170,io.DisplaySize.y-g.y-8)
+            local w=DSP.clamp(g.w+d.x,math.min(320,maxw),maxw)
+            local h=DSP.clamp(g.h+d.y,math.min(230,maxh),maxh)
+            DSP.settings.mcr_window={x=g.x,y=g.y,w=w,h=h};save()
+        end
+    end
+end
+local original_draw=U.draw
+function Classic.draw()
+    if V and V.track_touch then V.track_touch(imgui.GetIO())end
+    local io=imgui.GetIO();local sz=io.DisplaySize
+    local g=classic_geometry(sz.x,sz.y)
+    if not V.initialized then
+        V.screen=(U.screen and U.screen~='palatka')and U.screen or'palatka'
+        V.initialized=true
+    end
+    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
+    local colors=DSP.theme.push_window()
+    imgui.SetNextWindowBgAlpha(DSP.settings.mcr_classic_alpha)
+    -- Warm beige MCR accent on native ImGui, without overwriting Palatka's saved theme.
+    imgui.PushStyleColor(imgui.Col.Button,imgui.ImVec4(.26,.25,.23,1))
+    imgui.PushStyleColor(imgui.Col.ButtonHovered,imgui.ImVec4(.40,.36,.30,1))
+    imgui.PushStyleColor(imgui.Col.ButtonActive,imgui.ImVec4(.48,.41,.33,1))
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,7))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(5,5))
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoResize+imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar
+    M.flush_save(false)
+    if imgui.Begin('##palatka_mcr_classic',U.open_ref,flags)then
+        V.font_pixels=V.font_scale_for(1,g.w,U.d)
+        V.apply_font()
+        local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+        local labelw=math.max(75,g.w-178)
+        V.text_button('MCR CLASSIC  /  PALATKA AI', 'mcr_window_drag',labelw,false,31)
+        if imgui.IsItemActive() and io.MouseDelta then
+            local d=io.MouseDelta
+            if d.x~=0 or d.y~=0 then
+                DSP.settings.mcr_window={x=DSP.clamp(g.x+d.x,0,sz.x-g.w),
+                    y=DSP.clamp(g.y+d.y,0,sz.y-g.h),w=g.w,h=g.h};save()
             end
         end
-        out[#out+1]={pawn=p,best_shop_sell=best_sell,best_shop_buy=best_buy,
-            diff_from_shop_sell=best_sell and (p.price-best_sell.price) or nil,
-            diff_to_shop_buy=best_buy and (best_buy.price-p.price) or nil}
+        V.at(x+g.w-143,y)
+        if button('МЕНЮ','menu',81,V.nav,31)then V.nav=not V.nav end
+        V.at(x+g.w-55,y)
+        if button('X','close',39,false,31)then U.set_open(false)end
+        V.at(x,y+39);imgui.Separator()
+        local available=imgui.GetContentRegionAvail()
+        local left=math.min(102,math.max(78,g.w*.14))
+        local right=math.min(124,math.max(88,g.w*.16))
+        if V.nav and g.w<550 then
+            side_panel(math.max(160,available.x),available.y-35)
+        else
+            side_panel(left,available.y-35)
+            V.inline(5,120)
+            local center=math.max(100,available.x-left-right-14)
+            if imgui.BeginChild('##mcr_workspace',imgui.ImVec2(center,available.y-35),false)then
+                V.apply_font()
+                local ok,err=xpcall(function()
+                    if V.screen=='palatka' then trade_panel()else other_panel()end
+                end,debug.traceback)
+                if not ok then
+                    V.errors[V.screen]=err;DSP.flog('MCR Classic UI: '..tostring(err))
+                    V.red('Ошибка экрана. См. standalone.log')
+                end
+            end
+            imgui.EndChild()
+            V.inline(5,80)
+            action_panel(right,available.y-35)
+        end
+        V.at(x,math.max(y+39,g.h-42))
+        V.muted(V.fit('Palatka AI · Mobile 2 · '..tostring(DSP.auto.status or 'готов'),math.max(100,g.w-58)))
+        if V.popup_pending then
+            local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(cp(p.title)..'##v22_'..p.id)
+        end
+        if V.popups then V.popups()end
+        resize_grip(g,io)
+    end
+    imgui.End()
+    imgui.PopStyleVar(3);imgui.PopStyleColor(3)
+    if colors and colors>0 then imgui.PopStyleColor(colors)end
+    if U.open_ref and not U.open_ref[0]then M.flush_save(true);U.open=false end
+end
+function U.draw()
+    if DSP.settings.ui_style=='mcr' then return Classic.draw()end
+    return original_draw()
+end
+return true
+
+end
+__mod_69_mcr_classic()
+
+local function __mod_69a_arbitrage_agent()
+-- Palatka Arbitrage Session: many routes, local execution ledger and a floating guide.
+-- Read-only game integration: confirmation is manual, receipt matching only suggests.
+-- This module never submits purchase/sale packets and never edits the remote API.
+DSP.arb_agent=DSP.arb_agent or {}
+local A=DSP.arb_agent
+local M=DSP.market
+local MAX=9007199254740991
+local function num(v,lo,hi)
+    local n=tonumber(v)
+    if n and n==n and n%1==0 and n>=(lo or 0)and n<=(hi or MAX)then return math.floor(n)end
+end
+local function server()
+    local detected
+    if type(DSP.detect_server)=='function'then
+        local ok,id=pcall(DSP.detect_server)
+        if ok then detected=num(id,1)end
+    end
+    return detected or num(M.state and M.state.sid,1)
+        or num(DSP.settings and DSP.settings.server,1)or 0
+end
+local function cycle_start(ts)
+    local date=os.date('*t',ts or os.time())
+    date.hour,date.min,date.sec=5,0,0
+    local start=os.time(date)
+    return(ts or os.time())<start and(start-86400)or start
+end
+local function part(v)
+    local s=tostring(v or '')
+    return tostring(#s)..':'..s
+end
+local function eq(a,b)
+    if DSP.lower then return DSP.lower(tostring(a or''))==DSP.lower(tostring(b or''))end
+    return tostring(a or''):lower()==tostring(b or''):lower()
+end
+local function key(sid,row,side,o)
+    if not row or not o then return nil end
+    local fields={sid,side,row.key or row.item_key or row.name or'',o.shop,o.owner,o.price,o.ts or 0}
+    local out={}
+    for i,v in ipairs(fields)do out[i]=part(v)end
+    return table.concat(out,'|')
+end
+A.quote_key=key
+A.path=(DSP.dir or '.')..'/arb_agent_v1.json'
+A.data=A.data or {schema=1,session=nil,consumed={},history={}}
+A.revision=A.revision or 0
+A.hint=nil
+local function safe_data(d)
+    return type(d)=='table'and d.schema==1 and type(d.consumed)=='table'
+        and type(d.history)=='table'and (d.session==nil or type(d.session)=='table')
+end
+function A.load()
+    local f=io.open(A.path,'rb')
+    if not f then return false end
+    local raw=f:read('*a')or'';f:close()
+    local ok,d=pcall(decodeJson,raw)
+    if not ok or not safe_data(d)then return false end
+    A.data=d
+    if A.data.session and type(A.data.session.routes)~='table'then A.data.session=nil end
+    return true
+end
+function A.save()
+    local ok,raw=pcall(encodeJson,A.data)
+    if not ok or type(raw)~='string'then return false,'encode'end
+    local tmp=A.path..'.tmp'
+    local f,err=io.open(tmp,'wb')
+    if not f then return false,err end
+    local wrote,why=f:write(raw);local closed,close_err=f:close()
+    if not wrote or not closed then os.remove(tmp);return false,why or close_err or'write'end
+    local renamed,rename_err=os.rename(tmp,A.path)
+    if not renamed then os.remove(tmp);return false,rename_err or'rename'end
+    return true
+end
+local function changed()
+    A.revision=A.revision+1
+    local ok,err=A.save()
+    A.save_error=not ok and tostring(err)or nil
+    if not ok and DSP.flog then DSP.flog('ARB AGENT save failed: '..tostring(err))end
+    if M.invalidate_arbitrage then M.invalidate_arbitrage()end
+    return ok,err
+end
+local function active()
+    local s=A.data.session
+    if not s or s.ended or s.sid~=server()
+        or(num(s.started,0)or 0)<cycle_start(os.time())then return nil end
+    return s
+end
+function A.active()return active()end
+function A.is_open()
+    return DSP.settings.arb_agent_open==true and active()~=nil
+end
+function A.show(value)
+    DSP.settings.arb_agent_open=value~=false
+    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
+    elseif DSP.save_settings then DSP.save_settings()end
+end
+function A.stop()
+    local s=active()
+    if not s then return false,'Нет активной сессии'end
+    s.ended=os.time()
+    A.show(false)
+    return changed()
+end
+local function record_snapshot(route,sid)
+    if type(route)~='table'or not route.sell_offer or not route.buy_offer
+        or not route.row then return nil end
+    local q=num(route.tradable_qty,1,1000000000)
+    local cost=num(route.p_buy,1,MAX)
+    local price=num(route.p_sell,1,MAX)
+    if not q or not cost or not price or price<=cost or q*math.max(cost,price)>MAX then return nil end
+    local row=route.row
+    local sell=route.sell_offer
+    local buy=route.buy_offer
+    local cut=cycle_start(os.time())
+    -- Do not requeue a previous server-day quote after the expected 05:00 restart.
+    local sell_at,buy_at=num(sell.ts,1),num(buy.ts,1)
+    if (sell_at and sell_at<cut)or(buy_at and buy_at<cut)then return nil end
+    local sk=key(sid,row,'sell',sell)
+    local bk=key(sid,row,'buy',buy)
+    local ts=os.time()
+    local entry={
+        id='',sid=sid,name=tostring(route.name or row.display or row.name or'?'),
+        item_key=tostring(row.key or''),ench=num(row.ench,0,1000)or 0,
+        qty=q,bought=0,sold=0,buy_price=cost,sell_price=price,
+        seller_shop=tostring(sell.shop or'?'),buyer_shop=tostring(buy.shop or'?'),
+        seller_owner=tostring(sell.owner or'?'),buyer_owner=tostring(buy.owner or'?'),
+        seller_quote=sk,buyer_quote=bk,
+        seller_ts=num(sell.ts,0)or 0,buyer_ts=num(buy.ts,0)or 0,
+        proposed_profit=num(route.net_profit,0)or 0,created=ts
+    }
+    entry.id=sk..'>'..bk
+    return entry
+end
+local function route_pending(e)
+    return not e.skipped and e.sold<e.qty
+end
+local function count_open(s)
+    local n=0
+    for _,e in ipairs(s.routes)do if route_pending(e)then n=n+1 end end
+    return n
+end
+local function append_routes(routes,cap)
+    local s=active()
+    if not s then return 0 end
+    local seen={}
+    for _,e in ipairs(s.routes)do seen[e.id]=true end
+    local fresh=0;local open=count_open(s)
+    for _,r in ipairs(routes or{})do
+        if open>=(cap or 24)or #s.routes>=250 then break end
+        local entry=record_snapshot(r,s.sid)
+        if entry and not seen[entry.id]then
+            seen[entry.id]=true
+            s.routes[#s.routes+1]=entry
+            open=open+1;fresh=fresh+1
+        end
+    end
+    if fresh>0 then changed()end
+    return fresh
+end
+function A.start(routes)
+    if server()==0 then return false,'Сервер ещё не определён'end
+    local s=active()
+    if not s then
+        A.data.session={sid=server(),started=os.time(),routes={},focus=1,last_review=0,
+            tax_bp=num(DSP.settings.tax_bp,0,10000)or 200}
+    end
+    local n=append_routes(routes,24)
+    if n==0 and #A.data.session.routes==0 then
+        A.data.session=nil
+        return false,'Новых пригодных маршрутов пока нет'
+    end
+    A.show(true)
+    return true,n
+end
+function A.add_plan(plan)
+    local routes=plan and plan.routes
+    if type(routes)~='table'or#routes==0 then return false,'В плане нет маршрутов'end
+    return A.start(routes)
+end
+function A.start_market()
+    if M.state.status=='cache'or M.state.status=='error'then
+        return false,'Нет свежего рынка; проверьте API или локальный скан'
+    end
+    local groups,status
+    if M.arbitrage_grouped_ui then groups,status=M.arbitrage_grouped_ui()
+    else groups=M.arbitrage_grouped();status='ready'end
+    if status~='ready'or not groups then return false,'Рынок ещё рассчитывается'end
+    local routes={}
+    for _,g in ipairs(groups)do for _,r in ipairs(g.routes or{})do routes[#routes+1]=r end end
+    table.sort(routes,function(a,b)return(tonumber(a.net_profit)or 0)>(tonumber(b.net_profit)or 0)end)
+    return A.start(routes)
+end
+-- A locally scanned route can join the same session if both quantities are known.
+-- The local quote identity is separate from remote API identities.
+function A.add_local_route(r)
+    if type(r)~='table' or not num(r.qty,1,1000000000)then
+        return false,'Скан не подтвердил количество с обеих сторон'
+    end
+    local item_key=tostring(r.id or'?')..':'..tostring(r.ench or 0)
+    local row={key=item_key,display=r.name,ench=r.ench or 0}
+    local sell={shop=r.seller_shop,owner=r.seller_owner,price=r.buy_price,ts=r.seller_at}
+    local buy={shop=r.buyer_shop,owner=r.buyer_owner,price=r.sell_price,ts=r.buyer_at}
+    local p={row=row,name=r.name,sell_offer=sell,buy_offer=buy,
+        tradable_qty=r.qty,p_buy=r.buy_price,p_sell=r.sell_price,net_profit=r.profit_total or 0}
+    return A.add_plan({routes={p}})
+end
+function A.get(index)
+    local s=active()
+    return s and s.routes[index],s
+end
+function A.focus(index)
+    local s=active()
+    if not s then return false end
+    index=num(index,1,#s.routes)
+    if not index then return false end
+    s.focus=index
+    A.save()
+    return true
+end
+function A.next(step)
+    local s=active()
+    if not s or #s.routes==0 then return false end
+    local count=#s.routes;local i=num(s.focus,1,count)or 1
+    for _=1,count do
+        i=((i-1+(step or 1))%count)+1
+        if route_pending(s.routes[i])then return A.focus(i)end
+    end
+    return A.focus(i)
+end
+function A.stats()
+    local s=active();local out={routes=0,done=0,skipped=0,bought=0,sold=0,
+        pending=0,profit_estimate=0,spent_estimate=0}
+    if not s then return out end
+    out.routes=#s.routes
+    local bp=num(s.tax_bp,0,10000)or num(DSP.settings.tax_bp,0,10000)or 200
+    local factor=10000-bp
+    for _,e in ipairs(s.routes)do
+        local b=num(e.bought,0)or 0;local sold=num(e.sold,0)or 0
+        out.bought=out.bought+b;out.sold=out.sold+sold
+        if e.skipped then out.skipped=out.skipped+1
+        elseif sold==e.qty then out.done=out.done+1
+        else out.pending=out.pending+1 end
+        -- Confirming a trade does not prove the actual receipt amount.
+        -- These figures remain estimates at originally quoted prices/tax.
+        local gross=sold*e.sell_price
+        local revenue=math.floor(gross/10000)*factor+math.floor((gross%10000)*factor/10000)
+        out.profit_estimate=out.profit_estimate+revenue-sold*e.buy_price
+        out.spent_estimate=out.spent_estimate+b*e.buy_price
     end
     return out
 end
-function L.flush()
-    if not L._dirty then return true end
-    local ok,json=pcall(encodeJson,L.data);if not ok or type(json)~='string' then return false,'encode' end
-    local tmp=L.path..'.tmp';local f=io.open(tmp,'wb');if not f then return false,'open' end
-    local a,b=f:write(json),f:close();if not a or not b then return false,'write' end
-    local r,e=os.rename(tmp,L.path);if not r then return false,e end
-    L._dirty=false;return true
+local function consumed_entry(quote)
+    return A.data.consumed[quote]
 end
-function L.load()
-    local f=io.open(L.path,'rb');if not f then return false end
-    local raw=f:read('*a') or '';f:close();local ok,d=pcall(decodeJson,raw)
-    if ok and type(d)=='table' and type(d.servers)=='table' then L.data=d;L.data.schema=L.schema;return true end
-    return false
+local function consume(quote,n,at)
+    local c=consumed_entry(quote)or{qty=0,at=0}
+    c.qty=(num(c.qty,0)or 0)+n;c.at=at
+    A.data.consumed[quote]=c
 end
-function L.command(param)
-    param=clean(param or '')
-    local st=L.stats()
-    if param=='' then
-        if DSP.notify then DSP.notify(('Lombard: items=%d pages=%d history=%d scans=%d'):format(st.items,st.pages,st.history_items,st.scans)) end
-        return
+function A.confirm(index,side,amount)
+    local e,s=A.get(index)
+    if not e or not s then return false,'Нет такой сделки'end
+    if e.skipped then return false,'Сделка пропущена'end
+    if side~='buy'and side~='sell'then return false,'Неизвестный тип'end
+    local limit=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
+    local q=num(amount,1,limit)
+    if not q then return false,'Количество превышает оставшийся лимит'end
+    local at=os.time()
+    if side=='buy'then
+        e.bought=e.bought+q;e.bought_at=at
+        consume(e.seller_quote,q,at)
+    else
+        e.sold=e.sold+q;e.sold_at=at
+        consume(e.buyer_quote,q,at)
     end
-    local rows=L.search(param);if DSP.notify then DSP.notify('Lombard search "'..param..'": '..#rows) end
-    for i=1,math.min(#rows,5) do local r=rows[i];if DSP.notify then DSP.notify((r.side or 'quote')..' '..r.name..' '..DSP.money(r.price)) end end
+    s.last_action=at
+    A.data.history[#A.data.history+1]={
+        session_started=s.started,route_id=e.id,side=side,qty=q,
+        item=e.name,at=at,method='manual',price=side=='buy'and e.buy_price or e.sell_price
+    }
+    if #A.data.history>1000 then table.remove(A.data.history,1)end
+    if A.hint and A.hint.route_id==e.id and A.hint.side==side then A.hint=nil end
+    changed()
+    if e.sold==e.qty then A.next(1)end
+    return true,q
 end
-function L.start_auto()
-    if not sampIsDialogActive or not sampIsDialogActive() then if DSP.notify then DSP.notify('Lombard: open pawnshop dialog first') end;return false end
-    local id=sampGetCurrentDialogId and sampGetCurrentDialogId() or -1
-    local title=sampGetDialogTitle and sampGetDialogTitle() or ''
-    local text=sampGetDialogText and sampGetDialogText() or ''
-    if not L.is_dialog(title,text) then if DSP.notify then DSP.notify('Lombard: current dialog not recognized') end;return false end
-    L.session=nil;L.auto_scan=true;L.observe_dialog(id,0,title,'','',text);schedule_next(id,text)
-    if DSP.notify then DSP.notify('Lombard auto scan started') end;return true
+function A.skip(index,value)
+    local e=A.get(index);if not e then return false end
+    e.skipped=value~=false
+    changed()
+    return true
 end
-function L.install()
-    if L._installed then return end;L._installed=true
-    pcall(L.load)
-    if sampRegisterChatCommand then
-        pcall(sampRegisterChatCommand,'crrlombard',L.command)
-        pcall(sampRegisterChatCommand,'crrlombardscan',function() L.start_auto() end)
+function A.remaining(row,side,offer,base,meta)
+    local q=num(base,0)or 0
+    local quote=key(server(),row,side,offer)
+    local c=quote and consumed_entry(quote)
+    if not c then return q,meta end
+    local last=num(c.at,0)or 0
+    if last<cycle_start(os.time())then return q,meta end
+    -- A newer complete game observation supersedes our local bookkeeping.
+    if meta and(meta.source=='recent_scan'or meta.source=='game_observed')
+        and (num(meta.at,0)or 0)>last then return q,meta end
+    return math.max(0,q-(num(c.qty,0)or 0)),{source='local_execution',at=last}
+end
+local base_offer_qty=M.offer_quantity
+if type(base_offer_qty)=='function'and not A._quantity_hook then
+    M.offer_quantity=function(row,side,offer,now)
+        local q,meta=base_offer_qty(row,side,offer,now)
+        return A.remaining(row,side,offer,q,meta)
     end
-    local ok,sampev=pcall(require,'samp.events')
-    if ok and sampev then
-        local prev=sampev.onShowDialog
-        sampev.onShowDialog=function(id,style,title,b1,b2,text)
-            local seen=false;local good,ret=pcall(L.observe_dialog,id,style,title,b1,b2,text);if good then seen=ret end
-            if seen then schedule_next(id,text) end
-            if prev then return prev(id,style,title,b1,b2,text) end
+    A._quantity_hook=true
+end
+local function matches_receipt(entry,side,name,amount)
+    if not eq(entry.name,name)or entry.skipped then return false end
+    local limit=side=='buy'and(entry.qty-entry.bought)or(entry.bought-entry.sold)
+    local unit=side=='buy'and entry.buy_price or entry.sell_price
+    return limit>0 and amount>0 and amount%unit==0 and amount/unit<=limit
+end
+function A.observe_receipt(side,name,amount)
+    if side~='buy'and side~='sell'then return false end
+    amount=num(amount,1);if not amount then return false end
+    local s=active()
+    if not s then return false end
+    local matched,qty=nil,nil
+    for i,e in ipairs(s.routes)do
+        if matches_receipt(e,side,name,amount)then
+            if matched then A.hint=nil;return false end -- ambiguous
+            matched=i;qty=amount/(side=='buy'and e.buy_price or e.sell_price)
         end
     end
-    if lua_thread and lua_thread.create and wait then
-        lua_thread.create(function() while true do wait(2500);if L._dirty then pcall(L.flush) end end end)
+    if matched then
+        A.hint={index=matched,route_id=s.routes[matched].id,side=side,
+            qty=qty,amount=amount,at=os.time()}
+        return true
+    end
+    return false
+end
+local log_market=DSP.craglog and DSP.craglog.log_market
+if type(log_market)=='function'and not A._receipt_hook then
+    DSP.craglog.log_market=function(direction,item,amount,raw)
+        local ok,err=log_market(direction,item,amount,raw)
+        if ok then pcall(A.observe_receipt,direction,item,amount)end
+        return ok,err
+    end
+    A._receipt_hook=true
+end
+function A.review_market()
+    local s=active();if not s then return false end
+    local now=os.time()
+    if now-(num(s.last_review,0)or 0)<60 then return false end
+    s.last_review=now
+    -- 60-second review is LOCAL; it never bypasses market API backoff.
+    if M.state.status~='live'then return false end
+    local groups,status
+    if M.arbitrage_grouped_ui then groups,status=M.arbitrage_grouped_ui()
+    else groups=M.arbitrage_grouped();status='ready'end
+    if status~='ready'or not groups then return false end
+    local routes={}
+    for _,g in ipairs(groups)do for _,r in ipairs(g.routes or{})do routes[#routes+1]=r end end
+    table.sort(routes,function(a,b)return(tonumber(a.net_profit)or 0)>(tonumber(b.net_profit)or 0)end)
+    return append_routes(routes,24)>0
+end
+function A.install()
+    if A.installed then return end
+    A.installed=true
+    A.load()
+    -- Keep a finished session available in history but never reactivate it.
+    if imgui and imgui.OnFrame then
+        imgui.OnFrame(A.is_open,function()
+            local ok,err=xpcall(A.draw,debug.traceback)
+            if not ok then
+                if DSP.flog then DSP.flog('ARB AGENT UI: '..tostring(err))end
+                A.show(false)
+            end
+        end)
     end
 end
 return true
+
 end
-__mod_46c_lombard()
+__mod_69a_arbitrage_agent()
+
+local function __mod_69b_arbitrage_agent_ui()
+-- Compact floating assistant for an entire arbitrage session (not one route).
+-- Controls never send trades; all execution acknowledgement is explicit.
+local A=DSP.arb_agent
+local M=DSP.market
+local U=DSP.ui
+local V=DSP.ui22
+local function cp(v)return DSP.utf8(tostring(v or''))end
+local function btn(label,id,w,h)
+    return imgui.Button(cp(label)..'##arb_agent_'..id,imgui.ImVec2(w or -1,h or 34))
+end
+local function text(s)imgui.Text(cp(s))end
+local function muted(s)imgui.TextDisabled(cp(s))end
+local function good(s)imgui.TextColored(DSP.theme.col('good',1),cp(s))end
+local function bad(s)imgui.TextColored(DSP.theme.col('bad',1),cp(s))end
+local function fmt(n)return DSP.money(tonumber(n)or 0)end
+local function notify(msg)
+    A.ui_message=tostring(msg or'')
+    if DSP.flog then DSP.flog('ARB AGENT: '..A.ui_message)end
+end
+local function selected(s)
+    local i=math.min(math.max(1,tonumber(s.focus)or 1),math.max(1,#s.routes))
+    return s.routes[i],i
+end
+local function flag(e)
+    if e.skipped then return 'ПРОПУЩЕНО' end
+    if e.sold==e.qty then return 'ЗАВЕРШЕНО' end
+    if e.bought==0 then return 'КУПИТЬ' end
+    if e.bought<e.qty then return 'ДОКУПИТЬ' end
+    return 'СДАТЬ'
+end
+local function geometry(sw,sh)
+    local p=DSP.settings.arb_agent_window or{}
+    local maxw=math.max(220,sw-16)
+    local maxh=math.max(180,sh-16)
+    local w=DSP.clamp(tonumber(p.w)or math.min(360,maxw),math.min(280,maxw),maxw)
+    local h=DSP.clamp(tonumber(p.h)or math.min(440,maxh),math.min(280,maxh),maxh)
+    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w-10),0,math.max(0,sw-w)),
+        y=DSP.clamp(tonumber(p.y)or math.max(8,sh*.16),0,math.max(0,sh-h))}
+end
+local function save_geometry(g,dx,dy,dw,dh,io)
+    local sw,sh=io.DisplaySize.x,io.DisplaySize.y
+    local x=DSP.clamp(g.x+(dx or 0),0,math.max(0,sw-g.w))
+    local y=DSP.clamp(g.y+(dy or 0),0,math.max(0,sh-g.h))
+    local w=DSP.clamp(g.w+(dw or 0),math.min(280,sw-16),sw-x)
+    local h=DSP.clamp(g.h+(dh or 0),math.min(280,sh-16),sh-y)
+    DSP.settings.arb_agent_window={x=x,y=y,w=w,h=h}
+    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
+end
+local function header(s,g,io)
+    local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+    if btn('АРБИТРАЖ / MOVE','drag',math.max(65,g.w-119),32)then end
+    if imgui.IsItemActive()and io.MouseDelta then
+        local d=io.MouseDelta
+        if d.x~=0 or d.y~=0 then save_geometry(g,d.x,d.y,0,0,io)end
+    end
+    imgui.SameLine(0,4)
+    if btn(A.queue_expanded and '-' or '+','queue_toggle',33,32)then
+        A.queue_expanded=not A.queue_expanded
+    end
+    imgui.SameLine(0,4)
+    if btn('X','close',34,32)then A.show(false)end
+end
+local function summary(s)
+    local st=A.stats()
+    good('Сделок: '..st.done..' / '..st.routes..'  |  В работе: '..st.pending)
+    text('Куплено: '..st.bought..'  |  Сдано: '..st.sold)
+    good('Прибыль ~ '..fmt(st.profit_estimate))
+    muted('Расчёт по ценам плана, не подтверждённая касса')
+    local updated=M.state and M.state.updated or 0
+    muted('API: '..(M.freshness and M.freshness()or'нет данных')..' | обзор каждые 60 с')
+end
+local function queue(s)
+    local total=#s.routes
+    if total==0 then muted('Маршрутов пока нет');return end
+    A.queue_page=math.max(1,math.min(tonumber(A.queue_page)or 1,math.ceil(total/5)))
+    local pages=math.ceil(total/5)
+    muted('Все маршруты, включая завершённые: '..total)
+    local first=(A.queue_page-1)*5+1
+    for i=first,math.min(total,first+4)do
+        local e=s.routes[i]
+        local label=(i==s.focus and '* 'or'')..tostring(i)..'. '..e.name..
+            ' | '..flag(e)..' '..e.sold..'/'..e.qty
+        if btn(label,'route_'..i,-1,30)then A.focus(i);A.qty_key=nil end
+    end
+    if pages>1 then
+        if btn('<','queue_prev',52,28)then A.queue_page=math.max(1,A.queue_page-1)end
+        imgui.SameLine(0,5)
+        muted('Страница '..A.queue_page..'/'..pages)
+        imgui.SameLine(0,5)
+        if btn('>','queue_next',52,28)then A.queue_page=math.min(pages,A.queue_page+1)end
+    end
+end
+-- Normal ImGui input is used intentionally: unavailable native exotic widgets
+-- must not make the floating assistant impossible to close.
+function A.draw()
+    local s=A.active()
+    if not s then A.show(false);return end
+    if A.review_market then A.review_market()end
+    local io=imgui.GetIO()
+    local g=geometry(io.DisplaySize.x,io.DisplaySize.y)
+    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
+    local colors=DSP.theme.push_window()
+    imgui.SetNextWindowBgAlpha(.90)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,6))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(5,5))
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,6)
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoResize+imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar
+    if imgui.Begin('##palatka_arbitrage_agent',nil,flags)then
+        if imgui.SetWindowFontScale then
+            imgui.SetWindowFontScale(1)
+            local fs=imgui.GetFontSize()
+            imgui.SetWindowFontScale(math.min(1.15,15/math.max(1,fs)))
+        end
+        header(s,g,io)
+        imgui.Separator()
+        if imgui.BeginChild('##arb_agent_scroll',imgui.ImVec2(0,-40),false)then
+            summary(s)
+            imgui.Separator()
+            if A.queue_expanded then
+                queue(s)
+                if not A.end_confirm then
+                    if btn('Завершить сессию','end_session',-1,28)then A.end_confirm=true end
+                else
+                    bad('Завершить текущую сессию? История останется.')
+                    if btn('Да, завершить','end_yes',-1,30)then
+                        A.stop();A.end_confirm=false
+                    end
+                    if btn('Отмена','end_cancel',-1,28)then A.end_confirm=false end
+                end
+                imgui.Separator()
+            end
+            local e,index=selected(s)
+            if e then
+                text('МАРШРУТ '..index..' / '..#s.routes..' | '..flag(e))
+                text(V.fit(e.name,math.max(100,imgui.GetContentRegionAvail().x-8)))
+                muted('План: '..e.qty..' шт. | ожидание ~ '..fmt(e.proposed_profit))
+                muted('Куплено '..e.bought..' / '..e.qty..' | Продано '..e.sold..' / '..e.qty)
+                -- Confirming each step updates the local offer ledger, never cash history.
+                if e.skipped then
+                    if btn('Вернуть','restore',-1)then A.skip(index,false)end
+                else
+                    local side=e.bought<e.qty and'buy'or'sell'
+                    local remaining=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
+                    if remaining>0 then
+                        local shop=side=='buy'and e.seller_shop or e.buyer_shop
+                        local owner=side=='buy'and e.seller_owner or e.buyer_owner
+                        local unit=side=='buy'and e.buy_price or e.sell_price
+                        text(side=='buy'and'КУПИТЬ' or'СДАТЬ')
+                        text('Лавка #'..shop..' | '..owner)
+                        text('x'..remaining..' | '..fmt(unit)..'/шт.')
+                        if btn('Найти лавку #'..shop,'target',-1)then
+                            if not M.mark_shop(shop)then notify('Метка недоступна')end
+                        end
+                        local input_key=e.id..':'..side
+                        if A.qty_key~=input_key then A.qty_key=input_key;A.qty_field=imgui.new.int(remaining)end
+                        muted('Подтвердить количество:')
+                        imgui.SetNextItemWidth(math.min(160,imgui.GetContentRegionAvail().x))
+                        imgui.InputInt('##arb_agent_qty',A.qty_field,1,10)
+                        if btn(side=='buy'and'КУПЛЕНО' or'ПРОДАНО','confirm',-1,39)then
+                            local ok,why=A.confirm(index,side,A.qty_field[0])
+                            if ok then A.qty_key=nil;notify('Подтверждено: '..e.name)
+                            else notify(tostring(why))end
+                        end
+                        local hint=A.hint
+                        if hint and hint.route_id==e.id and hint.side==side then
+                            muted('Похожий чек: '..hint.qty..' шт. (не автозачёт)')
+                            if btn('Подтвердить чек','accept_receipt',-1)then
+                                local ok,why=A.confirm(index,side,hint.qty)
+                                if ok then A.qty_key=nil;notify('Чек подтверждён')
+                                else notify(tostring(why))end
+                            end
+                        end
+                    else good('Маршрут выполнен')end
+                end
+            else
+                muted('Маршруты появятся после сканирования рынка')
+            end
+        end
+        imgui.EndChild()
+        if A.save_error then bad('Запись не сохранена: '..tostring(A.save_error))end
+        if A.ui_message then muted(V.fit(A.ui_message,math.max(80,g.w-32)))end
+        if btn('<','previous',47,30)then A.next(-1);A.qty_key=nil end
+        imgui.SameLine(0,5)
+        if btn('>','next',47,30)then A.next(1);A.qty_key=nil end
+        imgui.SameLine(0,5)
+        local e,i=selected(s)
+        if e and btn('Пропустить','skip',100,30)then A.skip(i,true);A.next(1);A.qty_key=nil end
+        imgui.SameLine(0,5)
+        if btn('Меню','main',65,30)then
+            if U and U.set_open then U.set_open(true)end
+            if V and V.set_screen then V.set_screen('arbitrage')end
+        end
+        -- Bottom-right corner belongs to resize, not to gameplay.
+        imgui.SetCursorPos(imgui.ImVec2(g.w-44,g.h-34))
+        btn('//','size',30,27)
+        if imgui.IsItemActive()and io.MouseDelta then
+            local d=io.MouseDelta
+            if d.x~=0 or d.y~=0 then save_geometry(g,0,0,d.x,d.y,io)end
+        end
+    end
+    imgui.End()
+    imgui.PopStyleVar(3)
+    if colors and colors>0 then imgui.PopStyleColor(colors)end
+end
+return true
+
+end
+__mod_69b_arbitrage_agent_ui()
 
 local function __mod_99_main()
 -- Main entry: catalog, price base, market, UI, screens, live hooks, craglog, overlay.
@@ -43037,6 +45485,7 @@ safe('live.install',  function() DSP.live.install() end)
 safe('shop_identity.install', function() if DSP.shop_identity and DSP.shop_identity.install then DSP.shop_identity.install() end end)
 safe('trade_probe.install', function() DSP.trade_probe.install() end)
 safe('local_arb.install', function() if DSP.local_arb then DSP.local_arb.install() end end)
+safe('arb_agent.install',function() if DSP.arb_agent and DSP.arb_agent.install then DSP.arb_agent.install()end end)
 safe('storage.textdraw', function() if DSP.storage and DSP.storage.install_textdraw then DSP.storage.install_textdraw() end end)
 safe('promo.install', function() DSP.promo.install() end)
 safe('shop_marker.install', function() DSP.shop_marker.install() end)
