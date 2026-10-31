@@ -20,6 +20,7 @@ local function int(s)
 end
 local function kind_of(title)
     local s=DSP.lower(normal(title))
+    if s:find('инвентарь',1,true) then return 'inventory' end
     if s:find('áàãàæíèê',1,true) or s:find('Áàãàæíèê',1,true) then return 'trunk' end
     if s:find('øêàô',1,true) or s:find('Øêàô',1,true) then return 'cabinet' end
     if s:find('ñêëàä',1,true) or s:find('Ñêëàä',1,true) or s:find('õðàíèëèùå',1,true) or s:find('Õðàíèëèùå',1,true) then return 'warehouse' end
