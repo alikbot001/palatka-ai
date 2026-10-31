@@ -80,9 +80,17 @@ local function loot_map(summary)
     return map
 end
 local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
 function C.drop_sales_stats(period,query)
     period=period or'day';query=query or''
-    local inv_rev=tostring(DSP.auto and DSP.auto.inv_status or'')..':'..tostring(DSP.auto and #(DSP.auto.inv or{}) or 0)
+    local inv_rev=inventory_signature()
     local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
         DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
     if cache[sig] then return cache[sig] end
@@ -94,8 +102,9 @@ function C.drop_sales_stats(period,query)
     local inv,inventory_ready=inventory_map()
     local all_keys={}
     for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
     for k in pairs(sold) do all_keys[k]=true end
-    for k in pairs(inv) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
     local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
         inventory_total=0,inventory_ready=inventory_ready,approx=false}
     for k in pairs(all_keys) do
