@@ -1,7 +1,7 @@
--- Palatka AI v2.9.2 mobile release, built from src/*.lua
+-- Palatka AI v2.9.3 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.2')
+script_version('2.9.3')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1783609
+DSP.item_icon_blob_offset = 1783675
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.9.2'
+DSP.version = '2.9.3'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -39646,7 +39646,8 @@ local function __mod_49b_promo_mh_options()
 -- Market Helper style template controls over Palatka's safe chat-command queue.
 -- Manual "send now" can run every enabled row with a configurable inter-line pause.
 local P=DSP.promo
-if P._mh_options_installed then return true end
+if P._mh_options_v293_installed then return true end
+P._mh_options_v293_installed=true
 P._mh_options_installed=true
 P.MIN_INTERVAL=30
 local function int(v,min,max)
@@ -45578,7 +45579,8 @@ local function __mod_68b_promo_universal_ui()
 -- Market Helper pattern: template title and editable chat commands in one panel.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
-if V._promo292_installed then return true end
+if V._promo293_installed then return true end
+V._promo293_installed=true
 V._promo292_installed=true
 local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
 local function txt(s)return DSP.utf8(tostring(s or''))end
@@ -45726,7 +45728,7 @@ function V.promo_screen()
         (left and(' | следующая через '..left..'с')or''))
     if V.mhpromo_error or P.last_error then V.red(tostring(V.mhpromo_error or P.last_error))end
     V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
-    V.muted('Интерфейс Palatka MH / сборка 2.9.2')
+    V.muted('Интерфейс Palatka MH / сборка 2.9.3')
     V.list_rows('mhpromo_templates',settings.templates,124,function(t,i)
         V.row('mhpromo_t_'..i,124,function(w,x,y)
             local lo=tonumber(t.interval_min)or 0
@@ -46367,7 +46369,7 @@ function A.draw()
         local st=A.stats()
         quiet('Завершено '..st.done..'/'..st.routes..' · В работе '..st.pending)
         green('Ожидаемый результат ~ '..money(st.profit_estimate))
-        quiet('Мини-агент Palatka / сборка 2.9.2')
+        quiet('Мини-агент Palatka / сборка 2.9.3')
         imgui.Separator()
         if A.queue_expanded then
             route_queue(s)
@@ -46569,7 +46571,7 @@ __mod_69c_arbitrage_status()
 local function __mod_69d_runtime_diagnostic()
 -- In-game verification for actively loaded UI modules, not just the version manifest.
 local V,C,A,P=DSP.ui22,DSP.craglog,DSP.arb_agent,DSP.promo
-DSP.active_ui_build='2.9.2'
+DSP.active_ui_build='2.9.3'
 DSP.active_ui_refs={
     agent=A and A.draw, journal=C and C.draw,
     journal_tab=V and V.journal, promo=V and V.promo_screen
