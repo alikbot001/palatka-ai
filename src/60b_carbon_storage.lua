@@ -51,7 +51,8 @@ function V.storage_screen()
                 local statuses={idle='Ожидает открытия',receiving='Получение данных',
                     saved='Последний багажник сохранён',saved_from_disk='Есть старый снимок',
                     incomplete='Недостаточно слотов',unknown_partial='Получена лишь часть',
-                    unverified_delta='Непроверенное изменение',save_error='Ошибка сохранения'}
+                    unverified_delta='Непроверенное изменение',save_error='Ошибка сохранения',
+                    no_packets='Полный снимок не получен'}
                 V.text('БАГАЖНИК · сканирование')
                 if b((t.autoscan_enabled and 'Автоскан: ВКЛ' or 'Автоскан: ВЫКЛ'),
                      'toggle_trunk_auto',math.min(width,250),t.autoscan_enabled,t.autoscan_enabled) then
@@ -105,15 +106,41 @@ function V.storage_screen()
                             V.muted('Нет цен для '..info.missing_prices..' строк.')
                         end
                     end
-                    if b('НАЗВАТЬ И СОХРАНИТЬ','name_trunk',math.min(width,310),false,true)then
-                        V.storage_name_target=t.snapshot
-                        V.storage_name_buf=imgui.new.char[128]()
-                        V.storage_name_error=nil
-                        V.open_popup('Сохранить багажник','storage_trunk_name')
+                    local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
+                    if update_target then
+                        V.green('ГОТОВО ДЛЯ ОБНОВЛЕНИЯ: '..tostring(update_target.title))
+                        V.muted('Новый скан ещё НЕ записан поверх сохранённого хранилища.')
+                        if b('ПРИМЕНИТЬ К '..tostring(update_target.title),'apply_update',math.min(width,330),false,true)then
+                            local ok,updated=S.apply_latest_to_saved(update_target.id)
+                            if ok then
+                                local _,idx=S.find_snapshot(updated.id)
+                                V.storage_selected=idx or 1
+                                V.storage_library_page='detail'
+                                V.storage_tab='snapshots'
+                                V.storage_error=nil
+                                return
+                            else
+                                V.storage_error=tostring(updated)
+                            end
+                        end
+                        if b('СОХРАНИТЬ КАК НОВОЕ','save_update_as_new',math.min(width,300))then
+                            V.storage_name_target=t.snapshot
+                            V.storage_name_buf=imgui.new.char[128]()
+                            V.storage_name_error=nil
+                            V.open_popup('Сохранить багажник','storage_trunk_name')
+                        end
+                    else
+                        if b('СОХРАНИТЬ КАК НОВОЕ','name_trunk',math.min(width,300),false,true)then
+                            V.storage_name_target=t.snapshot
+                            V.storage_name_buf=imgui.new.char[128]()
+                            V.storage_name_error=nil
+                            V.open_popup('Сохранить багажник','storage_trunk_name')
+                        end
                     end
-                    V.muted('Название относится к этому снимку, не к ID автомобиля.')
-                    if b('Посмотреть последний багажник','view_trunk',math.min(width,310),false,true)then
+                    V.muted('Название закрепляется за сохранённой записью, не за последним сканом.')
+                    if b('Открыть последний скан','view_trunk',math.min(width,280))then
                         V.storage_tab='snapshots'
+                        V.storage_library_page='detail'
                         for i,snap in ipairs(S.snapshots or {})do
                             if snap==t.snapshot or (snap.source=='packet220_trunk' and snap.kind=='trunk') then
                                 V.storage_selected=i;break
@@ -127,8 +154,8 @@ function V.storage_screen()
             else
                 V.red('Диагностика этого контейнера недоступна в данной сборке.')
             end
-            if b('Снимки и сохранённые вещи','show_snapshots',math.min(width,290))then
-                V.storage_tab='snapshots';V.storage_selected=1
+            if b('МОИ ХРАНИЛИЩА','show_snapshots',math.min(width,260),false,true)then
+                V.storage_tab='snapshots';V.storage_library_page='list'
             end
             if b('Ввести список вручную','manual_open',math.min(width,250))then
                 V.storage_tab='manual'
