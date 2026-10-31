@@ -321,7 +321,14 @@ function L.save_observation(rows,source)
     return commit_session(session,source or 'packet_unverified')
 end
 function L.start_auto()
-    if not sampIsDialogActive or not sampIsDialogActive() then if DSP.notify then DSP.notify('Lombard: open pawnshop dialog first') end;return false end
+    if not sampIsDialogActive or not sampIsDialogActive() then
+        if L.packet_probe and L.packet_probe.arm then
+            L.packet_probe.arm(35)
+            if DSP.notify then DSP.notify('Lombard: listening for native pawnshop menu (35 sec)')end
+            return true
+        end
+        return false
+    end
     local id=sampGetCurrentDialogId and sampGetCurrentDialogId() or -1
     local title=sampGetDialogTitle and sampGetDialogTitle() or ''
     local text=sampGetDialogText and sampGetDialogText() or ''
@@ -335,6 +342,9 @@ function L.install()
     if sampRegisterChatCommand then
         pcall(sampRegisterChatCommand,'crrlombard',L.command)
         pcall(sampRegisterChatCommand,'crrlombardscan',function() L.start_auto() end)
+        pcall(sampRegisterChatCommand,'crrlombardui',function()
+            if DSP.ui21 and DSP.ui21.set_screen then DSP.ui21.set_screen('lombard') end
+        end)
     end
     local ok,sampev=pcall(require,'samp.events')
     if ok and sampev then
