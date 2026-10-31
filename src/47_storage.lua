@@ -570,6 +570,7 @@ function S.save_named_trunk(snapshot,label)
             return false,tostring(err or saved or 'save failed')
         end
     end
+    T.completed_update_target_id=nil
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,named
 end
