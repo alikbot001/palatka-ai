@@ -1,7 +1,7 @@
--- Palatka AI v2.9.1 mobile release, built from src/*.lua
+-- Palatka AI v2.9.2 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.1')
+script_version('2.9.2')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1761991
+DSP.item_icon_blob_offset = 1763491
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.9.1'
+DSP.version = '2.9.2'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -44284,12 +44284,79 @@ end
 end
 __mod_66_ui22_journal()
 
+local function __mod_66a_trade_log_tab_mh()
+-- Trade-first journal tab, adapted from Market Helper log list.
+-- Original reward/payday detail UI remains reachable if needed.
+local V,M,C=DSP.ui22,DSP.mobile,DSP.craglog
+local original=V.journal
+local function b(label,id,width,on)
+    return V.button(label,'tradelog_'..id,width,on)
+end
+local function line(e)
+    if C.trade_feed_line then return C.trade_feed_line(e)end
+    return tostring(e.item_name or'')..' '..DSP.money(e.amount or 0)
+end
+function V.journal()
+    if V.trade_full_history and original then
+        if b('Торговый журнал','trade_tab',200,true)then V.trade_full_history=false end
+        return original()
+    end
+    local s=DSP.settings.craglog or{}
+    DSP.settings.craglog=s
+    V.heading('Торговый журнал',function()
+        if b(s.open and'Скрыть окно' or'Показать окно','toggle',161,s.open)then
+            if C.toggle then C.toggle()end
+        end
+    end,175)
+    V.muted('Только подтверждённые продажи и покупки, без расчётных сделок арбитража.')
+    if b('Все','all',88,V.trade_filter=='all' or not V.trade_filter)then V.trade_filter='all'end
+    V.inline(5)
+    if b('Продажи','sell',112,V.trade_filter=='sell')then V.trade_filter='sell'end
+    V.inline(5)
+    if b('Скупка','buy',112,V.trade_filter=='buy')then V.trade_filter='buy'end
+    V.inline(5)
+    if b('Подробная история','full',183)then V.trade_full_history=true end
+    V.muted('Плавающий лог: прозрачность '..math.floor((tonumber(s.mh_log_alpha)or .58)*100)..'%')
+    for _,pct in ipairs({25,45,60,80})do
+        if b(pct..'%','opacity_'..pct,72,math.floor((s.mh_log_alpha or .58)*100)==pct)then
+            s.mh_log_alpha=pct/100;DSP.save_settings()
+        end
+        V.inline(4)
+    end
+    V.muted('Строк в плавающем окне: '..tostring(s.mh_log_lines or 8))
+    for _,n in ipairs({5,8,12})do
+        if b(tostring(n),'lines_'..n,68,(s.mh_log_lines or 8)==n)then
+            s.mh_log_lines=n;DSP.save_settings()
+        end
+        V.inline(4)
+    end
+    local all=C.trade_feed and C.trade_feed(40)or{}
+    local rows={}
+    for _,e in ipairs(all)do
+        if not V.trade_filter or V.trade_filter=='all' or e.direction==V.trade_filter then
+            rows[#rows+1]=e
+        end
+    end
+    if #rows==0 then V.muted('Записей продажи и скупки пока нет.')end
+    V.list_rows('tradelog_entries',rows,53,function(e,i)
+        V.row('trade_'..i,53,function(w,x,y)
+            V.at(x,y+2)
+            if e.direction=='sell' then V.green(V.fit(line(e),w-8))
+            else V.muted(V.fit(line(e),w-8))end
+        end)
+    end,{footer=function()V.muted('События сохраняются штатным журналом Palatka.')end})
+end
+return true
+
+end
+__mod_66a_trade_log_tab_mh()
+
 local function __mod_66c_mh_trade_journal()
 -- Market Helper-inspired trade log: concise receipts and totals, no loot/stat dashboard.
 -- All events originate from Palatka's verified journal; no invented transactions.
 local C,V=DSP.craglog,DSP.ui22
-if C._trade291_installed then return true end
-C._trade291_installed=true
+if C._trade292_installed then return true end
+C._trade292_installed=true
 local function u(s)return DSP.utf8(tostring(s or''))end
 local function b(s,id,w,active)return V.button(s,'trade291_'..id,w,active,false,38)end
 local function money(n)return DSP.money(math.floor(tonumber(n)or 0))end
@@ -44360,6 +44427,7 @@ function V.journal()
         if b('Мини-окно','mini',160)then C.set_minimized(false);DSP.settings.craglog.open=true;DSP.save_settings()end
     end,178)
     V.muted('Подтверждённые продажи и покупки. Без наград и лишней статистики.')
+    V.muted('Торговый журнал / сборка 2.9.2')
     V.journal_trade_period=V.journal_trade_period or'today'
     if b('Сегодня','today',136,V.journal_trade_period=='today')then V.journal_trade_period='today'end
     V.inline(6)
@@ -44447,73 +44515,6 @@ return true
 
 end
 __mod_66c_mh_trade_journal()
-
-local function __mod_66a_trade_log_tab_mh()
--- Trade-first journal tab, adapted from Market Helper log list.
--- Original reward/payday detail UI remains reachable if needed.
-local V,M,C=DSP.ui22,DSP.mobile,DSP.craglog
-local original=V.journal
-local function b(label,id,width,on)
-    return V.button(label,'tradelog_'..id,width,on)
-end
-local function line(e)
-    if C.trade_feed_line then return C.trade_feed_line(e)end
-    return tostring(e.item_name or'')..' '..DSP.money(e.amount or 0)
-end
-function V.journal()
-    if V.trade_full_history and original then
-        if b('Торговый журнал','trade_tab',200,true)then V.trade_full_history=false end
-        return original()
-    end
-    local s=DSP.settings.craglog or{}
-    DSP.settings.craglog=s
-    V.heading('Торговый журнал',function()
-        if b(s.open and'Скрыть окно' or'Показать окно','toggle',161,s.open)then
-            if C.toggle then C.toggle()end
-        end
-    end,175)
-    V.muted('Только подтверждённые продажи и покупки, без расчётных сделок арбитража.')
-    if b('Все','all',88,V.trade_filter=='all' or not V.trade_filter)then V.trade_filter='all'end
-    V.inline(5)
-    if b('Продажи','sell',112,V.trade_filter=='sell')then V.trade_filter='sell'end
-    V.inline(5)
-    if b('Скупка','buy',112,V.trade_filter=='buy')then V.trade_filter='buy'end
-    V.inline(5)
-    if b('Подробная история','full',183)then V.trade_full_history=true end
-    V.muted('Плавающий лог: прозрачность '..math.floor((tonumber(s.mh_log_alpha)or .58)*100)..'%')
-    for _,pct in ipairs({25,45,60,80})do
-        if b(pct..'%','opacity_'..pct,72,math.floor((s.mh_log_alpha or .58)*100)==pct)then
-            s.mh_log_alpha=pct/100;DSP.save_settings()
-        end
-        V.inline(4)
-    end
-    V.muted('Строк в плавающем окне: '..tostring(s.mh_log_lines or 8))
-    for _,n in ipairs({5,8,12})do
-        if b(tostring(n),'lines_'..n,68,(s.mh_log_lines or 8)==n)then
-            s.mh_log_lines=n;DSP.save_settings()
-        end
-        V.inline(4)
-    end
-    local all=C.trade_feed and C.trade_feed(40)or{}
-    local rows={}
-    for _,e in ipairs(all)do
-        if not V.trade_filter or V.trade_filter=='all' or e.direction==V.trade_filter then
-            rows[#rows+1]=e
-        end
-    end
-    if #rows==0 then V.muted('Записей продажи и скупки пока нет.')end
-    V.list_rows('tradelog_entries',rows,53,function(e,i)
-        V.row('trade_'..i,53,function(w,x,y)
-            V.at(x,y+2)
-            if e.direction=='sell' then V.green(V.fit(line(e),w-8))
-            else V.muted(V.fit(line(e),w-8))end
-        end)
-    end,{footer=function()V.muted('События сохраняются штатным журналом Palatka.')end})
-end
-return true
-
-end
-__mod_66a_trade_log_tab_mh()
 
 local function __mod_67_ui22_shop_scan()
 -- Observed stalls are separate from API snapshots and never rewrite preset prices implicitly.
@@ -45202,8 +45203,8 @@ local function __mod_68b_promo_universal_ui()
 -- Market Helper pattern: template title and editable chat commands in one panel.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
-if V._promo291_installed then return true end
-V._promo291_installed=true
+if V._promo292_installed then return true end
+V._promo292_installed=true
 local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
 local function txt(s)return DSP.utf8(tostring(s or''))end
 local function buff(str,n)
@@ -45343,6 +45344,7 @@ function V.promo_screen()
         ' | '..(P.running and(P.pause_reason or'работает')or'выключен'))
     if V.mhpromo_error then V.red(V.mhpromo_error)end
     V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
+    V.muted('Интерфейс Palatka MH / сборка 2.9.2')
     V.list_rows('mhpromo_templates',settings.templates,96,function(t,i)
         V.row('mhpromo_t_'..i,96,function(w,x,y)
             V.at(x,y);V.text(V.fit(t.name or'Шаблон',math.max(80,w-155)))
@@ -45968,6 +45970,7 @@ function A.draw()
         local st=A.stats()
         quiet('Завершено '..st.done..'/'..st.routes..' · В работе '..st.pending)
         green('Ожидаемый результат ~ '..money(st.profit_estimate))
+        quiet('Мини-агент Palatka / сборка 2.9.2')
         imgui.Separator()
         if A.queue_expanded then
             route_queue(s)
@@ -46163,6 +46166,43 @@ return true
 
 end
 __mod_69c_arbitrage_status()
+
+local function __mod_69d_runtime_diagnostic()
+-- In-game verification for actively loaded UI modules, not just the version manifest.
+local V,C,A,P=DSP.ui22,DSP.craglog,DSP.arb_agent,DSP.promo
+DSP.active_ui_build='2.9.2'
+DSP.active_ui_refs={
+    agent=A and A.draw, journal=C and C.draw,
+    journal_tab=V and V.journal, promo=V and V.promo_screen
+}
+local function report()
+    local ref=DSP.active_ui_refs or{}
+    local same=V and C and A and P and
+        A.draw==ref.agent and C.draw==ref.journal and
+        V.journal==ref.journal_tab and V.promo_screen==ref.promo and
+        type(P.save_template_options)=='function' and type(C.trade_rows)=='function'
+    local line='Palatka runtime '..tostring(DSP.version or '?')..
+        ' / UI '..tostring(DSP.active_ui_build or 'none')..
+        ' / screens '..(same and'ACTIVE' or'MISMATCH')
+    if DSP.flog then DSP.flog('CRDIAG '..line)end
+    if sampAddChatMessage then
+        sampAddChatMessage('[Palatka] '..line,0x99FFAA)
+    end
+    return same,line
+end
+DSP.ui_runtime_check=report
+if sampRegisterChatCommand and not DSP._crdiag_registered then
+    sampRegisterChatCommand('crdiag',report)
+    DSP._crdiag_registered=true
+end
+if DSP.flog then
+    local ok,msg=report()
+    DSP.flog('UI modules installed: '..tostring(ok)..' / '..tostring(msg))
+end
+return true
+
+end
+__mod_69d_runtime_diagnostic()
 
 local function __mod_99_main()
 -- Main entry: catalog, price base, market, UI, screens, live hooks, craglog, overlay.
