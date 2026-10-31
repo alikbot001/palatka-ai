@@ -1,5 +1,5 @@
 -- Palatka AI 2.8.3: compatible trunk sizes, suggestion dialog and settings protection.
-PALATKA_UPDATE_VERSION = '2.8.4'
+PALATKA_UPDATE_VERSION = '2.8.5'
 return function(DSP)
   -- Install settings guard before any other overlay can save preferences.
   local function module_settings_safety()
@@ -2049,7 +2049,1209 @@ end
     end
   end
 
-  DSP.version='2.8.4'
-  if DSP.flog then DSP.flog('Storage search beta v2.8.4 with settings safety; CRR rollback -> 2.7.0') end
+  -- Palatka AI 2.8.5: observed trade quantities and passive pawnshop scanner.
+  if DSP._v285_installed then
+    DSP.version='2.8.5'
+    return true
+  end
+  local updated,why=pcall(function()
+    do
+      local function __palatka_v285_arbitrage()
+-- Compare real offers; budget limits apply before profitability filters.
+local M = DSP.market
+local cache, signature, expires
+-- Missing shops reported by the player are hidden temporarily per server.
+-- No API timestamp is proof that a physical stall still exists.
+M.missing_shops = M.missing_shops or DSP.settings.arb_missing_shops or {}
+DSP.settings.arb_missing_shops=M.missing_shops
+M.missing_revision = M.missing_revision or 0
+local function missing_key(shop)
+    local id=tonumber(shop)
+    if not id or id<=0 or id>99999 or id%1~=0 then return nil end
+    return tostring(M.state.sid or DSP.settings.server or 0)..':'..tostring(math.floor(id))
+end
+local function record_deadline(record)
+    if type(record)=='table' then return tonumber(record.until_ts) or 0 end
+    return tonumber(record) or 0
+end
+function M.missing_deadline(record)
+    return record_deadline(record)
+end
+local function changed_missing()
+    M.missing_revision=(M.missing_revision or 0)+1
+    if M.invalidate_arbitrage then M.invalidate_arbitrage() end
+    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
+    elseif DSP.save_settings then pcall(DSP.save_settings) end
+end
+-- Numeric entries remain compatible with the v2.2.15 settings file.
+-- A confirmed game rejection persists longer and does not reappear merely
+-- because the same stale API payload was downloaded again.
+function M.is_shop_missing(shop, now, offer_ts)
+    local key=missing_key(shop)
+    if not key then return true end
+    now=now or os.time()
+    local record=M.missing_shops[key]
+    if record==nil then return false end
+    local deadline=record_deadline(record)
+    if deadline<=now then
+        M.missing_shops[key]=nil
+        return false
+    end
+    if type(record)=='table' and record.reason=='game_not_found' then
+        local observed=tonumber(offer_ts) or 0
+        local blocked=tonumber(record.snapshot_ts) or 0
+        local since=tonumber(record.since) or now
+        -- A truly newer stall *observation*, fetched after the rejection,
+        -- may be legitimate. Old API refreshes cannot erase a server verdict.
+        if observed>blocked and observed>since and observed<=now+60
+            and now>=since+300 and (tonumber(M.state.received_at) or 0)>since then
+            return false
+        end
+    end
+    return true
+end
+function M.mark_shop_missing(shop, minutes)
+    local key=missing_key(shop)
+    if not key then return false end
+    local duration=math.max(60,math.min(3600,math.floor((tonumber(minutes) or 30)*60)))
+    M.missing_shops[key]=os.time()+duration
+    changed_missing()
+    return true
+end
+function M.mark_shop_missing_from_game(shop, timestamp)
+    local key=missing_key(shop)
+    if not key then return false end
+    local now=tonumber(timestamp) or os.time()
+    local latest=0
+    for _,row in ipairs(M.state.rows or {}) do
+        for _,side in ipairs({row.sell or {},row.buy or {}}) do
+            for _,offer in ipairs(side.offers or {}) do
+                if tostring(offer.shop)==tostring(shop) then
+                    latest=math.max(latest,tonumber(offer.ts) or 0)
+                end
+            end
+        end
+    end
+    M.missing_shops[key]={reason='game_not_found',since=now,
+        until_ts=now+21600,snapshot_ts=latest}
+    changed_missing()
+    -- /findilavka feedback can arrive after the UI was closed. Persist now,
+    -- rather than relying on an ImGui frame to flush deferred settings.
+    if DSP.save_settings then pcall(DSP.save_settings) end
+    return true
+end
+function M.restore_shop(shop)
+    local key=missing_key(shop)
+    if not key then return false end
+    M.missing_shops[key]=nil
+    changed_missing()
+    return true
+end
+
+-- Match server notifications only while a /findilavka request is outstanding.
+-- They must never be attributed to an unrelated chat or arbitrary API record.
+function M.on_shop_lookup_feedback(text, timestamp)
+    local pending=M.pending_find
+    if not pending then return false end
+    local now=tonumber(timestamp) or os.time()
+    if now-(tonumber(pending.at) or 0)>8 or now<(tonumber(pending.at) or 0) then
+        M.pending_find=nil
+        return false
+    end
+    local actual=DSP.detect_server and DSP.detect_server()
+    if tonumber(pending.sid)~=tonumber(M.state.sid) or (actual and tonumber(actual)~=tonumber(pending.sid)) then
+        M.pending_find=nil
+        return false
+    end
+    local cleaned=DSP.lower(DSP.clean_text(text or '')):gsub('%s+',' ')
+    local has_stall=cleaned:find('\235\224\226\234' ,1,true) ~= nil
+    local no_stall=cleaned:find('\237\229 \241\243\249\229\241\242\226\243\229\242' ,1,true)
+        or cleaned:find('\237\229 \237\224\233\228\229\237\224' ,1,true)
+        or cleaned:find('\237\229 \237\224\233\228\229\237\238' ,1,true)
+        or cleaned:find('\238\242\241\243\242\241\242\226\243\229\242' ,1,true)
+    if not has_stall or not no_stall then return false end
+    -- Prefer an explicit number, if the server includes one. A different
+    -- number means this response is not for our request.
+    local numbered=cleaned:match('#%s*(%d+)')
+    if numbered and tonumber(numbered)~=tonumber(pending.shop) then return false end
+    M.pending_find=nil
+    if not M.mark_shop_missing_from_game(pending.shop,now) then return false end
+    if DSP.shop_marker and DSP.shop_marker.clear then DSP.shop_marker.clear() end
+    if DSP.add_log then DSP.add_log('\200\227\240\224: \235\224\226\234\224 #'..tostring(pending.shop)..' \237\229 \241\243\249\229\241\242\226\243\229\242. \211\228\224\235\229\237\224 \232\231 API-\236\224\240\248\240\243\242\238\226.','error') end
+    if DSP.flog then DSP.flog('FINDILAVKA missing shop='..tostring(pending.shop)..' sid='..tostring(pending.sid)) end
+    return true
+end
+
+local function checkpoint()
+    local hook=M.arb_yield
+    if hook and hook.owner==coroutine.running() then hook.checkpoint() end
+end
+local function sort_rows(rows,less)
+    local hook=M.arb_yield
+    if hook and hook.owner==coroutine.running() then return hook.sort(rows,less) end
+    return table.sort(rows,less)
+end
+
+function M.should_refresh(now)
+    if M.state.status == 'loading' then return false end
+    if (tonumber(M.state.next_auto_retry) or 0) > (now or os.time()) then return false end
+    local interval = math.max(180, tonumber(DSP.settings.refresh_seconds) or 300)
+    return (now or os.time()) - (M.state.last_request or 0) >= interval
+end
+
+local function integer(value, default)
+    local n = tonumber(value)
+    if not n or n ~= n or n == math.huge or n == -math.huge then return default or 0 end
+    return math.max(0, math.floor(n))
+end
+
+local function tax_factor(tax_bp)
+    return 10000 - math.min(10000, integer(tax_bp, 200))
+end
+
+local function after_tax(gross, tax_bp)
+    local factor = tax_factor(tax_bp)
+    -- Avoid multiplying a large gross amount by 10000 before dividing.
+    return math.floor(gross / 10000) * factor + math.floor((gross % 10000) * factor / 10000)
+end
+
+local function offer_qty(row,side,offer,now)
+    if M.offer_quantity then return M.offer_quantity(row,side,offer,now) end
+    return integer(offer.qty),{source='api'}
+end
+local function fresh(offer, now, filters)
+    if M.state.status=='cache' or M.state.status=='error' then return false end
+    if M.is_shop_missing(offer.shop,now,offer.ts) then return false end
+    local ts = integer(offer.ts)
+    if ts == 0 then return filters.include_unknown ~= false end
+    if ts > now + 60 then return false end
+    local max_age = integer(filters.max_age, 300)
+    return max_age == 0 or now - ts <= max_age
+end
+
+-- Build a non-overlapping purchase/resale plan. A shop's stock or demand
+-- cannot be committed twice just because it matches several other stalls.
+-- Greedy allocation prioritizes unit profit (or ROI under a cash budget).
+local function opportunities(filters, now, rows, selections)
+    local candidates, out = {}, {}
+    local tax_bp = math.min(10000, integer(filters.tax_bp, DSP.settings.tax_bp or 200))
+    local budget = integer(filters.budget)
+    local remaining_budget = budget > 0 and budget or math.huge
+    local max_qty = integer(filters.max_qty)
+    local sellers_left, buyers_left = {}, {}
+    local min_profit = integer(filters.min_profit)
+    local min_roi = tonumber(filters.min_roi) or 0
+    local reserve_pct = math.floor(math.max(0, math.min(90, tonumber(filters.safety_pct) or 0)))
+    local min_unit_profit = integer(filters.min_unit_profit)
+    local max_buy_price = integer(filters.max_buy_price)
+    local min_stock = integer(filters.min_stock)
+    local shop_mode = integer(filters.shop_mode)
+    for _, row in ipairs(rows or M.state.rows or {}) do
+        for _, seller in ipairs(row.sell.offers or {}) do
+            if (not selections or selections.sell[seller]) and fresh(seller, now, filters) then
+                local seller_qty,seller_meta=offer_qty(row,'sell',seller,now)
+                sellers_left[seller] = seller_qty
+                for _, buyer in ipairs(row.buy.offers or {}) do
+                    checkpoint()
+                    local p_buy, p_sell = integer(seller.price), integer(buyer.price)
+                    local buyer_qty,buyer_meta=offer_qty(row,'buy',buyer,now)
+                    if (not selections or selections.buy[buyer])
+                        and (seller.ench or 0) == (buyer.ench or 0)
+                        and fresh(buyer, now, filters)
+                        and p_buy > 0 and p_sell > p_buy
+                        and (max_buy_price == 0 or p_buy <= max_buy_price)
+                        and (shop_mode == 0
+                            or (shop_mode == 1 and tostring(seller.shop)==tostring(buyer.shop))
+                            or (shop_mode == 2 and tostring(seller.shop)~=tostring(buyer.shop)))
+                        and seller_qty >= math.max(1, min_stock)
+                        and buyer_qty >= math.max(1, min_stock) then
+                        local demand_qty = buyer_qty
+                        if not buyer.verified_at then
+                            local factor=100-reserve_pct
+                            -- Exact up to 2^53: do not overflow precision by multiplying
+                            -- the full inventory count before dividing by 100.
+                            demand_qty=math.floor(demand_qty/100)*factor
+                                + math.floor((demand_qty%100)*factor/100)
+                        end
+                        -- On a one-unit quote, a 10% reserve cannot be a
+                        -- fractional item. Retain 1 as a *potential* trade,
+                        -- not as a guarantee that the order still exists.
+                        if buyer_qty>0 and reserve_pct<100 then
+                            demand_qty=math.max(1,demand_qty)
+                        end
+                        -- Several sellers can share one buyer. Do not replenish
+                        -- the same demand pool for every candidate!
+                        if buyers_left[buyer]==nil then buyers_left[buyer] = demand_qty end
+                        -- Tax is rounded on the batch, not on each individual item.
+                        local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
+                        local unit_profit = after_tax(p_sell, tax_bp) - p_buy + fraction
+                        if unit_profit > 0 and unit_profit >= min_unit_profit then
+                            candidates[#candidates+1] = {
+                                row=row, seller=seller, buyer=buyer,
+                                qty_seller=seller_qty,qty_buyer=buyer_qty,
+                                seller_source=seller_meta and seller_meta.source or 'api',
+                                buyer_source=buyer_meta and buyer_meta.source or 'api',
+                                p_buy=p_buy, p_sell=p_sell, unit_profit=unit_profit,
+                                unit_roi=unit_profit / p_buy,
+                            }
+                        end
+                    end
+                end
+            end
+        end
+    end
+    sort_rows(candidates, function(a, b)
+        local av = budget > 0 and a.unit_roi or a.unit_profit
+        local bv = budget > 0 and b.unit_roi or b.unit_profit
+        if av ~= bv then return av > bv end
+        if a.unit_profit ~= b.unit_profit then return a.unit_profit > b.unit_profit end
+        if a.row.key ~= b.row.key then return a.row.key < b.row.key end
+        if a.p_buy ~= b.p_buy then return a.p_buy < b.p_buy end
+        if tostring(a.seller.shop) ~= tostring(b.seller.shop) then
+            return tostring(a.seller.shop) < tostring(b.seller.shop)
+        end
+        return tostring(a.buyer.shop) < tostring(b.buyer.shop)
+    end)
+    for _, c in ipairs(candidates) do
+        checkpoint()
+        local seller, buyer = c.seller, c.buyer
+        -- Unverified buy demand is a dated quote, not a reservation. Leave a
+        -- percentage uncommitted across all routes using this exact offer.
+        -- A player-confirmed quantity can be used without this reserve.
+        local available = math.min(sellers_left[seller] or 0, buyers_left[buyer] or 0)
+        if available > 0 and remaining_budget >= c.p_buy then
+            local qty = available
+            if max_qty > 0 then qty = math.min(qty, max_qty) end
+            -- Keep integer arithmetic inside IEEE-754's exact integer range.
+            qty = math.min(qty, math.floor(9007199254740991 / math.max(c.p_buy,c.p_sell)))
+            if remaining_budget ~= math.huge then
+                if filters.allow_partial == false and qty * c.p_buy > remaining_budget then
+                    qty = 0
+                else
+                    qty = math.min(qty, math.floor(remaining_budget / c.p_buy))
+                end
+            end
+            if qty > 0 then
+                local cost = qty * c.p_buy
+                local revenue = after_tax(qty * c.p_sell, tax_bp)
+                local profit = revenue - cost
+                local roi = profit / cost * 100
+                if profit > 0 and profit >= min_profit and roi >= min_roi then
+                    out[#out+1] = {
+                        row=c.row, name=c.row.display, ench=c.row.ench,
+                        sell_offer=seller, buy_offer=buyer,
+                        p_buy=c.p_buy, p_sell=c.p_sell,
+                        qty_seller=c.qty_seller, qty_buyer=c.qty_buyer,
+                        seller_source=c.seller_source, buyer_source=c.buyer_source,
+                        available_qty=available, tradable_qty=qty, partial=qty<available,
+                        total_cost=cost, net_revenue=revenue, net_profit=profit,
+                        roi=roi, unit_profit=c.unit_profit,
+                        sell_age=seller.ts or 0, buy_age=buyer.ts or 0,
+                        shared_stock=available<math.min(c.qty_seller,c.qty_buyer),
+                        same_shop=tostring(seller.shop)==tostring(buyer.shop),
+                        demand_verified=(tonumber(buyer.verified_at) or 0)>0,
+                        reserve_pct=(tonumber(buyer.verified_at) or 0)>0 and 0 or reserve_pct,
+                    }
+                    sellers_left[seller] = sellers_left[seller] - qty
+                    buyers_left[buyer] = buyers_left[buyer] - qty
+                    remaining_budget = remaining_budget - cost
+                end
+            end
+        end
+    end
+    local sort = tonumber(filters.sort) or 1
+    sort_rows(out, function(a,b)
+        local av, bv = a.net_profit, b.net_profit
+        if sort == 2 then av,bv = a.unit_profit,b.unit_profit end
+        if sort == 3 then av,bv = a.roi,b.roi end
+        if av ~= bv then return av > bv end
+        if a.name ~= b.name then return a.name < b.name end
+        if tostring(a.sell_offer.shop) ~= tostring(b.sell_offer.shop) then
+            return tostring(a.sell_offer.shop) < tostring(b.sell_offer.shop)
+        end
+        return tostring(a.buy_offer.shop) < tostring(b.buy_offer.shop)
+    end)
+    return out
+end
+
+-- Selection keys are scoped to an item group; distinct price bands stay separate.
+function M.offer_key(offer)
+    return table.concat({tostring(offer.shop), tostring(offer.price), tostring(offer.owner)}, '\0')
+end
+
+local function selected_offers(offers, selection)
+    local chosen, total = {}, 0
+    local listed = {}
+    for _, offer in ipairs(selection or {}) do listed[offer] = true end
+    for _, offer in ipairs(offers or {}) do
+        if selection == nil or selection[offer] or selection[M.offer_key(offer)] or listed[offer] then
+            chosen[offer] = true
+            total = total + integer(offer.qty)
+        end
+    end
+    return chosen, total
+end
+
+-- Recalculate an alternative plan from selected source offers, never from already
+-- allocated routes. nil selects all; {} selects none. Source quantities stay intact.
+-- Options override the saved filters; extra is charged once for a nonempty plan.
+function M.plan_offers(group, sellers, buyers, options)
+    local plan = {qty=0, planned=0, cost=0, gross=0, revenue=0, fee=0, extra=0, profit=0, routes={}, supply=0, demand=0}
+    if not group or not group.row then return plan end
+    local row = group.row
+    local selections = {}
+    selections.sell, plan.supply = selected_offers(row.sell.offers, sellers)
+    selections.buy, plan.demand = selected_offers(row.buy.offers, buyers)
+    local filters = {}
+    for key, value in pairs(DSP.settings.arb_filters or {}) do filters[key] = value end
+    for key, value in pairs(options or {}) do filters[key] = value end
+    plan.routes = opportunities(filters, os.time(), {row}, selections)
+    for _, route in ipairs(plan.routes) do
+        plan.qty = plan.qty + route.tradable_qty
+        plan.cost = plan.cost + route.total_cost
+        plan.gross = plan.gross + route.p_sell * route.tradable_qty
+        plan.revenue = plan.revenue + route.net_revenue
+        plan.profit = plan.profit + route.net_profit
+    end
+    plan.planned = plan.qty
+    plan.fee = plan.gross - plan.revenue
+    if plan.qty > 0 then
+        plan.extra = integer(filters.extra)
+        plan.profit = plan.profit - plan.extra
+    end
+    return plan
+end
+
+DSP.arbitrage = DSP.arbitrage or {}
+DSP.arbitrage.plan_offers = M.plan_offers
+DSP.arbitrage.offer_key = M.offer_key
+
+function M.arbitrage()
+    return opportunities({max_age=600, include_unknown=false, safety_pct=10}, os.time())
+end
+
+function M.arbitrage_filtered()
+    local f = DSP.settings.arb_filters or {}
+    local now = os.time()
+    local sig = table.concat({M.state.sid or 0, M.state.version or 0, M.state.status or '', DSP.settings.tax_bp or 200,
+        f.budget or 0, f.min_profit or 0, f.min_roi or 0, f.sort or 1,
+        f.max_age or 300, tostring(f.include_unknown == true),
+        tostring(f.allow_partial ~= false), f.max_qty or 0, f.safety_pct or 0,
+        f.tax_bp or 'global',f.min_unit_profit or 0,f.max_buy_price or 0,
+        f.min_stock or 0,f.shop_mode or 0,M.missing_revision or 0}, '|')
+    if cache and sig == signature and not M.arb_dirty and now < expires then return cache end
+    M.accuracy_next_expiry=nil
+    cache, signature = opportunities(f, now), sig
+    expires = math.huge
+    local max_age = integer(f.max_age,300)
+    for _,record in pairs(M.missing_shops or {})do
+        local deadline=record_deadline(record)
+        if deadline>now then expires=math.min(expires,deadline)end
+    end
+    for _, row in ipairs(M.state.rows or {}) do
+            for _, side in ipairs({row.sell,row.buy}) do
+                for _, offer in ipairs(side.offers or {}) do
+                    local ts = integer(offer.ts)
+                    local deadline = ts + max_age + 1
+                    if max_age > 0 and ts > 0 and deadline > now then expires = math.min(expires,deadline) end
+                    if ts > now+60 then expires = math.min(expires,ts-60) end
+                end
+            end
+    end
+    if M.accuracy_next_expiry then expires=math.min(expires,M.accuracy_next_expiry) end
+    M.arb_dirty = false
+    return cache
+end
+
+function M.offer_freshness(ts)
+    ts = tonumber(ts) or 0
+    if ts <= 0 then return '\226\240\229\236\255 \237\229\232\231\226\229\241\242\237\238', 'muted' end
+    local age = os.time() - ts
+    if age < -60 then return '\238\248\232\225\234\224 \226\240\229\236\229\237\232', 'warn' end
+    if age < 180 then return '\241\226\229\230\229\229', 'good' end
+    if age < 600 then return math.floor(age / 60) .. ' \236\232\237 \237\224\231\224\228', 'warn' end
+    return math.floor(age / 60) .. ' \236\232\237 \237\224\231\224\228', 'muted'
+end
+
+-- Direct observations from a currently open mobile stall are independent of
+-- the web API. Even if the API is stale/empty, detect its own bid/ask spread.
+-- Lack of server-provided quantity is explicitly unknown, never x1.
+function M.live_shop_spreads()
+    local shop=DSP.live and DSP.live.shop
+    if not shop or (shop.menu_closed or 0)>0 or not shop.num or shop.num==''
+       or not shop.owner or shop.owner=='' then return {} end
+    if shop.server and tonumber(shop.server)~=tonumber(DSP.settings.server) then return {} end
+    if os.time()-(shop.items_updated or 0)>120 then return {} end
+    local sells={}
+    for _,it in ipairs(shop.sell or{}) do
+        local key=DSP.item_key(it.name,it.ench)
+        if tonumber(it.price) and it.price>0 and
+           (not sells[key] or it.price<sells[key].price) then sells[key]=it end
+    end
+    local results={}
+    local factor=tax_factor(DSP.settings.tax_bp)
+    for _,buyer in ipairs(shop.buy or{}) do
+        local seller=sells[DSP.item_key(buyer.name,buyer.ench)]
+        if seller and tonumber(buyer.price) and buyer.price>0 then
+            local margin=after_tax(buyer.price,DSP.settings.tax_bp)-seller.price
+            if margin>0 then
+                local sq=tonumber(seller.qty);local bq=tonumber(buyer.qty)
+                local confirmed=sq and bq and sq>0 and bq>0
+                local count=confirmed and math.min(sq,bq) or nil
+                results[#results+1]={name=buyer.name,ench=buyer.ench,
+                    shop=shop.num,owner=shop.owner,buy_price=seller.price,
+                    sell_price=buyer.price,profit_unit=margin,
+                    quantity=count,verified_quantity=confirmed and true or false,
+                    source='opened_shop',updated=shop.items_updated}
+            end
+        end
+    end
+    table.sort(results,function(a,b)return a.profit_unit>b.profit_unit end)
+    return results
+end
+
+-- Cheap diagnostic summary from the current market, memoized per revision.
+function M.arbitrage_visibility()
+    local st=M.state;local c=M._arb_visibility
+    local key=tostring(st.sid)..':'..tostring(st.version)..':'..tostring(DSP.settings.tax_bp)
+    if c and c.key==key then return c.value end
+    local result={pairs=0,same_shop=0,only_one=0,rows=#(st.rows or{})}
+    for _,row in ipairs(st.rows or{})do
+        if row.sell and row.buy and (row.sell.min or 0)>0
+           and (row.buy.max or 0)>(row.sell.min or math.huge) then
+            result.pairs=result.pairs+1
+            local one=(row.sell.qty or 0)<=1 or (row.buy.qty or 0)<=1
+            if one then result.only_one=result.only_one+1 end
+            for _,s in ipairs(row.sell.offers or{})do
+                for _,b in ipairs(row.buy.offers or{})do
+                    if s.shop==b.shop and after_tax(b.price,DSP.settings.tax_bp)>s.price then
+                        result.same_shop=result.same_shop+1
+                        break
+                    end
+                end
+            end
+        end
+    end
+    M._arb_visibility={key=key,value=result}
+    return result
+end
+
+      end
+      __palatka_v285_arbitrage()
+    end
+
+    do
+      local function __palatka_v285_accuracy()
+-- Market quantity reconciliation. No network calls, no packet writes.
+-- API figures remain immutable; an observed game quantity is temporary evidence,
+-- never a guarantee that a different player has not traded in the meantime.
+local M=DSP.market
+M.accuracy=M.accuracy or {}
+local A=M.accuracy
+A.ttl_seconds=90
+local function unsigned(value)
+    local n=tonumber(value)
+    if n and n==n and n>=0 and n<=1000000000 and n%1==0 then return n end
+end
+local function equal(a,b)
+    return DSP.lower(DSP.trim(tostring(a or '')))==DSP.lower(DSP.trim(tostring(b or '')))
+end
+local function rows_quantity(rows,row,side,offer)
+    local wanted=row.key or DSP.item_key(row.name or '',row.ench or 0)
+    local count,found=0,0
+    for _,item in ipairs(rows or {})do
+        if DSP.item_key(item.name or '',item.ench or 0)==wanted
+            and tonumber(item.price)==tonumber(offer.price) then
+            found=found+1
+            if item.qty_known~=true then return nil end
+            local q=unsigned(item.qty)
+            if not q then return nil end
+            count=count+q
+            if count>1000000000 then return nil end
+        end
+    end
+    if found>0 then return count,found end
+end
+-- Only confirmed packet quantities for the *same shop, server, owner, item, price, side*.
+-- Completeness is not claimed: only observed matching rows are counted.
+function A.quantity(row,side,offer,now)
+    if not row or (side~='sell' and side~='buy') or not offer then return nil end
+    now=tonumber(now) or os.time()
+    local sid=tonumber(M.state and M.state.sid)
+    local shop=tonumber(offer.shop)
+    local owner=tostring(offer.owner or '')
+    -- Never join anonymous API stalls to live scans by numeric id alone.
+    if not sid or not shop or owner=='' or owner=='?' then return nil end
+    local live=DSP.live and DSP.live.shop
+    -- Recompute the market once a currently-loading native fragment has
+    -- settled, even on clients without the optional shop-store worker.
+    if live and tonumber(live.server)==sid and tonumber(live.num)==shop
+        and (live.menu_closed or 0)==0 and equal(live.owner,offer.owner) then
+        local stamp=tonumber(live.items_updated) or 0
+        if stamp>0 and now-stamp>=0 and now-stamp<2
+            and live.scan_complete~=true then
+            M.accuracy_next_expiry=math.min(M.accuracy_next_expiry or math.huge,stamp+2)
+        end
+    end
+    if live and tonumber(live.server)==sid
+        -- Native pages can arrive as fragments: wait for the 2-second quiet
+        -- window unless the existing scan worker already marked it stable.
+        and (live.scan_complete==true or now-(tonumber(live.items_updated) or now)>=2)
+        and tonumber(live.num)==shop and (live.menu_closed or 0)==0
+        and equal(live.owner,offer.owner)
+        and now-(tonumber(live.items_updated) or 0)>=0
+        and now-(tonumber(live.items_updated) or 0)<=A.ttl_seconds then
+        local n,slots=rows_quantity(live[side],row,side,offer)
+        if n then
+            local seen=tonumber(live.items_updated) or now
+            M.accuracy_next_expiry=math.min(M.accuracy_next_expiry or math.huge,seen+A.ttl_seconds+1)
+            return n,{source='game_observed',at=seen,slots=slots,complete=false}
+        end
+    end
+    local store=DSP.shop_store
+    local saved=store and store.get_by_num and store.get_by_num(shop,sid)
+    if saved and equal(saved.owner,offer.owner) then
+        local at=tonumber(saved.at) or 0
+        if at>0 and now-at>=0 and now-at<=A.ttl_seconds then
+            local n,slots=rows_quantity(saved[side],row,side,offer)
+            if n then
+                M.accuracy_next_expiry=math.min(M.accuracy_next_expiry or math.huge,at+A.ttl_seconds+1)
+                return n,{source='recent_scan',at=at,slots=slots,complete=false}
+            end
+        end
+    end
+end
+function M.offer_quantity(row,side,offer,now)
+    local game,meta=A.quantity(row,side,offer,now)
+    if game~=nil then return game,meta end
+    local api=unsigned(offer and offer.qty)
+    return api or 0,{source='api',at=offer and offer.ts or 0,complete=false}
+end
+return true
+
+      end
+      __palatka_v285_accuracy()
+    end
+
+    do
+      local function __palatka_v285_lombard()
+-- Long-lived pawnshop scanner. Pawnshop data is intentionally separate from
+-- the 80-row local ShopStore LRU: a pawnshop is a server economy source, not a stall.
+DSP.lombard = DSP.lombard or {}
+local L=DSP.lombard
+L.schema=1
+L.path=(DSP.dir or '.')..'/lombard_store_v1.json'
+L.data=L.data or {schema=L.schema,servers={}}
+L.session=L.session or nil
+L.auto_scan=false
+L._dirty=false
+L._installed=false
+L._last_dialog=nil
+L.history_days=365
+L.max_history_per_item=512
+local MAX=9007199254740991
+local CP_LOMBARD='\xeb\xee\xec\xe1\xe0\xf0\xe4'
+local UTF_LOMBARD='\208\187\208\190\208\188\208\177\208\176\209\128\208\180'
+local CP_NEXT='\xf1\xeb\xe5\xe4\xf3\xfe\xf9'
+local CP_MORE='\xe4\xe0\xeb\xe5\xe5'
+local CP_PREV='\xef\xf0\xe5\xe4\xfb\xe4'
+local CP_SEARCH='\xef\xee\xe8\xf1\xea'
+local CP_BALANCE='\xe1\xe0\xeb\xe0\xed\xf1'
+local CP_EXIT='\xe2\xfb\xf5\xee\xe4'
+local CP_BACK='\xed\xe0\xe7\xe0\xe4'
+local CP_BUY='\xf1\xea\xf3\xef'      -- skyp / skypka prefix
+local CP_PURCHASE='\xef\xee\xea\xf3\xef' -- pokup prefix
+local CP_SELL='\xef\xf0\xee\xe4\xe0' -- proda prefix
+local CP_GIVE='\xf1\xe4\xe0\xf2\xfc' -- sdat (hand over / pawn)
+local CP_ITEM='\xef\xf0\xe5\xe4\xec\xe5\xf2' -- predmet
+local function lower(v)
+    local x=tostring(v or '')
+    return DSP.lower and DSP.lower(x) or x:lower()
+end
+local function clean(v)
+    local x=tostring(v or '')
+    if DSP.clean_text then x=DSP.clean_text(x) else x=x:gsub('{%x+}','') end
+    x=x:gsub('\r',''):gsub('^%s+',''):gsub('%s+,'')
+    return x
+end
+local function current_sid()
+    local s=tonumber(DSP.market and DSP.market.state and DSP.market.state.sid)
+    if s==nil then s=tonumber(DSP.settings and DSP.settings.server) end
+    return math.floor(s or 0)
+end
+local function srv(server_id)
+    local k=tostring(tonumber(server_id) or current_sid())
+    local root=L.data.servers
+    if type(root[k])~='table' then root[k]={latest={at=0,items={}},history={},scans={}} end
+    local r=root[k]
+    if type(r.latest)~='table' then r.latest={at=0,items={}} end
+    if type(r.latest.items)~='table' then r.latest.items={} end
+    if type(r.history)~='table' then r.history={} end
+    if type(r.scans)~='table' then r.scans={} end
+    return r,k
+end
+local function is_lombard_text(v)
+    local q=lower(clean(v))
+    return q:find(CP_LOMBARD,1,true)~=nil or q:find(UTF_LOMBARD,1,true)~=nil or q:find('pawn',1,true)~=nil
+end
+function L.is_dialog(title,text)
+    if is_lombard_text(title) or is_lombard_text(text) then return true end
+    -- Nested pawnshop screens may be titled "Choose item" without "Lombard".
+    -- Only trust them for an already recognized, recent pawnshop session.
+    local sess=L.session
+    if not sess or not sess.pawn_context or os.time()-(sess.last or 0)>20 then return false end
+    local header=lower(clean(title))
+    return header:find(CP_ITEM,1,true)~=nil or header:find(CP_GIVE,1,true)~=nil
+end
+local function side_from(title,text)
+    local q=lower(clean(title)..' '..clean(text))
+    if q:find(CP_GIVE,1,true) or q:find(CP_BUY,1,true) or q:find(CP_PURCHASE,1,true) then return 'buy' end
+    if q:find(CP_SELL,1,true) then return 'sell' end
+    return 'quote'
+end
+local function parse_price(v)
+    if DSP.market and DSP.market.parse_cr_price then
+        local ok,p=pcall(DSP.market.parse_cr_price,v)
+        if ok and tonumber(p) and p>0 then return math.floor(p) end
+    end
+    local q=tostring(v or ''):gsub('{%x+}',''):gsub('%s','')
+    q=q:gsub('^%,''):gsub('%$',''):gsub('[,.]','')
+    local p=tonumber(q);if p and p>0 and p<=MAX then return math.floor(p) end
+end
+local function normalize_name(v)
+    local n=clean(v)
+    n=n:gsub('^%[%d+%]%s*',''):gsub('^%d+[%.%)]%s*','')
+    n=n:gsub('%s+%(%s*ID%s*:%s*%d+%s*%)%s*,'')
+    n=n:gsub('%s+%[[xX]%d+%]%s*,'')
+    n=n:gsub('%s+[xX]%s*%d+%s*,'')
+    n=n:gsub('^%s+',''):gsub('%s+,'')
+    return n
+end
+local function skip_line(line)
+    local q=lower(clean(line))
+    if q=='' then return true end
+    if q:find(CP_LOMBARD,1,true) or q:find(UTF_LOMBARD,1,true) then return true end
+    if q:find(CP_NEXT,1,true) or q:find(CP_MORE,1,true) or q:find(CP_PREV,1,true)
+        or q:find(CP_SEARCH,1,true) or q:find(CP_BALANCE,1,true)
+        or q:find(CP_EXIT,1,true) or q:find(CP_BACK,1,true) then return true end
+    if q=='>>' or q=='<<' then return true end
+    return false
+end
+local function fields(line)
+    local t={}
+    for x in tostring(line or ''):gmatch('[^\t]+') do t[#t+1]=clean(x) end
+    return t
+end
+local function parse_line(line,title)
+    local raw=clean(line)
+    if skip_line(raw) then return nil end
+    local fs=fields(raw)
+    local price,price_i
+    if #fs>1 then
+        for i=#fs,2,-1 do
+            local p=parse_price(fs[i])
+            if p then price,price_i=p,i;break end
+        end
+    end
+    local name
+    if price then
+        local acc={};for i=1,price_i-1 do if fs[i]~='' then acc[#acc+1]=fs[i] end end
+        name=table.concat(acc,' ')
+    else
+        local prefix,token=raw:match('^(.-)%s+(:CASH:[%d%.,]+)%s*)
+        if not prefix then prefix,token=raw:match('^(.-)%s+(%$[%d%.,]+)%s*) end
+        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*%s*[KkMm])%s*) end
+        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*)%s*) end
+        if prefix and token then price=parse_price(token);name=prefix end
+    end
+    name=normalize_name(name or '')
+    if not price or name=='' or #name<2 then return nil end
+    -- Avoid treating pure service/menu labels as items.
+    if name:match('^%d+) then return nil end
+    local ench=tonumber(name:match('%(%+(%d+)%)')) or 0
+    local base=name:gsub('%s*%(%+%d+%)%s*,'')
+    local id=nil
+    if DSP.items and DSP.items.id_for_name then
+        local ok,v=pcall(DSP.items.id_for_name,base);if ok then id=tonumber(v) end
+    end
+    local side=side_from(title,raw)
+    local key=(DSP.item_key and DSP.item_key(base,ench) or lower(base)..':'..ench)..':'..side
+    return {name=name,base_name=base,item_id=id,ench=ench,price=price,side=side,key=key,raw_index=0}
+end
+function L.parse_dialog(title,text)
+    local out,seen={},{}
+    local idx=0
+    for line in tostring(text or ''):gmatch('[^\n]+') do
+        local r=parse_line(line,title);if r then
+            r.raw_index=idx
+            local k=r.key..':'..tostring(r.price)
+            if not seen[k] then seen[k]=true;out[#out+1]=r end
+        end
+        idx=idx+1
+    end
+    return out
+end
+local function page_hash(title,text)
+    local s=clean(title)..'\n'..clean(text)
+    local h=2166136261
+    for i=1,#s do h=(h*16777619+s:byte(i))%4294967296 end
+    return string.format('%08x',h)
+end
+local function new_session(id,title)
+    L.session={id=tonumber(id) or -1,title=clean(title),started=os.time(),last=os.time(),pages={},items={},order={},history_seen={},pawn_context=true}
+    return L.session
+end
+local function get_session(id,title)
+    local now=os.time();local s=L.session
+    if not s or now-(s.last or 0)>20 or
+        (s.id~=tonumber(id) and tonumber(id)~=nil and not s.pawn_context) then
+        s=new_session(id,title)
+    end
+    s.id=tonumber(id) or s.id
+    s.last=now;if clean(title)~='' then s.title=clean(title) end
+    return s
+end
+local function history_add(root,item,at,session)
+    if session.history_seen[item.key] then return end
+    session.history_seen[item.key]=true
+    local h=root.history[item.key]
+    if type(h)~='table' then h={name=item.name,side=item.side,item_id=item.item_id,ench=item.ench,points={}};root.history[item.key]=h end
+    if type(h.points)~='table' then h.points={} end
+    h.name=item.name;h.side=item.side;h.item_id=item.item_id or h.item_id;h.ench=item.ench or h.ench
+    local prev=h.points[#h.points]
+    if prev and prev.price==item.price and at-(prev.at or 0)<21600 then prev.at=at
+    else h.points[#h.points+1]={at=at,price=item.price} end
+    local cutoff=at-(tonumber(L.history_days) or 365)*86400
+    while #h.points>0 and ((h.points[1].at or 0)<cutoff or #h.points>(tonumber(L.max_history_per_item) or 512)) do table.remove(h.points,1) end
+end
+local function commit_session(session,source)
+    if not session then return false,'session' end
+    local root,skey=srv(current_sid());local at=os.time();local items={}
+    for _,k in ipairs(session.order) do local r=session.items[k];if r then items[#items+1]=r;history_add(root,r,at,session) end end
+    table.sort(items,function(a,b) if a.name~=b.name then return a.name<b.name end;if a.side~=b.side then return a.side<b.side end;return a.price<b.price end)
+    root.latest={at=at,started=session.started,title=session.title,items=items,pages=session.page_count or 0,source=source or 'dialog'}
+    root.scans[#root.scans+1]={at=at,count=#items,pages=session.page_count or 0,source=source or 'dialog'}
+    while #root.scans>180 do table.remove(root.scans,1) end
+    L._dirty=true
+    if DSP.flog then DSP.flog(('LOMBARD commit sid=%s items=%d pages=%d'):format(skey,#items,session.page_count or 0)) end
+    return true,#items
+end
+function L.observe_dialog(id,style,title,b1,b2,text)
+    if not L.is_dialog(title,text) then return false end
+    L._last_dialog={id=id,style=style,title=title,b1=b1,b2=b2,text=text,at=os.time()}
+    local s=get_session(id,title);local h=page_hash(title,text)
+    if not s.pages[h] then
+        s.pages[h]=true;s.page_count=(s.page_count or 0)+1
+        local rows=L.parse_dialog(title,text)
+        for _,r in ipairs(rows) do
+            local k=r.key
+            local old=s.items[k]
+            if not old then s.items[k]=r;s.order[#s.order+1]=k
+            elseif r.price~=old.price then
+                -- Same item can legitimately appear more than once at different prices.
+                local k2=k..':p'..tostring(r.price)
+                if not s.items[k2] then r.key=k2;s.items[k2]=r;s.order[#s.order+1]=k2 end
+            end
+        end
+        if #rows>0 then commit_session(s,L.auto_scan and 'auto_pages' or 'passive') end
+    end
+    return true
+end
+local function next_index(text)
+    local i=0
+    for line in tostring(text or ''):gmatch('[^\n]+') do
+        local q=lower(clean(line))
+        if q:find(CP_NEXT,1,true) or q:find(CP_MORE,1,true) or q=='>>' then return i end
+        i=i+1
+    end
+    return nil
+end
+local function schedule_next(id,text)
+    if not L.auto_scan then return end
+    local idx=next_index(text);if idx==nil then
+        L.auto_scan=false
+        if DSP.notify then DSP.notify('Lombard scan complete: '..tostring(L.stats().items)..' items') end
+        return
+    end
+    if not lua_thread or not lua_thread.create or not wait then return end
+    lua_thread.create(function()
+        wait(120)
+        if L.auto_scan and sampIsDialogActive and sampIsDialogActive() and sampGetCurrentDialogId and sampGetCurrentDialogId()==id then
+            pcall(sampSendDialogResponse,id,1,idx,'')
+        end
+    end)
+end
+function L.stats(server_id)
+    local root=srv(server_id);local hist=0;for _ in pairs(root.history) do hist=hist+1 end
+    return {items=#(root.latest.items or {}),last=root.latest.at or 0,pages=root.latest.pages or 0,history_items=hist,scans=#root.scans,server=tonumber(server_id) or current_sid()}
+end
+function L.search(query,server_id)
+    local root=srv(server_id);local q=lower(clean(query));local out={}
+    for _,r in ipairs(root.latest.items or {}) do
+        if q=='' or lower(r.name):find(q,1,true) then out[#out+1]=r end
+    end
+    table.sort(out,function(a,b) if a.name~=b.name then return a.name<b.name end;return a.price<b.price end)
+    return out
+end
+function L.history(item_key,server_id)
+    local root=srv(server_id);local h=root.history[item_key];return h and h.points or {}
+end
+function L.links(query,server_id)
+    local out={};if not DSP.shop_store or not DSP.shop_store.search then return out end
+    local sidv=tonumber(server_id) or current_sid()
+    for _,p in ipairs(L.search(query,sidv)) do
+        local refs=DSP.shop_store.search(p.base_name or p.name,nil,sidv)
+        local best_sell,best_buy
+        for _,ref in ipairs(refs or {}) do
+            local price=tonumber(ref.offer and ref.offer.price)
+            if price then
+                if ref.side=='sell' and (not best_sell or price<best_sell.price) then best_sell={price=price,shop=ref.shop and ref.shop.num,owner=ref.shop and ref.shop.owner} end
+                if ref.side=='buy' and (not best_buy or price>best_buy.price) then best_buy={price=price,shop=ref.shop and ref.shop.num,owner=ref.shop and ref.shop.owner} end
+            end
+        end
+        out[#out+1]={pawn=p,best_shop_sell=best_sell,best_shop_buy=best_buy,
+            diff_from_shop_sell=best_sell and (p.price-best_sell.price) or nil,
+            diff_to_shop_buy=best_buy and (best_buy.price-p.price) or nil}
+    end
+    return out
+end
+function L.flush()
+    if not L._dirty then return true end
+    local ok,json=pcall(encodeJson,L.data);if not ok or type(json)~='string' then return false,'encode' end
+    local tmp=L.path..'.tmp';local f=io.open(tmp,'wb');if not f then return false,'open' end
+    local a,b=f:write(json),f:close();if not a or not b then return false,'write' end
+    local r,e=os.rename(tmp,L.path);if not r then return false,e end
+    L._dirty=false;return true
+end
+function L.load()
+    local f=io.open(L.path,'rb');if not f then return false end
+    local raw=f:read('*a') or '';f:close();local ok,d=pcall(decodeJson,raw)
+    if ok and type(d)=='table' and type(d.servers)=='table' then L.data=d;L.data.schema=L.schema;return true end
+    return false
+end
+function L.command(param)
+    param=clean(param or '')
+    local st=L.stats()
+    if param=='' then
+        if DSP.notify then DSP.notify(('Lombard: items=%d pages=%d history=%d scans=%d'):format(st.items,st.pages,st.history_items,st.scans)) end
+        return
+    end
+    local rows=L.search(param);if DSP.notify then DSP.notify('Lombard search "'..param..'": '..#rows) end
+    for i=1,math.min(#rows,5) do local r=rows[i];if DSP.notify then DSP.notify((r.side or 'quote')..' '..r.name..' '..DSP.money(r.price)) end end
+end
+-- Store only an explicitly reviewed native observation, not an automatic trade.
+function L.save_observation(rows,source)
+    if type(rows)~='table' or #rows==0 or #rows>180 then return false,'no rows' end
+    local session=new_session(-1,'Lombard native observation')
+    session.page_count=1
+    for _,item in ipairs(rows) do
+        if type(item)=='table' and type(item.name)=='string'
+            and tonumber(item.price) and tonumber(item.price)>0 then
+            local key=tostring(item.key or item.name..':'..item.price)
+            if not session.items[key] then
+                session.items[key]=item
+                session.order[#session.order+1]=key
+            end
+        end
+    end
+    if #session.order==0 then return false,'no recognized items' end
+    return commit_session(session,source or 'packet_unverified')
+end
+function L.start_auto()
+    if not sampIsDialogActive or not sampIsDialogActive() then
+        if L.packet_probe and L.packet_probe.arm then
+            L.packet_probe.arm(35)
+            if DSP.notify then DSP.notify('Lombard: listening for native pawnshop menu (35 sec)')end
+            return true
+        end
+        return false
+    end
+    local id=sampGetCurrentDialogId and sampGetCurrentDialogId() or -1
+    local title=sampGetDialogTitle and sampGetDialogTitle() or ''
+    local text=sampGetDialogText and sampGetDialogText() or ''
+    if not L.is_dialog(title,text) then if DSP.notify then DSP.notify('Lombard: current dialog not recognized') end;return false end
+    L.session=nil;L.auto_scan=true;L.observe_dialog(id,0,title,'','',text);schedule_next(id,text)
+    if DSP.notify then DSP.notify('Lombard auto scan started') end;return true
+end
+function L.install()
+    if L._installed then return end;L._installed=true
+    pcall(L.load)
+    if sampRegisterChatCommand then
+        pcall(sampRegisterChatCommand,'crrlombard',L.command)
+        pcall(sampRegisterChatCommand,'crrlombardscan',function() L.start_auto() end)
+        pcall(sampRegisterChatCommand,'crrlombardui',function()
+            if DSP.ui21 and DSP.ui21.set_screen then DSP.ui21.set_screen('lombard') end
+        end)
+    end
+    local ok,sampev=pcall(require,'samp.events')
+    if ok and sampev then
+        local prev=sampev.onShowDialog
+        sampev.onShowDialog=function(id,style,title,b1,b2,text)
+            local seen=false;local good,ret=pcall(L.observe_dialog,id,style,title,b1,b2,text);if good then seen=ret end
+            if seen then schedule_next(id,text) end
+            if prev then return prev(id,style,title,b1,b2,text) end
+        end
+    end
+    if lua_thread and lua_thread.create and wait then
+        lua_thread.create(function() while true do wait(2500);if L._dirty then pcall(L.flush) end end end)
+    end
+end
+return true
+      end
+      __palatka_v285_lombard()
+    end
+
+    do
+      local function __palatka_v285_lombard_packets()
+-- Passive native pawnshop menu inspection. The packet layout is NOT
+-- verified against a real pawnshop dump; all entries are observational only.
+local L=DSP.lombard
+if not L then return false end
+local P={active=false,status='idle',until_ts=0,packets=0,tagged=0,
+    ignored=0,candidates={},items={},order={},verified_label=false}
+L.packet_probe=P
+local MAX_BYTES,MAX_ROWS,MAX_CANDIDATES=100000,180,12
+local function int(v,cap)
+    local n=tonumber(v)
+    if n and n==n and n>=0 and n<=cap and n%1==0 then return n end
+end
+local function lower(s)
+    s=tostring(s or '')
+    return DSP.lower and DSP.lower(s) or s:lower()
+end
+local function pawn_text(s)
+    s=lower(s)
+    return s:find('\xeb\xee\xec\xe1\xe0\xf0\xe4',1,true)~=nil
+        or s:find('\208\187\208\190\208\188\208\177\208\176\209\128\208\180',1,true)~=nil
+        or s:find('pawnshop',1,true)~=nil or s:find('pawn',1,true)~=nil
+end
+function P.arm(seconds)
+    local duration=int(seconds or 35,60) or 35
+    if duration<5 then duration=35 end
+    P.active=true;P.status='listening';P.until_ts=os.time()+duration
+    P.packets=0;P.tagged=0;P.ignored=0;P.candidates={};P.items={};P.order={}
+    P.verified_label=false
+    return true
+end
+function P.stop()
+    P.active=false;P.status='review';return true
+end
+function P.state()
+    if P.active and os.time()>P.until_ts then P.stop() end
+    return P
+end
+local function has_known_game_name(item)
+    return type(item)=='table' and type(item.name)=='string' and item.name~=''
+end
+local function recognize(item,index,tag)
+    if type(item)~='table' then return nil end
+    local explicit_price=int(item.price or item.cost or item.unit_price or item.unitPrice,9007199254740991)
+    if not explicit_price or explicit_price<1 then return nil end
+    local row
+    if DSP.item_registry and DSP.item_registry.from_node then
+        local ok,value=pcall(DSP.item_registry.from_node,item,'buy',index)
+        if ok and value then row=value end
+    end
+    if not row and has_known_game_name(item) and L.parse_dialog then
+        local lines=L.parse_dialog(tag or '',item.name..'\t'..tostring(explicit_price))
+        row=lines[1]
+    end
+    if not row then return nil end
+    row.side='buy'
+    row.price=explicit_price
+    return row
+end
+local function nodes(obj)
+    if type(obj)~='table' then return nil end
+    if type(obj.items)=='table' then return obj.items end
+    if type(obj.rows)=='table' then return obj.rows end
+    if type(obj.data)=='table' then
+        if type(obj.data.items)=='table' then return obj.data.items end
+        if type(obj.data.rows)=='table' then return obj.data.rows end
+    end
+end
+function L.on_packet(iface,sub,raw)
+    local active=P.state().active
+    if type(raw)~='string' or #raw<2 or #raw>MAX_BYTES then return false end
+    -- A labeled pawnshop packet may be observed passively. Unknown packet
+    -- layouts are explored only during the explicit 35-second scan window.
+    if not active and not pawn_text(raw) then return false end
+    local ok,obj=pcall(decodeJson,raw:gsub('%z+,''))
+    if not ok or type(obj)~='table' then return false end
+    local packet_type=int(obj.type,255)
+    if packet_type==8 or packet_type==13 or packet_type==28 or
+        (packet_type==1 and tonumber(sub)==2) or tonumber(iface)==57 then
+        P.ignored=P.ignored+1;return false
+    end
+    local label=tostring(obj.title or obj.header or obj.caption or obj.name or
+        (type(obj.data)=='table' and obj.data.title) or '')
+    local labeled=pawn_text(label)
+    if not active and not labeled then return false end
+    local slot_list=nodes(obj)
+    if not slot_list then
+        if active then
+            P.packets=P.packets+1
+            if #P.candidates<MAX_CANDIDATES then
+                P.candidates[#P.candidates+1]={iface=tonumber(iface),sub=tonumber(sub),
+                    type=packet_type,rows=0,label=labeled}
+            end
+        end
+        return false
+    end
+    if #slot_list>MAX_ROWS then return false end
+    P.packets=P.packets+1
+    if labeled then P.tagged=P.tagged+1;P.verified_label=true end
+    local accepted=0
+    for i,item in ipairs(slot_list)do
+        local row=recognize(item,i,label)
+        if row then
+            local key=tostring(row.key or row.name)..':'..tostring(row.price)
+            if not P.items[key] then P.order[#P.order+1]=key end
+            P.items[key]=row;accepted=accepted+1
+        end
+    end
+    if #P.candidates<MAX_CANDIDATES then
+        P.candidates[#P.candidates+1]={iface=tonumber(iface),sub=tonumber(sub),
+            type=packet_type,rows=accepted,label=labeled}
+    end
+    -- Never write any native observation automatically: the server has not
+    -- supplied a proven end-of-list marker or stable pawnshop session ID.
+    if accepted>0 then P.status='preview_ready' end
+    return accepted>0
+end
+function P.preview()
+    local rows={}
+    for _,key in ipairs(P.order)do
+        local row=P.items[key]
+        if row then rows[#rows+1]=row end
+    end
+    return rows
+end
+function P.save()
+    if P.state().active then return false,'stop the scan first' end
+    local rows=P.preview()
+    if #rows==0 then return false,'no recognized priced items' end
+    if not L.save_observation then return false,'pawnshop store unavailable' end
+    local ok,result=L.save_observation(rows,'packet_unverified')
+    if ok then P.status='saved_unverified' end
+    return ok,result
+end
+function P.report()
+    -- Metadata only; never include names, IDs, raw JSON or account data.
+    local candidates={}
+    for _,c in ipairs(P.candidates)do
+        candidates[#candidates+1]={iface=c.iface,sub=c.sub,
+            type=c.type,rows=c.rows,labeled=c.label}
+    end
+    return {schema=1,packets=P.packets,tagged=P.tagged,ignored=P.ignored,
+        candidates=candidates}
+end
+return true
+
+      end
+      __palatka_v285_lombard_packets()
+    end
+
+    do
+      local function __palatka_v285_lombard_ui()
+-- Native mimgui pawnshop panel. No WebView and no item transfer actions.
+local V=DSP.ui21
+local L=DSP.lombard
+if not (V and L) then return false end
+local function button(label,id,w,active)
+    return V.button(label,'lombard_'..id,w,active)
+end
+function V.lombard_screen()
+    V.heading('LOMBARD')
+    local P=L.packet_probe
+    local stats=L.stats and L.stats() or {items=0,pages=0}
+    V.text('Saved pawnshop quotes: '..tostring(stats.items or 0))
+    V.muted('Read-only: approach the pawnshop and choose the item hand-in menu.')
+    V.muted('Classic dialogs are captured automatically; native packets need validation.')
+    V.muted('No item hand-in, clicks or purchases are sent by Palatka.')
+    if not P then V.red('Native scanner unavailable');return end
+    local st=P.state()
+    if not st.active then
+        if button('Listen for native menu (35 sec)','start',280,false)then P.arm(35) end
+    else
+        V.green('Observing native menu, seconds left: '..math.max(0,st.until_ts-os.time()))
+        if button('Stop and review','stop',280,true)then P.stop()end
+    end
+    V.muted('Packets: '..st.packets..' \183 candidate packets: '..#st.candidates..
+        ' \183 labelled: '..st.tagged)
+    local rows=P.preview()
+    V.text('Observed priced items: '..#rows)
+    if not st.verified_label and #rows>0 then
+        V.red('UNVERIFIED: menu identity and complete item list not confirmed.')
+    end
+    if #rows>0 then
+        V.list_rows('lombard_preview',rows,60,function(item,i)
+            V.row('lombard_item_'..i,60,function(w,x,y)
+                V.at(x,y);V.text(V.fit(tostring(item.name or '?'),w-8))
+                V.at(x,y+27);V.muted('Pawnshop quote: '..DSP.money(item.price or 0))
+            end)
+        end,{height=math.min(330,math.max(120,imgui.GetContentRegionAvail().y*.55)),footer=false})
+        if not st.active and button('Save observed quotes (unverified)','save',280)then
+            local ok,err=P.save()
+            if ok then V.lombard_error=nil else V.lombard_error=tostring(err) end
+        end
+    end
+    if V.lombard_error then V.red(V.lombard_error) end
+    if stats.items>0 then
+        V.text('Previously captured quotes')
+        local old=L.search and L.search('') or {}
+        for i=1,math.min(5,#old)do
+            local item=old[i]
+            V.muted(V.fit(item.name..' / '..DSP.money(item.price),280))
+        end
+    end
+end
+-- Compatibility route for older OTA shells which do not have a Lombard nav entry.
+local previous_tools=V.tools
+V.tools=function(screen)
+    if screen=='lombard' then return V.lombard_screen() end
+    if previous_tools then return previous_tools(screen) end
+end
+return true
+
+      end
+      __palatka_v285_lombard_ui()
+    end
+
+    if DSP.lombard and DSP.lombard.install then DSP.lombard.install() end
+    -- Installed older standalone clients do not have this pawnshop hook.
+    local live=DSP.live
+    if live and type(live.handle)=='function'
+       and not live._lombard_packet_hooked and not live._v285_lombard_wrapped then
+      local previous=live.handle
+      live.handle=function(iface,sub,raw)
+        if DSP.lombard and DSP.lombard.on_packet then
+          local ok,err=pcall(DSP.lombard.on_packet,iface,sub,raw)
+          if not ok and DSP.flog then DSP.flog('LOMBARD native observer: '..tostring(err)) end
+        end
+        local result={previous(iface,sub,raw)}
+        local typ=tonumber(tostring(raw or ''):match('"type"%s*:%s*(%d+)'))
+        if tonumber(iface)==255 or
+           ((tonumber(iface)==52 or tonumber(iface)==60) and (typ==13 or typ==28)) then
+          local ts=os.time()
+          if ts-(live._v285_last_invalidated or 0)>=1 then
+            if DSP.market and DSP.market.invalidate_arbitrage then
+              pcall(DSP.market.invalidate_arbitrage)
+            end
+            live._v285_last_invalidated=ts
+          end
+        end
+        return unpack(result)
+      end
+      live._v285_lombard_wrapped=true
+    end
+  end)
+  if not updated then
+    if DSP.flog then DSP.flog('Palatka 2.8.5 install failed: '..tostring(why)) end
+    return false
+  end
+  DSP._v285_installed=true
+  DSP.version='2.8.5'
+  if DSP.flog then DSP.flog('Palatka 2.8.5: Accurate Trade and Lombard native probe beta installed') end
   return true
 end
