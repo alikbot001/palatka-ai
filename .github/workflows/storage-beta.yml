@@ -34,3 +34,4 @@ jobs:
           luajit tests/test_v283_storage_matching.lua
           luajit tests/test_v283_storage_match_ui.lua
           luajit tests/test_v283_settings_safety.lua
+          luajit tests/test_v283_trunk_capacity.lua
