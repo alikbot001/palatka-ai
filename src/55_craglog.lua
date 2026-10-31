@@ -276,18 +276,38 @@ end
 function C.install()
     if C.installed then return end
     C.installed=true;local restored={}
-    local f=io.open(DSP.events_log_path,'r')
-    if f then local history={}
+    local f=io.open(DSP.events_log_path,'rb')
+    if f then
+        -- A long-running account can have years of JSONL data. The mini-ring
+        -- only needs its last 300 events; do not parse the entire file at login.
+        -- Seek from the end and discard the initial partial line.
+        local max_tail_bytes=2*1024*1024
+        local length=f:seek('end')
+        if length then
+            local start=math.max(0,length-max_tail_bytes)
+            f:seek('set',start)
+            if start>0 then f:read('*l') end
+        else
+            f:seek('set',0)
+        end
+        local history,head,count={},1,0
         for line in f:lines() do
             if line~='' then
                 local ok,row=pcall(decodeJson,line)
                 if ok and type(row)=='table' and row.type and row.type~='journal_deleted' then
-                    history[#history+1]=row
-                    if #history>C.ring_cap then table.remove(history,1) end
+                    history[head]=row
+                    head=head%C.ring_cap+1
+                    count=math.min(count+1,C.ring_cap)
                 end
             end
         end
         f:close()
+        local ordered={}
+        for i=0,count-1 do
+            local index=(head-count+i-1)%C.ring_cap+1
+            ordered[#ordered+1]=history[index]
+        end
+        history=ordered
         local markers={}
         for _,e in ipairs(history) do
             if e.type=='payday_detail' then
