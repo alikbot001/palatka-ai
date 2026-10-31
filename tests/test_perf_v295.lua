@@ -73,6 +73,7 @@ do
         money=function(n)return '$'..tostring(n)end,
     }
     _G.imgui={
+        ImVec2=function(x,y)return{x=x,y=y}end,
         GetContentRegionAvail=function()return{x=900,y=650}end,
         BeginPopup=function()return false end,
         BeginChild=function()return false end,
