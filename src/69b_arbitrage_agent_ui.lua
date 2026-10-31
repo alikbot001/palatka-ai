@@ -69,9 +69,15 @@ local function route_info(e,index,total)
     quiet('Куплено '..e.bought..' · Продано '..e.sold)
     if e.skipped then
         if e.bought>e.sold then red('Товаров на руках: '..(e.bought-e.sold)..' шт.')end
-        if b('Вернуть маршрут','restore',-1)then
-            if e.unavailable_reason then A.restore_unavailable(index)else A.skip(index,false)end
+        quiet('Маршрут остаётся в сессии. Можно вернуть его или перейти дальше.')
+        local half=math.max(105,math.floor((imgui.GetContentRegionAvail().x-6)/2))
+        if b('Вернуть маршрут','restore',half)then
+            local ok,err
+            if e.unavailable_reason then ok,err=A.restore_unavailable(index)else ok=A.skip(index,false)end
+            notice(ok and 'Маршрут снова активен' or tostring(err or 'Не удалось вернуть маршрут'))
         end
+        imgui.SameLine(0,6)
+        if b('Следующий','skipped_next',half)then A.next(1);A.qty_key=nil end
         return
     end
     if e.sold>=e.qty then green('Сделка завершена');return end
@@ -155,9 +161,10 @@ function A.draw()
             end
             imgui.Separator()
         end
-        if imgui.BeginChild('##agent291_content',imgui.ImVec2(0,-80),false)then
+        if imgui.BeginChild('##agent291_content',imgui.ImVec2(0,-80),false,imgui.WindowFlags.NoScrollbar)then
             local e,i=selected(s)
             route_info(e,i,#s.routes)
+            if DSP.mobile and DSP.mobile.touch_scroll then DSP.mobile.touch_scroll(io,'arb_agent_content')end
         end
         imgui.EndChild()
         if A.ui_message then quiet(V.fit(A.ui_message,math.max(120,g.w-35)))end

@@ -183,6 +183,7 @@ local function details(g)
 end
 function V.arbitrage()
     local st=DSP.market.state
+    local compact_h=imgui.GetContentRegionAvail().y<340
     V.text('Арбитраж');V.inline();V.muted('Снимок: '..DSP.market.freshness())
     if DSP.arb_agent then
         V.inline()
@@ -197,12 +198,25 @@ function V.arbitrage()
     end
     V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',120)then DSP.market.pull(st.sid)end
     V.arb_source=V.arb_source or 'api'
-    if b('API','source_api',116,V.arb_source=='api')then
+    local source_api_w=compact_h and 88 or 116
+    local source_local_w=compact_h and 132 or 175
+    if b('API','source_api',source_api_w,V.arb_source=='api')then
         V.arb_source='api';V.reset_list('arb_main')
     end
-    V.inline()
-    if b('МОИ СКАНЫ','source_local',175,V.arb_source=='local')then
+    V.inline(5,source_local_w)
+    if b('МОИ СКАНЫ','source_local',source_local_w,V.arb_source=='local')then
         V.arb_source='local';V.reset_list('local_arb_items')
+    end
+    if compact_h and V.arb_source=='api' then
+        V.inline(5,132)
+        if b(V.arb_sort=='az' and 'А-Я' or 'Прибыль','sort_compact',132,V.arb_sort~='az')then
+            V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
+            V.reset_list('arb_main')
+        end
+        V.inline(5,108)
+        if b('Фильтры','filters_compact',108,V.arb_filters)then
+            V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+        end
     end
     if V.arb_source=='local' then
         if V.local_arbitrage_view then V.local_arbitrage_view() end
@@ -214,20 +228,24 @@ function V.arbitrage()
             imgui.GetContentRegionAvail().x))
     end
     local af=DSP.settings.arb_filters or {}
-    V.muted(V.fit('Фильтры: '..(tonumber(af.max_age)==0 and 'без ограничения времени' or
-        (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' мин'))..
-        ' · ROI от '..tostring(af.min_roi or 0)..'% · резерв '..tostring(af.safety_pct or 0)..
-        '% · комиссия '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
-        imgui.GetContentRegionAvail().x))
+    if not compact_h then
+        V.muted(V.fit('Фильтры: '..(tonumber(af.max_age)==0 and 'без ограничения времени' or
+            (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' мин'))..
+            ' · ROI от '..tostring(af.min_roi or 0)..'% · резерв '..tostring(af.safety_pct or 0)..
+            '% · комиссия '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
+            imgui.GetContentRegionAvail().x))
+    end
     local query,edited=V.search('arb','Поиск предмета',-1)
     if edited then V.reset_list('arb_main')end
-    if b(V.arb_sort=='az' and 'АЯ' or 'Прибыль: больше','sort',143,V.arb_sort=='az')then
-        V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
-        V.reset_list('arb_main')
-    end
-    V.inline()
-    if b('Фильтры','filters',120,V.arb_filters)then
-        V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+    if not compact_h then
+        if b(V.arb_sort=='az' and 'А-Я' or 'Прибыль: больше','sort',143,V.arb_sort=='az')then
+            V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
+            V.reset_list('arb_main')
+        end
+        V.inline()
+        if b('Фильтры','filters',120,V.arb_filters)then
+            V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+        end
     end
     -- Direct game observation does not require the external API to refresh.
     local live=DSP.market.live_shop_spreads and DSP.market.live_shop_spreads() or {}
@@ -273,6 +291,14 @@ function V.arbitrage()
             ('Нет выгодных связок по фильтрам'..(age>0 and (' · старше '..math.floor(age/60)..'м исключены')or '')))
         V.muted(V.fit(reason,imgui.GetContentRegionAvail().x))
     end
+    local list_options
+    if compact_h then
+        list_options={footer=false}
+    else
+        list_options={footer=function()
+            V.muted('Оценка по API, не гарантированная прибыль. Количество у скупщика может уменьшиться.')
+        end}
+    end
     V.list_rows('arb_main',filtered,92,function(g,i)
         V.row('arb_group_'..i,92,function(w,x,y)
             M.thumbnail({name=g.name,id=g.row and g.row.id},34)
@@ -288,7 +314,7 @@ function V.arbitrage()
                 V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
             end
         end)
-    end,{footer=function()V.muted('Оценка по API, не гарантированная прибыль. Количество у скупщика может уменьшиться.')end})
+    end,list_options)
 end
 local previous=V.popups
 function V.popups()
