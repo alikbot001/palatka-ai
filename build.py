@@ -138,8 +138,22 @@ for name in MODULES:
         print(f"legacy CP1251 module: {name}")
     try:
         text.encode("cp1251")
-    except UnicodeEncodeError as exc:
-        sys.exit(f"non-CP1251 characters in {name}: {repr(text[exc.start:exc.end])} at {exc.start}")
+    except UnicodeEncodeError:
+        # Some legacy UTF-8 files contain Latin-1 renderings of CP1251
+        # bytes (e.g. 'çàãðóæåí' instead of Russian). Recover Cyrillic
+        # byte-for-byte rather than replacing unsupported characters.
+        repaired = "".join(
+            chr(0x0410 + ord(c) - 0xC0) if 0xC0 <= ord(c) <= 0xDF else
+            chr(0x0430 + ord(c) - 0xE0) if 0xE0 <= ord(c) <= 0xFF else
+            ("Ё" if c == "\\u00a8" else "ё" if c == "\\u00b8" else c)
+            for c in text
+        )
+        try:
+            repaired.encode("cp1251")
+        except UnicodeEncodeError as exc:
+            sys.exit(f"non-CP1251 characters in {name}: {repr(repaired[exc.start:exc.end])} at {exc.start}")
+        text = repaired
+        print(f"fixed legacy Latin1 mojibake: {name}")
     fn = "__mod_" + name.replace(".lua", "").replace("-", "_")
     parts.append(f"local function {fn}()\n")
     parts.append(text)
