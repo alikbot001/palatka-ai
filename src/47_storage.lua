@@ -390,6 +390,7 @@ local function save_snapshot(slots, source_reason)
         end
     end
     T.last_error=nil
+    T.last_warning=nil
     T.scan_generation=(T.scan_generation or 0)+1
     T.review_generation=T.scan_generation
     T.review_needed=true
@@ -460,8 +461,9 @@ function S.on_inventory_packet(sub, raw)
             T.status='need_reopen'
             T.last_error='Полный снимок не пришёл. Закрой багажник и открой его заново.'
         elseif T.snapshot then
-            T.status='unverified_delta'
-            T.last_error='Частичное изменение пропущено: ID машины неизвестен.'
+            -- Do not hide a previously valid full scan just because a single
+            -- slot changed while the player was inside the trunk.
+            T.last_warning='Изменение отдельных слотов не применено. Для новых данных открой багажник заново.'
         end
         return false
     end
