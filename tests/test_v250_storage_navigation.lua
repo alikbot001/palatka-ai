@@ -1,7 +1,7 @@
 -- Smoke test for the native storage home: menu is always accessible.
 package.loaded['ffi']={string=function(x)return tostring(x)end,copy=function()end}
 local pressed,last_kind,last_title,last_probe = '','','',''
-DSP={ui21={},mobile={},storage={snapshots={},
+DSP={ui21={},mobile={},to_cp=function(x)return x end,utf8=function(x)return tostring(x or '') end,storage={snapshots={},
     textdraw_state=function()return 'idle' end,
     trunk_state=function()return {status='idle',received=0}end,
     accept=function(kind,title,text)last_kind=kind;last_title=title;return true end}}
