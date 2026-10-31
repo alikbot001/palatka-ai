@@ -25,6 +25,8 @@ local CP_BACK='\xed\xe0\xe7\xe0\xe4'
 local CP_BUY='\xf1\xea\xf3\xef'      -- skyp / skypka prefix
 local CP_PURCHASE='\xef\xee\xea\xf3\xef' -- pokup prefix
 local CP_SELL='\xef\xf0\xee\xe4\xe0' -- proda prefix
+local CP_GIVE='\xf1\xe4\xe0\xf2\xfc' -- sdat (hand over / pawn)
+local CP_ITEM='\xef\xf0\xe5\xe4\xec\xe5\xf2' -- predmet
 local function lower(v)
     local x=tostring(v or '')
     return DSP.lower and DSP.lower(x) or x:lower()
@@ -56,11 +58,17 @@ local function is_lombard_text(v)
     return q:find(CP_LOMBARD,1,true)~=nil or q:find(UTF_LOMBARD,1,true)~=nil or q:find('pawn',1,true)~=nil
 end
 function L.is_dialog(title,text)
-    return is_lombard_text(title) or is_lombard_text(text)
+    if is_lombard_text(title) or is_lombard_text(text) then return true end
+    -- Nested pawnshop screens may be titled "Choose item" without "Lombard".
+    -- Only trust them for an already recognized, recent pawnshop session.
+    local sess=L.session
+    if not sess or not sess.pawn_context or os.time()-(sess.last or 0)>20 then return false end
+    local header=lower(clean(title))
+    return header:find(CP_ITEM,1,true)~=nil or header:find(CP_GIVE,1,true)~=nil
 end
 local function side_from(title,text)
     local q=lower(clean(title)..' '..clean(text))
-    if q:find(CP_BUY,1,true) or q:find(CP_PURCHASE,1,true) then return 'buy' end
+    if q:find(CP_GIVE,1,true) or q:find(CP_BUY,1,true) or q:find(CP_PURCHASE,1,true) then return 'buy' end
     if q:find(CP_SELL,1,true) then return 'sell' end
     return 'quote'
 end
@@ -75,7 +83,7 @@ local function parse_price(v)
 end
 local function normalize_name(v)
     local n=clean(v)
-    n=n:gsub('^%[%d+%]%s*','')
+    n=n:gsub('^%[%d+%]%s*',''):gsub('^%d+[%.%)]%s*','')
     n=n:gsub('%s+%(%s*ID%s*:%s*%d+%s*%)%s*$','')
     n=n:gsub('%s+%[[xX]%d+%]%s*$','')
     n=n:gsub('%s+[xX]%s*%d+%s*$','')
@@ -153,12 +161,16 @@ local function page_hash(title,text)
     return string.format('%08x',h)
 end
 local function new_session(id,title)
-    L.session={id=tonumber(id) or -1,title=clean(title),started=os.time(),last=os.time(),pages={},items={},order={},history_seen={}}
+    L.session={id=tonumber(id) or -1,title=clean(title),started=os.time(),last=os.time(),pages={},items={},order={},history_seen={},pawn_context=true}
     return L.session
 end
 local function get_session(id,title)
     local now=os.time();local s=L.session
-    if not s or now-(s.last or 0)>20 or (s.id~=tonumber(id) and tonumber(id)~=nil) then s=new_session(id,title) end
+    if not s or now-(s.last or 0)>20 or
+        (s.id~=tonumber(id) and tonumber(id)~=nil and not s.pawn_context) then
+        s=new_session(id,title)
+    end
+    s.id=tonumber(id) or s.id
     s.last=now;if clean(title)~='' then s.title=clean(title) end
     return s
 end
@@ -204,7 +216,7 @@ function L.observe_dialog(id,style,title,b1,b2,text)
                 if not s.items[k2] then r.key=k2;s.items[k2]=r;s.order[#s.order+1]=k2 end
             end
         end
-        commit_session(s,L.auto_scan and 'auto_pages' or 'passive')
+        if #rows>0 then commit_session(s,L.auto_scan and 'auto_pages' or 'passive') end
     end
     return true
 end
