@@ -10,7 +10,19 @@ local function num(v,lo,hi)
     if n and n==n and n%1==0 and n>=(lo or 0)and n<=(hi or MAX)then return math.floor(n)end
 end
 local function server()
-    return num(M.state and M.state.sid,1)or num(DSP.settings and DSP.settings.server,1)or 0
+    local detected
+    if type(DSP.detect_server)=='function'then
+        local ok,id=pcall(DSP.detect_server)
+        if ok then detected=num(id,1)end
+    end
+    return detected or num(M.state and M.state.sid,1)
+        or num(DSP.settings and DSP.settings.server,1)or 0
+end
+local function cycle_start(ts)
+    local date=os.date('*t',ts or os.time())
+    date.hour,date.min,date.sec=5,0,0
+    local start=os.time(date)
+    return(ts or os.time())<start and(start-86400)or start
 end
 local function part(v)
     local s=tostring(v or '')
@@ -61,13 +73,15 @@ end
 local function changed()
     A.revision=A.revision+1
     local ok,err=A.save()
+    A.save_error=not ok and tostring(err)or nil
     if not ok and DSP.flog then DSP.flog('ARB AGENT save failed: '..tostring(err))end
     if M.invalidate_arbitrage then M.invalidate_arbitrage()end
     return ok,err
 end
 local function active()
     local s=A.data.session
-    if not s or s.ended or s.sid~=server()then return nil end
+    if not s or s.ended or s.sid~=server()
+        or(num(s.started,0)or 0)<cycle_start(os.time())then return nil end
     return s
 end
 function A.active()return active()end
@@ -142,7 +156,8 @@ function A.start(routes)
     if server()==0 then return false,'Сервер ещё не определён'end
     local s=active()
     if not s then
-        A.data.session={sid=server(),started=os.time(),routes={},focus=1,last_review=0}
+        A.data.session={sid=server(),started=os.time(),routes={},focus=1,last_review=0,
+            tax_bp=num(DSP.settings.tax_bp,0,10000)or 200}
     end
     local n=append_routes(routes,24)
     A.show(true)
@@ -258,6 +273,7 @@ function A.remaining(row,side,offer,base,meta)
     local c=quote and consumed_entry(quote)
     if not c then return q,meta end
     local last=num(c.at,0)or 0
+    if last<cycle_start(os.time())then return q,meta end
     -- A newer complete game observation supersedes our local bookkeeping.
     if meta and(meta.source=='recent_scan'or meta.source=='game_observed')
         and (num(meta.at,0)or 0)>last then return q,meta end
