@@ -1,7 +1,8 @@
 -- Market Helper style template controls over Palatka's safe chat-command queue.
 -- Manual "send now" can run every enabled row with a configurable inter-line pause.
 local P=DSP.promo
-if P._mh_options_installed then return true end
+if P._mh_options_v293_installed then return true end
+P._mh_options_v293_installed=true
 P._mh_options_installed=true
 P.MIN_INTERVAL=30
 local function int(v,min,max)
