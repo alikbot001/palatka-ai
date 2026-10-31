@@ -399,12 +399,23 @@ function V.storage_screen()
         V.text('Предметов: '..info.total_qty..' шт.')
     end
     if current.kind=='trunk' then
-        V.muted('Занято слотов: '..tostring(current.occupied_slots or #current.rows)..' / 180')
+        V.muted('Занято слотов: '..tostring(current.occupied_slots or #current.rows)..
+            ' / '..tostring(current.slots_count or 180))
     elseif current.source=='packet220_probe' then
         V.red('Предварительный снимок: полный формат этого хранилища ещё проверяется.')
     end
-    V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
-    V.muted('По объявлениям: '..DSP.money(info.ask_value)..' · не чистая прибыль')
+    if V.storage_detail_key and #rows==1 then
+        local item=rows[1]
+        if not info.cross_server and item.bid then
+            V.green('Оценка этого предмета: '..DSP.money((item.qty or 0)*item.bid))
+            V.muted('Цена скупки: '..DSP.money(item.bid)..' / шт.')
+        else
+            V.muted('Нет актуальной цены скупки для найденного предмета.')
+        end
+    else
+        V.green('Оценка скупки всего хранилища: '..DSP.money(info.sell_to_buyers))
+        V.muted('По объявлениям: '..DSP.money(info.ask_value)..' · не чистая прибыль')
+    end
 
     V.list_rows('storage_items',rows,82,function(it,i)
         V.row('storage_item_'..i,82,function(rw,x,y)
