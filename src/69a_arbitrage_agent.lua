@@ -181,6 +181,20 @@ function A.start_market()
     table.sort(routes,function(a,b)return(tonumber(a.net_profit)or 0)>(tonumber(b.net_profit)or 0)end)
     return A.start(routes)
 end
+-- A locally scanned route can join the same session if both quantities are known.
+-- The local quote identity is separate from remote API identities.
+function A.add_local_route(r)
+    if type(r)~='table' or not num(r.qty,1,1000000000)then
+        return false,'Скан не подтвердил количество с обеих сторон'
+    end
+    local item_key=tostring(r.id or'?')..':'..tostring(r.ench or 0)
+    local row={key=item_key,display=r.name,ench=r.ench or 0}
+    local sell={shop=r.seller_shop,owner=r.seller_owner,price=r.buy_price,ts=r.seller_at}
+    local buy={shop=r.buyer_shop,owner=r.buyer_owner,price=r.sell_price,ts=r.buyer_at}
+    local p={row=row,name=r.name,sell_offer=sell,buy_offer=buy,
+        tradable_qty=r.qty,p_buy=r.buy_price,p_sell=r.sell_price,net_profit=r.profit_total or 0}
+    return A.add_plan({routes={p}})
+end
 function A.get(index)
     local s=active()
     return s and s.routes[index],s
