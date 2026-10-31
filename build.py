@@ -83,6 +83,7 @@ MODULES = [
     "60f_lombard_ui.lua",
     "69a_arbitrage_agent.lua",
     "69b_arbitrage_agent_ui.lua",
+    "69c_arbitrage_status.lua",
     "99_main.lua",
 ]
 
