@@ -21,9 +21,9 @@ end
 local function kind_of(title)
     local s=DSP.lower(normal(title))
     if s:find('инвентарь',1,true) then return 'inventory' end
-    if s:find('áàãàæíèê',1,true) or s:find('Áàãàæíèê',1,true) then return 'trunk' end
-    if s:find('øêàô',1,true) or s:find('Øêàô',1,true) then return 'cabinet' end
-    if s:find('ñêëàä',1,true) or s:find('Ñêëàä',1,true) or s:find('õðàíèëèùå',1,true) or s:find('Õðàíèëèùå',1,true) then return 'warehouse' end
+    if s:find('багажник',1,true) or s:find('Багажник',1,true) then return 'trunk' end
+    if s:find('шкаф',1,true) or s:find('Шкаф',1,true) then return 'cabinet' end
+    if s:find('склад',1,true) or s:find('Склад',1,true) or s:find('хранилище',1,true) or s:find('Хранилище',1,true) then return 'warehouse' end
     return nil
 end
 S.kind_of = kind_of
@@ -34,17 +34,17 @@ function S.parse_line(raw)
     if s=='' or #s>320 then return nil end
     local name,qty
     -- An explicit unit is mandatory: 'slot #1' is NOT one item.
-    name,qty=s:match('^(.-)%s*%(%s*([%d%., ]+)%s*øò%.?%s*%)%s*$')
-    if not name then name,qty=s:match('^(.-)%s*%[%s*([%d%., ]+)%s*øò%.?%s*%]%s*$') end
-    if not name then name,qty=s:match('^(.-)%s*[%-%—:]%s*([%d%., ]+)%s*øò%.?%s*$')end
-    if not name then name,qty=s:match('^(.-)%s+[xõXÕ]%s*([%d%., ]+)%s*$')end
-    if not name then name,qty=s:match('^(.-)%s*%([xõXÕ]%s*([%d%., ]+)%)%s*$')end
+    name,qty=s:match('^(.-)%s*%(%s*([%d%., ]+)%s*шт%.?%s*%)%s*$')
+    if not name then name,qty=s:match('^(.-)%s*%[%s*([%d%., ]+)%s*шт%.?%s*%]%s*$') end
+    if not name then name,qty=s:match('^(.-)%s*[%-%—:]%s*([%d%., ]+)%s*шт%.?%s*$')end
+    if not name then name,qty=s:match('^(.-)%s+[xхXХ]%s*([%d%., ]+)%s*$')end
+    if not name then name,qty=s:match('^(.-)%s*%([xхXХ]%s*([%d%., ]+)%)%s*$')end
     if not name then
         -- Legitimate unlabeled line: show unknown count, never silently x1.
-        if s:find('%$',1,true) or s:find('Âûáåðèòå',1,true) or s:find('Íàçàä',1,true)
-            or DSP.lower(s):find('âìåñòèìîñòü',1,true) or s:match('^[-=]+$')
-            or s:find('Îòêðûòü',1,true) or s:find('Çàêðûòü',1,true)
-            or s:find('Çàáðàòü',1,true) or s:find('Ïîëîæèòü',1,true) then return nil end
+        if s:find('%$',1,true) or s:find('Выберите',1,true) or s:find('Назад',1,true)
+            or DSP.lower(s):find('вместимость',1,true) or s:match('^[-=]+$')
+            or s:find('Открыть',1,true) or s:find('Закрыть',1,true)
+            or s:find('Забрать',1,true) or s:find('Положить',1,true) then return nil end
         name=s
     end
     name=DSP.trim(name or '')
@@ -96,7 +96,7 @@ function S.accept(kind,title,text,ts,source)
     if DSP.settings and DSP.save_settings then
         DSP.settings.storage_snapshots=S.snapshots
         local ok,err=DSP.save_settings()
-        if not ok then S.last_error='Íå óäàëîñü ñîõðàíèòü ñíèìîê: '..tostring(err) end
+        if not ok then S.last_error='Не удалось сохранить снимок: '..tostring(err) end
     end
     return true,snap
 end
@@ -223,10 +223,10 @@ function S.sorted(snapshot,mode,lookup)
         if mode=='category' then
             local function cat(n)
                 n=DSP.lower(tostring(n or ''))
-                if n:find('äðîâ',1,true) or n:find('ìåòàëë',1,true) or n:find('êàìåíü',1,true)
-                    or n:find('ëåí',1,true) or n:find('õëîï',1,true) then return 1 end
-                if n:find('ëàðåö',1,true) or n:find('êåéñ',1,true) then return 2 end
-                if n:find('äåòàëü òþíèíãà',1,true) then return 3 end
+                if n:find('дров',1,true) or n:find('металл',1,true) or n:find('камень',1,true)
+                    or n:find('лен',1,true) or n:find('хлоп',1,true) then return 1 end
+                if n:find('ларец',1,true) or n:find('кейс',1,true) then return 2 end
+                if n:find('деталь тюнинга',1,true) then return 3 end
                 return 4
             end
             if cat(a.name)~=cat(b.name)then return cat(a.name)<cat(b.name)end
@@ -327,11 +327,12 @@ local function save_snapshot(slots, source_reason)
     local ts=os.time()
     local rows, total, occupied = build_rows(slots)
     local previous = active_snapshot()
+    local requested_at=T.requested_at
     local snap={
         id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
         kind='trunk',
         -- No persistent vehicle identity in observed packet. This is ALWAYS the last opened trunk.
-        title=DSP.to_cp and DSP.to_cp('ÐŸÐ¾ÑÐ»ÐµÐ´Ð½Ð¸Ð¹ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ñ‹Ð¹ Ð±Ð°Ð³Ð°Ð¶Ð½Ð¸Ðº') or 'Last opened trunk',
+        title='Последний открытый багажник',
         source='packet220_trunk', identity_verified=false,
         observed_at=ts, updated_at=ts, server=DSP.market and DSP.market.state and DSP.market.state.sid or nil,
         slots_count=TRUNK_SLOTS, occupied_slots=occupied,count_known=total,
@@ -354,6 +355,11 @@ local function save_snapshot(slots, source_reason)
     if DSP.settings then DSP.settings.storage_snapshots=new_list end
     T.snapshot=snap;T.last_update=ts;T.status='saved';T.received=TRUNK_SLOTS
     T.occupied=occupied;T.total=total
+    T.last_saved_at=ts
+    if requested_at then
+        T.last_completed_request_at=ts
+        T.requested_at=nil
+    end
     if DSP.save_settings then
         local called,ok,err=pcall(DSP.save_settings)
         if not called or not ok then
@@ -361,6 +367,8 @@ local function save_snapshot(slots, source_reason)
             if DSP.settings then DSP.settings.storage_snapshots=old_saved end
             T.snapshot=old_snap;T.last_update=old_updated
             T.occupied=old_occ;T.total=old_total
+            T.last_saved_at=nil
+            T.requested_at=requested_at
             T.status='save_error'
             T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
             if DSP.flog then DSP.flog('TRUNK save failed: '..T.last_error) end
@@ -381,6 +389,7 @@ function S.on_inventory_packet(sub, raw)
     -- Real trunk full snapshots use subid=0. subid=2 carries a separate slot
     -- namespace for other inventory blocks; never merge it with trunk slots.
     if tonumber(sub)~=0 then return false end
+    if not (T.autoscan_enabled or T.requested_at) then return false end
     local items=parse_payload(raw)
     if not items or #items == 0 then return false end
     local ts=os.time()
@@ -417,7 +426,7 @@ function S.on_inventory_packet(sub, raw)
     -- Leave the last complete 180-slot snapshot untouched.
     if #items<=5 and T.snapshot then
         T.status='unverified_delta'
-        T.last_error='×àñòè÷íîå èçìåíåíèå ïðîïóùåíî: ID ìàøèíû íåèçâåñòåí. Îòêðîé áàãàæíèê çàíîâî.'
+        T.last_error='Частичное изменение пропущено: ID машины неизвестен. Открой багажник заново.'
         return false
     end
     T.status='unknown_partial'
@@ -426,7 +435,94 @@ end
 
 -- Load the most recently persisted trunk as read-only history after restart.
 T.snapshot=active_snapshot()
+T.autoscan_enabled=not (DSP.settings and DSP.settings.storage_trunk_autoscan==false)
 if T.snapshot then T.status='saved_from_disk';T.occupied=T.snapshot.occupied_slots;T.total=T.snapshot.count_known end
+
+-- The normal UI uses these methods; no additional game commands are needed.
+function S.set_trunk_autoscan(enabled)
+    local value=not not enabled
+    local prior=T.autoscan_enabled
+    T.autoscan_enabled=value
+    if DSP.settings then DSP.settings.storage_trunk_autoscan=value end
+    if DSP.save_settings then
+        local ok,saved,err=pcall(DSP.save_settings)
+        if not ok or not saved then
+            T.autoscan_enabled=prior
+            if DSP.settings then DSP.settings.storage_trunk_autoscan=prior end
+            return false,tostring(err or saved or 'save failed')
+        end
+    end
+    if not value and not T.requested_at then
+        T.pending=nil
+        T.status='disabled'
+    elseif value and T.status=='disabled' then
+        T.status='idle'
+    end
+    return true
+end
+
+function S.begin_trunk_scan()
+    T.pending=nil
+    T.received=0
+    T.last_error=nil
+    T.requested_at=os.time()
+    T.status='waiting'
+    return true
+end
+
+-- Keep manually named copies independent from the latest automatically opened
+-- vehicle. The packet has no trusted vehicle ID: do NOT auto-assign old labels
+-- when a different trunk is opened.
+function S.save_named_trunk(snapshot,label)
+    if type(snapshot)~='table' or snapshot.source~='packet220_trunk' then
+        return false,'select a confirmed full trunk snapshot'
+    end
+    if not snapshot.rows or snapshot.slots_count~=TRUNK_SLOTS then
+        return false,'incomplete trunk snapshot'
+    end
+    local name=DSP.trim(DSP.clean_text(tostring(label or '')))
+    if name=='' or #name>66 or name:find('[%c]') then
+        return false,'name must contain 1-66 characters without controls'
+    end
+    S._named_seq=(S._named_seq or 0)+1
+    local ts=os.time()
+    local rows={}
+    for i,r in ipairs(snapshot.rows) do
+        rows[i]={slot=r.slot,id=r.id,name=r.name,ench=r.ench,
+            qty=r.qty,quantity_confirmed=r.quantity_confirmed}
+    end
+    local named={id='trunk_saved_'..tostring(ts)..'_'..tostring(S._named_seq),
+        title=name,kind='trunk',source='packet220_trunk_named',
+        identity_verified=false,complete_verified=true,
+        observed_at=snapshot.observed_at,server=snapshot.server,
+        slots_count=TRUNK_SLOTS,occupied_slots=snapshot.occupied_slots,
+        count_known=snapshot.count_known,rows=rows}
+    local prior=S.snapshots
+    local prior_saved=DSP.settings and DSP.settings.storage_snapshots
+    local fresh={}
+    if prior[1] and prior[1].source=='packet220_trunk' then
+        fresh[#fresh+1]=prior[1]
+    end
+    fresh[#fresh+1]=named
+    for _,existing in ipairs(prior) do
+        if existing~=named and existing~=fresh[1] then
+            fresh[#fresh+1]=existing
+            if #fresh>=8 then break end
+        end
+    end
+    S.snapshots=fresh
+    if DSP.settings then DSP.settings.storage_snapshots=fresh end
+    if DSP.save_settings then
+        local ok,saved,err=pcall(DSP.save_settings)
+        if not ok or not saved then
+            S.snapshots=prior
+            if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
+            return false,tostring(err or saved or 'save failed')
+        end
+    end
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true,named
+end
 
 -- Refresh timeout status when the scanner panel is drawn, even if no more packets arrive.
 function S.trunk_state()
