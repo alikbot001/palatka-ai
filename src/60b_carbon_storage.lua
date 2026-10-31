@@ -166,6 +166,16 @@ function V.storage_screen()
     end
     V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
     local current=snapshots[V.storage_selected]
+    if V.storage_ask_name then
+        V.storage_ask_name=nil
+        V.storage_label_target=current
+        V.storage_label_buf=imgui.new.char[128]()
+        -- Suggest a default name but let the player replace it.
+        local current_title=DSP.utf8(tostring(current.title or ''))
+        ffi.copy(V.storage_label_buf,current_title:sub(1,120))
+        V.storage_label_error=nil
+        V.open_popup('Название снимка','storage_rename')
+    end
     local controlw=math.max(90,(imgui.GetContentRegionAvail().x-8)/2)
     if b('Снимок '..V.storage_selected..' / '..#snapshots,'next',controlw)then
         V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
