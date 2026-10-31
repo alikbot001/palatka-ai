@@ -221,4 +221,123 @@ function P.install()
     previous_install()
     P.bootstrap(os.time())
 end
+
+-- v2.8.9: a named template owns a list of independently scheduled commands.
+-- Previous single-line templates migrate without losing their saved text/order.
+local previous_settings=P.settings
+local previous_update=P.update
+local function ensure_rows(t)
+    if type(t.rows)=='table' then return t.rows end
+    local rows={}
+    for _,line in ipairs(P.lines(t.text or''))do
+        rows[#rows+1]={text=line,interval=num(t.interval,60,3600)or 180,auto=true}
+    end
+    t.rows=rows
+    return rows
+end
+function P.settings()
+    local s=previous_settings()
+    for _,t in ipairs(s.templates)do ensure_rows(t)end
+    return s
+end
+function P.update(index,name,text,interval)
+    local ok,err=previous_update(index,name,text,interval)
+    if ok then
+        local t=P.settings().templates[index]
+        local rows={}
+        for _,line in ipairs(P.lines(text or''))do
+            rows[#rows+1]={text=line,interval=num(interval,60,3600)or 180,auto=true}
+        end
+        t.rows=rows
+        persist()
+    end
+    return ok,err
+end
+function P.save_template(index,name,rows,enabled)
+    local s=P.settings()
+    if type(name)~='string' or #name<1 or #name>64 then
+        return false,'Название шаблона: 1–64 байта'
+    end
+    if type(rows)~='table' or #rows==0 or #rows>24 then
+        return false,'Добавь от 1 до 24 строк'
+    end
+    if not index and #s.templates>=P.MAX_TEMPLATES then
+        return false,'Достигнут лимит шаблонов'
+    end
+    if index and not s.templates[index]then return false,'Шаблон не найден'end
+    local normalized={}
+    local total=0
+    for i,row in ipairs(rows)do
+        if type(row)~='table' then return false,'Ошибка строки '..i end
+        local cmd=tostring(row.text or''):match('^%s*(.-)%s*$')
+        local ok,err=P.validate(cmd)
+        if not ok then return false,'Строка '..i..': '..tostring(err)end
+        if #P.lines(cmd)~=1 then return false,'Одна команда на строку'end
+        total=total+#cmd
+        if total>4800 then return false,'Слишком длинный шаблон'end
+        normalized[i]={text=cmd,interval=num(row.interval,P.MIN_INTERVAL,3600)or 180,
+            auto=row.auto~=false}
+    end
+    local old=index and s.templates[index]or nil
+    local t={name=name,text=table.concat((function()
+        local lines={}
+        for _,r in ipairs(normalized)do lines[#lines+1]=r.text end
+        return lines
+    end)(),'\n'),rows=normalized,
+        interval=normalized[1].interval,auto=enabled~=false,
+        last_sent=old and old.last_sent or 0,line_index=old and old.line_index or 0}
+    if index then s.templates[index]=t else
+        s.templates[#s.templates+1]=t;index=#s.templates
+    end
+    if not persist()then
+        if old then s.templates[index]=old else table.remove(s.templates,index)end
+        return false,'Не удалось сохранить шаблон'
+    end
+    return true,index
+end
+function P.steps()
+    local steps={}
+    for i,t in ipairs(P.settings().templates)do
+        if t.auto~=false then
+            for line,row in ipairs(ensure_rows(t))do
+                if row.auto~=false and type(row.text)=='string' and P.validate(row.text)then
+                    steps[#steps+1]={index=i,line=line,command=row.text,
+                        interval=num(row.interval,P.MIN_INTERVAL,3600)or 180,name=t.name}
+                end
+            end
+        end
+    end
+    return steps
+end
+function P.send_once(index,at,send,connected)
+    at=at or os.time()
+    local t=P.settings().templates[index]
+    if not t then return false,'Шаблон не найден'end
+    local all=P.steps()
+    local target=all[P.cursor or 1]
+    if not target or target.index~=index then
+        for _,step in ipairs(all)do
+            if step.index==index then target=step;break end
+        end
+    end
+    if not target or target.index~=index then return false,'В шаблоне нет включённых строк'end
+    if P.last_sent>0 and at-P.last_sent<P.MIN_INTERVAL then
+        return false,'Пауза до следующей отправки'
+    end
+    if connected==nil then connected=online()end
+    if not connected then return false,'Нет подключения к игре'end
+    local resolved,err=P.expand(target.command)
+    if not resolved then return false,err end
+    if #resolved>P.MAX_STEP_BYTES then return false,'Команда превышает 200 байт'end
+    local sender=send or sampSendChat
+    if type(sender)~='function'then return false,'Нет отправки чата'end
+    local ok,response=pcall(sender,resolved)
+    if not ok or response==false then return false,'Не удалось отправить команду'end
+    P.last_sent=at;P.session_count=P.session_count+1
+    P.last_command=resolved;P.last_error=nil
+    t.last_sent=at;t.line_index=target.line
+    t.rows[target.line].last_sent=at
+    return true
+end
+
 return true

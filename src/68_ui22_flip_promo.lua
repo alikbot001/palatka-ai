@@ -2,15 +2,15 @@
 local ffi=require('ffi')
 local V,M,F,P=DSP.ui22,DSP.mobile,DSP.flip,DSP.promo
 local function b(label,id,width,active,primary)return V.button(label,'flip24_'..id,width,active,primary)end
-local function save()if not DSP.save_settings()then V.flip_error='Не удалось сохранить настройки';return false end
+local function save()if not DSP.save_settings()then V.flip_error='РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё';return false end
     if M.defer_save then M.defer_save() end;return true end
 local function money(n)return DSP.money(n or 0)end
 local function fixed(s,w)return V.fit(tostring(s),math.max(1,w))end
 local function row_price(r,w)
-    return fixed('Спрос: '..money(r.buy and r.buy.best or 0)..' · Предложения: '..money(r.sell and r.sell.med or 0),w)
+    return fixed('РЎРїСЂРѕСЃ: '..money(r.buy and r.buy.best or 0)..' В· РџСЂРµРґР»РѕР¶РµРЅРёСЏ: '..money(r.sell and r.sell.med or 0),w)
 end
 local function risk_label(n)
-    return ({[0]='низкий',[1]='умеренный',[2]='высокий',[3]='очень высокий'})[n]or'нет оценки'
+    return ({[0]='РЅРёР·РєРёР№',[1]='СѓРјРµСЂРµРЅРЅС‹Р№',[2]='РІС‹СЃРѕРєРёР№',[3]='РѕС‡РµРЅСЊ РІС‹СЃРѕРєРёР№'})[n]or'РЅРµС‚ РѕС†РµРЅРєРё'
 end
 local function data_groups()
     if DSP.market.arbitrage_grouped_ui then return DSP.market.arbitrage_grouped_ui() end
@@ -26,14 +26,14 @@ local function open_arb(item)
     V.arb_sellers={};V.arb_buyers={};V.arb_revision=(V.arb_revision or 0)+1
     for _,o in ipairs(g.sellers or{})do V.arb_sellers[DSP.market.offer_key(o)]=true end
     for _,o in ipairs(g.buyers or{})do V.arb_buyers[DSP.market.offer_key(o)]=true end
-    V.open_popup('Арбитраж','arb_details')
+    V.open_popup('РђСЂР±РёС‚СЂР°Р¶','arb_details')
 end
 local function opportunities()
     local groups,status=data_groups()
-    if status=='loading' then V.muted('Расчёт рынка...')end
-    if status=='error' then V.red('Ошибка подготовки рынка')end
-    V.muted('Найдено по снимку API. Это НЕ совершённые сделки и НЕ гарантированный остаток.')
-    local query,edited=V.search('flip','Предмет или название...',-1)
+    if status=='loading' then V.muted('Р Р°СЃС‡С‘С‚ СЂС‹РЅРєР°...')end
+    if status=='error' then V.red('РћС€РёР±РєР° РїРѕРґРіРѕС‚РѕРІРєРё СЂС‹РЅРєР°')end
+    V.muted('РќР°Р№РґРµРЅРѕ РїРѕ СЃРЅРёРјРєСѓ API. Р­С‚Рѕ РќР• СЃРѕРІРµСЂС€С‘РЅРЅС‹Рµ СЃРґРµР»РєРё Рё РќР• РіР°СЂР°РЅС‚РёСЂРѕРІР°РЅРЅС‹Р№ РѕСЃС‚Р°С‚РѕРє.')
+    local query,edited=V.search('flip','РџСЂРµРґРјРµС‚ РёР»Рё РЅР°Р·РІР°РЅРёРµ...',-1)
     if edited then V.reset_list('flip_results')end
     local snap=F.rank(groups)
     local visible=V.memo('flip_results',snap.version..'|'..DSP.lower(query),function()
@@ -42,81 +42,81 @@ local function opportunities()
         return out
     end)
     local sum=snap.summary
-    V.muted(fixed('План: '..sum.count..' связок · Вложить '..money(sum.cost)..' · Прибыль ~ '..money(sum.profit),imgui.GetContentRegionAvail().x))
-    if sum.limited then V.muted('Резерв капитала '..money(sum.reserve)..' · Свободно '..money(sum.unallocated))end
+    V.muted(fixed('РџР»Р°РЅ: '..sum.count..' СЃРІСЏР·РѕРє В· Р’Р»РѕР¶РёС‚СЊ '..money(sum.cost)..' В· РџСЂРёР±С‹Р»СЊ ~ '..money(sum.profit),imgui.GetContentRegionAvail().x))
+    if sum.limited then V.muted('Р РµР·РµСЂРІ РєР°РїРёС‚Р°Р»Р° '..money(sum.reserve)..' В· РЎРІРѕР±РѕРґРЅРѕ '..money(sum.unallocated))end
     V.list_rows('flip_results',visible,112,function(x,i)
         V.row('flip_'..i,112,function(w,l,t)
             M.thumbnail({name=x.name,id=x.group.row and x.group.row.id},30)
             V.at(l+40,t);V.text(fixed(x.name,w-205))
-            V.at(l+40,t+27);V.muted(fixed('КУПИТЬ #'..tostring(x.seller_shop)..' '..money(x.buy_price)..' · СДАТЬ #'..tostring(x.buyer_shop)..' '..money(x.sell_price),w-205))
-            V.at(l+40,t+54);V.green(fixed('~ +'..money(x.profit)..' · '..string.format('%.1f',x.roi)..'% · '..x.qty..' шт.',w-205))
-            V.at(l+40,t+80);V.muted(fixed('Риск: '..risk_label(x.risk)..' · '..(x.reason~='' and x.reason or 'проверьте в игре'),w-205))
+            V.at(l+40,t+27);V.muted(fixed('РљРЈРџРРўР¬ #'..tostring(x.seller_shop)..' '..money(x.buy_price)..' В· РЎР”РђРўР¬ #'..tostring(x.buyer_shop)..' '..money(x.sell_price),w-205))
+            V.at(l+40,t+54);V.green(fixed('~ +'..money(x.profit)..' В· '..string.format('%.1f',x.roi)..'% В· '..x.qty..' С€С‚.',w-205))
+            V.at(l+40,t+80);V.muted(fixed('Р РёСЃРє: '..risk_label(x.risk)..' В· '..(x.reason~='' and x.reason or 'РїСЂРѕРІРµСЂСЊС‚Рµ РІ РёРіСЂРµ'),w-205))
             V.at(l+w-158,t+4)
-            if b('Разобрать >','detail_'..i,154)then
-                V.flip_focus=x;V.open_popup('Разбор сделки','flip_detail')
+            if b('Р Р°Р·РѕР±СЂР°С‚СЊ >','detail_'..i,154)then
+                V.flip_focus=x;V.open_popup('Р Р°Р·Р±РѕСЂ СЃРґРµР»РєРё','flip_detail')
             end
             V.at(l+w-158,t+57)
-            if b('Маршрут','route_'..i,154)then open_arb(x)end
+            if b('РњР°СЂС€СЂСѓС‚','route_'..i,154)then open_arb(x)end
         end)
-    end,{footer=function()V.muted('Скорость продажи неизвестна: число скупщиков не равно реальному обороту.')end})
+    end,{footer=function()V.muted('РЎРєРѕСЂРѕСЃС‚СЊ РїСЂРѕРґР°Р¶Рё РЅРµРёР·РІРµСЃС‚РЅР°: С‡РёСЃР»Рѕ СЃРєСѓРїС‰РёРєРѕРІ РЅРµ СЂР°РІРЅРѕ СЂРµР°Р»СЊРЅРѕРјСѓ РѕР±РѕСЂРѕС‚Сѓ.')end})
 end
 local function portfolio()
     local s=F.settings()
-    V.muted('Бюджет — сумма доступных денег. Ноль означает расчёт без ограничения.')
-    V.muted('Капитал для торговли ($)')
+    V.muted('Р‘СЋРґР¶РµС‚ вЂ” СЃСѓРјРјР° РґРѕСЃС‚СѓРїРЅС‹С… РґРµРЅРµРі. РќРѕР»СЊ РѕР·РЅР°С‡Р°РµС‚ СЂР°СЃС‡С‘С‚ Р±РµР· РѕРіСЂР°РЅРёС‡РµРЅРёСЏ.')
+    V.muted('РљР°РїРёС‚Р°Р» РґР»СЏ С‚РѕСЂРіРѕРІР»Рё ($)')
     if M.compact_number(s,'capital','flip_capital',210,0)then F.invalidate();save()end
-    V.muted('Резерв на непредвиденные расходы')
+    V.muted('Р РµР·РµСЂРІ РЅР° РЅРµРїСЂРµРґРІРёРґРµРЅРЅС‹Рµ СЂР°СЃС…РѕРґС‹')
     for _,pct in ipairs({0,10,20,30})do
         if b(pct..'%','reserve_'..pct,70,s.reserve_pct==pct)then s.reserve_pct=pct;F.invalidate();save()end
         V.inline(4)
     end
-    V.text('Максимум на один предмет')
+    V.text('РњР°РєСЃРёРјСѓРј РЅР° РѕРґРёРЅ РїСЂРµРґРјРµС‚')
     for _,pct in ipairs({20,35,50,100})do
         if b(pct..'%','exposure_'..pct,74,s.max_position_pct==pct)then s.max_position_pct=pct;F.invalidate();save()end
         V.inline(4)
     end
-    V.text('Минимальный ROI')
+    V.text('РњРёРЅРёРјР°Р»СЊРЅС‹Р№ ROI')
     for _,pct in ipairs({0,5,10,20})do
         if b(pct..'%','roi_'..pct,74,s.min_roi==pct)then s.min_roi=pct;F.invalidate();save()end
         V.inline(4)
     end
-    V.text('Показывать риск до уровня')
-    for _,x in ipairs({{1,'Умер.'},{2,'Высок.'},{3,'Все'}})do
+    V.text('РџРѕРєР°Р·С‹РІР°С‚СЊ СЂРёСЃРє РґРѕ СѓСЂРѕРІРЅСЏ')
+    for _,x in ipairs({{1,'РЈРјРµСЂ.'},{2,'Р’С‹СЃРѕРє.'},{3,'Р’СЃРµ'}})do
         if b(x[2],'risk_'..x[1],100,s.max_risk==x[1])then s.max_risk=x[1];F.invalidate();save()end
         V.inline(4)
     end
-    V.text('Рейтинг по:')
-    for _,x in ipairs({{'profit','Прибыль'},{'roi','ROI'},{'unit','За шт.'}})do
+    V.text('Р РµР№С‚РёРЅРі РїРѕ:')
+    for _,x in ipairs({{'profit','РџСЂРёР±С‹Р»СЊ'},{'roi','ROI'},{'unit','Р—Р° С€С‚.'}})do
         if b(x[2],'sort_'..x[1],115,s.sort==x[1])then s.sort=x[1];F.invalidate();save()end
         V.inline(4)
     end
-    V.muted('Ограничения считаются на весь план, не отдельно на каждый маршрут.')
+    V.muted('РћРіСЂР°РЅРёС‡РµРЅРёСЏ СЃС‡РёС‚Р°СЋС‚СЃСЏ РЅР° РІРµСЃСЊ РїР»Р°РЅ, РЅРµ РѕС‚РґРµР»СЊРЅРѕ РЅР° РєР°Р¶РґС‹Р№ РјР°СЂС€СЂСѓС‚.')
 end
 local function watchlist()
     local s=F.settings()
-    if b(s.alerts and 'Оповещения: ВКЛ' or 'Оповещения: ВЫКЛ','watch_enabled',225,s.alerts)then
+    if b(s.alerts and 'РћРїРѕРІРµС‰РµРЅРёСЏ: Р’РљР›' or 'РћРїРѕРІРµС‰РµРЅРёСЏ: Р’Р«РљР›','watch_enabled',225,s.alerts)then
         s.alerts=not s.alerts;save()
     end
-    V.muted('Цена из API; не значит, что лот ещё доступен. Не чаще одного уведомления в 5 минут.')
+    V.muted('Р¦РµРЅР° РёР· API; РЅРµ Р·РЅР°С‡РёС‚, С‡С‚Рѕ Р»РѕС‚ РµС‰С‘ РґРѕСЃС‚СѓРїРµРЅ. РќРµ С‡Р°С‰Рµ РѕРґРЅРѕРіРѕ СѓРІРµРґРѕРјР»РµРЅРёСЏ РІ 5 РјРёРЅСѓС‚.')
     local rows={}
     for key,rule in pairs(s.watch)do rows[#rows+1]={key=key,rule=rule}end
     table.sort(rows,function(a,b)return a.key<b.key end)
     V.list_rows('flip_watch',rows,96,function(x,i)
         V.row('watch_'..i,96,function(w,l,t)
             V.at(l,t);V.text(fixed(x.rule.name,w-150))
-            V.at(l,t+30);V.muted(fixed('Порог '..money(x.rule.max_price)..' · сервер '..tostring(x.rule.server),w-150))
+            V.at(l,t+30);V.muted(fixed('РџРѕСЂРѕРі '..money(x.rule.max_price)..' В· СЃРµСЂРІРµСЂ '..tostring(x.rule.server),w-150))
             local st=DSP.market.state or{}
             local actual=(st.by_key or{})[x.key]
-            V.at(l,t+56);V.muted(actual and row_price(actual,w-150)or'На текущем снимке отсутствует')
+            V.at(l,t+56);V.muted(actual and row_price(actual,w-150)or'РќР° С‚РµРєСѓС‰РµРј СЃРЅРёРјРєРµ РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚')
             V.at(l+w-142,t+22)
-            if b('Удалить','watch_delete_'..i,138)then
-                V.flip_remove_watch=x.key;V.open_popup('Удалить наблюдение?','flip_watch_delete')
+            if b('РЈРґР°Р»РёС‚СЊ','watch_delete_'..i,138)then
+                V.flip_remove_watch=x.key;V.open_popup('РЈРґР°Р»РёС‚СЊ РЅР°Р±Р»СЋРґРµРЅРёРµ?','flip_watch_delete')
             end
         end)
-    end,{footer=function()V.muted('Не выполняет покупок и не отправляет дополнительные запросы.')end})
+    end,{footer=function()V.muted('РќРµ РІС‹РїРѕР»РЅСЏРµС‚ РїРѕРєСѓРїРѕРє Рё РЅРµ РѕС‚РїСЂР°РІР»СЏРµС‚ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ Р·Р°РїСЂРѕСЃС‹.')end})
 end
 local function pricing()
-    local query,edited=V.search('flip_prices','Предмет для настройки цены',-1)
+    local query,edited=V.search('flip_prices','РџСЂРµРґРјРµС‚ РґР»СЏ РЅР°СЃС‚СЂРѕР№РєРё С†РµРЅС‹',-1)
     if edited then V.reset_list('flip_prices')end
     local needle=DSP.lower(query)
     local st=DSP.market.state or{}
@@ -128,40 +128,40 @@ local function pricing()
         end
         return out
     end)
-    V.muted('Быстро / рынок / маржа — цены ОБЪЯВЛЕНИЙ; без известной себестоимости прибыль неизвестна.')
+    V.muted('Р‘С‹СЃС‚СЂРѕ / СЂС‹РЅРѕРє / РјР°СЂР¶Р° вЂ” С†РµРЅС‹ РћР‘РЄРЇР’Р›Р•РќРР™; Р±РµР· РёР·РІРµСЃС‚РЅРѕР№ СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚Рё РїСЂРёР±С‹Р»СЊ РЅРµРёР·РІРµСЃС‚РЅР°.')
     V.list_rows('flip_prices',rows,100,function(r,i)
         V.row('price_'..i,100,function(w,l,t)
             V.at(l,t);V.text(fixed(r.display,w-170))
             V.at(l,t+30);V.muted(row_price(r,w-170))
             local fast=F.suggest_price(r,'fast');local regular=F.suggest_price(r,'market');local premium=F.suggest_price(r,'premium')
-            V.at(l,t+60);V.muted(fixed('Быстро '..money(fast)..' · Рынок '..money(regular)..' · Маржа '..money(premium),w-170))
+            V.at(l,t+60);V.muted(fixed('Р‘С‹СЃС‚СЂРѕ '..money(fast)..' В· Р С‹РЅРѕРє '..money(regular)..' В· РњР°СЂР¶Р° '..money(premium),w-170))
             V.at(l+w-160,t+26)
-            if b('Настроить >','price_select_'..i,156)then
+            if b('РќР°СЃС‚СЂРѕРёС‚СЊ >','price_select_'..i,156)then
                 V.flip_price_row=r;V.flip_cost={value=0};V.flip_cost_known=false
-                V.open_popup('Цена для пресета','flip_price_modal')
+                V.open_popup('Р¦РµРЅР° РґР»СЏ РїСЂРµСЃРµС‚Р°','flip_price_modal')
             end
         end)
-    end,{footer=function()V.muted('Последние 180 строк списка; используй поиск. Новых HTTP-запросов нет.')end})
+    end,{footer=function()V.muted('РџРѕСЃР»РµРґРЅРёРµ 180 СЃС‚СЂРѕРє СЃРїРёСЃРєР°; РёСЃРїРѕР»СЊР·СѓР№ РїРѕРёСЃРє. РќРѕРІС‹С… HTTP-Р·Р°РїСЂРѕСЃРѕРІ РЅРµС‚.')end})
 end
 local function earnings()
     local today=F.cash_summary(DSP.settings.trades,true)
     local all=F.cash_summary(DSP.settings.trades,false)
-    V.text('Подтверждённые денежные потоки')
-    for _,x in ipairs({{'Сегодня',today},{'Всего',all}})do
-        V.text(x[1]..' · записей '..x[2].trades)
-        V.muted('Получено денег '..money(x[2].cash_in)..' · Отдано '..money(x[2].cash_out))
-        V.muted('Движение наличных '..money(x[2].cash_net))
-        V.muted('Трейдов с предметами/оценкой: '..x[2].valued_trades)
+    V.text('РџРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹Рµ РґРµРЅРµР¶РЅС‹Рµ РїРѕС‚РѕРєРё')
+    for _,x in ipairs({{'РЎРµРіРѕРґРЅСЏ',today},{'Р’СЃРµРіРѕ',all}})do
+        V.text(x[1]..' В· Р·Р°РїРёСЃРµР№ '..x[2].trades)
+        V.muted('РџРѕР»СѓС‡РµРЅРѕ РґРµРЅРµРі '..money(x[2].cash_in)..' В· РћС‚РґР°РЅРѕ '..money(x[2].cash_out))
+        V.muted('Р”РІРёР¶РµРЅРёРµ РЅР°Р»РёС‡РЅС‹С… '..money(x[2].cash_net))
+        V.muted('РўСЂРµР№РґРѕРІ СЃ РїСЂРµРґРјРµС‚Р°РјРё/РѕС†РµРЅРєРѕР№: '..x[2].valued_trades)
     end
-    V.red('Движение наличных НЕ равно прибыли: стоимость предметов и незакрытые позиции не учтены.')
-    if b('Открыть полный журнал >','journal',265)then V.set_screen('logs')end
+    V.red('Р”РІРёР¶РµРЅРёРµ РЅР°Р»РёС‡РЅС‹С… РќР• СЂР°РІРЅРѕ РїСЂРёР±С‹Р»Рё: СЃС‚РѕРёРјРѕСЃС‚СЊ РїСЂРµРґРјРµС‚РѕРІ Рё РЅРµР·Р°РєСЂС‹С‚С‹Рµ РїРѕР·РёС†РёРё РЅРµ СѓС‡С‚РµРЅС‹.')
+    if b('РћС‚РєСЂС‹С‚СЊ РїРѕР»РЅС‹Р№ Р¶СѓСЂРЅР°Р» >','journal',265)then V.set_screen('logs')end
 end
 function V.flip_screen()
-    local tabs={{'opportunities','Сделки'},{'portfolio','Капитал'},{'watch','Охота'},
-        {'pricing','Цены'},{'earnings','Итоги'}}
+    local tabs={{'opportunities','РЎРґРµР»РєРё'},{'portfolio','РљР°РїРёС‚Р°Р»'},{'watch','РћС…РѕС‚Р°'},
+        {'pricing','Р¦РµРЅС‹'},{'earnings','РС‚РѕРіРё'}}
     V.flip_tab=V.flip_tab or 'opportunities'
-    V.heading('Перепродажа',function()
-        if b('Арбитраж >','main_arb',146)then V.set_screen('arbitrage')end
+    V.heading('РџРµСЂРµРїСЂРѕРґР°Р¶Р°',function()
+        if b('РђСЂР±РёС‚СЂР°Р¶ >','main_arb',146)then V.set_screen('arbitrage')end
     end,148)
     local w=imgui.GetContentRegionAvail().x
     local compact=w<700
@@ -204,92 +204,92 @@ local function promo_edit(index)
     fill_buffer(V.promo_name,item and item.name or '',80)
     fill_buffer(V.promo_text,item and item.text or '/vr ',768)
     V.promo_interval={value=item and item.interval or 300}
-    V.open_popup('Шаблон рекламы','promo_edit')
+    V.open_popup('РЁР°Р±Р»РѕРЅ СЂРµРєР»Р°РјС‹','promo_edit')
 end
 function V.promo_screen()
-    V.text('Авто-пиар · Палатка AI')
+    V.text('РђРІС‚Рѕ-РїРёР°СЂ В· РџР°Р»Р°С‚РєР° AI')
     local total=P.session_count
-    V.muted('Отправлено за сессию: '..total..' / '..P.MAX_SESSION..' · интервал минимум '..P.MIN_INTERVAL..' сек.')
-    V.muted('Активируется вручную. Строки /vr, /fam, /gd, /s, /ad идут по очереди.')
-    V.muted('Доступность каналов зависит от сервера, прав игрока и ограничений чата.')
+    V.muted('РћС‚РїСЂР°РІР»РµРЅРѕ Р·Р° СЃРµСЃСЃРёСЋ: '..total..' / '..P.MAX_SESSION..' В· РёРЅС‚РµСЂРІР°Р» РјРёРЅРёРјСѓРј '..P.MIN_INTERVAL..' СЃРµРє.')
+    V.muted('РђРєС‚РёРІРёСЂСѓРµС‚СЃСЏ РІСЂСѓС‡РЅСѓСЋ. РЎС‚СЂРѕРєРё /vr, /fam, /gd, /s, /ad РёРґСѓС‚ РїРѕ РѕС‡РµСЂРµРґРё.')
+    V.muted('Р”РѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РєР°РЅР°Р»РѕРІ Р·Р°РІРёСЃРёС‚ РѕС‚ СЃРµСЂРІРµСЂР°, РїСЂР°РІ РёРіСЂРѕРєР° Рё РѕРіСЂР°РЅРёС‡РµРЅРёР№ С‡Р°С‚Р°.')
     if P.running then
-        if b('ОСТАНОВИТЬ','promo_stop',185,true,true)then P.stop()end
+        if b('РћРЎРўРђРќРћР’РРўР¬','promo_stop',185,true,true)then P.stop()end
     else
-        if b('Запустить авто-пиар','promo_start',210,false,true)then
+        if b('Р—Р°РїСѓСЃС‚РёС‚СЊ Р°РІС‚Рѕ-РїРёР°СЂ','promo_start',210,false,true)then
             local ok,err=P.start();V.promo_error=ok and nil or err
         end
     end
-    V.inline();if b('+ Шаблон','promo_new',155)then promo_edit(nil)end
+    V.inline();if b('+ РЁР°Р±Р»РѕРЅ','promo_new',155)then promo_edit(nil)end
     if V.promo_error or P.last_error then V.red(tostring(V.promo_error or P.last_error))end
     local rows=P.settings().templates
     V.list_rows('promo_list',rows,126,function(it,i)
         V.row('promo_row_'..i,126,function(w,l,t)
             V.at(l,t);V.text(fixed((it.auto and '[x] ' or '[ ] ')..it.name,w-170))
             V.at(l,t+28);V.muted(fixed(it.text,w-170))
-            V.at(l,t+54);V.muted('Каждые '..tostring(it.interval or 300)..'с · '..#P.lines(it.text)..' строк по очереди')
+            V.at(l,t+54);V.muted('РљР°Р¶РґС‹Рµ '..tostring(it.interval or 300)..'СЃ В· '..#P.lines(it.text)..' СЃС‚СЂРѕРє РїРѕ РѕС‡РµСЂРµРґРё')
             V.at(l,t+80)
-            if b(it.auto and 'Авто: да' or 'Авто: нет','promo_toggle_'..i,118,it.auto)then
+            if b(it.auto and 'РђРІС‚Рѕ: РґР°' or 'РђРІС‚Рѕ: РЅРµС‚','promo_toggle_'..i,118,it.auto)then
                 it.auto=not it.auto
                 if not save()then it.auto=not it.auto end
             end
-            V.inline(4);if b('Отправить','promo_send_'..i,134)then
+            V.inline(4);if b('РћС‚РїСЂР°РІРёС‚СЊ','promo_send_'..i,134)then
                 local ok,err=P.send_once(i)
                 V.promo_error=ok and nil or err
             end
             V.at(l+w-155,t+8)
-            if b('Изменить','promo_edit_'..i,151)then promo_edit(i)end
+            if b('РР·РјРµРЅРёС‚СЊ','promo_edit_'..i,151)then promo_edit(i)end
             V.at(l+w-155,t+63)
-            if b('Удалить','promo_del_'..i,151)then
-                V.promo_delete=i;V.open_popup('Удалить шаблон?','promo_delete')
+            if b('РЈРґР°Р»РёС‚СЊ','promo_del_'..i,151)then
+                V.promo_delete=i;V.open_popup('РЈРґР°Р»РёС‚СЊ С€Р°Р±Р»РѕРЅ?','promo_delete')
             end
         end)
-    end,{footer=function()V.muted('Не отправляет сообщений, пока не нажата кнопка запуска.')end})
+    end,{footer=function()V.muted('РќРµ РѕС‚РїСЂР°РІР»СЏРµС‚ СЃРѕРѕР±С‰РµРЅРёР№, РїРѕРєР° РЅРµ РЅР°Р¶Р°С‚Р° РєРЅРѕРїРєР° Р·Р°РїСѓСЃРєР°.')end})
 end
 local previous_popups=V.popups
 function V.popups()
     if previous_popups then previous_popups()end
-    V.popup('Разбор сделки','flip_detail',function()
+    V.popup('Р Р°Р·Р±РѕСЂ СЃРґРµР»РєРё','flip_detail',function()
         local x=V.flip_focus
         if not x then imgui.CloseCurrentPopup();return end
         local st=DSP.market.state or{}
         if x.group and (x.group.row~=(st.by_key or{})[x.key]) then
-            V.red('Рынок изменился. Откройте предложение заново.');V.cancel('flip_detail');return
+            V.red('Р С‹РЅРѕРє РёР·РјРµРЅРёР»СЃСЏ. РћС‚РєСЂРѕР№С‚Рµ РїСЂРµРґР»РѕР¶РµРЅРёРµ Р·Р°РЅРѕРІРѕ.');V.cancel('flip_detail');return
         end
         V.text(x.name)
-        V.muted('Купить '..x.qty..' шт. в #'..tostring(x.seller_shop)..' по '..money(x.buy_price))
-        V.muted('Продать в скупку #'..tostring(x.buyer_shop)..' по '..money(x.sell_price))
-        V.text('Затраты '..money(x.cost))
-        V.text('Валовая выручка '..money(x.gross))
-        V.text('Комиссия ~ '..money(x.fee))
-        V.text('После комиссии ~ '..money(x.revenue))
-        V.green('Потенциальная прибыль ~ '..money(x.profit)..' · ROI '..string.format('%.1f%%',x.roi))
-        V.red('Риск '..risk_label(x.risk)..': '..x.reason)
-        V.muted('Интерес рынка: '..F.market_interest(x.group and x.group.row))
-        V.muted('Сверьте количества и готовность скупщика в игре ДО покупки.')
-        if b('Метка продавца','flip_detail_sell',187)then DSP.market.mark_shop(x.seller_shop)end
-        V.inline();if b('Метка скупщика','flip_detail_buy',188)then DSP.market.mark_shop(x.buyer_shop)end
-        V.muted('Отслеживать цену входа (за шт.)')
+        V.muted('РљСѓРїРёС‚СЊ '..x.qty..' С€С‚. РІ #'..tostring(x.seller_shop)..' РїРѕ '..money(x.buy_price))
+        V.muted('РџСЂРѕРґР°С‚СЊ РІ СЃРєСѓРїРєСѓ #'..tostring(x.buyer_shop)..' РїРѕ '..money(x.sell_price))
+        V.text('Р—Р°С‚СЂР°С‚С‹ '..money(x.cost))
+        V.text('Р’Р°Р»РѕРІР°СЏ РІС‹СЂСѓС‡РєР° '..money(x.gross))
+        V.text('РљРѕРјРёСЃСЃРёСЏ ~ '..money(x.fee))
+        V.text('РџРѕСЃР»Рµ РєРѕРјРёСЃСЃРёРё ~ '..money(x.revenue))
+        V.green('РџРѕС‚РµРЅС†РёР°Р»СЊРЅР°СЏ РїСЂРёР±С‹Р»СЊ ~ '..money(x.profit)..' В· ROI '..string.format('%.1f%%',x.roi))
+        V.red('Р РёСЃРє '..risk_label(x.risk)..': '..x.reason)
+        V.muted('РРЅС‚РµСЂРµСЃ СЂС‹РЅРєР°: '..F.market_interest(x.group and x.group.row))
+        V.muted('РЎРІРµСЂСЊС‚Рµ РєРѕР»РёС‡РµСЃС‚РІР° Рё РіРѕС‚РѕРІРЅРѕСЃС‚СЊ СЃРєСѓРїС‰РёРєР° РІ РёРіСЂРµ Р”Рћ РїРѕРєСѓРїРєРё.')
+        if b('РњРµС‚РєР° РїСЂРѕРґР°РІС†Р°','flip_detail_sell',187)then DSP.market.mark_shop(x.seller_shop)end
+        V.inline();if b('РњРµС‚РєР° СЃРєСѓРїС‰РёРєР°','flip_detail_buy',188)then DSP.market.mark_shop(x.buyer_shop)end
+        V.muted('РћС‚СЃР»РµР¶РёРІР°С‚СЊ С†РµРЅСѓ РІС…РѕРґР° (Р·Р° С€С‚.)')
         V.flip_watch_price=V.flip_watch_price or {value=x.buy_price}
         M.compact_number(V.flip_watch_price,'value','flip_watch_target',170,1)
-        if b('Следить за ценой','flip_watch_add',208)then
+        if b('РЎР»РµРґРёС‚СЊ Р·Р° С†РµРЅРѕР№','flip_watch_add',208)then
             local ok,err=F.watch_set(x.key,x.name,V.flip_watch_price.value)
             V.flip_error=ok and nil or err
         end
         V.inline();V.cancel('flip_detail')
     end,{w=690,h=500,resizable=true})
-    V.popup('Цена для пресета','flip_price_modal',function()
+    V.popup('Р¦РµРЅР° РґР»СЏ РїСЂРµСЃРµС‚Р°','flip_price_modal',function()
         local r=V.flip_price_row
         if not r then imgui.CloseCurrentPopup();return end
         V.text(r.display)
         local evidence=F.price_evidence(r)
-        V.muted('API '..(evidence.api and money(evidence.api)or'нет')..' · Скупка '..(evidence.buy and money(evidence.buy)or'нет'))
-        V.muted('ЦР '..(evidence.cr and money(evidence.cr)or'нет')..' · Открытая лавка '..(evidence.opened and money(evidence.opened)or'нет'))
-        V.muted('Продано сегодня: '..(evidence.today and (money(evidence.today)..' · '..tostring(evidence.today_qty)..' шт.')or'нет подтверждённой истории'))
-        V.muted('Неизвестная себестоимость не подменяется нулём.')
-        if b(V.flip_cost_known and 'Себестоимость известна' or 'Себестоимость неизвестна','cost_toggle',300,V.flip_cost_known)then V.flip_cost_known=not V.flip_cost_known end
+        V.muted('API '..(evidence.api and money(evidence.api)or'РЅРµС‚')..' В· РЎРєСѓРїРєР° '..(evidence.buy and money(evidence.buy)or'РЅРµС‚'))
+        V.muted('Р¦Р  '..(evidence.cr and money(evidence.cr)or'РЅРµС‚')..' В· РћС‚РєСЂС‹С‚Р°СЏ Р»Р°РІРєР° '..(evidence.opened and money(evidence.opened)or'РЅРµС‚'))
+        V.muted('РџСЂРѕРґР°РЅРѕ СЃРµРіРѕРґРЅСЏ: '..(evidence.today and (money(evidence.today)..' В· '..tostring(evidence.today_qty)..' С€С‚.')or'РЅРµС‚ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅРѕР№ РёСЃС‚РѕСЂРёРё'))
+        V.muted('РќРµРёР·РІРµСЃС‚РЅР°СЏ СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚СЊ РЅРµ РїРѕРґРјРµРЅСЏРµС‚СЃСЏ РЅСѓР»С‘Рј.')
+        if b(V.flip_cost_known and 'РЎРµР±РµСЃС‚РѕРёРјРѕСЃС‚СЊ РёР·РІРµСЃС‚РЅР°' or 'РЎРµР±РµСЃС‚РѕРёРјРѕСЃС‚СЊ РЅРµРёР·РІРµСЃС‚РЅР°','cost_toggle',300,V.flip_cost_known)then V.flip_cost_known=not V.flip_cost_known end
         if V.flip_cost_known then M.compact_number(V.flip_cost,'value','flip_cost_input',180,0)end
         local w=imgui.GetContentRegionAvail().x
-        for i,mode in ipairs({{'fast','Быстро'},{'market','Рынок'},{'premium','Маржа'}})do
+        for i,mode in ipairs({{'fast','Р‘С‹СЃС‚СЂРѕ'},{'market','Р С‹РЅРѕРє'},{'premium','РњР°СЂР¶Р°'}})do
             local price,info=F.suggest_price(r,mode[1],V.flip_cost_known and V.flip_cost.value or nil)
             if b(mode[2]..' '..money(price),'price_mode_'..i,math.max(95,(w-16)/3))then
                 if price then
@@ -298,20 +298,20 @@ function V.popups()
             end
             if i<3 then V.inline(6)end
         end
-        for _,pair in ipairs({{'cr','ЦР',evidence.cr},{'today','Сегодня',evidence.today},{'opened','Лавка',evidence.opened}})do
+        for _,pair in ipairs({{'cr','Р¦Р ',evidence.cr},{'today','РЎРµРіРѕРґРЅСЏ',evidence.today},{'opened','Р›Р°РІРєР°',evidence.opened}})do
             if pair[3] and b(pair[2]..' '..money(pair[3]),'evidence_'..pair[1],174)then
                 V.flip_chosen_price=pair[3];V.flip_chosen_key=r.key
             end
             V.inline(4)
         end
-        V.text('Выбранная цена: '..(V.flip_chosen_key==r.key and money(V.flip_chosen_price) or 'нет'))
-        V.muted('Подставление возможно только для существующей позиции активного пресета.')
-        if b('Применить в продажу','price_apply',235)then
+        V.text('Р’С‹Р±СЂР°РЅРЅР°СЏ С†РµРЅР°: '..(V.flip_chosen_key==r.key and money(V.flip_chosen_price) or 'РЅРµС‚'))
+        V.muted('РџРѕРґСЃС‚Р°РІР»РµРЅРёРµ РІРѕР·РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РґР»СЏ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РµР№ РїРѕР·РёС†РёРё Р°РєС‚РёРІРЅРѕРіРѕ РїСЂРµСЃРµС‚Р°.')
+        if b('РџСЂРёРјРµРЅРёС‚СЊ РІ РїСЂРѕРґР°Р¶Сѓ','price_apply',235)then
             local found=DSP.presets.find('sell',r.key)
-            if not found then V.flip_error='Сначала добавьте предмет в пресет продажи'
-            elseif V.flip_chosen_key~=r.key then V.flip_error='Выберите цену'
+            if not found then V.flip_error='РЎРЅР°С‡Р°Р»Р° РґРѕР±Р°РІСЊС‚Рµ РїСЂРµРґРјРµС‚ РІ РїСЂРµСЃРµС‚ РїСЂРѕРґР°Р¶Рё'
+            elseif V.flip_chosen_key~=r.key then V.flip_error='Р’С‹Р±РµСЂРёС‚Рµ С†РµРЅСѓ'
             elseif V.flip_cost_known and math.floor(V.flip_chosen_price*(10000-math.max(0,math.min(10000,tonumber(DSP.settings.tax_bp)or 200)))/10000)<(tonumber(V.flip_cost.value)or 0) then
-                V.flip_error='Цена ниже себестоимости после комиссии'
+                V.flip_error='Р¦РµРЅР° РЅРёР¶Рµ СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚Рё РїРѕСЃР»Рµ РєРѕРјРёСЃСЃРёРё'
             else
                 local ok,err=DSP.presets.update('sell',found,{price=V.flip_chosen_price})
                 V.flip_error=ok and nil or err
@@ -321,47 +321,47 @@ function V.popups()
         V.inline();V.cancel('flip_price_modal')
         if V.flip_error then V.red(V.flip_error)end
     end,{w=650,h=485,resizable=true})
-    V.popup('Удалить наблюдение?','flip_watch_delete',function()
-        V.text('Удалить наблюдение?')
-        if b('Удалить','watch_delete_confirm',160)then
+    V.popup('РЈРґР°Р»РёС‚СЊ РЅР°Р±Р»СЋРґРµРЅРёРµ?','flip_watch_delete',function()
+        V.text('РЈРґР°Р»РёС‚СЊ РЅР°Р±Р»СЋРґРµРЅРёРµ?')
+        if b('РЈРґР°Р»РёС‚СЊ','watch_delete_confirm',160)then
             local ok,err=F.watch_remove(V.flip_remove_watch)
             V.flip_error=ok and nil or err
             if ok then imgui.CloseCurrentPopup()end
         end
         V.inline();V.cancel('flip_watch_delete')
     end,{w=450,h=230})
-    V.popup('Удалить шаблон?','promo_delete',function()
-        V.text('Удалить выбранный шаблон?')
-        if b('Удалить','promo_delete_yes',170)then
+    V.popup('РЈРґР°Р»РёС‚СЊ С€Р°Р±Р»РѕРЅ?','promo_delete',function()
+        V.text('РЈРґР°Р»РёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ С€Р°Р±Р»РѕРЅ?')
+        if b('РЈРґР°Р»РёС‚СЊ','promo_delete_yes',170)then
             local ok=P.remove(V.promo_delete)
-            if ok then imgui.CloseCurrentPopup()else V.promo_error='Не удалось сохранить удаление'end
+            if ok then imgui.CloseCurrentPopup()else V.promo_error='РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СѓРґР°Р»РµРЅРёРµ'end
         end
         V.inline();V.cancel('promo_delete')
     end,{w=460,h=240})
-    V.popup('Шаблон рекламы','promo_edit',function()
-        V.text('Название шаблона');input_buffer('Название','name',V.promo_name,80)
-        V.muted('Несколько строк: /vr, /fam, /gd, /s или /ad — по одной раз в интервал.')
+    V.popup('РЁР°Р±Р»РѕРЅ СЂРµРєР»Р°РјС‹','promo_edit',function()
+        V.text('РќР°Р·РІР°РЅРёРµ С€Р°Р±Р»РѕРЅР°');input_buffer('РќР°Р·РІР°РЅРёРµ','name',V.promo_name,80)
+        V.muted('РќРµСЃРєРѕР»СЊРєРѕ СЃС‚СЂРѕРє: /vr, /fam, /gd, /s РёР»Рё /ad вЂ” РїРѕ РѕРґРЅРѕР№ СЂР°Р· РІ РёРЅС‚РµСЂРІР°Р».')
         imgui.SetNextItemWidth(-1)
         imgui.InputTextMultiline('##prom24_text',V.promo_text,768,imgui.ImVec2(-1,116))
-        if b('Вставить лавку','promo_insert_shop',206)then
+        if b('Р’СЃС‚Р°РІРёС‚СЊ Р»Р°РІРєСѓ','promo_insert_shop',206)then
             local raw=ffi.string(V.promo_text)
-            local marker=' {лавка}'
+            local marker=' {Р»Р°РІРєР°}'
             if #raw+#marker<767 then fill_buffer(V.promo_text,raw..marker,768) end
         end
         local shop,reason=P.own_shop_number()
-        V.muted('Моя лавка: '..(shop and tostring(shop) or 'не задан')..' ('..reason..')')
+        V.muted('РњРѕСЏ Р»Р°РІРєР°: '..(shop and tostring(shop) or 'РЅРµ Р·Р°РґР°РЅ')..' ('..reason..')')
         local ps=P.settings()
         V.promo_shop_number=V.promo_shop_number or {value=tonumber(ps.shop_number) or 0}
         M.compact_number(V.promo_shop_number,'value','promo_shop_num',126,0)
         V.inline(4)
-        if b('Запомнить №','promo_shop_save',160)then
+        if b('Р—Р°РїРѕРјРЅРёС‚СЊ в„–','promo_shop_save',160)then
             local ok,err=P.set_shop_number(V.promo_shop_number.value)
             V.promo_error=ok and nil or err
         end
-        V.muted('Маркер {лавка} -> кликабельное :lavkaID:. {номер} -> просто цифры.')
-        V.text('Интервал в секундах: 180–3600')
+        V.muted('РњР°СЂРєРµСЂ {Р»Р°РІРєР°} -> РєР»РёРєР°Р±РµР»СЊРЅРѕРµ :lavkaID:. {РЅРѕРјРµСЂ} -> РїСЂРѕСЃС‚Рѕ С†РёС„СЂС‹.')
+        V.text('РРЅС‚РµСЂРІР°Р» РІ СЃРµРєСѓРЅРґР°С…: 180вЂ“3600')
         M.compact_number(V.promo_interval,'value','promo_interval',175,180)
-        if b('Сохранить','promo_save_edit',168,true)then
+        if b('РЎРѕС…СЂР°РЅРёС‚СЊ','promo_save_edit',168,true)then
             local name=DSP.to_cp(ffi.string(V.promo_name))
             local text=DSP.to_cp(ffi.string(V.promo_text))
             local ok,err

@@ -1,5 +1,5 @@
 -- Palatka AI 2.8.3: compatible trunk sizes, suggestion dialog and settings protection.
-PALATKA_UPDATE_VERSION = '2.8.8'
+PALATKA_UPDATE_VERSION = '2.8.9'
 return function(DSP)
   -- v2.8.6: Independent, additive UI + multi-deal arbitration patch.
   local function install_v286()
@@ -181,7 +181,7 @@ local function best_plan(g)
     local p=DSP.market.plan_offers(g,nil,nil,{
         extra=V.arb_extra_enabled and V.arb_extra and V.arb_extra.value or 0})
     if p.qty<=0 then
-        V.arb_best_error='Íåò âûãîäíîãî ìàðøðóòà ïðè òåêóùèõ ôèëüòðàõ'
+        V.arb_best_error='\205\229\242 \226\251\227\238\228\237\238\227\238 \236\224\240\248\240\243\242\224 \239\240\232 \242\229\234\243\249\232\245 \244\232\235\252\242\240\224\245'
         return
     end
     V.arb_sellers={};V.arb_buyers={}
@@ -222,31 +222,31 @@ local function offer_row(o,i)
     local missing=DSP.market.is_shop_missing and DSP.market.is_shop_missing(o.shop,os.time(),o.ts)
     V.row('arb_offer_'..V.arb_tab..i,100,function(w,x,y)
         local right=math.max(155,w-170)
-        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),right-8))
+        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' \183 '..tostring(o.owner or'?'),right-8))
         local count=DSP.market.format_units(o.qty)
         local row=V.arb_detail_group and V.arb_detail_group.row
         local live_qty=DSP.market.live_offer_quantity(row,V.arb_tab,o)
-        local status=o.qty_source=='game' and 'ïðîâåðåíî: èãðà' or
-            o.qty_source=='manual' and 'ïðîâåðåíî âðó÷íóþ' or 'API, íå ïîäòâåðæäåíî'
-        V.at(x,y+26);V.muted(V.fit(count..' øò. · '..status..
-            (live_qty and (' · Èãðà: '..DSP.market.format_units(live_qty)) or ''),right-8))
-        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/øò. · '..DSP.market.offer_freshness(o.ts),right-8))
+        local status=o.qty_source=='game' and '\239\240\238\226\229\240\229\237\238: \232\227\240\224' or
+            o.qty_source=='manual' and '\239\240\238\226\229\240\229\237\238 \226\240\243\247\237\243\254' or 'API, \237\229 \239\238\228\242\226\229\240\230\228\229\237\238'
+        V.at(x,y+26);V.muted(V.fit(count..' \248\242. \183 '..status..
+            (live_qty and (' \183 \200\227\240\224: '..DSP.market.format_units(live_qty)) or ''),right-8))
+        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/\248\242. \183 '..DSP.market.offer_freshness(o.ts),right-8))
         if missing then
-            V.at(x,y+76);V.red('Ëàâêà íåäîñòóïíà: èñêëþ÷åíà èç ïëàíà')
+            V.at(x,y+76);V.red('\203\224\226\234\224 \237\229\228\238\241\242\243\239\237\224: \232\241\234\235\254\247\229\237\224 \232\231 \239\235\224\237\224')
         elseif o.qty==1 and not o.verified_at then
-            V.at(x,y+76);V.muted(V.fit('Âíèìàíèå: 1 ìîæåò áûòü êîëè÷åñòâîì ñëîòîâ',right-8))
+            V.at(x,y+76);V.muted(V.fit('\194\237\232\236\224\237\232\229: 1 \236\238\230\229\242 \225\251\242\252 \234\238\235\232\247\229\241\242\226\238\236 \241\235\238\242\238\226',right-8))
         end
         V.at(x+right,y+1)
-        if not missing and b(checked and 'Ñíÿòü âûáîð' or 'Âûáðàòü','select_'..i,160,checked)then
+        if not missing and b(checked and '\209\237\255\242\252 \226\251\225\238\240' or '\194\251\225\240\224\242\252','select_'..i,160,checked)then
             selected[key]=not checked or nil;V.arb_revision=V.arb_revision+1
         end
         V.at(x+right,y+49)
-        if b('Óòî÷íèòü','verify_'..V.arb_tab..i,80,false)then
+        if b('\211\242\238\247\237\232\242\252','verify_'..V.arb_tab..i,80,false)then
             V.arb_verify={offer=o,side=V.arb_tab,source=live_qty and 'game' or 'manual'}
             V.arb_verify_value={qty=live_qty or tonumber(o.qty) or 0}
         end
         V.inline(4)
-        if b(missing and 'Âåðíóòü' or 'Íåò ëàâêè','gone_'..V.arb_tab..i,82,missing)then
+        if b(missing and '\194\229\240\237\243\242\252' or '\205\229\242 \235\224\226\234\232','gone_'..V.arb_tab..i,82,missing)then
             if missing then DSP.market.restore_shop(o.shop) else DSP.market.mark_shop_missing(o.shop,30)end
             V.arb_revision=V.arb_revision+1;V.arb_route=false;V.cache.arb_plan=nil;M.defer_save()
         end
@@ -255,27 +255,27 @@ end
 local function route_rows(p)
     return function(r,i)
         V.row('route_'..i,100,function(w,x,y)
-            V.text(V.fit('ÊÓÏÈÒÜ '..r.tradable_qty..' øò. ó ëàâêè #'..tostring(r.sell_offer.shop)..' · '..DSP.money(r.p_buy)..'/øò.',w))
-            V.at(x,y+26);V.text(V.fit('ÏÐÎÄÀÒÜ ñêóïùèêó #'..tostring(r.buy_offer.shop)..' · '..DSP.money(r.p_sell)..'/øò.',w))
+            V.text(V.fit('\202\211\207\200\210\220 '..r.tradable_qty..' \248\242. \243 \235\224\226\234\232 #'..tostring(r.sell_offer.shop)..' \183 '..DSP.money(r.p_buy)..'/\248\242.',w))
+            V.at(x,y+26);V.text(V.fit('\207\208\206\196\192\210\220 \241\234\243\239\249\232\234\243 #'..tostring(r.buy_offer.shop)..' \183 '..DSP.money(r.p_sell)..'/\248\242.',w))
             V.at(x,y+52)
-            if b('Ê ïðîäàâöó','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
-            V.inline();if b('Ê ñêóïùèêó','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
+            if b('\202 \239\240\238\228\224\226\246\243','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
+            V.inline();if b('\202 \241\234\243\239\249\232\234\243','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
             V.inline();V.green('~ +'..DSP.money(r.net_profit))
             if r.same_shop then
-                V.at(x,y+78);V.red('Îäíà ëàâêà: âîçìîæíîñòü îáðàòíîé ñäåëêè ïðîâåðüòå â èãðå')
+                V.at(x,y+78);V.red('\206\228\237\224 \235\224\226\234\224: \226\238\231\236\238\230\237\238\241\242\252 \238\225\240\224\242\237\238\233 \241\228\229\235\234\232 \239\240\238\226\229\240\252\242\229 \226 \232\227\240\229')
             end
         end)
     end
 end
 local function finance(p,compact)
     -- Planned, not executed. Display each money component explicitly.
-    V.muted('Ðàñ÷¸ò ïî çàÿâêàì API, íå ñîâåðø¸ííàÿ ñäåëêà')
-    V.text('Çàêóïêà: -'..DSP.money(p.cost or 0))
-    V.text('Ïðîäàæà, äî êîìèññèè: +'..DSP.money(p.gross or 0))
-    V.muted('Êîìèññèÿ (ïðèíÿòàÿ): -'..DSP.money(p.fee or 0))
-    V.muted('Ïîñòóïëåíèÿ ïîñëå êîìèññèè: '..DSP.money(p.revenue or 0))
-    if (p.extra or 0)>0 then V.muted('Äîï. ðàñõîäû: -'..DSP.money(p.extra))end
-    local result='ÎÆÈÄÀÅÌÀß ÏÐÈÁÛËÜ: '..DSP.money(p.profit or 0)
+    V.muted('\208\224\241\247\184\242 \239\238 \231\224\255\226\234\224\236 API, \237\229 \241\238\226\229\240\248\184\237\237\224\255 \241\228\229\235\234\224')
+    V.text('\199\224\234\243\239\234\224: -'..DSP.money(p.cost or 0))
+    V.text('\207\240\238\228\224\230\224, \228\238 \234\238\236\232\241\241\232\232: +'..DSP.money(p.gross or 0))
+    V.muted('\202\238\236\232\241\241\232\255 (\239\240\232\237\255\242\224\255): -'..DSP.money(p.fee or 0))
+    V.muted('\207\238\241\242\243\239\235\229\237\232\255 \239\238\241\235\229 \234\238\236\232\241\241\232\232: '..DSP.money(p.revenue or 0))
+    if (p.extra or 0)>0 then V.muted('\196\238\239. \240\224\241\245\238\228\251: -'..DSP.money(p.extra))end
+    local result='\206\198\200\196\192\197\204\192\223 \207\208\200\193\219\203\220: '..DSP.money(p.profit or 0)
     if (p.profit or 0)>=0 then V.green(result)else V.red(result)end
 end
 
@@ -284,24 +284,24 @@ local function details(g)
     local compact=imgui.GetContentRegionAvail().y<400
     V.arb_extra=V.arb_extra or{value=0}
     local function extra_control()
-        if b(V.arb_extra_enabled and 'x Ðàñõîäû' or '+ Ðàñõîäû','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
+        if b(V.arb_extra_enabled and 'x \208\224\241\245\238\228\251' or '+ \208\224\241\245\238\228\251','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
         if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
     end
     V.text(V.fit(g.name,imgui.GetContentRegionAvail().x-(compact and 290 or 0)))
     if compact then V.inline();extra_control()end
-    V.muted('Ïðîäàþò '..(g.row.sell.qty or g.supply)..' · Ñêóïàþò '..(g.row.buy.qty or g.demand)..' · Ïëàí '..p.qty..' øò.')
+    V.muted('\207\240\238\228\224\254\242 '..(g.row.sell.qty or g.supply)..' \183 \209\234\243\239\224\254\242 '..(g.row.buy.qty or g.demand)..' \183 \207\235\224\237 '..p.qty..' \248\242.')
     local changed=V.arb_snapshot~=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
-    if not compact then V.muted(V.fit('Ñíèìîê '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
-        (changed and ' · åñòü íîâûå äàííûå, îòêðîéòå çàíîâî'or ' · API, íàëè÷èå ïðîâåðüòå â èãðå'),imgui.GetContentRegionAvail().x))end
+    if not compact then V.muted(V.fit('\209\237\232\236\238\234 '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
+        (changed and ' \183 \229\241\242\252 \237\238\226\251\229 \228\224\237\237\251\229, \238\242\234\240\238\233\242\229 \231\224\237\238\226\238'or ' \183 API, \237\224\235\232\247\232\229 \239\240\238\226\229\240\252\242\229 \226 \232\227\240\229'),imgui.GetContentRegionAvail().x))end
     finance(p,compact)
     local f=DSP.settings.arb_filters or {}
-    if not compact then V.muted('Ïëàí óñëîâíûé: äîñòóïíîñòü íå çàáðîíèðîâàíà. Çàïàñ ñïðîñà: '
-        ..tostring(f.safety_pct or 0)..'%; îáíîâèòå è ïðîâåðüòå ñêóïêó ïåðåä çàêóïêîé.')end
+    if not compact then V.muted('\207\235\224\237 \243\241\235\238\226\237\251\233: \228\238\241\242\243\239\237\238\241\242\252 \237\229 \231\224\225\240\238\237\232\240\238\226\224\237\224. \199\224\239\224\241 \241\239\240\238\241\224: '
+        ..tostring(f.safety_pct or 0)..'%; \238\225\237\238\226\232\242\229 \232 \239\240\238\226\229\240\252\242\229 \241\234\243\239\234\243 \239\229\240\229\228 \231\224\234\243\239\234\238\233.')end
     if V.arb_verify and V.arb_verify_value then
         local vr=V.arb_verify
-        V.muted(V.fit('Ôàêòè÷åñêè ïðîâåðåíî â èãðå: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'ñêóïàåò' or 'ïðîäà¸ò'),imgui.GetContentRegionAvail().x))
+        V.muted(V.fit('\212\224\234\242\232\247\229\241\234\232 \239\240\238\226\229\240\229\237\238 \226 \232\227\240\229: #'..tostring(vr.offer.shop)..' \183 '..tostring(vr.side=='buy' and '\241\234\243\239\224\229\242' or '\239\240\238\228\224\184\242'),imgui.GetContentRegionAvail().x))
         M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',130,0)
-        V.inline();if b('Ïðèìåíèòü','verify_save',112)then
+        V.inline();if b('\207\240\232\236\229\237\232\242\252','verify_save',112)then
             local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
             local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
             local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
@@ -311,60 +311,60 @@ local function details(g)
                 V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
             else V.arb_best_error=tostring(err)end
         end
-        V.inline();if b('Îòìåíà','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
+        V.inline();if b('\206\242\236\229\237\224','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
         if V.arb_best_error then V.red(V.fit(V.arb_best_error,imgui.GetContentRegionAvail().x))end
         return
     end
     if V.arb_route then
-        if b('< Ïðåäëîæåíèÿ','back_offers',170)then V.arb_route=false end
+        if b('< \207\240\229\228\235\238\230\229\237\232\255','back_offers',170)then V.arb_route=false end
         V.inline()
-        if DSP.arb_agent and b('Â ÌÈÍÈ-ÀÃÅÍÒ','route_to_agent',176,true)then
+        if DSP.arb_agent and b('\194 \204\200\205\200-\192\195\197\205\210','route_to_agent',176,true)then
             local ok,why=DSP.arb_agent.add_plan(p)
             if ok then
                 DSP.arb_agent.show(true)
                 imgui.CloseCurrentPopup()
-            else DSP.notify('Àãåíò: '..tostring(why))end
+            else DSP.notify('\192\227\229\237\242: '..tostring(why))end
         end
         V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
-            if p.profit>=0 then V.green(DSP.money(p.profit)..' ÷èñòîé ïðèáûëè')
-            else V.red(DSP.money(p.profit)..' èòîãîâîãî óáûòêà')end
+            if p.profit>=0 then V.green(DSP.money(p.profit)..' \247\232\241\242\238\233 \239\240\232\225\251\235\232')
+            else V.red(DSP.money(p.profit)..' \232\242\238\227\238\226\238\227\238 \243\225\251\242\234\224')end
         end})
         return
     end
     local tw=imgui.GetContentRegionAvail().x
-    if b('Ïðîäàþò · êóïèòü '..#g.sellers,'sell',tw*.23,V.arb_tab=='sell')then V.arb_tab='sell'end
-    V.inline();if b('Ñêóïàþò · ïðîäàòü '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
-    V.inline();if b('Ëó÷øèé ïëàí >','best',tw*.27)then best_plan(g)end
-    V.inline();if b('Ñáðîñ','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
+    if b('\207\240\238\228\224\254\242 \183 \234\243\239\232\242\252 '..#g.sellers,'sell',tw*.23,V.arb_tab=='sell')then V.arb_tab='sell'end
+    V.inline();if b('\209\234\243\239\224\254\242 \183 \239\240\238\228\224\242\252 '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
+    V.inline();if b('\203\243\247\248\232\233 \239\235\224\237 >','best',tw*.27)then best_plan(g)end
+    V.inline();if b('\209\225\240\238\241','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
     if not compact then extra_control()end
     if V.arb_best_error then V.red(V.arb_best_error)end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
     V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{footer=function()
-        if b('Ìàðøðóò >','route',142,true)then V.arb_route=true end
-        V.inline();if b('Çàêðûòü','close_details',116)then imgui.CloseCurrentPopup()end
+        if b('\204\224\240\248\240\243\242 >','route',142,true)then V.arb_route=true end
+        V.inline();if b('\199\224\234\240\251\242\252','close_details',116)then imgui.CloseCurrentPopup()end
     end})
 end
 function V.arbitrage()
     local st=DSP.market.state
-    V.text('Àðáèòðàæ');V.inline();V.muted('Ñíèìîê: '..DSP.market.freshness())
+    V.text('\192\240\225\232\242\240\224\230');V.inline();V.muted('\209\237\232\236\238\234: '..DSP.market.freshness())
     if DSP.arb_agent then
         V.inline()
-        if b(DSP.arb_agent.active()and'ÌÈÍÈ-ÀÃÅÍÒ >'or'ÍÀ×ÀÒÜ ÑÅÑÑÈÞ','session_start',190,true)then
+        if b(DSP.arb_agent.active()and'\204\200\205\200-\192\195\197\205\210 >'or'\205\192\215\192\210\220 \209\197\209\209\200\222','session_start',190,true)then
             local ok,why
             if DSP.arb_agent.active()then DSP.arb_agent.show(true);ok=true
             else ok,why=DSP.arb_agent.start_market()end
-            if not ok then DSP.notify('Àãåíò àðáèòðàæà: '..tostring(why))end
+            if not ok then DSP.notify('\192\227\229\237\242 \224\240\225\232\242\240\224\230\224: '..tostring(why))end
         end
         local st_agent=DSP.arb_agent.stats()
-        if st_agent.routes>0 then V.muted('Ñåññèÿ: '..st_agent.done..'/'..st_agent.routes..' ìàðøðóòîâ')end
+        if st_agent.routes>0 then V.muted('\209\229\241\241\232\255: '..st_agent.done..'/'..st_agent.routes..' \236\224\240\248\240\243\242\238\226')end
     end
-    V.inline();if b(st.status=='loading' and 'Çàãðóçêà...' or 'Îáíîâèòü','refresh',120)then DSP.market.pull(st.sid)end
+    V.inline();if b(st.status=='loading' and '\199\224\227\240\243\231\234\224...' or '\206\225\237\238\226\232\242\252','refresh',120)then DSP.market.pull(st.sid)end
     V.arb_source=V.arb_source or 'api'
     if b('API','source_api',116,V.arb_source=='api')then
         V.arb_source='api';V.reset_list('arb_main')
     end
     V.inline()
-    if b('ÌÎÈ ÑÊÀÍÛ','source_local',175,V.arb_source=='local')then
+    if b('\204\206\200 \209\202\192\205\219','source_local',175,V.arb_source=='local')then
         V.arb_source='local';V.reset_list('local_arb_items')
     end
     if V.arb_source=='local' then
@@ -373,41 +373,41 @@ function V.arbitrage()
     end
     if st.error then
         local delay=(tonumber(st.next_auto_retry) or 0)-os.time()
-        V.red(V.fit('API: '..tostring(st.error)..(delay>0 and (' · àâòî-ïîâòîð ÷åðåç '..delay..'ñ')or ''),
+        V.red(V.fit('API: '..tostring(st.error)..(delay>0 and (' \183 \224\226\242\238-\239\238\226\242\238\240 \247\229\240\229\231 '..delay..'\241')or ''),
             imgui.GetContentRegionAvail().x))
     end
     local af=DSP.settings.arb_filters or {}
-    V.muted(V.fit('Ôèëüòðû: '..(tonumber(af.max_age)==0 and 'áåç îãðàíè÷åíèÿ âðåìåíè' or
-        (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' ìèí'))..
-        ' · ROI îò '..tostring(af.min_roi or 0)..'% · ðåçåðâ '..tostring(af.safety_pct or 0)..
-        '% · êîìèññèÿ '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
+    V.muted(V.fit('\212\232\235\252\242\240\251: '..(tonumber(af.max_age)==0 and '\225\229\231 \238\227\240\224\237\232\247\229\237\232\255 \226\240\229\236\229\237\232' or
+        (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' \236\232\237'))..
+        ' \183 ROI \238\242 '..tostring(af.min_roi or 0)..'% \183 \240\229\231\229\240\226 '..tostring(af.safety_pct or 0)..
+        '% \183 \234\238\236\232\241\241\232\255 '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
         imgui.GetContentRegionAvail().x))
-    local query,edited=V.search('arb','Ïîèñê ïðåäìåòà',-1)
+    local query,edited=V.search('arb','\207\238\232\241\234 \239\240\229\228\236\229\242\224',-1)
     if edited then V.reset_list('arb_main')end
-    if b(V.arb_sort=='az' and 'Àß' or 'Ïðèáûëü: áîëüøå','sort',143,V.arb_sort=='az')then
+    if b(V.arb_sort=='az' and '\192\151\223' or '\207\240\232\225\251\235\252: \225\238\235\252\248\229','sort',143,V.arb_sort=='az')then
         V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
         V.reset_list('arb_main')
     end
     V.inline()
-    if b('Ôèëüòðû','filters',120,V.arb_filters)then
-        V.arb_filters=true;V.open_popup('Ôèëüòðû àðáèòðàæà','arb_filters')
+    if b('\212\232\235\252\242\240\251','filters',120,V.arb_filters)then
+        V.arb_filters=true;V.open_popup('\212\232\235\252\242\240\251 \224\240\225\232\242\240\224\230\224','arb_filters')
     end
     -- Direct game observation does not require the external API to refresh.
     local live=DSP.market.live_shop_spreads and DSP.market.live_shop_spreads() or {}
     if #live>0 then
-        V.green('ÍÀÉÄÅÍÎ Â ÎÒÊÐÛÒÎÉ ËÀÂÊÅ: '..tostring(#live))
+        V.green('\205\192\201\196\197\205\206 \194 \206\210\202\208\219\210\206\201 \203\192\194\202\197: '..tostring(#live))
         V.list_rows('arb_live_shop',live,86,function(deal,i)
             V.row('arb_live_row_'..i,86,function(w,x,y)
-                V.at(x,y+2);V.text(V.fit(deal.name..' · ëàâêà #'..tostring(deal.shop),w))
-                V.at(x,y+27);V.muted(V.fit('Êóïèòü '..DSP.money(deal.buy_price)..' / ñäàòü '..DSP.money(deal.sell_price),w))
-                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/øò. ïîñëå êîìèññèè · '..
-                    (deal.verified_quantity and ('äî '..tostring(deal.quantity)..' øò.') or 'êîëè÷åñòâî íåèçâåñòíî'),w))
+                V.at(x,y+2);V.text(V.fit(deal.name..' \183 \235\224\226\234\224 #'..tostring(deal.shop),w))
+                V.at(x,y+27);V.muted(V.fit('\202\243\239\232\242\252 '..DSP.money(deal.buy_price)..' / \241\228\224\242\252 '..DSP.money(deal.sell_price),w))
+                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/\248\242. \239\238\241\235\229 \234\238\236\232\241\241\232\232 \183 '..
+                    (deal.verified_quantity and ('\228\238 '..tostring(deal.quantity)..' \248\242.') or '\234\238\235\232\247\229\241\242\226\238 \237\229\232\231\226\229\241\242\237\238'),w))
             end)
         end,{height=math.min(180,math.max(90,imgui.GetContentRegionAvail().y*.30)),footer=false})
     end
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
-    if status=='loading'then V.muted('Ðàñ÷¸ò ðûíêà...')elseif status=='error'then V.red('Îøèáêà ðàñ÷¸òà. Ñì. æóðíàë')end
+    if status=='loading'then V.muted('\208\224\241\247\184\242 \240\251\237\234\224...')elseif status=='error'then V.red('\206\248\232\225\234\224 \240\224\241\247\184\242\224. \209\236. \230\243\240\237\224\235')end
     local sig=tostring(groups)..'|'..DSP.lower(query)..'|'..tostring(V.arb_sort)
     local filtered=V.memo('arb_rows',sig,function()
         local out={};local q=DSP.lower(query)
@@ -421,42 +421,42 @@ function V.arbitrage()
         end)
         return out
     end)
-    if st.status=='cache' then V.red(V.fit('Ñåòü íåäîñòóïíà: ðàñ÷¸ò ïî ñîõðàí¸ííîìó ñíèìêó, íàëè÷èå íå ïîäòâåðæäåíî',imgui.GetContentRegionAvail().x))end
+    if st.status=='cache' then V.red(V.fit('\209\229\242\252 \237\229\228\238\241\242\243\239\237\224: \240\224\241\247\184\242 \239\238 \241\238\245\240\224\237\184\237\237\238\236\243 \241\237\232\236\234\243, \237\224\235\232\247\232\229 \237\229 \239\238\228\242\226\229\240\230\228\229\237\238',imgui.GetContentRegionAvail().x))end
     if status~='loading' and #groups==0 and DSP.market.arbitrage_visibility then
         local d=DSP.market.arbitrage_visibility()
         if d.pairs>0 then
-            V.muted(V.fit('Â API åñòü '..d.pairs..' öåíîâûõ ðàçðûâîâ (â îäíîé ëàâêå: '..d.same_shop..
-                '), íî ôèëüòð ñâåæåñòè/îáú¸ìà/êîìèññèè èñêëþ÷èë ìàðøðóòû.',imgui.GetContentRegionAvail().x))
+            V.muted(V.fit('\194 API \229\241\242\252 '..d.pairs..' \246\229\237\238\226\251\245 \240\224\231\240\251\226\238\226 (\226 \238\228\237\238\233 \235\224\226\234\229: '..d.same_shop..
+                '), \237\238 \244\232\235\252\242\240 \241\226\229\230\229\241\242\232/\238\225\250\184\236\224/\234\238\236\232\241\241\232\232 \232\241\234\235\254\247\232\235 \236\224\240\248\240\243\242\251.',imgui.GetContentRegionAvail().x))
         end
     end
     if #filtered==0 and status~='loading' then
         local age=tonumber((DSP.settings.arb_filters or{}).max_age)or 300
-        local reason=#groups>0 and 'Ïî çàïðîñó íè÷åãî íå íàéäåíî' or
-            (#(st.rows or{})==0 and 'Íåò ðûíêà: íàæìèòå «Îáíîâèòü»' or
-            ('Íåò âûãîäíûõ ñâÿçîê ïî ôèëüòðàì'..(age>0 and (' · ñòàðøå '..math.floor(age/60)..'ì èñêëþ÷åíû')or '')))
+        local reason=#groups>0 and '\207\238 \231\224\239\240\238\241\243 \237\232\247\229\227\238 \237\229 \237\224\233\228\229\237\238' or
+            (#(st.rows or{})==0 and '\205\229\242 \240\251\237\234\224: \237\224\230\236\232\242\229 \171\206\225\237\238\226\232\242\252\187' or
+            ('\205\229\242 \226\251\227\238\228\237\251\245 \241\226\255\231\238\234 \239\238 \244\232\235\252\242\240\224\236'..(age>0 and (' \183 \241\242\224\240\248\229 '..math.floor(age/60)..'\236 \232\241\234\235\254\247\229\237\251')or '')))
         V.muted(V.fit(reason,imgui.GetContentRegionAvail().x))
     end
     V.list_rows('arb_main',filtered,92,function(g,i)
         V.row('arb_group_'..i,92,function(w,x,y)
             M.thumbnail({name=g.name,id=g.row and g.row.id},34)
             V.at(x+44,y+2);V.text(V.fit(g.name,w-220))
-            V.at(x+44,y+29);V.muted(V.fit('Êóïèòü: '..DSP.market.format_units(g.supply)..
-                ' · Ñäàòü: '..DSP.market.format_units(g.demand)..' øò. (API)',w-220))
-            V.at(x+44,y+54);V.muted(V.fit('Ïëàí '..DSP.market.format_units(g.planned)..
-                ' øò. · Îöåíêà ïðèáûëè '..DSP.money(g.profit),w-220))
+            V.at(x+44,y+29);V.muted(V.fit('\202\243\239\232\242\252: '..DSP.market.format_units(g.supply)..
+                ' \183 \209\228\224\242\252: '..DSP.market.format_units(g.demand)..' \248\242. (API)',w-220))
+            V.at(x+44,y+54);V.muted(V.fit('\207\235\224\237 '..DSP.market.format_units(g.planned)..
+                ' \248\242. \183 \206\246\229\237\234\224 \239\240\232\225\251\235\232 '..DSP.money(g.profit),w-220))
             V.at(x+w-164,y+15)
-            if b('Ïðåäëîæåíèÿ >','group_'..i,160,false)then
+            if b('\207\240\229\228\235\238\230\229\237\232\255 >','group_'..i,160,false)then
                 V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                 V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
-                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('Àðáèòðàæ','arb_details')
+                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('\192\240\225\232\242\240\224\230','arb_details')
             end
         end)
-    end,{footer=function()V.muted('Îöåíêà ïî API, íå ãàðàíòèðîâàííàÿ ïðèáûëü. Êîëè÷åñòâî ó ñêóïùèêà ìîæåò óìåíüøèòüñÿ.')end})
+    end,{footer=function()V.muted('\206\246\229\237\234\224 \239\238 API, \237\229 \227\224\240\224\237\242\232\240\238\226\224\237\237\224\255 \239\240\232\225\251\235\252. \202\238\235\232\247\229\241\242\226\238 \243 \241\234\243\239\249\232\234\224 \236\238\230\229\242 \243\236\229\237\252\248\232\242\252\241\255.')end})
 end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
-    if V.arb_filters then V.popup('Ôèëüòðû àðáèòðàæà','arb_filters',function()
+    if V.arb_filters then V.popup('\212\232\235\252\242\240\251 \224\240\225\232\242\240\224\230\224','arb_filters',function()
         local f=DSP.settings.arb_filters or {};DSP.settings.arb_filters=f
         -- Fields are saved as numeric settings and never trigger requests per frame.
         -- 0 seconds means any age; percentage fields use explicit units.
@@ -469,34 +469,34 @@ function V.popups()
             end
         end
         V.list('arb_filter_controls',function(w)
-            number('Ñâåæåñòü äàííûõ: ìàêñèìóì ñåêóíä (0 = áåç îãðàíè÷åíèÿ, 3600 = ÷àñ)', 'max_age',0,2592000)
-            if b('10 ìèí','age10',110) then f.max_age=600;M.refresh_buffer(f,'max_age');changed=true end
-            V.inline();if b('1 ÷àñ','age60',110)then f.max_age=3600;M.refresh_buffer(f,'max_age');changed=true end
-            V.inline();if b('Ëþáîé âîçðàñò','age_any',170)then f.max_age=0;M.refresh_buffer(f,'max_age');changed=true end
-            number('Êîìèññèÿ â áàçèñíûõ ïóíêòàõ: 100 = 1%, 250 = 2.5%', 'tax_bp',0,10000)
-            number('Ðåçåðâ ñïðîñà (%) îò 0 äî 90: îñòàâëÿòü íåïðîâåðåííûé îáú¸ì', 'safety_pct',0,90)
-            number('Ìèíèìàëüíàÿ ðåíòàáåëüíîñòü ROI (%)', 'min_roi',0,100000)
-            number('Ìèíèìàëüíàÿ ÷èñòàÿ ïðèáûëü íà ìàðøðóò ($)', 'min_profit',0)
-            number('Ìèíèìàëüíàÿ ïðèáûëü ñ îäíîé øòóêè ($)', 'min_unit_profit',0)
-            number('Ìàêñèìàëüíàÿ öåíà çàêóïêè çà øòóêó ($; 0 = áåç ëèìèòà)', 'max_buy_price',0)
-            number('Ìèíèìàëüíûé çàïàñ È ñïðîñ API (øò.; 0 = áåç ëèìèòà)', 'min_stock',0)
-            number('Áþäæåò íà âñå ìàðøðóòû ($; 0 = áåç ëèìèòà)', 'budget',0)
-            number('Ìàêñèìóì øòóê íà ìàðøðóò (0 = áåç ëèìèòà)', 'max_qty',0)
-            V.muted('Ëàâêè: ëþáîå ñî÷åòàíèå / òîëüêî îäíà è òà æå / òîëüêî ðàçíûå')
-            for i,opt in ipairs({{0,'Ëþáûå'},{1,'Îäíà'},{2,'Ðàçíûå'}})do
+            number('\209\226\229\230\229\241\242\252 \228\224\237\237\251\245: \236\224\234\241\232\236\243\236 \241\229\234\243\237\228 (0 = \225\229\231 \238\227\240\224\237\232\247\229\237\232\255, 3600 = \247\224\241)', 'max_age',0,2592000)
+            if b('10 \236\232\237','age10',110) then f.max_age=600;M.refresh_buffer(f,'max_age');changed=true end
+            V.inline();if b('1 \247\224\241','age60',110)then f.max_age=3600;M.refresh_buffer(f,'max_age');changed=true end
+            V.inline();if b('\203\254\225\238\233 \226\238\231\240\224\241\242','age_any',170)then f.max_age=0;M.refresh_buffer(f,'max_age');changed=true end
+            number('\202\238\236\232\241\241\232\255 \226 \225\224\231\232\241\237\251\245 \239\243\237\234\242\224\245: 100 = 1%, 250 = 2.5%', 'tax_bp',0,10000)
+            number('\208\229\231\229\240\226 \241\239\240\238\241\224 (%) \238\242 0 \228\238 90: \238\241\242\224\226\235\255\242\252 \237\229\239\240\238\226\229\240\229\237\237\251\233 \238\225\250\184\236', 'safety_pct',0,90)
+            number('\204\232\237\232\236\224\235\252\237\224\255 \240\229\237\242\224\225\229\235\252\237\238\241\242\252 ROI (%)', 'min_roi',0,100000)
+            number('\204\232\237\232\236\224\235\252\237\224\255 \247\232\241\242\224\255 \239\240\232\225\251\235\252 \237\224 \236\224\240\248\240\243\242 ($)', 'min_profit',0)
+            number('\204\232\237\232\236\224\235\252\237\224\255 \239\240\232\225\251\235\252 \241 \238\228\237\238\233 \248\242\243\234\232 ($)', 'min_unit_profit',0)
+            number('\204\224\234\241\232\236\224\235\252\237\224\255 \246\229\237\224 \231\224\234\243\239\234\232 \231\224 \248\242\243\234\243 ($; 0 = \225\229\231 \235\232\236\232\242\224)', 'max_buy_price',0)
+            number('\204\232\237\232\236\224\235\252\237\251\233 \231\224\239\224\241 \200 \241\239\240\238\241 API (\248\242.; 0 = \225\229\231 \235\232\236\232\242\224)', 'min_stock',0)
+            number('\193\254\228\230\229\242 \237\224 \226\241\229 \236\224\240\248\240\243\242\251 ($; 0 = \225\229\231 \235\232\236\232\242\224)', 'budget',0)
+            number('\204\224\234\241\232\236\243\236 \248\242\243\234 \237\224 \236\224\240\248\240\243\242 (0 = \225\229\231 \235\232\236\232\242\224)', 'max_qty',0)
+            V.muted('\203\224\226\234\232: \235\254\225\238\229 \241\238\247\229\242\224\237\232\229 / \242\238\235\252\234\238 \238\228\237\224 \232 \242\224 \230\229 / \242\238\235\252\234\238 \240\224\231\237\251\229')
+            for i,opt in ipairs({{0,'\203\254\225\251\229'},{1,'\206\228\237\224'},{2,'\208\224\231\237\251\229'}})do
                 if i>1 then V.inline()end
                 if b(opt[2],'shop_mode_'..opt[1],110,f.shop_mode==opt[1])then f.shop_mode=opt[1];changed=true end
             end
-            V.muted('Ïîðÿäîê ðàñ÷¸òà (ïðè áþäæåòå ïðèîðèòåò ROI)')
-            for i,opt in ipairs({{1,'Ïðèáûëü'},{2,'Çà øòóêó'},{3,'ROI'}})do
+            V.muted('\207\238\240\255\228\238\234 \240\224\241\247\184\242\224 (\239\240\232 \225\254\228\230\229\242\229 \239\240\232\238\240\232\242\229\242 ROI)')
+            for i,opt in ipairs({{1,'\207\240\232\225\251\235\252'},{2,'\199\224 \248\242\243\234\243'},{3,'ROI'}})do
                 if i>1 then V.inline()end
                 if b(opt[2],'sort_mode_'..opt[1],110,f.sort==opt[1])then f.sort=opt[1];changed=true end
             end
-            if b(f.allow_partial==false and '[ ] ×àñòè÷íûå ìàðøðóòû' or '[x] ×àñòè÷íûå ìàðøðóòû',
+            if b(f.allow_partial==false and '[ ] \215\224\241\242\232\247\237\251\229 \236\224\240\248\240\243\242\251' or '[x] \215\224\241\242\232\247\237\251\229 \236\224\240\248\240\243\242\251',
                 'allow_partial',290)then f.allow_partial=not(f.allow_partial~=false);changed=true end
-            if b(f.include_unknown==true and '[x] Áåç îòìåòêè âðåìåíè' or '[ ] Áåç îòìåòêè âðåìåíè',
+            if b(f.include_unknown==true and '[x] \193\229\231 \238\242\236\229\242\234\232 \226\240\229\236\229\237\232' or '[ ] \193\229\231 \238\242\236\229\242\234\232 \226\240\229\236\229\237\232',
                 'include_unknown',290)then f.include_unknown=not(f.include_unknown==true);changed=true end
-            if b('Ñáðîñèòü ôèëüòðû','reset_filters',210)then
+            if b('\209\225\240\238\241\232\242\252 \244\232\235\252\242\240\251','reset_filters',210)then
                 local defaults={budget=0,min_profit=0,min_roi=0,sort=1,max_age=300,max_qty=0,
                     safety_pct=10,allow_partial=true,include_unknown=false,
                     tax_bp=DSP.settings.tax_bp or 200,min_unit_profit=0,max_buy_price=0,
@@ -504,29 +504,29 @@ function V.popups()
                 for k,v in pairs(defaults)do f[k]=v;M.refresh_buffer(f,k)end
                 changed=true
             end
-            V.muted('Âîçðàñò 0 îçíà÷àåò ïîêàç äàæå ñòàðûõ îôôåðîâ; ýòî íå ãàðàíòèÿ íàëè÷èÿ.')
+            V.muted('\194\238\231\240\224\241\242 0 \238\231\237\224\247\224\229\242 \239\238\234\224\231 \228\224\230\229 \241\242\224\240\251\245 \238\244\244\229\240\238\226; \253\242\238 \237\229 \227\224\240\224\237\242\232\255 \237\224\235\232\247\232\255.')
         end,{footer=true})
         if changed then
             DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1
             V.reset_list('arb_main');M.defer_save()
         end
-        if b('Ïðèìåíèòü è çàêðûòü','filters_done',220,true)then
+        if b('\207\240\232\236\229\237\232\242\252 \232 \231\224\234\240\251\242\252','filters_done',220,true)then
             V.arb_filters=false;imgui.CloseCurrentPopup()
         end
     end,{w=690,h=570})end
-    V.popup('Àðáèòðàæ','arb_details',function()
+    V.popup('\192\240\225\232\242\240\224\230','arb_details',function()
         local st=DSP.market.state
         if V.arb_server~=st.sid then
-            V.text('Âûáðàí äðóãîé ñåðâåð');V.muted('Îòêðîéòå ïðåäìåò ïîâòîðíî äëÿ íîâîãî ðàñ÷¸òà')
-            if b('Çàêðûòü','stale_close',150)then imgui.CloseCurrentPopup()end
+            V.text('\194\251\225\240\224\237 \228\240\243\227\238\233 \241\229\240\226\229\240');V.muted('\206\242\234\240\238\233\242\229 \239\240\229\228\236\229\242 \239\238\226\242\238\240\237\238 \228\235\255 \237\238\226\238\227\238 \240\224\241\247\184\242\224')
+            if b('\199\224\234\240\251\242\252','stale_close',150)then imgui.CloseCurrentPopup()end
             return
         end
         -- Never keep showing the old route after a market refresh: source
         -- offer tables are replaced, not updated in place.
         if V.arb_snapshot~=tostring(st.sid)..'/'..tostring(st.version)
             or st.status=='loading' then
-            V.red('Äàííûå èçìåíèëèñü èëè îáíîâëÿþòñÿ. Ñòàðûé ìàðøðóò çàáëîêèðîâàí.')
-            if b('Ïåðåñ÷èòàòü','refresh_selected',164)then
+            V.red('\196\224\237\237\251\229 \232\231\236\229\237\232\235\232\241\252 \232\235\232 \238\225\237\238\226\235\255\254\242\241\255. \209\242\224\240\251\233 \236\224\240\248\240\243\242 \231\224\225\235\238\234\232\240\238\226\224\237.')
+            if b('\207\229\240\229\241\247\232\242\224\242\252','refresh_selected',164)then
                 local groups,status
                 if DSP.market.arbitrage_grouped_ui then
                     groups,status=DSP.market.arbitrage_grouped_ui()
@@ -537,21 +537,21 @@ function V.popups()
                         V.arb_detail_group=g;choose_all(g);V.arb_route=false
                         V.arb_verify=nil;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                         V.arb_snapshot_time=os.time()
-                    else V.arb_best_error='Ïîñëå îáíîâëåíèÿ ïîäõîäÿùèé ìàðøðóò îòñóòñòâóåò'end
+                    else V.arb_best_error='\207\238\241\235\229 \238\225\237\238\226\235\229\237\232\255 \239\238\228\245\238\228\255\249\232\233 \236\224\240\248\240\243\242 \238\242\241\243\242\241\242\226\243\229\242'end
                 end
             end
-            V.inline();if b('Çàêðûòü','stale_close_version',140)then imgui.CloseCurrentPopup()end
+            V.inline();if b('\199\224\234\240\251\242\252','stale_close_version',140)then imgui.CloseCurrentPopup()end
             -- Keep the inspected snapshot browsable, but expose no old route,
             -- quantity confirmation or marker actions after a refresh.
             local snapshot=V.arb_detail_group
             if snapshot then
-                if b('Ïðîäàþò · ñíèìîê','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
-                V.inline();if b('Ñêóïàþò · ñíèìîê','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
+                if b('\207\240\238\228\224\254\242 \183 \241\237\232\236\238\234','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
+                V.inline();if b('\209\234\243\239\224\254\242 \183 \241\237\232\236\238\234','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
                 local offers=V.arb_tab=='sell'and snapshot.sellers or snapshot.buyers
                 V.list_rows('arb_stale_'..snapshot.key..'_'..V.arb_tab,offers,76,function(o,i)
                     V.row('stale_offer_'..i,76,function(w,x,y)
-                        V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),w))
-                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/øò. · '..DSP.market.format_units(o.qty)..' øò. · ñòàðûé API-ñíèìîê',w))
+                        V.text(V.fit('#'..tostring(o.shop)..' \183 '..tostring(o.owner or '?'),w))
+                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/\248\242. \183 '..DSP.market.format_units(o.qty)..' \248\242. \183 \241\242\224\240\251\233 API-\241\237\232\236\238\234',w))
                     end)
                 end)
             end
@@ -559,8 +559,8 @@ function V.popups()
         end
         local g=V.arb_detail_group
         if g then details(g)else
-            V.muted('Ñâÿçêà áîëüøå íå ïðîõîäèò ôèëüòðû')
-            if b('Çàêðûòü','empty_close',140)then imgui.CloseCurrentPopup()end
+            V.muted('\209\226\255\231\234\224 \225\238\235\252\248\229 \237\229 \239\240\238\245\238\228\232\242 \244\232\235\252\242\240\251')
+            if b('\199\224\234\240\251\242\252','empty_close',140)then imgui.CloseCurrentPopup()end
         end
     end,{w=850,h=560})
 end
@@ -575,37 +575,37 @@ local M = DSP.market
 local function b(label,id,w,active) return V.button(label,'local_arb_'..id,w,active) end
 local function elapsed(at,now)
     local n=math.max(0,now-(tonumber(at)or 0))
-    return tostring(math.floor(n/60))..' ìèí íàçàä'
+    return tostring(math.floor(n/60))..' \236\232\237 \237\224\231\224\228'
 end
 local function txt(s,w) return V.fit(s,math.max(1,w)) end
 function V.local_arbitrage_view()
     local now=os.time()
     local stats=A.stats(now)
     local auto=DSP.settings.auto_shop_scan~=false
-    if b(auto and 'ÀÂÒÎÑÊÀÍ: ÂÊË' or 'ÀÂÒÎÑÊÀÍ: ÂÛÊË','auto_toggle',180) then
+    if b(auto and '\192\194\210\206\209\202\192\205: \194\202\203' or '\192\194\210\206\209\202\192\205: \194\219\202\203','auto_toggle',180) then
         DSP.settings.auto_shop_scan=not auto
         if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
         else DSP.save_settings() end
         auto=not auto
     end
     V.inline()
-    V.muted('Ñêàíèðóåò ïðè îòêðûòèè ëàâêè, áåç êíîïêè è áåç API')
+    V.muted('\209\234\224\237\232\240\243\229\242 \239\240\232 \238\242\234\240\251\242\232\232 \235\224\226\234\232, \225\229\231 \234\237\238\239\234\232 \232 \225\229\231 API')
     local saver=DSP.settings.fps_saver==true
-    if b(saver and 'ÝÊÎÍÎÌÈß FPS: ÂÊË' or 'ÝÊÎÍÎÌÈß FPS: ÂÛÊË','fps_toggle',200) then
+    if b(saver and '\221\202\206\205\206\204\200\223 FPS: \194\202\203' or '\221\202\206\205\206\204\200\223 FPS: \194\219\202\203','fps_toggle',200) then
         DSP.settings.fps_saver=not saver
         if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
         else DSP.save_settings() end
     end
     V.inline()
-    V.muted('Îòêëþ÷àåò äîïîëíèòåëüíûå îêíà è èêîíêè, àâòîñêàí îñòà¸òñÿ')
+    V.muted('\206\242\234\235\254\247\224\229\242 \228\238\239\238\235\237\232\242\229\235\252\237\251\229 \238\234\237\224 \232 \232\234\238\237\234\232, \224\226\242\238\241\234\224\237 \238\241\242\224\184\242\241\255')
     local last=DSP.live and DSP.live.auto_scan
     if last and (last.at or 0)>0 then
-        V.muted('Ïîñëåäíèé ñêàí: ëàâêà #'..tostring(last.shop)..' | '..tostring(last.items)..' ïîçèöèé | '..elapsed(last.at,now))
+        V.muted('\207\238\241\235\229\228\237\232\233 \241\234\224\237: \235\224\226\234\224 #'..tostring(last.shop)..' | '..tostring(last.items)..' \239\238\231\232\246\232\233 | '..elapsed(last.at,now))
     end
-    V.green('ÈÇ ÑÊÀÍÎÂ Â ÈÃÐÅ · ÁÅÇ API')
-    V.muted('Ëàâîê: '..stats.shops..' · ïðåäëîæåíèé: '..stats.offers..' · ïàìÿòü: 60 ìèí')
-    V.muted('Ñîõðàíÿþòñÿ öåíû òîëüêî ÎÒÊÐÛÒÛÕ ëàâîê ñ èçâåñòíûì íîìåðîì. Ïðîâåðÿé íàëè÷èå ïåðåä ñäåëêîé.')
-    local query,changed=V.search('local_arb','Íàçâàíèå ïðåäìåòà èëè íîìåð ëàâêè',-1)
+    V.green('\200\199 \209\202\192\205\206\194 \194 \200\195\208\197 \183 \193\197\199 API')
+    V.muted('\203\224\226\238\234: '..stats.shops..' \183 \239\240\229\228\235\238\230\229\237\232\233: '..stats.offers..' \183 \239\224\236\255\242\252: 60 \236\232\237')
+    V.muted('\209\238\245\240\224\237\255\254\242\241\255 \246\229\237\251 \242\238\235\252\234\238 \206\210\202\208\219\210\219\213 \235\224\226\238\234 \241 \232\231\226\229\241\242\237\251\236 \237\238\236\229\240\238\236. \207\240\238\226\229\240\255\233 \237\224\235\232\247\232\229 \239\229\240\229\228 \241\228\229\235\234\238\233.')
+    local query,changed=V.search('local_arb','\205\224\231\226\224\237\232\229 \239\240\229\228\236\229\242\224 \232\235\232 \237\238\236\229\240 \235\224\226\234\232',-1)
     if changed then V.reset_list('local_arb_items');V.reset_list('local_offer_search') end
     if query~='' and DSP.shop_store and DSP.shop_store.search then
         local matches=DSP.shop_store.search(query,nil,stats.server)
@@ -634,70 +634,70 @@ function V.local_arbitrage_view()
         end
         return out
     end)
-    V.muted('Íàéäåíî ñâÿçîê: '..tostring(#routes)..' · ïîðÿäîê: ïðèáûëü çà 1 øò.')
-    if #routes==0 then V.muted('Íåò âûãîäíûõ ïàð èç òâîèõ ñêàíîâ çà ïîñëåäíèé ÷àñ.') end
+    V.muted('\205\224\233\228\229\237\238 \241\226\255\231\238\234: '..tostring(#routes)..' \183 \239\238\240\255\228\238\234: \239\240\232\225\251\235\252 \231\224 1 \248\242.')
+    if #routes==0 then V.muted('\205\229\242 \226\251\227\238\228\237\251\245 \239\224\240 \232\231 \242\226\238\232\245 \241\234\224\237\238\226 \231\224 \239\238\241\235\229\228\237\232\233 \247\224\241.') end
     V.list_rows('local_arb_items',routes,142,function(r,i)
         V.row('local_route_'..i,142,function(w,x,y)
             local text_width=math.max(130,w-134)
             V.at(x,y+1);V.text(txt((r.name or 'ID:'..r.id)..' +'..tostring(r.ench or 0),text_width))
-            V.at(x,y+28);V.muted(txt('ÊÓÏÈÒÜ: #'..r.seller_shop..' · '..DSP.money(r.buy_price)..'/øò.',text_width))
-            V.at(x,y+51);V.muted(txt('ÑÄÀÒÜ: #'..r.buyer_shop..' · '..DSP.money(r.sell_price)..'/øò.',text_width))
-            V.at(x,y+75);V.green(txt('~ +'..DSP.money(r.profit_unit)..'/øò. ïîñëå êîìèññèè',text_width))
+            V.at(x,y+28);V.muted(txt('\202\211\207\200\210\220: #'..r.seller_shop..' \183 '..DSP.money(r.buy_price)..'/\248\242.',text_width))
+            V.at(x,y+51);V.muted(txt('\209\196\192\210\220: #'..r.buyer_shop..' \183 '..DSP.money(r.sell_price)..'/\248\242.',text_width))
+            V.at(x,y+75);V.green(txt('~ +'..DSP.money(r.profit_unit)..'/\248\242. \239\238\241\235\229 \234\238\236\232\241\241\232\232',text_width))
             V.at(x,y+100)
-            V.muted(txt('Ñêàí: '..elapsed(r.seller_at,now)..' / '..elapsed(r.buyer_at,now),w))
+            V.muted(txt('\209\234\224\237: '..elapsed(r.seller_at,now)..' / '..elapsed(r.buyer_at,now),w))
             V.at(x+math.max(0,w-124),y+33)
-            if b('Ìàðøðóò >','open_'..i,118) then
+            if b('\204\224\240\248\240\243\242 >','open_'..i,118) then
                 V.local_route={server=stats.server,route=r}
-                V.open_popup('Ìàðøðóò èç ñêàíà','local_route')
+                V.open_popup('\204\224\240\248\240\243\242 \232\231 \241\234\224\237\224','local_route')
             end
         end)
     end,{footer=function()
-        V.muted('Ïîòåíöèàëüíûå öåíû, ÍÅ ðåàëüíûå ïðîäàæè. Íåèçâåñòíûå îáú¸ìû íå ñóììèðóþòñÿ.')
+        V.muted('\207\238\242\229\237\246\232\224\235\252\237\251\229 \246\229\237\251, \205\197 \240\229\224\235\252\237\251\229 \239\240\238\228\224\230\232. \205\229\232\231\226\229\241\242\237\251\229 \238\225\250\184\236\251 \237\229 \241\243\236\236\232\240\243\254\242\241\255.')
     end})
 end
 local previous=V.popups
 function V.popups()
     if previous then previous() end
-    V.popup('Ìàðøðóò èç ñêàíà','local_route',function()
+    V.popup('\204\224\240\248\240\243\242 \232\231 \241\234\224\237\224','local_route',function()
         local selected=V.local_route
         if not selected or selected.server~=A.stats().server then
-            V.red('Ñìåíèëñÿ ñåðâåð. Âûáåðè ìàðøðóò çàíîâî.')
-            if b('Çàêðûòü','changed_close',150) then imgui.CloseCurrentPopup()end
+            V.red('\209\236\229\237\232\235\241\255 \241\229\240\226\229\240. \194\251\225\229\240\232 \236\224\240\248\240\243\242 \231\224\237\238\226\238.')
+            if b('\199\224\234\240\251\242\252','changed_close',150) then imgui.CloseCurrentPopup()end
             return
         end
         local r=selected.route
         local age=os.time()
         if age-r.seller_at>=A.ttl or age-r.buyer_at>=A.ttl then
-            V.red('Äàííûå óñòàðåëè. Îòêðîé ëàâêè çàíîâî.')
-            if b('Çàêðûòü','stale_close',150)then imgui.CloseCurrentPopup()end
+            V.red('\196\224\237\237\251\229 \243\241\242\224\240\229\235\232. \206\242\234\240\238\233 \235\224\226\234\232 \231\224\237\238\226\238.')
+            if b('\199\224\234\240\251\242\252','stale_close',150)then imgui.CloseCurrentPopup()end
             return
         end
         V.text(txt(r.name or '?',imgui.GetContentRegionAvail().x))
-        V.green('ÈÑÒÎ×ÍÈÊ: ëîêàëüíûé ñêàí â èãðå, íå API')
-        V.text('1. ÊÓÏÈÒÜ â ëàâêå #'..r.seller_shop..' ('..tostring(r.seller_owner or '?')..')')
-        V.muted(DSP.money(r.buy_price)..' çà øòóêó · '..elapsed(r.seller_at,age))
-        V.text('2. ÑÄÀÒÜ â ëàâêó #'..r.buyer_shop..' ('..tostring(r.buyer_owner or '?')..')')
-        V.muted(DSP.money(r.sell_price)..' çà øòóêó · '..elapsed(r.buyer_at,age))
-        V.text('Ïîñòóïëåíèÿ ïîñëå êîìèññèè: '..DSP.money(r.net_unit)..' çà øòóêó')
-        V.green('Ïîòåíöèàëüíàÿ ïðèáûëü: +'..DSP.money(r.profit_unit)..' çà øòóêó')
+        V.green('\200\209\210\206\215\205\200\202: \235\238\234\224\235\252\237\251\233 \241\234\224\237 \226 \232\227\240\229, \237\229 API')
+        V.text('1. \202\211\207\200\210\220 \226 \235\224\226\234\229 #'..r.seller_shop..' ('..tostring(r.seller_owner or '?')..')')
+        V.muted(DSP.money(r.buy_price)..' \231\224 \248\242\243\234\243 \183 '..elapsed(r.seller_at,age))
+        V.text('2. \209\196\192\210\220 \226 \235\224\226\234\243 #'..r.buyer_shop..' ('..tostring(r.buyer_owner or '?')..')')
+        V.muted(DSP.money(r.sell_price)..' \231\224 \248\242\243\234\243 \183 '..elapsed(r.buyer_at,age))
+        V.text('\207\238\241\242\243\239\235\229\237\232\255 \239\238\241\235\229 \234\238\236\232\241\241\232\232: '..DSP.money(r.net_unit)..' \231\224 \248\242\243\234\243')
+        V.green('\207\238\242\229\237\246\232\224\235\252\237\224\255 \239\240\232\225\251\235\252: +'..DSP.money(r.profit_unit)..' \231\224 \248\242\243\234\243')
         if r.qty and r.profit_total then
-            V.muted('Èçâåñòíûé ëèìèò: äî '..r.qty..' øò. · ïîòîëîê ïðèáûëè ~ '..DSP.money(r.profit_total))
+            V.muted('\200\231\226\229\241\242\237\251\233 \235\232\236\232\242: \228\238 '..r.qty..' \248\242. \183 \239\238\242\238\235\238\234 \239\240\232\225\251\235\232 ~ '..DSP.money(r.profit_total))
         else
-            V.muted('Êîëè÷åñòâî íåèçâåñòíî: èòîãîâóþ ïðèáûëü íå ðàññ÷èòûâàåì.')
+            V.muted('\202\238\235\232\247\229\241\242\226\238 \237\229\232\231\226\229\241\242\237\238: \232\242\238\227\238\226\243\254 \239\240\232\225\251\235\252 \237\229 \240\224\241\241\247\232\242\251\226\224\229\236.')
         end
-        V.red('Ñêàí ÍÅ ãàðàíòèðóåò, ÷òî ïðåäëîæåíèå åù¸ ñóùåñòâóåò!')
-        if DSP.arb_agent and r.qty and b('Â ÌÈÍÈ-ÀÃÅÍÒ','local_to_agent',186)then
+        V.red('\209\234\224\237 \205\197 \227\224\240\224\237\242\232\240\243\229\242, \247\242\238 \239\240\229\228\235\238\230\229\237\232\229 \229\249\184 \241\243\249\229\241\242\226\243\229\242!')
+        if DSP.arb_agent and r.qty and b('\194 \204\200\205\200-\192\195\197\205\210','local_to_agent',186)then
             local ok,why=DSP.arb_agent.add_local_route(r)
             if ok then DSP.arb_agent.show(true);imgui.CloseCurrentPopup()
-            else DSP.notify('Àãåíò: '..tostring(why))end
+            else DSP.notify('\192\227\229\237\242: '..tostring(why))end
         end
-        if b('Ìåòêà ïðîäàâöà','seller_marker',155) then M.mark_shop(r.seller_shop)end
-        V.inline();if b('Ìåòêà ñêóïùèêà','buyer_marker',155) then M.mark_shop(r.buyer_shop)end
-        if b('Íåò ëàâêè #'..r.seller_shop,'seller_missing',195) then
+        if b('\204\229\242\234\224 \239\240\238\228\224\226\246\224','seller_marker',155) then M.mark_shop(r.seller_shop)end
+        V.inline();if b('\204\229\242\234\224 \241\234\243\239\249\232\234\224','buyer_marker',155) then M.mark_shop(r.buyer_shop)end
+        if b('\205\229\242 \235\224\226\234\232 #'..r.seller_shop,'seller_missing',195) then
             M.mark_shop_missing(r.seller_shop,30);if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
             imgui.CloseCurrentPopup()
         end
-        V.inline();if b('Íåò ëàâêè #'..r.buyer_shop,'buyer_missing',195) then
+        V.inline();if b('\205\229\242 \235\224\226\234\232 #'..r.buyer_shop,'buyer_missing',195) then
             M.mark_shop_missing(r.buyer_shop,30);if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
             imgui.CloseCurrentPopup()
         end
@@ -2199,159 +2199,336 @@ function P.install()
     previous_install()
     P.bootstrap(os.time())
 end
+
+-- v2.8.9: a named template owns a list of independently scheduled commands.
+-- Previous single-line templates migrate without losing their saved text/order.
+local previous_settings=P.settings
+local previous_update=P.update
+local function ensure_rows(t)
+    if type(t.rows)=='table' then return t.rows end
+    local rows={}
+    for _,line in ipairs(P.lines(t.text or''))do
+        rows[#rows+1]={text=line,interval=num(t.interval,60,3600)or 180,auto=true}
+    end
+    t.rows=rows
+    return rows
+end
+function P.settings()
+    local s=previous_settings()
+    for _,t in ipairs(s.templates)do ensure_rows(t)end
+    return s
+end
+function P.update(index,name,text,interval)
+    local ok,err=previous_update(index,name,text,interval)
+    if ok then
+        local t=P.settings().templates[index]
+        local rows={}
+        for _,line in ipairs(P.lines(text or''))do
+            rows[#rows+1]={text=line,interval=num(interval,60,3600)or 180,auto=true}
+        end
+        t.rows=rows
+        persist()
+    end
+    return ok,err
+end
+function P.save_template(index,name,rows,enabled)
+    local s=P.settings()
+    if type(name)~='string' or #name<1 or #name>64 then
+        return false,'\205\224\231\226\224\237\232\229 \248\224\225\235\238\237\224: 1\15064 \225\224\233\242\224'
+    end
+    if type(rows)~='table' or #rows==0 or #rows>24 then
+        return false,'\196\238\225\224\226\252 \238\242 1 \228\238 24 \241\242\240\238\234'
+    end
+    if not index and #s.templates>=P.MAX_TEMPLATES then
+        return false,'\196\238\241\242\232\227\237\243\242 \235\232\236\232\242 \248\224\225\235\238\237\238\226'
+    end
+    if index and not s.templates[index]then return false,'\216\224\225\235\238\237 \237\229 \237\224\233\228\229\237'end
+    local normalized={}
+    local total=0
+    for i,row in ipairs(rows)do
+        if type(row)~='table' then return false,'\206\248\232\225\234\224 \241\242\240\238\234\232 '..i end
+        local cmd=tostring(row.text or''):match('^%s*(.-)%s*$')
+        local ok,err=P.validate(cmd)
+        if not ok then return false,'\209\242\240\238\234\224 '..i..': '..tostring(err)end
+        if #P.lines(cmd)~=1 then return false,'\206\228\237\224 \234\238\236\224\237\228\224 \237\224 \241\242\240\238\234\243'end
+        total=total+#cmd
+        if total>4800 then return false,'\209\235\232\248\234\238\236 \228\235\232\237\237\251\233 \248\224\225\235\238\237'end
+        normalized[i]={text=cmd,interval=num(row.interval,P.MIN_INTERVAL,3600)or 180,
+            auto=row.auto~=false}
+    end
+    local old=index and s.templates[index]or nil
+    local t={name=name,text=table.concat((function()
+        local lines={}
+        for _,r in ipairs(normalized)do lines[#lines+1]=r.text end
+        return lines
+    end)(),'\n'),rows=normalized,
+        interval=normalized[1].interval,auto=enabled~=false,
+        last_sent=old and old.last_sent or 0,line_index=old and old.line_index or 0}
+    if index then s.templates[index]=t else
+        s.templates[#s.templates+1]=t;index=#s.templates
+    end
+    if not persist()then
+        if old then s.templates[index]=old else table.remove(s.templates,index)end
+        return false,'\205\229 \243\228\224\235\238\241\252 \241\238\245\240\224\237\232\242\252 \248\224\225\235\238\237'
+    end
+    return true,index
+end
+function P.steps()
+    local steps={}
+    for i,t in ipairs(P.settings().templates)do
+        if t.auto~=false then
+            for line,row in ipairs(ensure_rows(t))do
+                if row.auto~=false and type(row.text)=='string' and P.validate(row.text)then
+                    steps[#steps+1]={index=i,line=line,command=row.text,
+                        interval=num(row.interval,P.MIN_INTERVAL,3600)or 180,name=t.name}
+                end
+            end
+        end
+    end
+    return steps
+end
+function P.send_once(index,at,send,connected)
+    at=at or os.time()
+    local t=P.settings().templates[index]
+    if not t then return false,'\216\224\225\235\238\237 \237\229 \237\224\233\228\229\237'end
+    local all=P.steps()
+    local target=all[P.cursor or 1]
+    if not target or target.index~=index then
+        for _,step in ipairs(all)do
+            if step.index==index then target=step;break end
+        end
+    end
+    if not target or target.index~=index then return false,'\194 \248\224\225\235\238\237\229 \237\229\242 \226\234\235\254\247\184\237\237\251\245 \241\242\240\238\234'end
+    if P.last_sent>0 and at-P.last_sent<P.MIN_INTERVAL then
+        return false,'\207\224\243\231\224 \228\238 \241\235\229\228\243\254\249\229\233 \238\242\239\240\224\226\234\232'
+    end
+    if connected==nil then connected=online()end
+    if not connected then return false,'\205\229\242 \239\238\228\234\235\254\247\229\237\232\255 \234 \232\227\240\229'end
+    local resolved,err=P.expand(target.command)
+    if not resolved then return false,err end
+    if #resolved>P.MAX_STEP_BYTES then return false,'\202\238\236\224\237\228\224 \239\240\229\226\251\248\224\229\242 200 \225\224\233\242'end
+    local sender=send or sampSendChat
+    if type(sender)~='function'then return false,'\205\229\242 \238\242\239\240\224\226\234\232 \247\224\242\224'end
+    local ok,response=pcall(sender,resolved)
+    if not ok or response==false then return false,'\205\229 \243\228\224\235\238\241\252 \238\242\239\240\224\226\232\242\252 \234\238\236\224\237\228\243'end
+    P.last_sent=at;P.session_count=P.session_count+1
+    P.last_command=resolved;P.last_error=nil
+    t.last_sent=at;t.line_index=target.line
+    t.rows[target.line].last_sent=at
+    return true
+end
+
 return true
 
       end
       _v288_promo_model()
 
       local function _v288_promo_ui()
--- Native Palatka workspace for universal auto-promo. No MCR UI dependencies.
+-- Native Palatka promo: template = name + multiple individually timed commands.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
 local function b(s,id,w,on)return V.button(s,'unipromo_'..id,w,on)end
-local function save()return DSP.save_settings and DSP.save_settings()~=false end
-local function input(id,hint,buffer,length)
-    imgui.SetNextItemWidth(-1)
-    return imgui.InputTextWithHint('##unipromo_'..id,DSP.utf8(hint),buffer,length)
-end
+local function fit(s,w)return V.fit(tostring(s or''),math.max(60,w))end
 local function fill(buf,value,max)
     local raw=DSP.to_u8(tostring(value or''))
     ffi.fill(buf,max);ffi.copy(buf,raw:sub(1,max-1))
 end
-local function open_editor(i)
-    local row=P.settings().templates[i]
-    V.unipromo_edit_index=i
-    V.unipromo_name=V.unipromo_name or imgui.new.char[80]()
-    V.unipromo_line=V.unipromo_line or imgui.new.char[512]()
-    fill(V.unipromo_name,row and row.name or '\205\238\226\224\255 \241\242\240\238\234\224',80)
-    fill(V.unipromo_line,row and row.text or '/fam ',512)
-    V.unipromo_interval={value=row and tonumber(row.interval)or 180}
-    V.unipromo_error=nil
-    V.open_popup('\196\238\225\224\226\232\242\252 \234\238\236\224\237\228\243','unipromo_edit')
+local function input(id,hint,buffer,length)
+    imgui.SetNextItemWidth(-1)
+    return imgui.InputTextWithHint('##unipromo_'..id,DSP.utf8(hint),buffer,length)
 end
-local function pretty(s,w)
-    return V.fit(tostring(s or ''),math.max(40,w))
+local function save()
+    if DSP.save_settings then return DSP.save_settings()~=false end
+    return false
 end
-function V.promo_screen()
-    local settings=P.settings()
-    V.heading('\192\226\242\238\239\232\224\240 \183 Palatka AI',function()
-        if P.running then
-            if b('\207\192\211\199\192','stop',118,true)then P.stop()end
-        else
-            if b('\199\192\207\211\209\202','start',118,true)then
-                local ok,why=P.start()
-                V.unipromo_error=ok and nil or tostring(why)
-            end
-        end
-    end,135)
-    V.muted('\203\254\225\224\255 \232\227\240\238\226\224\255 /\234\238\236\224\237\228\224. \209\242\240\238\234\232 \232\228\243\242 \239\238 \238\247\229\240\229\228\232; \238\242\228\229\235\252\237\224\255 \239\224\243\231\224 \239\238\241\235\229 \234\224\230\228\238\233.')
-    V.muted('\205\229 \243\241\234\238\240\255\229\242 \241\229\240\226\229\240\237\251\229 \238\227\240\224\237\232\247\229\237\232\255 \247\224\242\224. \192\226\242\238\226\238\231\238\225\237\238\226\235\229\237\232\229 \242\238\235\252\234\238 \239\240\232 \226\234\235\254\247\229\237\232\232.')
-    V.text('\209\242\224\242\243\241: '..(P.running and (P.pause_reason or'\199\224\239\243\249\229\237')or'\206\241\242\224\237\238\226\235\229\237'))
-    V.muted('\206\242\239\240\224\226\235\229\237\238: '..tostring(P.session_count)..(settings.continuous and ' | \246\232\234\235\232\247\229\241\234\232\233 \240\229\230\232\236' or ' / 12 \231\224 \231\224\239\243\241\234'))
-    if P.running and P.next_at and P.next_at>0 then
-        V.muted('\209\235\229\228\243\254\249\224\255 \238\242\239\240\224\226\234\224 \247\229\240\229\231 '..tostring(math.max(0,P.next_at-os.time()))..' \241')
+local function begin_template(index)
+    local t=P.settings().templates[index]
+    V.unipromo_editor=true;V.unipromo_edit_index=index
+    V.unipromo_name=V.unipromo_name or imgui.new.char[128]()
+    fill(V.unipromo_name,t and t.name or'',128)
+    local rows={}
+    for _,v in ipairs(t and t.rows or{})do
+        rows[#rows+1]={text=v.text,interval=v.interval,auto=v.auto~=false}
     end
-    if P.last_command then V.muted(pretty('\207\238\241\235\229\228\237\255\255: '..P.last_command,imgui.GetContentRegionAvail().x))end
-    if V.unipromo_error or P.last_error then V.red(pretty(V.unipromo_error or P.last_error,imgui.GetContentRegionAvail().x))end
-    if b(settings.continuous and '\214\232\234\235: \193\197\199 \203\200\204\200\210\192' or '\214\232\234\235: 12 \241\238\238\225\249\229\237\232\233',
-        'continuous',234,settings.continuous)then
+    V.unipromo_draft={rows=rows,auto=(t==nil or t.auto~=false)}
+    V.unipromo_error=nil
+end
+local function begin_line(index)
+    V.unipromo_line_index=index
+    V.unipromo_line=V.unipromo_line or imgui.new.char[512]()
+    local row=V.unipromo_draft.rows[index]
+    fill(V.unipromo_line,row and row.text or'/vr ',512)
+    V.unipromo_line_interval={value=row and row.interval or 180}
+    V.unipromo_line_enabled=(row==nil or row.auto~=false)
+    V.unipromo_line_error=nil
+    V.open_popup('\209\242\240\238\234\224 \240\229\234\235\224\236\251','unipromo_line')
+end
+local function summary(settings)
+    if P.running then
+        if b('\206\209\210\192\205\206\194\200\210\220','stop',170,true)then P.stop()end
+    else
+        if b('\199\192\207\211\209\210\200\210\220','start',170,true)then
+            local ok,err=P.start()
+            V.unipromo_error=ok and nil or tostring(err)
+        end
+    end
+    V.inline(5)
+    if b(settings.continuous and'\214\232\234\235: \193\197\199 \203\200\204\200\210\192' or'\214\232\234\235: 12 \241\238\238\225\249\229\237\232\233',
+        'continuous',216,settings.continuous)then
         local ok,err=P.set_option('continuous',not settings.continuous)
         if not ok then V.unipromo_error=err end
     end
-    V.inline(5)
-    if b(settings.resume_on_login and '\207\240\232 \226\245\238\228\229: \194\202\203' or '\207\240\232 \226\245\238\228\229: \194\219\202\203',
-        'resume',230,settings.resume_on_login)then
+    if b(settings.resume_on_login and'\207\238\241\235\229 \226\245\238\228\224: \194\202\203' or'\207\238\241\235\229 \226\245\238\228\224: \194\219\202\203',
+        'resume',216,settings.resume_on_login)then
         local ok,err=P.set_option('resume_on_login',not settings.resume_on_login)
         if not ok then V.unipromo_error=err end
     end
-    V.muted('\207\238\241\235\229 \226\245\238\228\224: \231\224\228\229\240\230\234\224 '..tostring(settings.start_delay)..' \241 \183 \239\240\232 \238\242\234\235\254\247\229\237\232\232 \238\242\239\240\224\226\234\224 \237\224 \239\224\243\231\229.')
-    for i,v in ipairs({10,20,30,60})do
-        if b(v..' \241','start_delay_'..i,82,settings.start_delay==v)then
-            local ok,err=P.set_option('start_delay',v)
+    V.inline(5)
+    V.muted('\199\224\228\229\240\230\234\224 \239\229\240\229\228 \241\242\224\240\242\238\236: '..tostring(settings.start_delay)..' \241\229\234.')
+    for i,n in ipairs({10,20,30,60})do
+        if b(n..'\241','startup_'..i,62,settings.start_delay==n)then
+            local ok,err=P.set_option('start_delay',n)
             if not ok then V.unipromo_error=err end
         end
-        if i<4 then V.inline(5)end
+        if i<4 then V.inline(4)end
     end
-    if b('+ \196\238\225\224\226\232\242\252 \241\242\240\238\234\243','add',200,true)then open_editor(nil)end
-    V.inline(5)
-    if b('\206\209\210\192\205\206\194\200\210\220','stop2',135,P.running)then P.stop()end
-    local rows=settings.templates
-    V.muted('\209\242\240\238\234: '..#rows..' / '..P.MAX_TEMPLATES..' \183 \232\237\242\229\240\226\224\235 60\1503600 \241 \239\238\241\235\229 \241\242\240\238\234\232.')
-    V.list_rows('unipromo_lines',rows,124,function(it,i)
-        V.row('unipromo_row_'..i,124,function(w,x,y)
+    V.muted('\209\242\224\242\243\241: '..(P.running and(P.pause_reason or'\240\224\225\238\242\224\229\242')or'\238\241\242\224\237\238\226\235\229\237'))
+    V.muted('\209\238\238\225\249\229\237\232\233: '..tostring(P.session_count)..
+        (settings.continuous and' | \225\229\231 \235\232\236\232\242\224' or' / 12')..
+        '  \183  \241\235\229\228\243\254\249\232\233 \248\224\227 \247\229\240\229\231 '..math.max(0,(P.next_at or 0)-os.time())..'\241')
+end
+local function template_editor()
+    local draft=V.unipromo_draft
+    V.heading(V.unipromo_edit_index and'\208\229\228\224\234\242\232\240\238\226\224\237\232\229 \248\224\225\235\238\237\224' or'\209\238\231\228\224\237\232\229 \248\224\225\235\238\237\224',function()
+        if b('\205\224\231\224\228','back',112)then V.unipromo_editor=false end
+    end,135)
+    V.text('\205\224\231\226\224\237\232\229 \248\224\225\235\238\237\224')
+    input('template_name','\205\224\239\240\232\236\229\240: \208\229\234\235\224\236\224 \214\208',V.unipromo_name,128)
+    V.muted('\196\238\225\224\226\252 \238\242\228\229\235\252\237\243\254 \241\242\240\238\234\243 \237\224 \234\224\230\228\251\233 \232\227\240\238\226\238\233 \247\224\242 \232\235\232 \234\238\236\224\237\228\243.')
+    if b('+ \196\238\225\224\226\232\242\252 \241\242\240\238\234\243','add_line',205,true)then begin_line(nil)end
+    V.inline(6)
+    if b('\209\238\245\240\224\237\232\242\252 \248\224\225\235\238\237','save_template',205,true)then
+        local name=DSP.to_cp(ffi.string(V.unipromo_name)):match('^%s*(.-)%s*$')
+        local ok,why=P.save_template(V.unipromo_edit_index,name,draft.rows,draft.auto)
+        if ok then V.unipromo_editor=false;V.unipromo_error=nil
+        else V.unipromo_error=tostring(why)end
+    end
+    if V.unipromo_error then V.red(V.unipromo_error)end
+    if #draft.rows==0 then
+        V.muted('\194 \248\224\225\235\238\237\229 \239\238\234\224 \237\229\242 \241\242\240\238\234. \205\224\230\236\232 \171\196\238\225\224\226\232\242\252 \241\242\240\238\234\243\187.')
+    else
+        V.muted('\194 \248\224\225\235\238\237\229 '..#draft.rows..' \241\242\240\238\234. \206\242\239\240\224\226\234\224 \239\238 \238\247\229\240\229\228\232 \241 \240\224\231\237\251\236\232 \232\237\242\229\240\226\224\235\224\236\232.')
+    end
+    V.list_rows('unipromo_template_lines',draft.rows,112,function(row,i)
+        V.row('unipromo_step_'..i,112,function(w,x,y)
             V.at(x,y)
-            V.text(pretty(tostring(i)..'. '..tostring(it.name or '\209\242\240\238\234\224'),w-165))
-            V.at(x,y+25)
-            V.muted(pretty(it.text or'',w-165))
-            V.at(x,y+49)
-            V.muted('\207\224\243\231\224 \239\238\241\235\229: '..tostring(it.interval or 180)..' \241\229\234')
-            V.at(x,y+73)
-            if b(it.auto and '\194\202\203' or '\194\219\202\203','line_on_'..i,77,it.auto)then
-                it.auto=not it.auto
-                if not save()then it.auto=not it.auto;V.unipromo_error='\205\229 \243\228\224\235\238\241\252 \241\238\245\240\224\237\232\242\252'end
+            V.text(fit(i..'. '..(row.text or''),w-170))
+            V.at(x,y+29)
+            V.muted('\200\237\242\229\240\226\224\235 \239\238\241\235\229: '..tostring(row.interval or 180)..' \241\229\234.')
+            V.at(x,y+61)
+            if b(row.auto~=false and'\194\202\203' or'\194\219\202\203','row_toggle_'..i,67,row.auto~=false)then
+                row.auto=not(row.auto~=false)
             end
             V.inline(4)
-            if b('\194\226\229\240\245','line_up_'..i,71)then P.move(i,-1)end
+            if b('\194\226\229\240\245','row_up_'..i,69)and i>1 then
+                draft.rows[i],draft.rows[i-1]=draft.rows[i-1],draft.rows[i]
+            end
             V.inline(4)
-            if b('\194\237\232\231','line_down_'..i,71)then P.move(i,1)end
-            V.at(x+w-155,y+10)
-            if b('\200\231\236\229\237\232\242\252','line_edit_'..i,150)then open_editor(i)end
-            V.at(x+w-155,y+65)
-            if b('\211\228\224\235\232\242\252','line_del_'..i,150)then
-                V.unipromo_delete=i;V.open_popup('\211\228\224\235\232\242\252 \234\238\236\224\237\228\243','unipromo_delete')
+            if b('\194\237\232\231','row_down_'..i,69)and i<#draft.rows then
+                draft.rows[i],draft.rows[i+1]=draft.rows[i+1],draft.rows[i]
+            end
+            V.at(x+w-150,y+6)
+            if b('\200\231\236\229\237\232\242\252','row_edit_'..i,146)then begin_line(i)end
+            V.at(x+w-150,y+60)
+            if b('\211\228\224\235\232\242\252','row_remove_'..i,146)then
+                table.remove(draft.rows,i)
             end
         end)
     end,{footer=function()
-        V.muted('\207\232\224\240 \226\251\239\238\235\237\255\229\242 \242\238\235\252\234\238 \243\234\224\231\224\237\237\251\229 \242\238\225\238\233 \234\238\236\224\237\228\251, \241 \241\238\225\235\254\228\229\237\232\229\236 \231\224\228\224\237\237\251\245 \239\224\243\231.')
+        V.muted('\207\240\232\236\229\240: /vr \207\240\238\228\224\236 \242\238\226\224\240\251 \183 /fam \207\240\238\228\224\236 \242\238\226\224\240\251 \183 /gd \207\240\238\228\224\236 \242\238\226\224\240\251')
     end})
 end
-local previous_popups=V.popups
+function V.promo_screen()
+    local settings=P.settings()
+    if V.unipromo_editor then return template_editor()end
+    V.heading('\192\226\242\238\239\232\224\240 \183 Palatka AI',function()
+        if b('+ \209\238\231\228\224\242\252 \248\224\225\235\238\237','new_template',195,true)then begin_template(nil)end
+    end,211)
+    V.muted('\206\228\232\237 \248\224\225\235\238\237 \241\238\228\229\240\230\232\242 \237\229\241\234\238\235\252\234\238 \241\242\240\238\234 \240\229\234\235\224\236\251 \228\235\255 \240\224\231\237\251\245 \247\224\242\238\226.')
+    summary(settings)
+    if V.unipromo_error then V.red(V.unipromo_error)end
+    V.muted('\216\224\225\235\238\237\251: '..#settings.templates..' / '..P.MAX_TEMPLATES)
+    V.list_rows('unipromo_templates',settings.templates,119,function(t,i)
+        V.row('unipromo_template_'..i,119,function(w,x,y)
+            local count=#(t.rows or{})
+            V.at(x,y)
+            V.text(fit(t.name or'\193\229\231 \237\224\231\226\224\237\232\255',w-162))
+            V.at(x,y+28)
+            V.muted('\209\242\240\238\234: '..count..' \183 '..(t.auto~=false and'\224\234\242\232\226\229\237' or'\226\251\234\235\254\247\229\237'))
+            if count>0 then
+                V.at(x,y+53)
+                V.muted(fit((t.rows[1]or{}).text or'',w-170))
+            end
+            V.at(x,y+81)
+            if b(t.auto~=false and'\194\202\203' or'\194\219\202\203','template_toggle_'..i,79,t.auto~=false)then
+                t.auto=not(t.auto~=false)
+                if not save()then t.auto=not(t.auto~=false)end
+            end
+            V.inline(5)
+            if b('\211\228\224\235\232\242\252','template_remove_'..i,91)then
+                V.unipromo_delete=i;V.open_popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','unipromo_delete')
+            end
+            V.at(x+w-150,y+10)
+            if b('\205\224\241\242\240\238\232\242\252','template_edit_'..i,146,true)then begin_template(i)end
+        end)
+    end,{footer=function()
+        V.muted('\193\229\241\234\238\237\229\247\237\251\233 \246\232\234\235 \232 \224\226\242\238\226\238\231\238\225\237\238\226\235\229\237\232\229 \226\234\235\254\247\224\254\242\241\255 \242\238\235\252\234\238 \226\240\243\247\237\243\254.')
+    end})
+end
+local old_popups=V.popups
 function V.popups()
-    if previous_popups then previous_popups()end
-    V.popup('\196\238\225\224\226\232\242\252 \234\238\236\224\237\228\243','unipromo_edit',function()
-        V.text('\205\224\231\226\224\237\232\229 \241\242\240\238\234\232')
-        input('name','\205\224\239\240\232\236\229\240: \209\229\236\229\233\237\251\233 \247\224\242',V.unipromo_name,80)
-        V.text('\202\238\236\224\237\228\224 \241 \224\240\227\243\236\229\237\242\224\236\232')
-        input('line','\205\224\239\240\232\236\229\240: /fam \207\240\238\228\224\236 \235\224\240\246\251',V.unipromo_line,512)
-        V.muted('\204\238\230\237\238 /f, /fam, /vr, /ad, /family \232 \235\254\225\243\254 \228\240\243\227\243\254 /\234\238\236\224\237\228\243 \232\227\240\251.')
-        V.muted('\197\241\235\232 \234\238\236\224\237\228\224 \238\242\234\240\251\226\224\229\242 \236\229\237\254, \238\237\238 \236\238\230\229\242 \236\229\248\224\242\252 \232\227\240\229 \239\240\232 \234\224\230\228\238\236 \246\232\234\235\229.')
-        if b('\194\241\242\224\226\232\242\252 {shop}','shopmacro',163)then
-            local raw=ffi.string(V.unipromo_line)
-            local suffix=' {shop}'
-            if #raw+#suffix<511 then fill(V.unipromo_line,raw..suffix,512)end
-        end
-        V.muted('\204\224\234\240\238\241 {shop} \226\241\242\224\226\235\255\229\242 \234\235\232\234\224\225\229\235\252\237\251\233 \237\238\236\229\240 \241\226\238\229\233 \235\224\226\234\232 \239\240\232 \238\242\239\240\224\226\234\229.')
+    if old_popups then old_popups()end
+    V.popup('\209\242\240\238\234\224 \240\229\234\235\224\236\251','unipromo_line',function()
+        V.text('\202\238\236\224\237\228\224 / \241\238\238\225\249\229\237\232\229 \226 \238\228\237\243 \241\242\240\238\234\243')
+        input('line_command','/vr \207\240\238\228\224\236 \242\238\226\224\240\251 \237\224 \214\208',V.unipromo_line,512)
+        V.muted('\205\224\239\240\232\236\229\240: /vr ..., /fam ..., /gd ..., /f ..., /ad ...')
         V.text('\200\237\242\229\240\226\224\235 \239\238\241\235\229 \253\242\238\233 \241\242\240\238\234\232, \241\229\234\243\237\228')
-        for _,seconds in ipairs({60,120,180,300,600})do
-            if b(tostring(seconds),'interval_'..seconds,69,V.unipromo_interval.value==seconds)then
-                V.unipromo_interval.value=seconds
+        for i,n in ipairs({60,120,180,300,600})do
+            if b(n..'\241','interval_'..i,61,V.unipromo_line_interval.value==n)then
+                V.unipromo_line_interval.value=n
             end
-            V.inline(4)
+            if i<5 then V.inline(5)end
         end
-        M.compact_number(V.unipromo_interval,'value','unipromo_interval',180,60)
-        if V.unipromo_error then V.red(tostring(V.unipromo_error))end
-        if b('\209\238\245\240\224\237\232\242\252 \241\242\240\238\234\243','save',182,true)then
-            local name=DSP.to_cp(ffi.string(V.unipromo_name))
-            local line=DSP.to_cp(ffi.string(V.unipromo_line))
-            local ok,err
-            if V.unipromo_edit_index then
-                ok,err=P.update(V.unipromo_edit_index,name,line,V.unipromo_interval.value)
+        M.compact_number(V.unipromo_line_interval,'value','unipromo_line_interval',190,60)
+        if V.unipromo_line_error then V.red(V.unipromo_line_error)end
+        if b('\196\238\225\224\226\232\242\252 / \241\238\245\240\224\237\232\242\252','line_save',225,true)then
+            local command=DSP.to_cp(ffi.string(V.unipromo_line)):match('^%s*(.-)%s*$')
+            local ok,err=P.validate(command)
+            if ok and #P.lines(command)==1 then
+                local row={text=command,interval=math.max(60,math.min(3600,
+                    math.floor(tonumber(V.unipromo_line_interval.value)or 180))),
+                    auto=V.unipromo_line_enabled~=false}
+                if V.unipromo_line_index then
+                    V.unipromo_draft.rows[V.unipromo_line_index]=row
+                else
+                    V.unipromo_draft.rows[#V.unipromo_draft.rows+1]=row
+                end
+                V.unipromo_line_error=nil
+                imgui.CloseCurrentPopup()
             else
-                ok,err=P.add(name,line,V.unipromo_interval.value)
+                V.unipromo_line_error=err or'\206\228\237\224 \234\238\236\224\237\228\224 \237\224 \241\242\240\238\234\243'
             end
-            if ok then V.unipromo_error=nil;imgui.CloseCurrentPopup()
-            else V.unipromo_error=tostring(err)end
         end
-        V.inline(6);V.cancel('unipromo_edit')
-    end,{w=680,h=470,resizable=true})
-    V.popup('\211\228\224\235\232\242\252 \234\238\236\224\237\228\243','unipromo_delete',function()
-        V.text('\211\228\224\235\232\242\252 \253\242\243 \241\242\240\238\234\243 \232\231 \240\224\241\239\232\241\224\237\232\255?')
-        if b('\196\224, \243\228\224\235\232\242\252','delete_confirm',174)then
-            if P.remove(V.unipromo_delete)then imgui.CloseCurrentPopup()
-            else V.unipromo_error='\206\248\232\225\234\224 \241\238\245\240\224\237\229\237\232\255'end
+        V.inline(6);V.cancel('unipromo_line')
+    end,{w=660,h=400,resizable=true})
+    V.popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','unipromo_delete',function()
+        V.text('\211\228\224\235\232\242\252 \248\224\225\235\238\237 \246\229\235\232\234\238\236 \226\236\229\241\242\229 \241\238 \241\242\240\238\234\224\236\232?')
+        if b('\196\224, \243\228\224\235\232\242\252','remove_template',160)then
+            local ok=P.remove(V.unipromo_delete)
+            if ok then imgui.CloseCurrentPopup()else V.unipromo_error='\206\248\232\225\234\224 \241\238\245\240\224\237\229\237\232\255'end
         end
         V.inline(6);V.cancel('unipromo_delete')
-    end,{w=470,h=240})
+    end,{w=460,h=250})
 end
 return true
 
@@ -2365,6 +2542,14 @@ return true
       return false
     end
     DSP._v288_installed=true;DSP.version='2.8.8'
+    return true
+  end
+  -- 2.8.9: properly encoded arbitration labels and named promo template editor.
+  local function install_v289()
+    if not install_v288() then return false end
+    if DSP._v289_installed then DSP.version='2.8.9';return true end
+    DSP._v289_installed=true
+    DSP.version='2.8.9'
     return true
   end
   -- Install settings guard before any other overlay can save preferences.
@@ -4417,7 +4602,7 @@ end
 
   -- Palatka AI 2.8.5: accurate trade and passive pawnshop read-only scanner.
   if DSP._v285_installed then
-    return install_v288()
+    return install_v289()
   end
   local applied,err=pcall(function()
     do
@@ -5617,5 +5802,5 @@ return true
   DSP._v285_installed=true
   DSP.version='2.8.5'
   if DSP.flog then DSP.flog('Palatka 2.8.5 Accurate Trade / Lombard beta installed') end
-  return install_v288()
+  return install_v289()
 end

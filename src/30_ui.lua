@@ -145,7 +145,7 @@ function DSP.ui.init()
     if sampRegisterChatCommand then
         sampRegisterChatCommand('crr', function() DSP.ui.toggle() end)
     end
-    DSP.add_log('palatka ai v' .. DSP.version .. ' çàãðóæåí')
+    DSP.add_log('palatka ai v' .. DSP.version .. ' загружен')
 end
 
 function DSP.ui.header()
@@ -154,14 +154,14 @@ function DSP.ui.header()
     imgui.SameLine(0, 14 * d())
     imgui.TextDisabled(DSP.utf8('Mobile ' .. tostring(st.sid)))
     imgui.SameLine(0, 14 * d())
-    local status = st.status == 'loading' and 'îáíîâëåíèå...'
-        or st.status == 'error' and ('îøèáêà: ' .. tostring(st.error))
-        or st.status == 'cache' and 'êýø'
+    local status = st.status == 'loading' and 'обновление...'
+        or st.status == 'error' and ('ошибка: ' .. tostring(st.error))
+        or st.status == 'cache' and 'кэш'
         or 'live'
     local sc = st.status == 'error' and DSP.theme.col('bad', 1) or DSP.theme.col('good', 1)
     imgui.TextColored(sc, DSP.utf8(status))
     imgui.SameLine(0, 14 * d())
-    imgui.TextDisabled(DSP.utf8(string.format('Ëàâîê: %d  |  Îôôåðîâ: %d  |  Ñâåæåñòü: %s',
+    imgui.TextDisabled(DSP.utf8(string.format('Лавок: %d  |  Офферов: %d  |  Свежесть: %s',
         st.shops or 0, st.offers or 0, DSP.market.freshness())))
     local bw = 130 * d()
     local avail = imgui.GetContentRegionAvail().x
@@ -172,14 +172,14 @@ function DSP.ui.header()
     end
     if st.status == 'loading' then
         imgui.TextDisabled(DSP.utf8('...'))
-    elseif imgui.Button(DSP.utf8('ÎÁÍÎÂÈÒÜ'), imgui.ImVec2(bw, 0)) then
+    elseif imgui.Button(DSP.utf8('ОБНОВИТЬ'), imgui.ImVec2(bw, 0)) then
         DSP.market.pull(st.sid)
     end
     imgui.Separator()
 end
 
 function DSP.ui.server_buttons()
-    imgui.TextDisabled(DSP.utf8('Ñåðâåð:'))
+    imgui.TextDisabled(DSP.utf8('Сервер:'))
     imgui.SameLine(0, 8 * d())
     for _, s in ipairs(DSP.market.servers) do
         local active = DSP.market.state.sid == s.id
@@ -205,20 +205,20 @@ function DSP.ui.market_tab()
     DSP.ui.server_buttons()
 
     imgui.SetNextItemWidth(320 * d())
-    if imgui.InputTextWithHint('##dsp_search', DSP.utf8('Ïîèñê ïî íàçâàíèþ...'), DSP.ui.search_buf, 128) then
+    if imgui.InputTextWithHint('##dsp_search', DSP.utf8('Поиск по названию...'), DSP.ui.search_buf, 128) then
         DSP.ui.search = ffi.string(DSP.ui.search_buf)
         DSP.market.state.filter_version = -1
         DSP.ui.page = 1
     end
     imgui.SameLine(0, 12 * d())
-    if imgui.Checkbox(DSP.utf8('Òîëüêî ñ ïðîôèòîì'), DSP.ui.chk.only_profit) then
+    if imgui.Checkbox(DSP.utf8('Только с профитом'), DSP.ui.chk.only_profit) then
         DSP.settings.only_profit = DSP.ui.chk.only_profit[0]
         DSP.save_settings()
         DSP.market.state.filter_version = -1
         DSP.ui.page = 1
     end
     imgui.SameLine(0, 12 * d())
-    if imgui.Checkbox(DSP.utf8('Ëèêâèäíûå (2+ îôôåðà)'), DSP.ui.chk.liquid) then
+    if imgui.Checkbox(DSP.utf8('Ликвидные (2+ оффера)'), DSP.ui.chk.liquid) then
         DSP.settings.liquid = DSP.ui.chk.liquid[0]
         DSP.save_settings()
         DSP.market.state.filter_version = -1
@@ -229,13 +229,13 @@ function DSP.ui.market_tab()
     local per = math.max(5, tonumber(DSP.settings.per_page) or 20)
     local sel = DSP.ui.selected and DSP.market.state.by_key[DSP.ui.selected] or nil
 
-    imgui.TextDisabled(DSP.utf8(string.format('Íàéäåíî: %d  |  ñîðòèðîâêà: %s',
+    imgui.TextDisabled(DSP.utf8(string.format('Найдено: %d  |  сортировка: %s',
         #rows,
-        (tonumber(DSP.settings.sort) == 2 and 'äåø¸âûå'
-            or tonumber(DSP.settings.sort) == 3 and 'äîðîãàÿ ñêóïêà'
-            or tonumber(DSP.settings.sort) == 4 and 'ïðîöåíò'
-            or tonumber(DSP.settings.sort) == 5 and 'îôôåðû'
-            or 'âûãîäà'))))
+        (tonumber(DSP.settings.sort) == 2 and 'дешёвые'
+            or tonumber(DSP.settings.sort) == 3 and 'дорогая скупка'
+            or tonumber(DSP.settings.sort) == 4 and 'процент'
+            or tonumber(DSP.settings.sort) == 5 and 'офферы'
+            or 'выгода'))))
 
     local avail = imgui.GetContentRegionAvail()
     local detail_h = sel and (196 * d()) or 0
@@ -250,12 +250,12 @@ function DSP.ui.market_tab()
     if imgui.BeginChild('##dsp_mkt_table', imgui.ImVec2(-1, table_h), true) then
         imgui.Columns(6, '##dsp_hdr', false)
         for i = 0, 5 do imgui.SetColumnWidth(i, widths[i + 1]) end
-        imgui.TextDisabled(DSP.utf8('ÒÎÂÀÐ'))
-        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ÑÊÓÏÊÀ'))
-        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ÏÐÎÄÀÆÀ'))
-        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ÂÛÃÎÄÀ'))
-        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ÊÎË-ÂÎ'))
-        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ÎÔÔ.'))
+        imgui.TextDisabled(DSP.utf8('ТОВАР'))
+        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('СКУПКА'))
+        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ПРОДАЖА'))
+        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ВЫГОДА'))
+        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('КОЛ-ВО'))
+        imgui.NextColumn(); imgui.TextDisabled(DSP.utf8('ОФФ.'))
         imgui.NextColumn()
         imgui.Separator()
         imgui.Columns(1)
@@ -307,7 +307,7 @@ function DSP.ui.market_tab()
         imgui.Columns(1)
         if #rows == 0 then
             imgui.Spacing()
-            imgui.TextDisabled(DSP.utf8('Íåò ñòðîê ïîä ôèëüòð. Íàæìèòå ÎÁÍÎÂÈÒÜ.'))
+            imgui.TextDisabled(DSP.utf8('Нет строк под фильтр. Нажмите ОБНОВИТЬ.'))
         end
         imgui.EndChild()
     end
@@ -325,14 +325,14 @@ function DSP.ui.detail(row)
     imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8(trunc(row.display, 42)))
     imgui.SameLine(0, 14 * d())
     local pc = row.profit > 0 and DSP.theme.col('good', 1) or DSP.theme.col('bad', 1)
-    imgui.TextColored(pc, DSP.utf8('âûãîäà ') .. (row.profit > 0 and '+' or '') .. DSP.money(row.profit))
+    imgui.TextColored(pc, DSP.utf8('выгода ') .. (row.profit > 0 and '+' or '') .. DSP.money(row.profit))
     imgui.SameLine(0, 10 * d())
     imgui.TextDisabled(string.format('(%+.1f%%)', row.profit_pct or 0))
     imgui.SameLine(0, 20 * d())
-    if imgui.SmallButton(DSP.utf8('çàêðûòü')) then DSP.ui.selected = nil end
-    -- v1.2 hotfix: ðûíî÷íàÿ ìåòêà. Åñëè åñòü ñêàí ÖÐ (ôàéë prices_server_{SID}.json)
-    --  ïîêàçûâàåò «Ðûíîê ÖÐ #N: Ïðîäàæà ~X$ | Ñêóïêà ~Y$ (ìåòêà DD.MM HH:MM)».
-    -- Èíà÷å: äèíàìè÷åñêàÿ ìåäèàíà èç va-ta.com  «Ðûíîê #N: Ïðîäàæà ~X$ | Ñêóïêà ~Y$ (íà îñíîâå N ëàâîê)».
+    if imgui.SmallButton(DSP.utf8('закрыть')) then DSP.ui.selected = nil end
+    -- v1.2 hotfix: рыночная метка. Если есть скан ЦР (файл prices_server_{SID}.json)
+    --  показывает «Рынок ЦР #N: Продажа ~X$ | Скупка ~Y$ (метка DD.MM HH:MM)».
+    -- Иначе: динамическая медиана из va-ta.com  «Рынок #N: Продажа ~X$ | Скупка ~Y$ (на основе N лавок)».
     imgui.Spacing()
     local label = DSP.market.market_label_for(row)
     if label and label ~= '' then
@@ -341,7 +341,7 @@ function DSP.ui.detail(row)
     imgui.Spacing()
     local h = 100 * d()
     if imgui.BeginChild('##dsp_d_sell', imgui.ImVec2(-1, h), true) then
-        imgui.TextDisabled(DSP.utf8('ÊÓÏÈÒÜ ÄÅØÅÂËÅ (ëàâêà ïðîäà¸ò)'))
+        imgui.TextDisabled(DSP.utf8('КУПИТЬ ДЕШЕВЛЕ (лавка продаёт)'))
         for i = 1, math.min(3, #row.sell.offers) do
             local o = row.sell.offers[i]
             imgui.TextColored(DSP.theme.col('warn', 1), DSP.money(o.price))
@@ -352,7 +352,7 @@ function DSP.ui.detail(row)
         imgui.EndChild()
     end
     if imgui.BeginChild('##dsp_d_buy', imgui.ImVec2(-1, h), true) then
-        imgui.TextDisabled(DSP.utf8('ÏÐÎÄÀÒÜ ÄÎÐÎÆÅ (ëàâêà ñêóïàåò)'))
+        imgui.TextDisabled(DSP.utf8('ПРОДАТЬ ДОРОЖЕ (лавка скупает)'))
         for i = 1, math.min(3, #row.buy.offers) do
             local o = row.buy.offers[i]
             imgui.TextColored(DSP.theme.col('good', 1), DSP.money(o.price))
@@ -365,14 +365,14 @@ function DSP.ui.detail(row)
     local bw = 210 * d()
     local bt = DSP.market.buy_target(row)
     local st = DSP.market.sell_target(row)
-    if imgui.Button(DSP.utf8('+ Â ñêóïêó  ' .. DSP.money(bt)), imgui.ImVec2(bw, 0)) then
+    if imgui.Button(DSP.utf8('+ В скупку  ' .. DSP.money(bt)), imgui.ImVec2(bw, 0)) then
         local ok, err = DSP.presets.add(row, 'buy')
-        if not ok then DSP.notify('Ñêóïêà: ' .. tostring(err)) end
+        if not ok then DSP.notify('Скупка: ' .. tostring(err)) end
     end
     imgui.SameLine(0, 10 * d())
-    if imgui.Button(DSP.utf8('+ Â ïðîäàæó  ' .. DSP.money(st)), imgui.ImVec2(bw, 0)) then
+    if imgui.Button(DSP.utf8('+ В продажу  ' .. DSP.money(st)), imgui.ImVec2(bw, 0)) then
         local ok, err = DSP.presets.add(row, 'sell')
-        if not ok then DSP.notify('Ïðîäàæà: ' .. tostring(err)) end
+        if not ok then DSP.notify('Продажа: ' .. tostring(err)) end
     end
 end
 
@@ -380,17 +380,17 @@ function DSP.ui.trade_tab()
     local kind = DSP.ui.preset_kind
     local p = kind == 'buy' and DSP.settings.buy_preset or DSP.settings.sell_preset
 
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÒÎÐÃÎÂËß'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ТОРГОВЛЯ'))
     imgui.SameLine(0, 18 * d())
     if kind == 'buy' then imgui.PushStyleColor(imgui.Col.Button, DSP.theme.col('accent', 0.55)) end
-    if imgui.Button(DSP.utf8('ÑÊÓÏÊÀ'), imgui.ImVec2(130 * d(), 0)) then DSP.ui.preset_kind = 'buy' end
+    if imgui.Button(DSP.utf8('СКУПКА'), imgui.ImVec2(130 * d(), 0)) then DSP.ui.preset_kind = 'buy' end
     if kind == 'buy' then imgui.PopStyleColor(1) end
     imgui.SameLine(0, 6 * d())
     if kind == 'sell' then imgui.PushStyleColor(imgui.Col.Button, DSP.theme.col('accent', 0.55)) end
-    if imgui.Button(DSP.utf8('ÏÐÎÄÀÆÀ'), imgui.ImVec2(130 * d(), 0)) then DSP.ui.preset_kind = 'sell' end
+    if imgui.Button(DSP.utf8('ПРОДАЖА'), imgui.ImVec2(130 * d(), 0)) then DSP.ui.preset_kind = 'sell' end
     if kind == 'sell' then imgui.PopStyleColor(1) end
     imgui.SameLine(0, 18 * d())
-    imgui.TextDisabled(DSP.utf8(string.format('%s: %d ïîç.', p.name or kind, #p.items)))
+    imgui.TextDisabled(DSP.utf8(string.format('%s: %d поз.', p.name or kind, #p.items)))
     imgui.Separator()
 
     local avail = imgui.GetContentRegionAvail()
@@ -399,12 +399,12 @@ function DSP.ui.trade_tab()
 
     if imgui.BeginChild('##dsp_trade_presets', imgui.ImVec2(-1, pre_h), true) then
         if #p.items == 0 then
-            imgui.TextDisabled(DSP.utf8('Ïóñòî. Ñêàíèðóéòå èíâåíòàðü è äîáàâëÿéòå òîâàðû.'))
+            imgui.TextDisabled(DSP.utf8('Пусто. Сканируйте инвентарь и добавляйте товары.'))
         end
         -- v1.2 hotfix: full inline preset editor. Per-item row layout:
-        --   [x] name  [Price: 50.000$] [-1$] [Ðûíîê] [+10ê] [-10ê] [+100ê]  [Êîë-âî: 100] [X]
+        --   [x] name  [Price: 50.000$] [-1$] [Рынок] [+10к] [-10к] [+100к]  [Кол-во: 100] [X]
         -- All inputs write straight to it.price / it.qty and save_settings.
-        -- Auto-âûñòàâëåíèå (40_auto.lua) reads it.price + it.qty when
+        -- Auto-выставление (40_auto.lua) reads it.price + it.qty when
         -- queueing dialog responses (15068-15071), so editing here
         -- guarantees the price/qty that lands in the dialog.
         for i, it in ipairs(p.items) do
@@ -420,11 +420,11 @@ function DSP.ui.trade_tab()
             local est = DSP.presets.estimate(it, kind)
             if est then
                 local ec = est >= 0 and DSP.theme.col('good', 1) or DSP.theme.col('bad', 1)
-                imgui.TextColored(ec, DSP.utf8('ïðîôèò ' .. (est >= 0 and '+' or '') .. DSP.money(est)))
+                imgui.TextColored(ec, DSP.utf8('профит ' .. (est >= 0 and '+' or '') .. DSP.money(est)))
             end
 
             -- Row 2: price input + quick adjust buttons
-            imgui.TextDisabled(DSP.utf8('  Öåíà:'))
+            imgui.TextDisabled(DSP.utf8('  Цена:'))
             imgui.SameLine(0, 6 * d())
             imgui.SetNextItemWidth(140 * d())
             local price_ref = imgui.new.int(tonumber(it.price) or 0)
@@ -433,13 +433,13 @@ function DSP.ui.trade_tab()
                 DSP.save_settings()
             end
             imgui.SameLine(0, 4 * d())
-            -- Quick adjust: -1$ / Ðûíîê / +10ê / -10ê / +100ê
+            -- Quick adjust: -1$ / Рынок / +10к / -10к / +100к
             if imgui.SmallButton(DSP.utf8('-1$##pm1_' .. i)) then
                 it.price = math.max(0, (tonumber(it.price) or 0) - 1)
                 DSP.save_settings()
             end
             imgui.SameLine(0, 2 * d())
-            if imgui.SmallButton(DSP.utf8('Ðûíîê##pmr_' .. i)) then
+            if imgui.SmallButton(DSP.utf8('Рынок##pmr_' .. i)) then
                 local row = DSP.presets.find_row(it)
                 if row then
                     local target = kind == 'buy'
@@ -449,30 +449,30 @@ function DSP.ui.trade_tab()
                         it.price = target
                         DSP.save_settings()
                     else
-                        DSP.notify('Ðûíîê: íåò áàçû äëÿ ' .. tostring(it.name))
+                        DSP.notify('Рынок: нет базы для ' .. tostring(it.name))
                     end
                 else
-                    DSP.notify('Ðûíîê: òîâàð íå íàéäåí â áàçå')
+                    DSP.notify('Рынок: товар не найден в базе')
                 end
             end
             imgui.SameLine(0, 2 * d())
-            if imgui.SmallButton(DSP.utf8('+10ê##pp10k_' .. i)) then
+            if imgui.SmallButton(DSP.utf8('+10к##pp10k_' .. i)) then
                 it.price = (tonumber(it.price) or 0) + 10000
                 DSP.save_settings()
             end
             imgui.SameLine(0, 2 * d())
-            if imgui.SmallButton(DSP.utf8('-10ê##pm10k_' .. i)) then
+            if imgui.SmallButton(DSP.utf8('-10к##pm10k_' .. i)) then
                 it.price = math.max(0, (tonumber(it.price) or 0) - 10000)
                 DSP.save_settings()
             end
             imgui.SameLine(0, 2 * d())
-            if imgui.SmallButton(DSP.utf8('+100ê##pp100k_' .. i)) then
+            if imgui.SmallButton(DSP.utf8('+100к##pp100k_' .. i)) then
                 it.price = (tonumber(it.price) or 0) + 100000
                 DSP.save_settings()
             end
 
             -- Row 3: qty input + delete [X]
-            imgui.TextDisabled(DSP.utf8('  Êîë-âî:'))
+            imgui.TextDisabled(DSP.utf8('  Кол-во:'))
             imgui.SameLine(0, 6 * d())
             imgui.SetNextItemWidth(100 * d())
             local qty_ref = imgui.new.int(tonumber(it.qty) or 1)
@@ -491,12 +491,12 @@ function DSP.ui.trade_tab()
     end
     imgui.Separator()
 
-    imgui.TextDisabled(DSP.utf8('ÑÊÀÍ ÈÍÂÅÍÒÀÐß: ' .. (DSP.auto.inv_status or 'íå ñêàíèðîâàí')))
-    if imgui.Button(DSP.utf8('ÑÊÀÍÈÐÎÂÀÒÜ'), imgui.ImVec2(120 * d(), 0)) then
+    imgui.TextDisabled(DSP.utf8('СКАН ИНВЕНТАРЯ: ' .. (DSP.auto.inv_status or 'не сканирован')))
+    if imgui.Button(DSP.utf8('СКАНИРОВАТЬ'), imgui.ImVec2(120 * d(), 0)) then
         DSP.auto.scan_inventory()
     end
     imgui.SameLine(0, 8 * d())
-    imgui.TextDisabled(DSP.utf8('ïîçèöèé: ' .. tostring(#(DSP.auto.inv or {}))))
+    imgui.TextDisabled(DSP.utf8('позиций: ' .. tostring(#(DSP.auto.inv or {}))))
 
     if DSP.auto and DSP.auto.inv and #DSP.auto.inv > 0 then
         if imgui.BeginChild('##dsp_trade_inv', imgui.ImVec2(-1, inv_h), true) then
@@ -526,17 +526,17 @@ function DSP.ui.trade_tab()
                     imgui.TextDisabled(string.format('%+.0f%%', pct))
                 end
                 imgui.SameLine(0, 6 * d())
-                if imgui.SmallButton(DSP.utf8('+ñêóï##dsp_inv_buy_' .. inv_item.name)) then
+                if imgui.SmallButton(DSP.utf8('+скуп##dsp_inv_buy_' .. inv_item.name)) then
                     if row then
                         local ok, err = DSP.presets.add(row, 'buy')
-                        DSP.notify(ok and 'OK' or ('Îøèáêà: ' .. tostring(err)))
+                        DSP.notify(ok and 'OK' or ('Ошибка: ' .. tostring(err)))
                     end
                 end
                 imgui.SameLine(0, 3 * d())
-                if imgui.SmallButton(DSP.utf8('+ïðîä##dsp_inv_sell_' .. inv_item.name)) then
+                if imgui.SmallButton(DSP.utf8('+прод##dsp_inv_sell_' .. inv_item.name)) then
                     if row then
                         local ok, err = DSP.presets.add(row, 'sell')
-                        DSP.notify(ok and 'OK' or ('Îøèáêà: ' .. tostring(err)))
+                        DSP.notify(ok and 'OK' or ('Ошибка: ' .. tostring(err)))
                     end
                 end
                 imgui.Spacing()
@@ -545,60 +545,60 @@ function DSP.ui.trade_tab()
         end
     end
 
-    if imgui.Button(DSP.utf8('ÏÅÐÅÑ×ÈÒÀÒÜ'), imgui.ImVec2(160 * d(), 0)) then
+    if imgui.Button(DSP.utf8('ПЕРЕСЧИТАТЬ'), imgui.ImVec2(160 * d(), 0)) then
         DSP.presets.recalc(kind)
     end
     imgui.SameLine(0, 8 * d())
-    if imgui.Button(DSP.utf8('ÈÌÏÎÐÒ ÈÇ MH'), imgui.ImVec2(140 * d(), 0)) then
+    if imgui.Button(DSP.utf8('ИМПОРТ ИЗ MH'), imgui.ImVec2(140 * d(), 0)) then
         local ok, err = DSP.presets.import_mh()
-        DSP.notify(ok and ('Èìïîðò: ' .. tostring(err)) or ('Èìïîðò: ' .. tostring(err)))
+        DSP.notify(ok and ('Импорт: ' .. tostring(err)) or ('Импорт: ' .. tostring(err)))
     end
     imgui.SameLine(0, 8 * d())
-    if imgui.Button(DSP.utf8('Î×ÈÑÒÈÒÜ'), imgui.ImVec2(110 * d(), 0)) then DSP.presets.clear(kind) end
+    if imgui.Button(DSP.utf8('ОЧИСТИТЬ'), imgui.ImVec2(110 * d(), 0)) then DSP.presets.clear(kind) end
     imgui.SameLine(0, 12 * d())
     if kind == 'buy' then
         if DSP.auto.buy_running then
-            if imgui.Button(DSP.utf8('ÑÒÎÏ ÑÊÓÏÊÈ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_buy() end
+            if imgui.Button(DSP.utf8('СТОП СКУПКИ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_buy() end
         else
-            if imgui.Button(DSP.utf8('ÑÒÀÐÒ ÑÊÓÏÊÈ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('buy') end
+            if imgui.Button(DSP.utf8('СТАРТ СКУПКИ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('buy') end
         end
     else
         if DSP.auto.sell_running then
-            if imgui.Button(DSP.utf8('ÑÒÎÏ ÏÐÎÄÀÆÈ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_sell() end
+            if imgui.Button(DSP.utf8('СТОП ПРОДАЖИ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_sell() end
         else
-            if imgui.Button(DSP.utf8('ÑÒÀÐÒ ÏÐÎÄÀÆÈ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('sell') end
+            if imgui.Button(DSP.utf8('СТАРТ ПРОДАЖИ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('sell') end
         end
     end
     imgui.SameLine(0, 10 * d())
     imgui.TextDisabled(DSP.utf8('dry-run: ') .. (DSP.settings.dry_run and 'ON' or 'OFF'))
 end
 
--- v1.2 alias: ÏÀËÀÒÊÀ screen -> trade_tab for Stage 1.
+-- v1.2 alias: ПАЛАТКА screen -> trade_tab for Stage 1.
 -- Stage 2 will replace this with a dedicated palatka_tab() that merges
--- preset âûñòàâëåíèå + auto-sell controls into a single mobile-friendly card.
+-- preset выставление + auto-sell controls into a single mobile-friendly card.
 DSP.ui.palatka_tab = DSP.ui.trade_tab
 
 function DSP.ui.auto_tab()
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÀÂÒÎ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('АВТО'))
     imgui.Separator()
-    local st = DSP.auto and DSP.auto.status_text and DSP.auto.status_text() or 'äâèæîê íå çàãðóæåí'
+    local st = DSP.auto and DSP.auto.status_text and DSP.auto.status_text() or 'движок не загружен'
     imgui.TextDisabled(DSP.utf8(st))
     imgui.Spacing()
 
     if imgui.BeginChild('##dsp_auto_buy', imgui.ImVec2(-1, 150 * d()), true) then
-        imgui.TextColored(DSP.theme.col('good', 1), DSP.utf8('ÀÂÒÎ-ÑÊÓÏÊÀ'))
-        imgui.TextDisabled(DSP.utf8(string.format('Ïðåñåò: %d ïîç.  |  ìàðæà: %d%%  |  êîë-âî: %d',
+        imgui.TextColored(DSP.theme.col('good', 1), DSP.utf8('АВТО-СКУПКА'))
+        imgui.TextDisabled(DSP.utf8(string.format('Пресет: %d поз.  |  маржа: %d%%  |  кол-во: %d',
             DSP.presets.active_count('buy'), tonumber(DSP.settings.margin) or 10,
             tonumber(DSP.settings.auto_buy_qty) or 1)))
         if DSP.auto.buy_running then
-            if imgui.Button(DSP.utf8('ÑÒÎÏ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_buy() end
+            if imgui.Button(DSP.utf8('СТОП'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_buy() end
         else
-            if imgui.Button(DSP.utf8('ÑÒÀÐÒ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('buy') end
+            if imgui.Button(DSP.utf8('СТАРТ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('buy') end
         end
         imgui.SameLine(0, 12 * d())
-        if imgui.Button(DSP.utf8('ÏÅÐÅÑ×ÈÒÀÒÜ'), imgui.ImVec2(160 * d(), 0)) then DSP.presets.recalc('buy') end
+        if imgui.Button(DSP.utf8('ПЕРЕСЧИТАТЬ'), imgui.ImVec2(160 * d(), 0)) then DSP.presets.recalc('buy') end
         imgui.SameLine(0, 16 * d())
-        if imgui.Checkbox(DSP.utf8('dry-run (áåç ïîêóïîê)'), DSP.ui.chk.dry_run) then
+        if imgui.Checkbox(DSP.utf8('dry-run (без покупок)'), DSP.ui.chk.dry_run) then
             DSP.settings.dry_run = DSP.ui.chk.dry_run[0]
             DSP.save_settings()
         end
@@ -606,23 +606,23 @@ function DSP.ui.auto_tab()
     end
     imgui.Spacing()
     if imgui.BeginChild('##dsp_auto_sell', imgui.ImVec2(-1, 150 * d()), true) then
-        imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8('ÀÂÒÎ-ÏÐÎÄÀÆÀ'))
-        imgui.TextDisabled(DSP.utf8(string.format('Ïðåñåò: %d ïîç.  |  undercut: %d%%  |  èíâåíòàðü: %s',
+        imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8('АВТО-ПРОДАЖА'))
+        imgui.TextDisabled(DSP.utf8(string.format('Пресет: %d поз.  |  undercut: %d%%  |  инвентарь: %s',
             DSP.presets.active_count('sell'), tonumber(DSP.settings.undercut) or 2,
-            DSP.auto.inv_status or 'íå ñêàíèðîâàí')))
+            DSP.auto.inv_status or 'не сканирован')))
         if DSP.auto.sell_running then
-            if imgui.Button(DSP.utf8('ÑÒÎÏ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_sell() end
+            if imgui.Button(DSP.utf8('СТОП'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.stop_sell() end
         else
-            if imgui.Button(DSP.utf8('ÑÒÀÐÒ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('sell') end
+            if imgui.Button(DSP.utf8('СТАРТ'), imgui.ImVec2(140 * d(), 0)) then DSP.auto.safe_start('sell') end
         end
         imgui.SameLine(0, 12 * d())
-        if imgui.Button(DSP.utf8('ÑÊÀÍ ÈÍÂÅÍÒÀÐß'), imgui.ImVec2(180 * d(), 0)) then DSP.auto.scan_inventory() end
+        if imgui.Button(DSP.utf8('СКАН ИНВЕНТАРЯ'), imgui.ImVec2(180 * d(), 0)) then DSP.auto.scan_inventory() end
         imgui.SameLine(0, 12 * d())
-        if imgui.Button(DSP.utf8('ÏÅÐÅÑ×ÈÒÀÒÜ'), imgui.ImVec2(160 * d(), 0)) then DSP.presets.recalc('sell') end
+        if imgui.Button(DSP.utf8('ПЕРЕСЧИТАТЬ'), imgui.ImVec2(160 * d(), 0)) then DSP.presets.recalc('sell') end
         imgui.EndChild()
     end
     imgui.Spacing()
-    imgui.TextDisabled(DSP.utf8('Ïîñëåäíèå ñîáûòèÿ:'))
+    imgui.TextDisabled(DSP.utf8('Последние события:'))
     if imgui.BeginChild('##dsp_auto_log', imgui.ImVec2(-1, 0), true) then
         for i = 1, math.min(8, #DSP.log) do
             local e = DSP.log[i]
@@ -637,21 +637,21 @@ function DSP.ui.auto_tab()
 end
 
 function DSP.ui.log_tab()
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ËÎÃÈ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ЛОГИ'))
     imgui.SameLine(0, 30 * d())
-    imgui.TextDisabled(DSP.utf8('Ñäåëêè: ' .. tostring(count_keys(DSP.settings.trades))))
+    imgui.TextDisabled(DSP.utf8('Сделки: ' .. tostring(count_keys(DSP.settings.trades))))
     imgui.SameLine(0, 12 * d())
-    imgui.TextDisabled(DSP.utf8('Ëàâêè: ' .. tostring(count_keys(DSP.settings.stalls))))
+    imgui.TextDisabled(DSP.utf8('Лавки: ' .. tostring(count_keys(DSP.settings.stalls))))
     imgui.SameLine(0, 12 * d())
-    imgui.TextDisabled(DSP.utf8('Ëàðöû: ' .. tostring(count_keys(DSP.settings.crates))))
+    imgui.TextDisabled(DSP.utf8('Ларцы: ' .. tostring(count_keys(DSP.settings.crates))))
     imgui.SameLine(0, 12 * d())
-    imgui.TextDisabled(DSP.utf8('×àò: ' .. tostring(#(DSP.settings.chat_logs or {}))))
+    imgui.TextDisabled(DSP.utf8('Чат: ' .. tostring(#(DSP.settings.chat_logs or {}))))
     imgui.SameLine(0, 20 * d())
-    if imgui.SmallButton(DSP.utf8('î÷èñòèòü ëîã')) then DSP.log = {} end
+    if imgui.SmallButton(DSP.utf8('очистить лог')) then DSP.log = {} end
     imgui.SameLine(0, 8 * d())
-    if imgui.SmallButton(DSP.utf8('î÷èñòèòü ñäåëêè')) then DSP.logs.clear_trades() end
+    if imgui.SmallButton(DSP.utf8('очистить сделки')) then DSP.logs.clear_trades() end
     imgui.SameLine(0, 8 * d())
-    if imgui.SmallButton(DSP.utf8('î÷èñòèòü ÷àò')) then DSP.settings.chat_logs = {}; DSP.db.save(true) end
+    if imgui.SmallButton(DSP.utf8('очистить чат')) then DSP.settings.chat_logs = {}; DSP.db.save(true) end
     imgui.Separator()
 
     if DSP.ui.tab_detail == 'crates' then
@@ -664,23 +664,23 @@ function DSP.ui.log_tab()
     imgui.Spacing()
     local r1 = DSP.ui.tab_detail == 'trades'
     if r1 then imgui.PushStyleColor(imgui.Col.Button, DSP.theme.col('accent', 0.55)) end
-    if imgui.Button(DSP.utf8('Ñäåëêè + ëàâêè'), imgui.ImVec2(160 * d(), 0)) then DSP.ui.tab_detail = 'trades' end
+    if imgui.Button(DSP.utf8('Сделки + лавки'), imgui.ImVec2(160 * d(), 0)) then DSP.ui.tab_detail = 'trades' end
     if r1 then imgui.PopStyleColor(1) end
     imgui.SameLine(0, 8 * d())
     local r2 = DSP.ui.tab_detail == 'crates'
     if r2 then imgui.PushStyleColor(imgui.Col.Button, DSP.theme.col('accent', 0.55)) end
-    if imgui.Button(DSP.utf8('Ëàðöû'), imgui.ImVec2(120 * d(), 0)) then DSP.ui.tab_detail = 'crates' end
+    if imgui.Button(DSP.utf8('Ларцы'), imgui.ImVec2(120 * d(), 0)) then DSP.ui.tab_detail = 'crates' end
     if r2 then imgui.PopStyleColor(1) end
     imgui.SameLine(0, 8 * d())
     local r3 = DSP.ui.tab_detail == 'chat'
     if r3 then imgui.PushStyleColor(imgui.Col.Button, DSP.theme.col('accent', 0.55)) end
-    if imgui.Button(DSP.utf8('×àò'), imgui.ImVec2(120 * d(), 0)) then DSP.ui.tab_detail = 'chat' end
+    if imgui.Button(DSP.utf8('Чат'), imgui.ImVec2(120 * d(), 0)) then DSP.ui.tab_detail = 'chat' end
     if r3 then imgui.PopStyleColor(1) end
 end
 
 function DSP.ui.trade_log()
     if not DSP.settings.trades or #DSP.settings.trades == 0 then
-        imgui.TextDisabled(DSP.utf8('Ñäåëêè íå çàïèñàíû'))
+        imgui.TextDisabled(DSP.utf8('Сделки не записаны'))
     else
         if imgui.BeginChild('##dsp_trade_log', imgui.ImVec2(-1, 360 * d()), true) then
             local sorted = to_sorted_array(DSP.settings.trades)
@@ -693,7 +693,7 @@ function DSP.ui.trade_log()
                 local pstr = e.profit and ((e.profit > 0 and '+' or '') .. DSP.money(e.profit)) or '-'
                 imgui.TextColored(sign, DSP.utf8(string.format('%s | %s -> %s | %s',
                     t, e.partner or '?', e.item_summary or 'N/A', pstr)))
-                imgui.TextDisabled(DSP.utf8(string.format('  ïîëó÷åíî: %s | îòäàíî: %s',
+                imgui.TextDisabled(DSP.utf8(string.format('  получено: %s | отдано: %s',
                     DSP.money(e.total_get or 0), DSP.money(e.total_give or 0))))
             end
             imgui.EndChild()
@@ -701,11 +701,11 @@ function DSP.ui.trade_log()
     end
 
     imgui.Spacing()
-    imgui.TextDisabled(DSP.utf8('Ñòåíäû (ñêàíèðîâàíèå ëàâîê):'))
+    imgui.TextDisabled(DSP.utf8('Стенды (сканирование лавок):'))
     if imgui.BeginChild('##dsp_stall_log', imgui.ImVec2(-1, 120 * d()), true) then
         local stalls = to_sorted_array(DSP.settings.stalls)
         if #stalls == 0 then
-            imgui.TextDisabled(DSP.utf8('Ñòåíäû íå ñêàíèðîâàíû'))
+            imgui.TextDisabled(DSP.utf8('Стенды не сканированы'))
         else
             for i = #stalls, 1, -1 do
                 local e = stalls[i]
@@ -720,7 +720,7 @@ end
 
 function DSP.ui.crate_log()
     if not DSP.settings.crates or #DSP.settings.crates == 0 then
-        imgui.TextDisabled(DSP.utf8('Ëàðöû íå îòêðûâàëèñü'))
+        imgui.TextDisabled(DSP.utf8('Ларцы не открывались'))
     else
         if imgui.BeginChild('##dsp_crate_log', imgui.ImVec2(-1, 360 * d()), true) then
             local sorted = to_sorted_array(DSP.settings.crates)
@@ -744,7 +744,7 @@ end
 
 function DSP.ui.chat_log()
     if not DSP.settings.chat_logs or #DSP.settings.chat_logs == 0 then
-        imgui.TextDisabled(DSP.utf8('×àò-ñîîáùåíèÿ íå çàïèñàíû'))
+        imgui.TextDisabled(DSP.utf8('Чат-сообщения не записаны'))
         return
     end
     if imgui.BeginChild('##dsp_chat_log', imgui.ImVec2(-1, 0), true) then
@@ -762,11 +762,11 @@ function DSP.ui.chat_log()
 end
 
 function DSP.ui.settings_tab()
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÍÀÑÒÐÎÉÊÈ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('НАСТРОЙКИ'))
     imgui.Separator()
 
     -- v1.2 Section 1: theme + opacity slider
-    imgui.TextDisabled(DSP.utf8('Òåìà îôîðìëåíèÿ:'))
+    imgui.TextDisabled(DSP.utf8('Тема оформления:'))
     local theme_order = { 'carbon_trade', 'ocean_blue', 'dark_amber', 'amoled', 'cyberpunk', 'purple', 'emerald' }
     for _, id in ipairs(theme_order) do
         local e = DSP.theme.list[id]
@@ -781,7 +781,7 @@ function DSP.ui.settings_tab()
         end
     end
     imgui.NewLine()
-    imgui.TextDisabled(DSP.utf8(string.format('Ïðîçðà÷íîñòü îêíà: %.2f', DSP.theme.opacity)))
+    imgui.TextDisabled(DSP.utf8(string.format('Прозрачность окна: %.2f', DSP.theme.opacity)))
     imgui.SameLine(0, 12 * d())
     -- v1.2 hotfix: imgui.new.float may not exist in all mimgui builds.
     -- Fall back to imgui.new.int (scaled to 0-1000) if float is unavailable.
@@ -813,12 +813,12 @@ function DSP.ui.settings_tab()
     imgui.Separator()
 
     -- v1.2 Stage 2 Section 1.5: CR tax selector (basis points)
-    imgui.TextDisabled(DSP.utf8('Êîìèññèÿ ÖÐ:'))
+    imgui.TextDisabled(DSP.utf8('Комиссия ЦР:'))
     local tax_options = {
         { bp = 100, label = '1% (ADD VIP)' },
         { bp = 200, label = '2% (Titan/Premium)' },
-        { bp = 300, label = '3% (áåç VIP)' },
-        { bp = 400, label = '4% (áåç VIP)' },
+        { bp = 300, label = '3% (без VIP)' },
+        { bp = 400, label = '4% (без VIP)' },
     }
     for _, t in ipairs(tax_options) do
         local act = (tonumber(DSP.settings.tax_bp) or 200) == t.bp
@@ -826,7 +826,7 @@ function DSP.ui.settings_tab()
         if imgui.Button(DSP.utf8(t.label), imgui.ImVec2(180 * d(), 0)) then
             DSP.settings.tax_bp = t.bp
             DSP.save_settings()
-            DSP.notify('Êîìèññèÿ ÖÐ: ' .. t.label)
+            DSP.notify('Комиссия ЦР: ' .. t.label)
         end
         if act then imgui.PopStyleColor(1) end
         imgui.SameLine(0, 6 * d())
@@ -839,13 +839,13 @@ function DSP.ui.settings_tab()
     imgui.Spacing()
 
     -- v1.2 hotfix: CR marker scan (dialog 15073) button + progress bar.
-    imgui.TextDisabled(DSP.utf8('Ñêàí ìåòêè ÖÐ (äèàëîã 15073):'))
+    imgui.TextDisabled(DSP.utf8('Скан метки ЦР (диалог 15073):'))
     imgui.SameLine(0, 8 * d())
     if DSP.market.cr_scan_state.active then
-        if imgui.Button(DSP.utf8('[ ÑÒÎÏ ]'), imgui.ImVec2(110 * d(), 0)) then
+        if imgui.Button(DSP.utf8('[ СТОП ]'), imgui.ImVec2(110 * d(), 0)) then
             DSP.market.cr_scan_state.active = false
-            DSP.market.cr_scan_state.status = 'îñòàíîâëåíî'
-            DSP.add_log('Ñêàí ÖÐ: îñòàíîâëåí âðó÷íóþ')
+            DSP.market.cr_scan_state.status = 'остановлено'
+            DSP.add_log('Скан ЦР: остановлен вручную')
         end
     else
         if imgui.Button(DSP.utf8('[ SCAN CR ]'), imgui.ImVec2(160 * d(), 0)) then
@@ -853,7 +853,7 @@ function DSP.ui.settings_tab()
         end
     end
     imgui.SameLine(0, 12 * d())
-    imgui.TextDisabled(DSP.utf8(DSP.market.cr_scan_state.status or 'íå ñêàíèðîâàí'))
+    imgui.TextDisabled(DSP.utf8(DSP.market.cr_scan_state.status or 'не сканирован'))
     if DSP.market.cr_scan_state.active then
         -- ASCII-safe text-based progress bar (no imgui.ProgressBar needed).
         local s = DSP.market.cr_scan_state
@@ -864,14 +864,14 @@ function DSP.ui.settings_tab()
         local filled = math.floor(bar_len * pct / 100)
         local bar = string.rep('=', filled) .. '>' .. string.rep(' ', bar_len - filled - 1)
         imgui.TextColored(DSP.theme.col('accent', 1),
-            DSP.utf8(string.format('[%s] %d%% ñòð.%d, òîâ. %d',
+            DSP.utf8(string.format('[%s] %d%% стр.%d, тов. %d',
                 bar, pct, s.page, #s.items)))
     end
     imgui.Separator()
 
     -- v1.2 Section 3: sort + margin + undercut
-    imgui.TextDisabled(DSP.utf8('Ñîðòèðîâêà ðûíêà:'))
-    local sorts = { 'âûãîäà', 'äåø¸âûå', 'äîðîãàÿ ñêóïêà', 'ïðîöåíò', 'îôôåðû' }
+    imgui.TextDisabled(DSP.utf8('Сортировка рынка:'))
+    local sorts = { 'выгода', 'дешёвые', 'дорогая скупка', 'процент', 'офферы' }
     for i, name in ipairs(sorts) do
         local act = (tonumber(DSP.settings.sort) or 1) == i
         if act then imgui.PushStyleColor(imgui.Col.Button, DSP.theme.col('accent', 0.55)) end
@@ -886,12 +886,12 @@ function DSP.ui.settings_tab()
     end
     imgui.NewLine()
     imgui.Spacing()
-    imgui.TextDisabled(DSP.utf8(string.format('Ìàðæà ñêóïêè: %d%%', tonumber(DSP.settings.margin) or 10)))
+    imgui.TextDisabled(DSP.utf8(string.format('Маржа скупки: %d%%', tonumber(DSP.settings.margin) or 10)))
     if imgui.SmallButton('-5##dsp_margm') then DSP.settings.margin = math.max(0, (tonumber(DSP.settings.margin) or 10) - 5); DSP.save_settings() end
     imgui.SameLine(0, 4 * d())
     if imgui.SmallButton('+5##dsp_margp') then DSP.settings.margin = math.min(80, (tonumber(DSP.settings.margin) or 10) + 5); DSP.save_settings() end
     imgui.SameLine(0, 12 * d())
-    imgui.TextDisabled(DSP.utf8(string.format('Undercut ïðîäàæè: %d%%', tonumber(DSP.settings.undercut) or 2)))
+    imgui.TextDisabled(DSP.utf8(string.format('Undercut продажи: %d%%', tonumber(DSP.settings.undercut) or 2)))
     if imgui.SmallButton('-1##dsp_ucm') then DSP.settings.undercut = math.max(0, (tonumber(DSP.settings.undercut) or 2) - 1); DSP.save_settings() end
     imgui.SameLine(0, 4 * d())
     if imgui.SmallButton('+1##dsp_ucp') then DSP.settings.undercut = math.min(50, (tonumber(DSP.settings.undercut) or 2) + 1); DSP.save_settings() end
@@ -899,16 +899,16 @@ function DSP.ui.settings_tab()
     imgui.Spacing()
 
     -- v1.2 Section 4: overlay toggles
-    imgui.TextDisabled(DSP.utf8('Îâåðëåé ïðè òðåéäå/ëàâêå:'))
-    checkbox(DSP.utf8('îöåíêà òðåéäà'), 'overlay_trade')
+    imgui.TextDisabled(DSP.utf8('Оверлей при трейде/лавке:'))
+    checkbox(DSP.utf8('оценка трейда'), 'overlay_trade')
     imgui.SameLine(0, 12 * d())
-    checkbox(DSP.utf8('ñêàí ëàâêè'), 'overlay_shop')
+    checkbox(DSP.utf8('скан лавки'), 'overlay_shop')
     imgui.SameLine(0, 12 * d())
-    checkbox(DSP.utf8('ïîâåðõ îêîí'), 'overlay_top')
+    checkbox(DSP.utf8('поверх окон'), 'overlay_top')
     imgui.Spacing()
 
     -- v1.2 Section 5: DPI scale
-    imgui.TextDisabled(DSP.utf8('Ìàñøòàá èíòåðôåéñà:'))
+    imgui.TextDisabled(DSP.utf8('Масштаб интерфейса:'))
     for _, v in ipairs({ 1.0, 1.25, 1.5 }) do
         local act = math.abs((DSP.ui.d or 1.25) - v) < 0.01
         if act then imgui.PushStyleColor(imgui.Col.Button, DSP.theme.col('accent', 0.55)) end
@@ -924,13 +924,13 @@ function DSP.ui.settings_tab()
     imgui.Spacing()
 
     -- v1.2 Section 6: stats mode
-    imgui.TextDisabled(DSP.utf8('Ñòàòèñòèêà ïî óìîë÷àíèþ:'))
+    imgui.TextDisabled(DSP.utf8('Статистика по умолчанию:'))
     local modes = {
-        { key = 'hour', label = '×àñ' },
-        { key = 'day', label = 'Äåíü' },
-        { key = 'week', label = 'Íåäåëÿ' },
-        { key = 'month', label = 'Ìåñÿö' },
-        { key = 'all', label = 'Âñå âðåìÿ' },
+        { key = 'hour', label = 'Час' },
+        { key = 'day', label = 'День' },
+        { key = 'week', label = 'Неделя' },
+        { key = 'month', label = 'Месяц' },
+        { key = 'all', label = 'Все время' },
     }
     for _, m in ipairs(modes) do
         local act = DSP.settings.stats_mode == m.key
@@ -946,14 +946,14 @@ function DSP.ui.settings_tab()
     imgui.Spacing()
 
     -- v1.2 Section 7: Telegram
-    imgui.TextDisabled(DSP.utf8('Telegram-óâåäîìëåíèÿ:'))
-    if imgui.Checkbox(DSP.utf8('âêëþ÷èòü'), DSP.ui.chk.tg_notify) then
+    imgui.TextDisabled(DSP.utf8('Telegram-уведомления:'))
+    if imgui.Checkbox(DSP.utf8('включить'), DSP.ui.chk.tg_notify) then
         DSP.settings.tg_notify = DSP.ui.chk.tg_notify[0]
         DSP.save_settings()
     end
     imgui.SameLine(0, 14 * d())
     local payday_chk = imgui.new.bool(DSP.settings.tg_payday_enabled and true or false)
-    if imgui.Checkbox(DSP.utf8('PayDay ñâîäêà (XX:00)'), payday_chk) then
+    if imgui.Checkbox(DSP.utf8('PayDay сводка (XX:00)'), payday_chk) then
         DSP.settings.tg_payday_enabled = payday_chk[0]
         DSP.save_settings()
     end
@@ -976,29 +976,29 @@ function DSP.ui.settings_tab()
         DSP.save_settings()
     end
     imgui.Spacing()
-    imgui.TextDisabled(DSP.utf8('Ëîãè ÷àòà è âûïàäîâ:'))
-    if imgui.Checkbox(DSP.utf8('çàïèñûâàòü âûïàäû'), DSP.ui.chk.log_drops) then
+    imgui.TextDisabled(DSP.utf8('Логи чата и выпадов:'))
+    if imgui.Checkbox(DSP.utf8('записывать выпады'), DSP.ui.chk.log_drops) then
         DSP.settings.log_chat_drops = DSP.ui.chk.log_drops[0]
         DSP.save_settings()
     end
-    if imgui.Button(DSP.utf8('ÝÊÑÏÎÐÒ Â TELEGRAM'), imgui.ImVec2(200 * d(), 0)) then
+    if imgui.Button(DSP.utf8('ЭКСПОРТ В TELEGRAM'), imgui.ImVec2(200 * d(), 0)) then
         if DSP.logs and DSP.logs.export_logs then DSP.logs.export_logs() end
     end
     imgui.SameLine(0, 12 * d())
-    if imgui.Button(DSP.utf8('ÑÎÕÐÀÍÈÒÜ'), imgui.ImVec2(160 * d(), 0)) then
+    if imgui.Button(DSP.utf8('СОХРАНИТЬ'), imgui.ImVec2(160 * d(), 0)) then
         DSP.save_settings()
         DSP.save_ui_state()
-        DSP.notify('Íàñòðîéêè ñîõðàíåíû')
+        DSP.notify('Настройки сохранены')
     end
     imgui.Spacing()
-    imgui.TextDisabled(DSP.utf8('Äàííûå: ' .. DSP.dir))
+    imgui.TextDisabled(DSP.utf8('Данные: ' .. DSP.dir))
     imgui.TextDisabled(DSP.utf8('API: ' .. DSP.market.api))
 end
 
 function DSP.ui.calculator_tab()
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÊÀËÜÊÓËßÒÎÐ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('КАЛЬКУЛЯТОР'))
     imgui.SameLine(0, 14 * d())
-    imgui.TextDisabled(DSP.utf8('Àðáèòðàæíûé êàëüêóëÿòîð'))
+    imgui.TextDisabled(DSP.utf8('Арбитражный калькулятор'))
     imgui.Separator()
 
     local avail = imgui.GetContentRegionAvail()
@@ -1006,17 +1006,17 @@ function DSP.ui.calculator_tab()
 
     if imgui.BeginChild('##dsp_calc_card', imgui.ImVec2(-1, 260 * d()), true) then
         imgui.PushItemWidth(w * 0.55)
-        imgui.TextDisabled(DSP.utf8('Öåíà ïîêóïêè:'))
+        imgui.TextDisabled(DSP.utf8('Цена покупки:'))
         imgui.SameLine(0, 8 * d())
         imgui.InputInt(DSP.utf8('buy##price'), DSP.ui.calc_buy_ref, 1000, 10000)
 
         imgui.Spacing()
-        imgui.TextDisabled(DSP.utf8('Öåíà ïðîäàæè:'))
+        imgui.TextDisabled(DSP.utf8('Цена продажи:'))
         imgui.SameLine(0, 8 * d())
         imgui.InputInt(DSP.utf8('sell##price'), DSP.ui.calc_sell_ref, 1000, 10000)
 
         imgui.Spacing()
-        imgui.TextDisabled(DSP.utf8('Êîë-âî:'))
+        imgui.TextDisabled(DSP.utf8('Кол-во:'))
         imgui.SameLine(0, 8 * d())
         imgui.InputInt(DSP.utf8('qty##calc'), DSP.ui.calc_qty_ref, 1, 10)
 
@@ -1032,31 +1032,31 @@ function DSP.ui.calculator_tab()
     local pct = buy_p > 0 and ((sell_p - buy_p) / buy_p * 100) or 0
 
     if imgui.BeginChild('##dsp_calc_result', imgui.ImVec2(-1, 140 * d()), true) then
-        imgui.TextDisabled(DSP.utf8('Ñóììà âëîæåíèé:'))
+        imgui.TextDisabled(DSP.utf8('Сумма вложений:'))
         imgui.SameLine(0, 20 * d())
         imgui.Text(DSP.money(buy_p * qty))
 
         imgui.Spacing()
-        imgui.TextDisabled(DSP.utf8('Îæèäàåìàÿ âûðó÷êà:'))
+        imgui.TextDisabled(DSP.utf8('Ожидаемая выручка:'))
         imgui.SameLine(0, 20 * d())
         imgui.Text(DSP.money(sell_p * qty))
 
         imgui.Spacing()
         local pc = profit >= 0 and DSP.theme.col('good', 1) or DSP.theme.col('bad', 1)
-        imgui.TextDisabled(DSP.utf8('Ïðèáûëü:'))
+        imgui.TextDisabled(DSP.utf8('Прибыль:'))
         imgui.SameLine(0, 30 * d())
         imgui.TextColored(pc, DSP.utf8((profit >= 0 and '+' or '') .. DSP.money(profit)))
         imgui.SameLine(0, 10 * d())
         imgui.TextColored(pc, string.format('%+.1f%%', pct))
 
         imgui.Spacing()
-        imgui.TextDisabled(DSP.utf8('Íà øòóêó:'))
+        imgui.TextDisabled(DSP.utf8('На штуку:'))
         imgui.SameLine(0, 24 * d())
         imgui.TextColored(pc, DSP.utf8((sell_p - buy_p >= 0 and '+' or '')
             .. DSP.money(sell_p - buy_p)))
 
         local bw = 160 * d()
-        if imgui.Button(DSP.utf8('Î×ÈÑÒÈÒÜ'), imgui.ImVec2(bw, 0)) then
+        if imgui.Button(DSP.utf8('ОЧИСТИТЬ'), imgui.ImVec2(bw, 0)) then
             DSP.ui.calc_buy_ref[0] = 1000
             DSP.ui.calc_sell_ref[0] = 1000
             DSP.ui.calc_qty_ref[0] = 1
@@ -1066,17 +1066,17 @@ function DSP.ui.calculator_tab()
 end
 
 function DSP.ui.statistics_tab()
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÑÒÀÒÈÑÒÈÊÀ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('СТАТИСТИКА'))
     imgui.SameLine(0, 14 * d())
-    imgui.TextDisabled(DSP.utf8('Ïðèáûëü ïî ïåðèîäàì'))
+    imgui.TextDisabled(DSP.utf8('Прибыль по периодам'))
     imgui.Separator()
 
     local modes = {
-        { key = 'hour', label = '×àñ' },
-        { key = 'day', label = 'Äåíü' },
-        { key = 'week', label = 'Íåäåëÿ' },
-        { key = 'month', label = 'Ìåñÿö' },
-        { key = 'all', label = 'Âñå âðåìÿ' },
+        { key = 'hour', label = 'Час' },
+        { key = 'day', label = 'День' },
+        { key = 'week', label = 'Неделя' },
+        { key = 'month', label = 'Месяц' },
+        { key = 'all', label = 'Все время' },
     }
     for _, m in ipairs(modes) do
         local active = DSP.ui.stat_mode == m.key
@@ -1094,29 +1094,29 @@ function DSP.ui.statistics_tab()
     local stat_h = avail.y - 30 * d()
 
     if imgui.BeginChild('##dsp_stat_summary', imgui.ImVec2(-1, 90 * d()), true) then
-        imgui.TextDisabled(DSP.utf8(string.format('Ñäåëîê: %d', summary.count)))
+        imgui.TextDisabled(DSP.utf8(string.format('Сделок: %d', summary.count)))
         imgui.SameLine(0, 16 * d())
         imgui.Text(DSP.money(summary.total_get))
         imgui.SameLine(0, 4 * d())
-        imgui.TextDisabled(DSP.utf8('ïîëó÷åíî'))
+        imgui.TextDisabled(DSP.utf8('получено'))
         imgui.SameLine(0, 16 * d())
         imgui.Text(DSP.money(summary.total_give))
         imgui.SameLine(0, 4 * d())
-        imgui.TextDisabled(DSP.utf8('îòäàíî'))
+        imgui.TextDisabled(DSP.utf8('отдано'))
         imgui.Spacing()
         local pc = summary.profit >= 0 and DSP.theme.col('good', 1) or DSP.theme.col('bad', 1)
-        imgui.TextColored(pc, DSP.utf8('Ïðèáûëü: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit)))
+        imgui.TextColored(pc, DSP.utf8('Прибыль: ' .. (summary.profit >= 0 and '+' or '') .. DSP.money(summary.profit)))
         imgui.SameLine(0, 16 * d())
         imgui.TextDisabled(string.format('ROI: %+.1f%%', summary.roi))
         imgui.SameLine(0, 16 * d())
-        imgui.TextDisabled(DSP.utf8('Ñðåäíÿÿ: ' .. DSP.money(summary.avg_profit)))
+        imgui.TextDisabled(DSP.utf8('Средняя: ' .. DSP.money(summary.avg_profit)))
     end
     imgui.EndChild()
 
     imgui.Spacing()
     if imgui.BeginChild('##dsp_stat_buckets', imgui.ImVec2(-1, stat_h - 100 * d()), true) then
         if #summary.sorted_keys == 0 then
-            imgui.TextDisabled(DSP.utf8('Íåò äàííûõ. Ñîâåðøèòå ñäåëêè ÷òîáû óâèäåòü ñòàòèñòèêó.'))
+            imgui.TextDisabled(DSP.utf8('Нет данных. Совершите сделки чтобы увидеть статистику.'))
         end
         for _, k in ipairs(summary.sorted_keys) do
             local b = summary.buckets[k]
@@ -1126,7 +1126,7 @@ function DSP.ui.statistics_tab()
                 imgui.SameLine(0, 20 * d())
                 imgui.TextColored(pc, DSP.utf8((b.profit >= 0 and '+' or '') .. DSP.money(b.profit)))
                 imgui.SameLine(0, 10 * d())
-                imgui.TextDisabled(string.format('%d ñäåë.', b.count))
+                imgui.TextDisabled(string.format('%d сдел.', b.count))
             end
             imgui.Spacing()
         end
@@ -1135,19 +1135,19 @@ function DSP.ui.statistics_tab()
 end
 
 -- =========================================================================
--- v1.2 Stage 2: ËÀÂÊÈ ÖÐ screen.
--- Lists all shops as cards with [Îòìåòèòü ëàâêó] + [Ñêîïèðîâàòü ñêóïêó] buttons.
+-- v1.2 Stage 2: ЛАВКИ ЦР screen.
+-- Lists all shops as cards with [Отметить лавку] + [Скопировать скупку] buttons.
 -- =========================================================================
 function DSP.ui.lavki_tab()
     local dpi = d()
     local shops = DSP.market.shops_list()
     DSP.ui.header()
 
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ËÀÂÊÈ ÖÐ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ЛАВКИ ЦР'))
     imgui.SameLine(0, 14 * dpi)
-    imgui.TextDisabled(DSP.utf8(string.format('Âñåãî ëàâîê: %d', #shops)))
+    imgui.TextDisabled(DSP.utf8(string.format('Всего лавок: %d', #shops)))
     imgui.SameLine(0, 14 * dpi)
-    if imgui.Button(DSP.utf8('ÎÁÍÎÂÈÒÜ ÁÀÇÓ'), imgui.ImVec2(160 * dpi, 0)) then
+    if imgui.Button(DSP.utf8('ОБНОВИТЬ БАЗУ'), imgui.ImVec2(160 * dpi, 0)) then
         DSP.market.pull(DSP.market.state.sid)
     end
     imgui.Separator()
@@ -1162,7 +1162,7 @@ function DSP.ui.lavki_tab()
 
     if imgui.BeginChild('##dsp_lavki_list', imgui.ImVec2(-1, list_h), true) then
         if #shops == 0 then
-            imgui.TextDisabled(DSP.utf8('Íåò äàííûõ. Íàæìèòå ÎÁÍÎÂÈÒÜ ÁÀÇÓ.'))
+            imgui.TextDisabled(DSP.utf8('Нет данных. Нажмите ОБНОВИТЬ БАЗУ.'))
         end
         for i = from, to do
             local s = shops[i]
@@ -1177,33 +1177,33 @@ function DSP.ui.lavki_tab()
                 imgui.PopStyleColor(1)
                 imgui.SameLine(0, 8 * dpi)
                 imgui.TextColored(DSP.theme.col('accent', 1),
-                    DSP.utf8(string.format('Ëàâêà #%s  %s', tostring(s.num), tostring(s.owner))))
+                    DSP.utf8(string.format('Лавка #%s  %s', tostring(s.num), tostring(s.owner))))
                 imgui.SameLine(0, 14 * dpi)
                 imgui.TextColored(DSP.theme.col(fresh_key, 1), DSP.utf8(fresh_text))
                 imgui.SameLine(0, 14 * dpi)
-                imgui.TextDisabled(DSP.utf8(string.format('ïðîäàæà: %d  ñêóïêà: %d',
+                imgui.TextDisabled(DSP.utf8(string.format('продажа: %d  скупка: %d',
                     s.sell_count, s.buy_count)))
                 imgui.SameLine(0, 12 * dpi)
-                if imgui.Button(DSP.utf8('[ Îòìåòèòü ëàâêó ]##mk' .. tostring(s.num)),
+                if imgui.Button(DSP.utf8('[ Отметить лавку ]##mk' .. tostring(s.num)),
                         imgui.ImVec2(170 * dpi, 32 * dpi)) then
                     DSP.market.mark_shop(s.num)
                 end
                 imgui.SameLine(0, 8 * dpi)
                 if s.buy_count > 0 then
-                    if imgui.Button(DSP.utf8('[ Ñêîïèðîâàòü ñêóïêó ]##cp' .. tostring(s.num)),
+                    if imgui.Button(DSP.utf8('[ Скопировать скупку ]##cp' .. tostring(s.num)),
                             imgui.ImVec2(190 * dpi, 32 * dpi)) then
                         local n, err = DSP.market.copy_shop_skupka(s.num, nil, 1)
                         if n then
-                            DSP.notify(string.format('Ñêóïêà: +%d ïîç. èç ëàâêè #%s', n, tostring(s.num)))
+                            DSP.notify(string.format('Скупка: +%d поз. из лавки #%s', n, tostring(s.num)))
                         else
-                            DSP.notify('Ñêóïêà: ' .. tostring(err))
+                            DSP.notify('Скупка: ' .. tostring(err))
                         end
                     end
                 end
                 if expanded then
                     imgui.Spacing()
                     if s.sell_count > 0 then
-                        imgui.TextDisabled(DSP.utf8(string.format('ÏÐÎÄÀ¨Ò (ëàâêà -> èãðîê): %d ïîç.', s.sell_count)))
+                        imgui.TextDisabled(DSP.utf8(string.format('ПРОДАЁТ (лавка -> игрок): %d поз.', s.sell_count)))
                         local max_show = math.min(8, #s.sell_offers)
                         for j = 1, max_show do
                             local e = s.sell_offers[j]
@@ -1217,7 +1217,7 @@ function DSP.ui.lavki_tab()
                     end
                     if s.buy_count > 0 then
                         imgui.Spacing()
-                        imgui.TextDisabled(DSP.utf8(string.format('ÑÊÓÏÀÅÒ (ëàâêà <- èãðîê): %d ïîç.', s.buy_count)))
+                        imgui.TextDisabled(DSP.utf8(string.format('СКУПАЕТ (лавка <- игрок): %d поз.', s.buy_count)))
                         local max_show = math.min(8, #s.buy_offers)
                         for j = 1, max_show do
                             local e = s.buy_offers[j]
@@ -1238,7 +1238,7 @@ function DSP.ui.lavki_tab()
 end
 
 -- =========================================================================
--- v1.2 Stage 2: ÀÐÁÈÒÐÀÆ screen.
+-- v1.2 Stage 2: АРБИТРАЖ screen.
 -- Table of cross-shop arbitrage opportunities with budget / profit / ROI
 -- filters, freshness labels, integer CR tax.
 -- =========================================================================
@@ -1247,14 +1247,14 @@ function DSP.ui.arbitrage_tab()
     local f = DSP.settings.arb_filters or { budget = 0, min_profit = 0, min_roi = 0, sort = 1 }
     DSP.ui.header()
 
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÀÐÁÈÒÐÀÆ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('АРБИТРАЖ'))
     imgui.SameLine(0, 14 * dpi)
     local tax_bp = tonumber(DSP.settings.tax_bp) or 200
-    imgui.TextDisabled(DSP.utf8(string.format('Êîìèññèÿ ÖÐ: %d%%', math.floor(tax_bp / 100))))
+    imgui.TextDisabled(DSP.utf8(string.format('Комиссия ЦР: %d%%', math.floor(tax_bp / 100))))
     imgui.Separator()
 
-    -- Filter row 1: budget input + [Ñ ðóê] + sort selector
-    imgui.TextDisabled(DSP.utf8('Áþäæåò íà ðóêàõ:'))
+    -- Filter row 1: budget input + [С рук] + sort selector
+    imgui.TextDisabled(DSP.utf8('Бюджет на руках:'))
     imgui.SameLine(0, 8 * dpi)
     imgui.SetNextItemWidth(160 * dpi)
     if imgui.InputInt('##arb_budget', DSP.ui.arb_budget_ref, 100000, 1000000) then
@@ -1265,7 +1265,7 @@ function DSP.ui.arbitrage_tab()
         DSP.screens.set_page('arbitrage', 1)
     end
     imgui.SameLine(0, 8 * dpi)
-    if imgui.Button(DSP.utf8('[ Ñ ðóê ]'), imgui.ImVec2(110 * dpi, 32 * dpi)) then
+    if imgui.Button(DSP.utf8('[ С рук ]'), imgui.ImVec2(110 * dpi, 32 * dpi)) then
         -- Apply budget filter; the user just confirmed the input.
         f.budget = math.max(0, DSP.ui.arb_budget_ref[0])
         DSP.settings.arb_filters.budget = f.budget
@@ -1275,7 +1275,7 @@ function DSP.ui.arbitrage_tab()
     end
     imgui.SameLine(0, 8 * dpi)
     if f.budget > 0 then
-        if imgui.Button(DSP.utf8('[ Ñáðîñ ]'), imgui.ImVec2(110 * dpi, 32 * dpi)) then
+        if imgui.Button(DSP.utf8('[ Сброс ]'), imgui.ImVec2(110 * dpi, 32 * dpi)) then
             f.budget = 0
             DSP.settings.arb_filters.budget = 0
             if DSP.market and DSP.market.invalidate_arbitrage then DSP.market.invalidate_arbitrage() end
@@ -1285,12 +1285,12 @@ function DSP.ui.arbitrage_tab()
         end
     end
     imgui.SameLine(0, 14 * dpi)
-    imgui.TextDisabled(DSP.utf8('Ñîðòèðîâêà:'))
+    imgui.TextDisabled(DSP.utf8('Сортировка:'))
     imgui.SameLine(0, 6 * dpi)
     local sorts = {
-        { id = 1, label = 'Ïî ïàðòèè' },
-        { id = 2, label = 'Çà 1 øò.' },
-        { id = 3, label = 'Ïî ROI' },
+        { id = 1, label = 'По партии' },
+        { id = 2, label = 'За 1 шт.' },
+        { id = 3, label = 'По ROI' },
     }
     for _, s in ipairs(sorts) do
         local act = (tonumber(f.sort) or 1) == s.id
@@ -1307,14 +1307,14 @@ function DSP.ui.arbitrage_tab()
     imgui.NewLine()
 
     -- Filter row 2: profit + ROI quick presets
-    imgui.TextDisabled(DSP.utf8('Ìèí. ïðèáûëü:'))
+    imgui.TextDisabled(DSP.utf8('Мин. прибыль:'))
     imgui.SameLine(0, 6 * dpi)
     local profit_presets = {
-        { label = 'Âñå',     val = 0 },
-        { label = '500ê+',   val = 500000 },
-        { label = '1êê+',    val = 1000000 },
-        { label = '5êê+',    val = 5000000 },
-        { label = '10êê+',  val = 10000000 },
+        { label = 'Все',     val = 0 },
+        { label = '500к+',   val = 500000 },
+        { label = '1кк+',    val = 1000000 },
+        { label = '5кк+',    val = 5000000 },
+        { label = '10кк+',  val = 10000000 },
     }
     for _, p in ipairs(profit_presets) do
         local act = (tonumber(f.min_profit) or 0) == p.val
@@ -1331,10 +1331,10 @@ function DSP.ui.arbitrage_tab()
     end
     imgui.NewLine()
     imgui.SameLine(0, 0)
-    imgui.TextDisabled(DSP.utf8('Ìèí. ROI:'))
+    imgui.TextDisabled(DSP.utf8('Мин. ROI:'))
     imgui.SameLine(0, 6 * dpi)
     local roi_presets = {
-        { label = 'Âñå',  val = 0 },
+        { label = 'Все',  val = 0 },
         { label = '5%+',   val = 5 },
         { label = '10%+',  val = 10 },
         { label = '25%+',  val = 25 },
@@ -1363,17 +1363,17 @@ function DSP.ui.arbitrage_tab()
         total_qty = total_qty + (e.tradable_qty or 0)
     end
     imgui.TextDisabled(DSP.utf8(string.format(
-        'Ïëàí: %d ñâÿçîê | %d øò. | çàòðàòû %s | ïðèáûëü +%s',
+        'План: %d связок | %d шт. | затраты %s | прибыль +%s',
         #rows, total_qty, DSP.money(total_cost), DSP.money(total_profit))))
     if (tonumber(f.budget) or 0) > 0 then
-        imgui.TextDisabled(DSP.utf8('Îáùèé îñòàòîê áþäæåòà: '..
+        imgui.TextDisabled(DSP.utf8('Общий остаток бюджета: '..
             DSP.money(math.max(0, f.budget - total_cost))))
     end
     imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8(
-        'Îñòàòêè íå äóáëèðóþòñÿ ìåæäó ñâÿçêàìè. Ïåðåä ïîêóïêîé îáíîâèòå ðûíîê è ïðîâåðüòå ëàâêè.'))
+        'Остатки не дублируются между связками. Перед покупкой обновите рынок и проверьте лавки.'))
     if DSP.market.state.status == 'cache' or DSP.market.state.status == 'error' then
         imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8(
-            'Âíèìàíèå: ðàñ÷¸ò âûïîëíåí ïî ëîêàëüíîìó ñíèìêó ðûíêà.'))
+            'Внимание: расчёт выполнен по локальному снимку рынка.'))
     end
     imgui.Separator()
 
@@ -1385,7 +1385,7 @@ function DSP.ui.arbitrage_tab()
         local cw = avail.x
         local widths = {cw*.24,cw*.17,cw*.17,cw*.12,cw*.17,cw*.13}
         for i = 0, 5 do imgui.SetColumnWidth(i, widths[i+1]) end
-        for _, title in ipairs({'ÒÎÂÀÐ', 'ÊÓÏÈÒÜ Ó', 'ÏÐÎÄÀÒÜ Â', 'ÑÄÅËÊÀ', '×ÈÑÒÀß ÏÐÈÁÛËÜ', 'ÌÅÒÊÈ'}) do
+        for _, title in ipairs({'ТОВАР', 'КУПИТЬ У', 'ПРОДАТЬ В', 'СДЕЛКА', 'ЧИСТАЯ ПРИБЫЛЬ', 'МЕТКИ'}) do
             imgui.TextDisabled(DSP.utf8(title)); imgui.NextColumn()
         end
         imgui.Separator()
@@ -1398,26 +1398,26 @@ function DSP.ui.arbitrage_tab()
             local e = rows[i]
             if e then
                 imgui.Text(DSP.utf8(trunc(e.name, 30)))
-                imgui.TextDisabled(DSP.utf8('Ñåðâåð '..tostring(DSP.market.state.sid)))
+                imgui.TextDisabled(DSP.utf8('Сервер '..tostring(DSP.market.state.sid)))
                 imgui.NextColumn()
                 imgui.TextColored(DSP.theme.col('warn', 1), DSP.money(e.p_buy))
-                imgui.TextDisabled(DSP.utf8('Ëàâêà #'..tostring(e.sell_offer.shop)..
-                    ' | '..tostring(e.qty_seller or e.sell_offer.qty)..' øò.'))
+                imgui.TextDisabled(DSP.utf8('Лавка #'..tostring(e.sell_offer.shop)..
+                    ' | '..tostring(e.qty_seller or e.sell_offer.qty)..' шт.'))
                 imgui.NextColumn()
                 imgui.TextColored(DSP.theme.col('good', 1), DSP.money(e.p_sell))
-                imgui.TextDisabled(DSP.utf8('Ëàâêà #'..tostring(e.buy_offer.shop)..
-                    ' | '..tostring(e.qty_buyer or e.buy_offer.qty)..' øò.'))
+                imgui.TextDisabled(DSP.utf8('Лавка #'..tostring(e.buy_offer.shop)..
+                    ' | '..tostring(e.qty_buyer or e.buy_offer.qty)..' шт.'))
                 imgui.NextColumn()
-                imgui.Text(DSP.utf8(tostring(e.tradable_qty)..' øò.'))
+                imgui.Text(DSP.utf8(tostring(e.tradable_qty)..' шт.'))
                 imgui.TextDisabled(DSP.money(e.total_cost))
                 imgui.NextColumn()
                 imgui.TextColored(DSP.theme.col('good', 1), DSP.utf8('+'..DSP.money(e.net_profit)))
                 imgui.TextDisabled(DSP.utf8(string.format('ROI %.1f%%', e.roi)))
                 imgui.NextColumn()
-                if imgui.SmallButton(DSP.utf8('Êóïèòü##arb_a'..i)) then
+                if imgui.SmallButton(DSP.utf8('Купить##arb_a'..i)) then
                     DSP.market.mark_shop(e.sell_offer.shop)
                 end
-                if imgui.SmallButton(DSP.utf8('Ñäàòü##arb_b'..i)) then
+                if imgui.SmallButton(DSP.utf8('Сдать##arb_b'..i)) then
                     DSP.market.mark_shop(e.buy_offer.shop)
                 end
                 imgui.NextColumn()
@@ -1427,34 +1427,34 @@ function DSP.ui.arbitrage_tab()
         imgui.Columns(1)
         if #rows == 0 then
             imgui.Spacing()
-            imgui.TextDisabled(DSP.utf8('Íåò ïîäõîäÿùèõ ñäåëîê. Èçìåíèòå ôèëüòðû èëè îáíîâèòå ðûíîê.'))
+            imgui.TextDisabled(DSP.utf8('Нет подходящих сделок. Измените фильтры или обновите рынок.'))
         end
         imgui.EndChild()
     end
 end
 
 -- =========================================================================
--- v1.2 Stage 2: ÏÎÈÑÊ screen (Item Finder).
--- Single search input -> for each matching row, show ÏÐÎÄÀÆÀ + ÑÊÓÏÊÀ blocks
--- with [Îòìåòèòü ëàâêó] buttons per offer.
+-- v1.2 Stage 2: ПОИСК screen (Item Finder).
+-- Single search input -> for each matching row, show ПРОДАЖА + СКУПКА blocks
+-- with [Отметить лавку] buttons per offer.
 -- =========================================================================
 function DSP.ui.finder_tab()
     local dpi = d()
     DSP.ui.header()
 
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÏÎÈÑÊ ÒÎÂÀÐÀ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ПОИСК ТОВАРА'))
     imgui.SameLine(0, 14 * dpi)
-    imgui.TextDisabled(DSP.utf8('Ïîèñê ïî âñåì ëàâêàì ÖÐ'))
+    imgui.TextDisabled(DSP.utf8('Поиск по всем лавкам ЦР'))
     imgui.Separator()
 
     imgui.SetNextItemWidth(360 * dpi)
-    if imgui.InputTextWithHint('##dsp_finder', DSP.utf8('Ââåäèòå íàçâàíèå (Äðîâà, Ë¸í, Êàìåíü, Ëàðåö)...'),
+    if imgui.InputTextWithHint('##dsp_finder', DSP.utf8('Введите название (Дрова, Лён, Камень, Ларец)...'),
             DSP.ui.finder_search_buf, 128) then
         DSP.ui.finder_query = ffi.string(DSP.ui.finder_search_buf)
         DSP.screens.set_page('search', 1)
     end
     imgui.SameLine(0, 12 * dpi)
-    if imgui.Button(DSP.utf8('Î÷èñòèòü'), imgui.ImVec2(110 * dpi, 0)) then
+    if imgui.Button(DSP.utf8('Очистить'), imgui.ImVec2(110 * dpi, 0)) then
         DSP.ui.finder_query = ''
         -- Wipe the C buffer
         for i = 0, 127 do DSP.ui.finder_search_buf[i] = 0 end
@@ -1462,7 +1462,7 @@ function DSP.ui.finder_tab()
 
     local matches = DSP.market.find_item(DSP.ui.finder_query)
     imgui.SameLine(0, 12 * dpi)
-    imgui.TextDisabled(DSP.utf8(string.format('Íàéäåíî: %d', #matches)))
+    imgui.TextDisabled(DSP.utf8(string.format('Найдено: %d', #matches)))
     imgui.Separator()
 
     local avail = imgui.GetContentRegionAvail()
@@ -1474,7 +1474,7 @@ function DSP.ui.finder_tab()
 
     if imgui.BeginChild('##dsp_finder_list', imgui.ImVec2(-1, list_h), true) then
         if #matches == 0 then
-            imgui.TextDisabled(DSP.utf8('Ââåäèòå íàçâàíèå òîâàðà â ñòðîêó ïîèñêà.'))
+            imgui.TextDisabled(DSP.utf8('Введите название товара в строку поиска.'))
         end
         -- v1.2 hotfix: helper to format qty with thousand dots (CP1251 safe).
         local function fmt_qty(n)
@@ -1489,67 +1489,67 @@ function DSP.ui.finder_tab()
                 -- Header per row: shows counts of sellers + buyers.
                 imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8(row.display))
                 imgui.SameLine(0, 12 * dpi)
-                imgui.TextDisabled(DSP.utf8(string.format('ïðîäà¸ò: %d ëàâîê  |  ñêóïàåò: %d ëàâîê',
+                imgui.TextDisabled(DSP.utf8(string.format('продаёт: %d лавок  |  скупает: %d лавок',
                     row.sell.count, row.buy.count)))
                 if row.sell.count > 0 and row.buy.count > 0 then
                     local profit = (row.buy.best or 0) - (row.sell.best or 0)
                     local pc = profit > 0 and DSP.theme.col('good', 1) or DSP.theme.col('bad', 1)
                     imgui.SameLine(0, 12 * dpi)
-                    imgui.TextColored(pc, DSP.utf8('ñïðåä: ' .. DSP.money(profit)))
+                    imgui.TextColored(pc, DSP.utf8('спред: ' .. DSP.money(profit)))
                 end
                 imgui.Separator()
 
-                -- ÏÐÎÄÀÆÀ block (ëàâêà ïðîäà¸ò èãðîêó): sort asc cheapest first
-                -- Format per ÒÇ: [Ëàâêà #14] Vanya_Pupkin - 2.500 øò. ïî $3.500 [freshness] [Îòìåòèòü]
+                -- ПРОДАЖА block (лавка продаёт игроку): sort asc cheapest first
+                -- Format per ТЗ: [Лавка #14] Vanya_Pupkin - 2.500 шт. по $3.500 [freshness] [Отметить]
                 if row.sell.count > 0 then
-                    imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8('ÏÐÎÄÀÆÀ (ãäå êóïèòü ñåáå)'))
+                    imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8('ПРОДАЖА (где купить себе)'))
                     local max_show = math.min(10, #row.sell.offers)
                     for j = 1, max_show do
                         local o = row.sell.offers[j]
                         local fresh_text, fresh_key = DSP.market.offer_freshness(o.ts)
                         imgui.TextColored(DSP.theme.col('accent', 1),
-                            DSP.utf8(string.format('[Ëàâêà #%s] %s', tostring(o.shop),
+                            DSP.utf8(string.format('[Лавка #%s] %s', tostring(o.shop),
                                 trunc(o.owner or '?', 18))))
                         imgui.SameLine(0, 6 * dpi)
-                        imgui.Text(DSP.utf8(string.format('- %s øò. ïî ', fmt_qty(o.qty or 0))))
+                        imgui.Text(DSP.utf8(string.format('- %s шт. по ', fmt_qty(o.qty or 0))))
                         imgui.SameLine(0, 4 * dpi)
                         imgui.TextColored(DSP.theme.col('warn', 1), DSP.money(o.price))
                         imgui.SameLine(0, 8 * dpi)
                         imgui.TextColored(DSP.theme.col(fresh_key, 1), DSP.utf8('[' .. fresh_text .. ']'))
                         imgui.SameLine(0, 8 * dpi)
-                        if imgui.SmallButton(DSP.utf8('[ Îòìåòèòü ]##fs' .. tostring(i) .. '_' .. tostring(j))) then
+                        if imgui.SmallButton(DSP.utf8('[ Отметить ]##fs' .. tostring(i) .. '_' .. tostring(j))) then
                             DSP.market.mark_shop(o.shop)
                         end
                     end
                 else
-                    imgui.TextDisabled(DSP.utf8('  Íåò ïðîäàâöîâ'))
+                    imgui.TextDisabled(DSP.utf8('  Нет продавцов'))
                 end
 
                 imgui.Spacing()
-                -- ÑÊÓÏÊÀ block (ëàâêà ñêóïàåò ó èãðîêà): sort desc highest first
-                -- Format per ÒÇ: [Ëàâêà #5] Sasha_Grey - íóæíî 10.000 øò. ïî $5.000 [freshness] [Îòìåòèòü]
+                -- СКУПКА block (лавка скупает у игрока): sort desc highest first
+                -- Format per ТЗ: [Лавка #5] Sasha_Grey - нужно 10.000 шт. по $5.000 [freshness] [Отметить]
                 if row.buy.count > 0 then
-                    imgui.TextColored(DSP.theme.col('good', 1), DSP.utf8('ÑÊÓÏÊÀ (êîìó âûãîäíî ñäàòü)'))
+                    imgui.TextColored(DSP.theme.col('good', 1), DSP.utf8('СКУПКА (кому выгодно сдать)'))
                     local max_show = math.min(10, #row.buy.offers)
                     for j = 1, max_show do
                         local o = row.buy.offers[j]
                         local fresh_text, fresh_key = DSP.market.offer_freshness(o.ts)
                         imgui.TextColored(DSP.theme.col('accent', 1),
-                            DSP.utf8(string.format('[Ëàâêà #%s] %s', tostring(o.shop),
+                            DSP.utf8(string.format('[Лавка #%s] %s', tostring(o.shop),
                                 trunc(o.owner or '?', 18))))
                         imgui.SameLine(0, 6 * dpi)
-                        imgui.Text(DSP.utf8(string.format('- íóæíî %s øò. ïî ', fmt_qty(o.qty or 0))))
+                        imgui.Text(DSP.utf8(string.format('- нужно %s шт. по ', fmt_qty(o.qty or 0))))
                         imgui.SameLine(0, 4 * dpi)
                         imgui.TextColored(DSP.theme.col('good', 1), DSP.money(o.price))
                         imgui.SameLine(0, 8 * dpi)
                         imgui.TextColored(DSP.theme.col(fresh_key, 1), DSP.utf8('[' .. fresh_text .. ']'))
                         imgui.SameLine(0, 8 * dpi)
-                        if imgui.SmallButton(DSP.utf8('[ Îòìåòèòü ]##fb' .. tostring(i) .. '_' .. tostring(j))) then
+                        if imgui.SmallButton(DSP.utf8('[ Отметить ]##fb' .. tostring(i) .. '_' .. tostring(j))) then
                             DSP.market.mark_shop(o.shop)
                         end
                     end
                 else
-                    imgui.TextDisabled(DSP.utf8('  Íåò ñêóïùèêîâ'))
+                    imgui.TextDisabled(DSP.utf8('  Нет скупщиков'))
                 end
                 imgui.Separator()
                 imgui.Spacing()
@@ -1560,36 +1560,36 @@ function DSP.ui.finder_tab()
 end
 
 -- =========================================================================
--- v1.2 Stage 3: ÇÀÌÅÒÊÈ screen.
+-- v1.2 Stage 3: ЗАМЕТКИ screen.
 -- InputTextMultiline fills the available area; auto-save is debounced to
 -- 1.5 seconds after the last edit so we never thrash the disk on every
 -- keystroke. The actual save is performed in DSP.ui.install()'s OnFrame.
 -- =========================================================================
 function DSP.ui.notes_tab()
     local dpi = d()
-    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ÇÀÌÅÒÊÈ'))
+    imgui.TextColored(DSP.theme.col('accent', 1), DSP.utf8('ЗАМЕТКИ'))
     imgui.SameLine(0, 14 * dpi)
-    imgui.TextDisabled(DSP.utf8('Àâòîñîõðàíåíèå â config/PalatkaAI/notes.txt (debounce 1.5ñ)'))
+    imgui.TextDisabled(DSP.utf8('Автосохранение в config/PalatkaAI/notes.txt (debounce 1.5с)'))
     imgui.SameLine(0, 14 * dpi)
     if DSP.ui._notes_dirty then
-        imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8('* íå ñîõðàíåíî'))
+        imgui.TextColored(DSP.theme.col('warn', 1), DSP.utf8('* не сохранено'))
     else
         imgui.TextColored(DSP.theme.col('good', 1), DSP.utf8('OK'))
     end
     imgui.SameLine(imgui.GetWindowWidth() - 130 * dpi, 6 * dpi)
-    if imgui.Button(DSP.utf8('Ñîõðàíèòü'), imgui.ImVec2(110 * dpi, 0)) then
+    if imgui.Button(DSP.utf8('Сохранить'), imgui.ImVec2(110 * dpi, 0)) then
         local txt = ffi.string(DSP.ui.notes_buf)
         local f = io.open(DSP.notes_path, 'w')
         if f then f:write(txt); f:close() end
         DSP.ui._notes_dirty = false
-        DSP.add_log('Çàìåòêè ñîõðàíåíû âðó÷íóþ')
+        DSP.add_log('Заметки сохранены вручную')
     end
     imgui.Separator()
 
     local avail = imgui.GetContentRegionAvail()
     -- v1.2 hotfix: imgui.InputTextMultiline may be missing in older mimgui
     -- builds. Fall back to plain imgui.InputText (single-line) wrapped in pcall
-    -- so the script doesn't crash on the ÇÀÌÅÒÊÈ tab.
+    -- so the script doesn't crash on the ЗАМЕТКИ tab.
     local flags = 0
     if imgui.InputTextFlags and imgui.InputTextFlags.Multiline then
         flags = imgui.InputTextFlags.Multiline
@@ -1621,7 +1621,7 @@ function DSP.ui.draw()
     local sw = (io and io.DisplaySize and io.DisplaySize.x) or 2340
     local sh = (io and io.DisplaySize and io.DisplaySize.y) or 1080
     -- v1.2: landscape proportions -- wide but NOT high, centered, never
-    -- reaches the system [ÂÇÀÈÌÎÄÅÉÑÒÂÈÅ] button at the bottom.
+    -- reaches the system [ВЗАИМОДЕЙСТВИЕ] button at the bottom.
     local win_w = math.min(sw * 0.85, 1600)
     local win_h = math.min(sh * 0.68, 540)
     local px = (sw - win_w) / 2
@@ -1646,7 +1646,7 @@ function DSP.ui.draw()
 
     local flags = imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize
         + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar
-    if imgui.Begin(DSP.utf8(' palatka ai | ÐÛÍÎÊ v' .. DSP.version .. ' '), DSP.ui.open_ref, flags) then
+    if imgui.Begin(DSP.utf8(' palatka ai | РЫНОК v' .. DSP.version .. ' '), DSP.ui.open_ref, flags) then
         DSP.screens.topbar()
         if imgui.BeginChild('##dsp_main', imgui.ImVec2(0, 0), false) then
             DSP.screens.draw(DSP.ui.screen)
@@ -1768,8 +1768,8 @@ function DSP.ui.install()
                         local written, write_err = f:write(txt)
                         local closed, close_err = f:close()
                         if written and closed then DSP.ui._notes_dirty = false
-                        else DSP.notify('Îøèáêà çàìåòîê: ' .. tostring(write_err or close_err)) end
-                    else DSP.notify('Îøèáêà çàìåòîê: ' .. tostring(err)) end
+                        else DSP.notify('Ошибка заметок: ' .. tostring(write_err or close_err)) end
+                    else DSP.notify('Ошибка заметок: ' .. tostring(err)) end
                 end
             end
         end)
