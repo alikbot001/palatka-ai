@@ -3,7 +3,7 @@ _G.DSP={settings={promo={templates={}}},
     lower=string.lower,
     save_settings=function()return true end,
     flog=function()end}
-assert(dofile('src/49_promo.lua'))
+dofile('src/49_promo.lua')
 assert(dofile('src/49a_promo_universal.lua'))
 local P=DSP.promo
 assert(P.MIN_INTERVAL==60)
