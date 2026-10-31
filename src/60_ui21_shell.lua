@@ -151,7 +151,7 @@ function V.list(key,draw,options)
     V.track_touch(imgui.GetIO())
     local o=options or {};local footer=o.footer~=false
     local avail=imgui.GetContentRegionAvail()
-    local reserved=footer and (o.footer_height or 42) or 0
+    local reserved=footer and (o.footer_height or 50) or 0
     local max_height=math.max(30,avail.y-reserved)
     local h=o.height and o.height>0 and math.min(o.height,max_height) or max_height
     local s=V.scrolls[key] or {pending=0,y=0};V.scrolls[key]=s;s.height=h
@@ -169,16 +169,11 @@ function V.list(key,draw,options)
     end
     imgui.EndChild()
     if footer then
-        if o.toolbar then
-            imgui.Separator();o.toolbar(key)
-        elseif o.scroll_buttons==true then
-            imgui.Separator();V.scroll_buttons(key)
+        imgui.Separator()
+        if o.toolbar then o.toolbar(key)else
+            V.scroll_buttons(key)
             if type(o.footer)=='function'then V.inline();o.footer()
-            elseif o.count then V.inline();V.muted(tostring(o.count)..' записей')end
-        elseif type(o.footer)=='function'then
-            imgui.Separator();o.footer()
-        elseif o.count then
-            imgui.Separator();V.muted(tostring(o.count)..' записей')
+            elseif o.count then V.inline();V.muted(tostring(o.count)..' çàïèñåé')end
         end
     end
 end

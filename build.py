@@ -70,6 +70,7 @@ MODULES = [
     "59_history.lua",
     "59a_loot_summary.lua",
     "60_ui21_shell.lua",
+    "60aa_touch_scroll.lua",
     "60a_carbon_home.lua",
     "60b_carbon_storage.lua",
     "60e_storage_probe_ui.lua",

@@ -77,7 +77,7 @@ local function fixture(sw,sh)
     DSP.market.pull=function()h.pulled=true end
     DSP.market.mark_shop=function(id)h.marked=id end
     for i=1,35 do DSP.settings.notes=DSP.settings.notes or{};DSP.settings.notes[i]={id=tostring(i),title='Note '..i,text='Body '..i,updated_at=i}end
-    for _,name in ipairs({'60_ui21_shell','61_ui21_trade','62_ui21_shops','63_ui21_arbitrage','64_ui21_journal_calc','65_ui22_tools','66_ui22_journal'})do dofile('src/'..name..'.lua')end
+    for _,name in ipairs({'60_ui21_shell','60aa_touch_scroll','61_ui21_trade','62_ui21_shops','63_ui21_arbitrage','64_ui21_journal_calc','65_ui22_tools','66_ui22_journal'})do dofile('src/'..name..'.lua')end
     h.V=DSP.ui21
     local baseline={}
     for index,c in pairs(imgui.GetStyle().Colors)do baseline[index]={x=c.x,y=c.y,z=c.z,w=c.w}end

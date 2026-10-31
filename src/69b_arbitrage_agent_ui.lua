@@ -16,6 +16,57 @@ local function status(e)
     if e.unavailable_reason=='shop_missing' then return 'Нет лавки' end
     if e.unavailable_reason=='item_missing' then return 'Нет предмета' end
     if e.unavailable_reason=='owner_changed' then return 'Смена владельца' end
+    if e.skipped then return 'Пропущено' end
+    if e.sold>=e.qty then return 'Завершено' end
+    if e.bought<e.qty then return 'Покупка' end
+    return 'Продажа'
+end
+local function rect(io)
+    DSP.settings.arb_agent_window=DSP.settings.arb_agent_window or{}
+    local p=DSP.settings.arb_agent_window
+    local sw,sh=io.DisplaySize.x,io.DisplaySize.y
+    local w=DSP.clamp(tonumber(p.w)or 440,math.min(305,sw-16),math.max(305,sw-16))
+    local h=DSP.clamp(tonumber(p.h)or 390,math.min(250,sh-16),math.max(250,sh-16))
+    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w-12),0,math.max(0,sw-w)),
+        y=DSP.clamp(tonumber(p.y)or 110,0,math.max(0,sh-h))}
+end
+local function drag(g,io,resize)
+    local d=io.MouseDelta
+    if not d or (d.x==0 and d.y==0) then return end
+    local w=resize and DSP.clamp(g.w+d.x,math.min(305,io.DisplaySize.x-16),io.DisplaySize.x-g.x)or g.w
+    local h=resize and DSP.clamp(g.h+d.y,math.min(250,io.DisplaySize.y-16),io.DisplaySize.y-g.y)or g.h
+    local x=resize and g.x or DSP.clamp(g.x+d.x,0,io.DisplaySize.x-w)
+    local y=resize and g.y or DSP.clamp(g.y+d.y,0,io.DisplaySize.y-h)
+    DSP.settings.arb_agent_window={x=x,y=y,w=w,h=h}
+    A._geometry_dirty=true
+end
+local function notice(msg)A.ui_message=msg end
+local function route_queue(s)
+    local total=#s.routes
+    if total==0 then return end
+    local pages=math.max(1,math.ceil(total/4))
+    A.queue_page=DSP.clamp(tonumber(A.queue_page)or 1,1,pages)
+    quiet('Маршруты: '..total..'  |  Страница '..A.queue_page..'/'..pages)
+    local from=(A.queue_page-1)*4+1
+    for i=from,math.min(total,from+3)do
+        local e=s.routes[i]
+        if b(V.fit(i..'. '..e.name..' · '..status(e),math.max(100,imgui.GetContentRegionAvail().x-20)),
+            'route_'..i,-1,s.focus==i)then
+            A.focus(i);A.qty_key=nil
+        end
+    end
+    if pages>1 then
+        if b('Ранее','pageprev',110)then A.queue_page=math.max(1,A.queue_page-1)end
+        imgui.SameLine(0,8)
+        if b('Далее','pagenext',110)then A.queue_page=math.min(pages,A.queue_page+1)end
+    end
+end
+local function route_info(e,index,total)
+    if not e then quiet('Новых маршрутов пока нет');return end
+    quiet('Сделка '..index..' из '..total..' · '..status(e))
+    label(V.fit(e.name,math.max(120,imgui.GetContentRegionAvail().x-12)))
+    quiet('План '..e.qty..' шт.  |  Ожидаемая прибыль ~ '..money(e.proposed_profit))
+    quiet('Куплено '..e.bought..' · Продано '..e.sold)
     if e.skipped then
         if e.bought>e.sold then red('Товаров на руках: '..(e.bought-e.sold)..' шт.')end
         quiet('Маршрут остаётся в сессии. Можно вернуть его или перейти дальше.')
