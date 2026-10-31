@@ -1,18 +1,18 @@
 {
   "schema": 2,
-  "version": "2.6.3-floating-webui",
+  "version": "2.6.4-legible-webui",
   "bootstrap": {
     "path": "updates/palatka_update.lua",
     "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua",
-    "size": 22326,
-    "version": "2.6.3-floating-webui"
+    "size": 26519,
+    "version": "2.6.4-legible-webui"
   },
   "assets": [
     {
       "path": "webui/index.html",
       "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/webui/index.html",
       "target": "PalatkaAI/webui/index.html",
-      "size": 36553,
+      "size": 39546,
       "required": true
     }
   ],
