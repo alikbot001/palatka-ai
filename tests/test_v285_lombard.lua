@@ -10,8 +10,9 @@ DSP.flog=function()end
 local cp_pawn='\xeb\xee\xec\xe1\xe0\xf0\xe4'
 local cp_item='\xef\xf0\xe5\xe4\xec\xe5\xf2'
 local cp_give='\xf1\xe4\xe0\xf2\xfc'
+local labeled_raw='tagged_'..cp_pawn
 local fixture={
- tagged={type=9,title=cp_pawn,items={{name='Lemon',price=150}}},
+ [labeled_raw]={type=9,title=cp_pawn,items={{name='Lemon',price=150}}},
  unknown={type=9,items={{name='Pear',price=200}}},
  trunk={type=8,items={{name='Trunk',price=500}}},
  market={type=13,items={{name='Market',price=500}}},
@@ -32,7 +33,7 @@ local P=L.packet_probe
 local previous=L.stats().items
 assert(not L.on_packet(52,0,'trunk'))
 assert(not L.on_packet(52,0,'market'))
-assert(L.on_packet(52,0,'tagged'),'pawnshop-labeled native packet not observed')
+assert(L.on_packet(52,0,labeled_raw),'pawnshop-labeled native packet not observed')
 assert(P.verified_label and #P.preview()==1 and P.preview()[1].price==150)
 assert(L.stats().items==previous,'native packet should never auto-persist')
 assert(P.save(),'explicitly reviewed observation should save')
