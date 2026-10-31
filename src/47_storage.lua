@@ -351,6 +351,7 @@ local function save_snapshot(slots, source_reason)
     local old_saved=DSP.settings and DSP.settings.storage_snapshots
     local old_snap,old_updated=T.snapshot,T.last_update
     local old_occ,old_total=T.occupied,T.total
+    local old_saved_at,old_completed_at=T.last_saved_at,T.last_completed_request_at
     S.snapshots=new_list
     if DSP.settings then DSP.settings.storage_snapshots=new_list end
     T.snapshot=snap;T.last_update=ts;T.status='saved';T.received=TRUNK_SLOTS
@@ -367,7 +368,8 @@ local function save_snapshot(slots, source_reason)
             if DSP.settings then DSP.settings.storage_snapshots=old_saved end
             T.snapshot=old_snap;T.last_update=old_updated
             T.occupied=old_occ;T.total=old_total
-            T.last_saved_at=nil
+            T.last_saved_at=old_saved_at
+            T.last_completed_request_at=old_completed_at
             T.requested_at=requested_at
             T.status='save_error'
             T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
@@ -465,6 +467,7 @@ function S.begin_trunk_scan()
     T.pending=nil
     T.received=0
     T.last_error=nil
+    T.last_completed_request_at=nil
     T.requested_at=os.time()
     T.status='waiting'
     return true
