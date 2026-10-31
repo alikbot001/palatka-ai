@@ -6,6 +6,7 @@ on:
       - fix/storage-smart-library-v281
       - refactor/storage-simple-v282
       - feat/storage-suggest-match-v283
+      - feat/storage-detailed-search-v284
   pull_request:
     paths:
       - 'src/**'
@@ -35,3 +36,5 @@ jobs:
           luajit tests/test_v283_storage_match_ui.lua
           luajit tests/test_v283_settings_safety.lua
           luajit tests/test_v283_trunk_capacity.lua
+          luajit tests/test_v284_storage_search.lua
+          luajit tests/test_v284_storage_search_ui.lua
