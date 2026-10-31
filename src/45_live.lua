@@ -312,6 +312,9 @@ function L.commit_shop_autoscan(defer_io)
     row=row or saved_row
     if not verified then scan_diag('error',s,'missing saved snapshot');return false,'error' end
     L._auto_scan_pending=false;L._auto_scan_stable_ticks=0;s.scan_complete=true
+    -- Recalculate plans once a stable shop scan has been observed.
+    -- Never mutate API stock and never claim a complete authoritative snapshot.
+    if DSP.market and DSP.market.invalidate_arbitrage then DSP.market.invalidate_arbitrage() end
     L.auto_scan.shop=tostring((row and row.num)or s.num or '')
     L.auto_scan.identity=tostring((row and row.identity)or s.local_identity or '')
     L.auto_scan.owner=tostring((row and row.owner)or s.owner or '')
@@ -508,7 +511,10 @@ function L.handle(iface, sub, raw)
         -- Finalize pending game data before the menu becomes closed. The save
         -- itself is deferred; disk writes during a network callback cause lag.
         if L._auto_scan_pending then L.commit_shop_autoscan(L._auto_scan_worker==true) end
-        if L.shop and (L.shop.menu_closed or 0)==0 then L.shop.menu_closed=now();shop_changed(L.shop) end
+        if L.shop and (L.shop.menu_closed or 0)==0 then
+            L.shop.menu_closed=now();shop_changed(L.shop)
+            if DSP.market and DSP.market.invalidate_arbitrage then DSP.market.invalidate_arbitrage() end
+        end
         if DSP.local_arb and DSP.local_arb.flush and not L._auto_scan_worker then
             -- Test/fallback hosts do not run the background save coroutine.
             local ok,err=pcall(DSP.local_arb.flush)
