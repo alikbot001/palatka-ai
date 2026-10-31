@@ -55,8 +55,18 @@ return function(DSP)
             pcall(os.remove, tmp)
             return false, er or ce
         end
-        pcall(os.remove, path)
+        -- Preserve the old HTML until replacement is complete.
+        -- On Android a rename-over-existing may fail; recover via .bak.
         local rn, re = os.rename(tmp, path)
+        if not rn and read_file(path) then
+            local bak = path .. '.bak'
+            pcall(os.remove, bak)
+            local backed = os.rename(path, bak)
+            if backed then
+                rn, re = os.rename(tmp, path)
+                if rn then pcall(os.remove, bak) else pcall(os.rename, bak, path) end
+            end
+        end
         if not rn then
             pcall(os.remove, tmp)
             return false, re
@@ -273,18 +283,27 @@ return function(DSP)
             done(true)
             return
         end
+        local function fallback(reason)
+            if html and #html > 2000 then
+                if DSP.flog then DSP.flog('WEBUI cached HTML fallback: ' .. tostring(reason)) end
+                done(true, 'cached HTML')
+            else
+                done(false, reason)
+            end
+        end
         if not DSP.http_get then
-            done(false, 'HTTP unavailable')
+            fallback('HTTP unavailable')
             return
         end
         DSP.http_get(W.html_url, function(body, err, code)
             if not body or #body < 2000 then
-                done(false, tostring(err or ('HTTP ' .. tostring(code or 0))))
+                fallback(tostring(err or ('HTTP ' .. tostring(code or 0))))
                 return
             end
             local ok, e = write_file(W.html_path, body)
-            if not ok then done(false, tostring(e)); return end
-            write_file(W.version_path, W.version)
+            if not ok then fallback(tostring(e)); return end
+            local saved, se = write_file(W.version_path, W.version)
+            if not saved and DSP.flog then DSP.flog('WEBUI version marker not saved: ' .. tostring(se)) end
             done(true)
         end)
     end
