@@ -462,6 +462,8 @@ function L.handle_shop_owner(raw)
     if (s.items_updated or 0)>0 then L.queue_shop_autoscan() end
 end
 
+-- Mark the source hook so OTA overlays cannot double-subscribe it.
+L._lombard_packet_hooked=true
 function L.handle(iface, sub, raw)
     -- Passive pawnshop packet observation; never consumes existing game events.
     if DSP.lombard and DSP.lombard.on_packet then
