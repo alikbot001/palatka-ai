@@ -128,8 +128,8 @@ end
 local function blocked(s)
     s=normalize(s)
     for _,part in ipairs({
-        'ban','banned','blocked','captcha','wrong password','invalid password',
-        'kicked','you are kicked','забан','блокиров','капч','неверный пароль',
+        'banned','you are banned','account blocked','captcha','wrong password','invalid password',
+        'kicked','you are kicked','вы забан','аккаунт заблокирован','капч','неверный пароль',
         'неправильный пароль','вы были кикнуты','отказ в авторизации',
     })do
         if s:find(part,1,true)then return true end
@@ -165,6 +165,7 @@ local function queue(reason,at)
 end
 function R.disconnected(kind,reason,at)
     kind=tostring(kind or'')
+    if R.state=='scheduled' then return true,'Already scheduled'end
     local c=R.config()
     local allowed=(kind=='lost' and c.on_lost)or(kind=='closed'and c.on_closed)
         or(kind=='rejected'and c.on_rejected)
@@ -218,7 +219,7 @@ function R.tick(at)
         local ok,spawned=pcall(sampIsLocalPlayerSpawned)
         if ok and spawned then
             if R.state=='connecting' or R.state=='scheduled'then R.connected(at)end
-            if R.last_seen_at~=at then R.last_seen_at=at;R.remember_address()end
+            if not R.last_seen_at or at-R.last_seen_at>=15 then R.last_seen_at=at;R.remember_address()end
         end
     end
     local pending=R.spawn_pending
@@ -273,6 +274,7 @@ local function spawn_title(title)
         or s:find('место появлен',1,true)~=nil or s:find('точк появлен',1,true)~=nil
 end
 function R.observe_dialog(id,style,title,content,at)
+    if not R.host then R.remember_address()end
     id=tonumber(id);style=tonumber(style)or-1
     if not id or (style~=2 and style~=4 and style~=5) then
         if R.state=='connecting'then R.awaiting_input=true;R.status='Waiting for player input'end
