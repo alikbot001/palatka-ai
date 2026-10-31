@@ -144,16 +144,6 @@ function DSP.ui.init()
     DSP.ui.tab = DSP.screens.index_by_id(DSP.ui.screen)
     if sampRegisterChatCommand then
         sampRegisterChatCommand('crr', function() DSP.ui.toggle() end)
-        -- Accessible shortcut, independent of whichever page was open before.
-        sampRegisterChatCommand('crstorage', function()
-            DSP.ui.set_open(true)
-            if DSP.ui21 then
-                DSP.ui21.screen='storage'
-                DSP.ui21.storage_tab='scan'
-                DSP.ui21.storage_scan_mode='trunk'
-                if DSP.ui21.reset_list then DSP.ui21.reset_list('storage_scan_panel') end
-            end
-        end)
     end
     DSP.add_log('palatka ai v' .. DSP.version .. ' çàãðóæåí')
 end
