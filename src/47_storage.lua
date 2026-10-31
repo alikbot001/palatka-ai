@@ -423,13 +423,15 @@ function S.on_inventory_packet(sub, raw)
     -- type=8 is already the confirmed trunk namespace; large batches start a
     -- fresh capture, while tiny <=5 slot deltas remain ignored.
     local starts_capture=(not T.pending and #items>5)
-    local explicit_restart=(T.pending and #items>5 and items[1] and items[1].slot==0 and T.pending.count>0)
-    if starts_capture or explicit_restart then
-        T.pending={slots={},seen={},count=0,started=ts}
+    local explicit_restart=(T.pending and #items>5 and items[1] and items[1].slot==0 and T.pending.seen[0])
+    local stale_restart=(T.pending and #items>5 and T.pending.last_at and (ts-T.pending.last_at)>3)
+    if starts_capture or explicit_restart or stale_restart then
+        T.pending={slots={},seen={},count=0,started=ts,last_at=ts}
         T.status='receiving';T.received=0;T.last_error=nil
     end
     if T.pending then
         local p=T.pending
+        p.last_at=ts
         for _,v in ipairs(items) do
             if not p.seen[v.slot] then p.seen[v.slot]=true;p.count=p.count+1 end
             p.slots[v.slot+1]=v
