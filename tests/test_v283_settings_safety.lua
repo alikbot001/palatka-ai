@@ -23,11 +23,20 @@ end
 local initial={version=1,name='LRC',auto_shop_scan=false,future_setting='KEEP'}
 local original_bytes=serialize(initial)
 write(path,encodeJson(initial))
-DSP={settings_path=path,settings=initial,save_settings=function()error('old writer used')end,flog=function()end}
+local ui_path=path..'.ui_state'
+local ui_initial={version=1,name='UI ORIGINAL',auto_shop_scan=false,future_setting='window'}
+write(ui_path,encodeJson(ui_initial))
+DSP={settings_path=path,ui_state_path=ui_path,settings=initial,
+ theme={current='carbon_trade',opacity=0.83},
+ save_settings=function()error('old writer used')end,flog=function()end}
 dofile('src/00a_settings_safety.lua')
 local G=DSP.settings_safety
 assert(G.installed)
 assert(read(path..'.checkpoint_v283')==original_bytes)
+assert(read(ui_path..'.checkpoint_v283')==serialize(ui_initial))
+assert(DSP.save_ui_state())
+assert(read(ui_path..'.bak')==serialize(ui_initial))
+assert(read(ui_path..'.checkpoint_v283')==serialize(ui_initial))
 -- User changes a preference. Only the old copy goes to .bak.
 DSP.settings.version=2
 DSP.settings.name='LRC New'
@@ -51,5 +60,6 @@ assert(read(path..'.bak'):find('v=2;',1,true))
 assert(read(path..'.checkpoint_v283')==original_bytes)
 for _,suffix in ipairs({'','.bak','.bak.previous','.checkpoint_v283','.safe_new','.old'}) do
  os.remove(path..suffix)
+ os.remove(ui_path..suffix)
 end
 print('PASS settings safety: checkpoints, preserved fields, backups and corruption guard')
