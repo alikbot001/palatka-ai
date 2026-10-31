@@ -1,4 +1,4 @@
-name: Palatka 2.8.9 production build
+name: Palatka 2.9.0 production build
 on:
   pull_request:
     paths:
@@ -57,6 +57,21 @@ jobs:
               assert not bad, (p, bad[:12])
               print(p, 'Cyrillic source verified')
           PY
+      - name: Test minimalist Market Helper-style trade journal
+        run: luajit tests/test_mh_trade_feed.lua
+      - name: Verify template editor uses inline rows and no nested line popup
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          ui=Path('src/68b_promo_universal_ui.lua').read_text()
+          log=Path('src/57a_trade_feed_mh.lua').read_text()
+          assert "+ Добавить строку" in ui
+          assert "##mhpromo_rows" in ui
+          assert "InputTextWithHint('##line'" in ui
+          assert "unipromo_line" not in ui
+          assert "trade_feed_lines" in log
+          print('MH-inspired editor and log UI verified')
+          PY
       - name: Verify OTA Lua syntax
         run: luajit -b updates/palatka_update.lua /dev/null
       - name: Verify OTA version and byte size
@@ -66,9 +81,9 @@ jobs:
           from pathlib import Path
           release=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert release['version']=='2.8.9'
+          assert release['version']=='2.9.0'
           assert len(ota)==release['size'], (len(ota),release['size'])
-          assert b"PALATKA_UPDATE_VERSION = '2.8.9'" in ota
+          assert b"PALATKA_UPDATE_VERSION = '2.9.0'" in ota
           assert b'local function _v286_mcr_classic()' not in ota
           print('OTA version and size verified:',len(ota))
           PY
@@ -79,7 +94,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.8.9' in data[:1000]
+          assert b'Palatka AI v2.9.0' in data[:1000]
           assert b'##palatka_arbitrage_agent' in data
           assert b'MCR CLASSIC  /  PALATKA AI' not in data
           assert 'Арбитраж'.encode('cp1251') in data
@@ -95,13 +110,13 @@ jobs:
           if git diff --cached --quiet; then
             echo "Full script already up to date"
           else
-            git commit -m "release: publish Palatka AI v2.8.9 standalone Lua"
+            git commit -m "release: publish Palatka AI v2.9.0 standalone Lua"
             git push origin HEAD:main
           fi
       - name: Upload verified standalone artifact
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-v289-full-build
+          name: palatka-v290-full-build
           path: palatka_ai.lua
           if-no-files-found: error
           retention-days: 7
