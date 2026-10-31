@@ -2049,14 +2049,14 @@ end
     end
   end
 
-  -- Palatka AI 2.8.5: observed trade quantities and passive pawnshop scanner.
+  -- Palatka AI 2.8.5: accurate trade and passive pawnshop read-only scanner.
   if DSP._v285_installed then
     DSP.version='2.8.5'
     return true
   end
-  local updated,why=pcall(function()
+  local applied,err=pcall(function()
     do
-      local function __palatka_v285_arbitrage()
+      local function _v285_arb()
 -- Compare real offers; budget limits apply before profitability filters.
 local M = DSP.market
 local cache, signature, expires
@@ -2537,11 +2537,11 @@ function M.arbitrage_visibility()
 end
 
       end
-      __palatka_v285_arbitrage()
+      _v285_arb()
     end
 
     do
-      local function __palatka_v285_accuracy()
+      local function _v285_accuracy()
 -- Market quantity reconciliation. No network calls, no packet writes.
 -- API figures remain immutable; an observed game quantity is temporary evidence,
 -- never a guarantee that a different player has not traded in the meantime.
@@ -2630,11 +2630,11 @@ end
 return true
 
       end
-      __palatka_v285_accuracy()
+      _v285_accuracy()
     end
 
     do
-      local function __palatka_v285_lombard()
+      local function _v285_pawn()
 -- Long-lived pawnshop scanner. Pawnshop data is intentionally separate from
 -- the 80-row local ShopStore LRU: a pawnshop is a server economy source, not a stall.
 DSP.lombard = DSP.lombard or {}
@@ -2671,7 +2671,7 @@ end
 local function clean(v)
     local x=tostring(v or '')
     if DSP.clean_text then x=DSP.clean_text(x) else x=x:gsub('{%x+}','') end
-    x=x:gsub('\r',''):gsub('^%s+',''):gsub('%s+,'')
+    x=x:gsub('\r',''):gsub('^%s+',''):gsub('%s+$','')
     return x
 end
 local function current_sid()
@@ -2715,16 +2715,16 @@ local function parse_price(v)
         if ok and tonumber(p) and p>0 then return math.floor(p) end
     end
     local q=tostring(v or ''):gsub('{%x+}',''):gsub('%s','')
-    q=q:gsub('^%,''):gsub('%$',''):gsub('[,.]','')
+    q=q:gsub('^%$',''):gsub('%$$',''):gsub('[,.]','')
     local p=tonumber(q);if p and p>0 and p<=MAX then return math.floor(p) end
 end
 local function normalize_name(v)
     local n=clean(v)
     n=n:gsub('^%[%d+%]%s*',''):gsub('^%d+[%.%)]%s*','')
-    n=n:gsub('%s+%(%s*ID%s*:%s*%d+%s*%)%s*,'')
-    n=n:gsub('%s+%[[xX]%d+%]%s*,'')
-    n=n:gsub('%s+[xX]%s*%d+%s*,'')
-    n=n:gsub('^%s+',''):gsub('%s+,'')
+    n=n:gsub('%s+%(%s*ID%s*:%s*%d+%s*%)%s*$','')
+    n=n:gsub('%s+%[[xX]%d+%]%s*$','')
+    n=n:gsub('%s+[xX]%s*%d+%s*$','')
+    n=n:gsub('^%s+',''):gsub('%s+$','')
     return n
 end
 local function skip_line(line)
@@ -2758,18 +2758,18 @@ local function parse_line(line,title)
         local acc={};for i=1,price_i-1 do if fs[i]~='' then acc[#acc+1]=fs[i] end end
         name=table.concat(acc,' ')
     else
-        local prefix,token=raw:match('^(.-)%s+(:CASH:[%d%.,]+)%s*)
-        if not prefix then prefix,token=raw:match('^(.-)%s+(%$[%d%.,]+)%s*) end
-        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*%s*[KkMm])%s*) end
-        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*)%s*) end
+        local prefix,token=raw:match('^(.-)%s+(:CASH:[%d%.,]+)%s*$')
+        if not prefix then prefix,token=raw:match('^(.-)%s+(%$[%d%.,]+)%s*$') end
+        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*%s*[KkMm])%s*$') end
+        if not prefix then prefix,token=raw:match('^(.-)%s+([%d][%d%.,]*)%s*$') end
         if prefix and token then price=parse_price(token);name=prefix end
     end
     name=normalize_name(name or '')
     if not price or name=='' or #name<2 then return nil end
     -- Avoid treating pure service/menu labels as items.
-    if name:match('^%d+) then return nil end
+    if name:match('^%d+$') then return nil end
     local ench=tonumber(name:match('%(%+(%d+)%)')) or 0
-    local base=name:gsub('%s*%(%+%d+%)%s*,'')
+    local base=name:gsub('%s*%(%+%d+%)%s*$','')
     local id=nil
     if DSP.items and DSP.items.id_for_name then
         local ok,v=pcall(DSP.items.id_for_name,base);if ok then id=tonumber(v) end
@@ -2998,11 +2998,11 @@ function L.install()
 end
 return true
       end
-      __palatka_v285_lombard()
+      _v285_pawn()
     end
 
     do
-      local function __palatka_v285_lombard_packets()
+      local function _v285_pawn_packets()
 -- Passive native pawnshop menu inspection. The packet layout is NOT
 -- verified against a real pawnshop dump; all entries are observational only.
 local L=DSP.lombard
@@ -3076,7 +3076,7 @@ function L.on_packet(iface,sub,raw)
     -- A labeled pawnshop packet may be observed passively. Unknown packet
     -- layouts are explored only during the explicit 35-second scan window.
     if not active and not pawn_text(raw) then return false end
-    local ok,obj=pcall(decodeJson,raw:gsub('%z+,''))
+    local ok,obj=pcall(decodeJson,raw:gsub('%z+$',''))
     if not ok or type(obj)~='table' then return false end
     local packet_type=int(obj.type,255)
     if packet_type==8 or packet_type==13 or packet_type==28 or
@@ -3149,11 +3149,11 @@ end
 return true
 
       end
-      __palatka_v285_lombard_packets()
+      _v285_pawn_packets()
     end
 
     do
-      local function __palatka_v285_lombard_ui()
+      local function _v285_pawn_ui()
 -- Native mimgui pawnshop panel. No WebView and no item transfer actions.
 local V=DSP.ui21
 local L=DSP.lombard
@@ -3215,30 +3215,29 @@ end
 return true
 
       end
-      __palatka_v285_lombard_ui()
+      _v285_pawn_ui()
     end
 
     if DSP.lombard and DSP.lombard.install then DSP.lombard.install() end
-    -- Installed older standalone clients do not have this pawnshop hook.
     local live=DSP.live
     if live and type(live.handle)=='function'
-       and not live._lombard_packet_hooked and not live._v285_lombard_wrapped then
-      local previous=live.handle
+        and not live._lombard_packet_hooked and not live._v285_lombard_wrapped then
+      local prior=live.handle
       live.handle=function(iface,sub,raw)
         if DSP.lombard and DSP.lombard.on_packet then
-          local ok,err=pcall(DSP.lombard.on_packet,iface,sub,raw)
-          if not ok and DSP.flog then DSP.flog('LOMBARD native observer: '..tostring(err)) end
+          local ok,why=pcall(DSP.lombard.on_packet,iface,sub,raw)
+          if not ok and DSP.flog then DSP.flog('LOMBARD native observer: '..tostring(why)) end
         end
-        local result={previous(iface,sub,raw)}
+        local result={prior(iface,sub,raw)}
         local typ=tonumber(tostring(raw or ''):match('"type"%s*:%s*(%d+)'))
         if tonumber(iface)==255 or
            ((tonumber(iface)==52 or tonumber(iface)==60) and (typ==13 or typ==28)) then
           local ts=os.time()
-          if ts-(live._v285_last_invalidated or 0)>=1 then
+          if ts-(live._v285_last_invalidate or 0)>=1 then
             if DSP.market and DSP.market.invalidate_arbitrage then
               pcall(DSP.market.invalidate_arbitrage)
             end
-            live._v285_last_invalidated=ts
+            live._v285_last_invalidate=ts
           end
         end
         return unpack(result)
@@ -3246,12 +3245,12 @@ return true
       live._v285_lombard_wrapped=true
     end
   end)
-  if not updated then
-    if DSP.flog then DSP.flog('Palatka 2.8.5 install failed: '..tostring(why)) end
+  if not applied then
+    if DSP.flog then DSP.flog('Palatka 2.8.5 install failed: '..tostring(err)) end
     return false
   end
   DSP._v285_installed=true
   DSP.version='2.8.5'
-  if DSP.flog then DSP.flog('Palatka 2.8.5: Accurate Trade and Lombard native probe beta installed') end
+  if DSP.flog then DSP.flog('Palatka 2.8.5 Accurate Trade / Lombard beta installed') end
   return true
 end
