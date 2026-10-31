@@ -391,9 +391,15 @@ function S.on_inventory_packet(sub, raw)
     -- Real trunk full snapshots use subid=0. subid=2 carries a separate slot
     -- namespace for other inventory blocks; never merge it with trunk slots.
     if tonumber(sub)~=0 then return false end
+    T.raw_packet_events=(T.raw_packet_events or 0)+1
+    T.last_raw_packet_at=os.time()
     if not (T.autoscan_enabled or T.requested_at) then return false end
     local items=parse_payload(raw)
-    if not items or #items == 0 then return false end
+    if not items or #items == 0 then
+        T.invalid_packet_events=(T.invalid_packet_events or 0)+1
+        T.last_error='type 8 received; payload could not be decoded'
+        return false
+    end
     local ts=os.time()
     -- Observed incoming payload; do not claim the trunk window is open.
     T.packet_events=(T.packet_events or 0)+1
