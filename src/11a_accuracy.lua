@@ -39,6 +39,16 @@ function A.quantity(row,side,offer,now)
     -- Never join anonymous API stalls to live scans by numeric id alone.
     if not sid or not shop or owner=='' or owner=='?' then return nil end
     local live=DSP.live and DSP.live.shop
+    -- Recompute the market once a currently-loading native fragment has
+    -- settled, even on clients without the optional shop-store worker.
+    if live and tonumber(live.server)==sid and tonumber(live.num)==shop
+        and (live.menu_closed or 0)==0 and equal(live.owner,offer.owner) then
+        local stamp=tonumber(live.items_updated) or 0
+        if stamp>0 and now-stamp>=0 and now-stamp<2
+            and live.scan_complete~=true then
+            M.accuracy_next_expiry=math.min(M.accuracy_next_expiry or math.huge,stamp+2)
+        end
+    end
     if live and tonumber(live.server)==sid
         -- Native pages can arrive as fragments: wait for the 2-second quiet
         -- window unless the existing scan worker already marked it stable.
