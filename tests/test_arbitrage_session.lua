@@ -18,8 +18,8 @@ local changed=0
 M.offer_quantity=function(_,_,offer) return offer.qty,{source='api',at=offer.ts}end
 M.invalidate_arbitrage=function()changed=changed+1 end
 local row={key='Super Car Box:0',display='Super Car Box',ench=0}
-local seller={shop='154',owner='Seller',price=200000,qty=100,ts=1234}
-local buyer={shop='281',owner='Buyer',price=260000,qty=100,ts=1234}
+local seller={shop='154',owner='Seller',price=200000,qty=100,ts=os.time()-10}
+local buyer={shop='281',owner='Buyer',price=260000,qty=100,ts=os.time()-10}
 local route={row=row,name=row.display,sell_offer=seller,buy_offer=buyer,
     tradable_qty=100,p_buy=200000,p_sell=260000,net_profit=5480000}
 M.arbitrage_grouped_ui=function()return{{routes={route}}},'ready'end
@@ -65,8 +65,8 @@ M.state.sid=102
 local q=A.remaining(row,'sell',seller,25,{source='game_observed',at=os.time()+10})
 assert(q==25)
 -- Receipt cues only suggest; they do not silently apply executions.
-local buyer2={shop='450',owner='Other',price=280000,qty=10,ts=2234}
-local seller2={shop='451',owner='Other',price=210000,qty=10,ts=2234}
+local buyer2={shop='450',owner='Other',price=280000,qty=10,ts=os.time()-5}
+local seller2={shop='451',owner='Other',price=210000,qty=10,ts=os.time()-5}
 local extra={row=row,name='Super Car Box',sell_offer=seller2,buy_offer=buyer2,
     tradable_qty=10,p_buy=210000,p_sell=280000,net_profit=600000}
 assert(A.add_plan({routes={extra}}))
