@@ -76,6 +76,23 @@ assert(A.observe_receipt('buy','Super Car Box',2100000))
 assert(A.hint and A.hint.qty==10 and A.hint.index==2)
 assert(new.bought==0)
 assert(changed>=5)
+-- A known-quantity live/local-scan route joins the same session.
+local scanned={name='Ларец',id=321,ench=0,seller_shop=12,seller_owner='A',
+    seller_at=os.time()-20,buyer_shop=14,buyer_owner='B',
+    buyer_at=os.time()-20,buy_price=1000,sell_price=1500,
+    qty=8,profit_total=3600}
+local ok_local,n_local=A.add_local_route(scanned)
+assert(ok_local and n_local==1)
+local third=A.active().routes[3]
+assert(third and third.name=='Ларец')
+assert(A.confirm(3,'buy',8))
+local before=A.remaining({key='321:0'},'sell',
+    {shop=12,owner='A',price=1000,ts=scanned.seller_at},
+    8,{source='recent_scan',at=scanned.seller_at})
+assert(before==0)
+assert(not A.confirm(3,'sell',9))
+assert(A.confirm(3,'sell',8))
+assert(A.stats().done==2)
 assert(A.stop())
 assert(A.active()==nil)
 os.remove(path)
