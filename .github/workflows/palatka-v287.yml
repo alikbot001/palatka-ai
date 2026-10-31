@@ -1,4 +1,4 @@
-name: Palatka 2.9.1 production build
+name: Palatka 2.9.2 production build
 on:
   pull_request:
     paths:
@@ -81,6 +81,19 @@ jobs:
           for lua in src/49b_promo_mh_options.lua src/66c_mh_trade_journal.lua src/68b_promo_universal_ui.lua src/69b_arbitrage_agent_ui.lua; do
             luajit -b "$lua" /dev/null
           done
+      - name: Verify active UI module order and runtime bindings
+        run: |
+          luajit tests/test_active_ui_runtime.lua
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('build.py').read_text()
+          assert src.index('"66a_trade_log_tab_mh.lua"') < src.index('"66c_mh_trade_journal.lua"')
+          assert src.index('"68_ui22_flip_promo.lua"') < src.index('"68b_promo_universal_ui.lua"')
+          assert src.index('"69b_arbitrage_agent_ui.lua"') < src.index('"69d_runtime_diagnostic.lua"')
+          ota=Path('updates/palatka_update.lua').read_text()
+          assert 'local function _v292_runtime_diagnostic()' in ota
+          assert 'local function install_v292()' in ota
+          PY
       - name: Verify OTA Lua syntax
         run: luajit -b updates/palatka_update.lua /dev/null
       - name: Verify OTA version and byte size
@@ -90,9 +103,9 @@ jobs:
           from pathlib import Path
           release=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert release['version']=='2.9.1'
+          assert release['version']=='2.9.2'
           assert len(ota)==release['size'], (len(ota),release['size'])
-          assert b"PALATKA_UPDATE_VERSION = '2.9.1'" in ota
+          assert b"PALATKA_UPDATE_VERSION = '2.9.2'" in ota
           assert b'local function _v286_mcr_classic()' not in ota
           assert b'local function _v291_arb_agent_native()' in ota
           assert b'local function _v291_compact_journal()' in ota
@@ -106,7 +119,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.1' in data[:1000]
+          assert b'Palatka AI v2.9.2' in data[:1000]
           assert b'##palatka_arbitrage_agent' in data
           assert 'Сделки'.encode('cp1251') in data
           assert 'Добавить строку'.encode('cp1251') in data
@@ -124,7 +137,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Full script already up to date"
           else
-            git commit -m "release: publish Palatka AI v2.9.1 standalone Lua"
+            git commit -m "release: publish Palatka AI v2.9.2 standalone Lua"
             git push origin HEAD:main
           fi
       - name: Upload verified standalone artifact
