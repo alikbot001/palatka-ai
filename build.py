@@ -81,7 +81,6 @@ MODULES = [
     "67_ui22_shop_scan.lua",
     "68_ui22_flip_promo.lua",
     "60f_lombard_ui.lua",
-    "69_mcr_classic.lua",
     "69a_arbitrage_agent.lua",
     "69b_arbitrage_agent_ui.lua",
     "99_main.lua",
