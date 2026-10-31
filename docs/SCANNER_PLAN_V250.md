@@ -10,13 +10,13 @@
 ## Phase A — implemented on feature branch
 
 Files:
-- `src/47b_storage_probe.lua`: opt-in observer, max 60 seconds, 180 slots per candidate, eight candidates, 100 KB input cap, only iface 52 sub 0/2; no outgoing packets, no raw chat/password capture.
+- `src/47b_storage_probe.lua`: opt-in observer, max 60 seconds, 180 slots per candidate, eight candidates, 100 KB input cap, only iface 52 sub 0/2; excludes confirmed trunk type 8 and stall inventory type 1/sub 2; no outgoing packets, no raw chat/password capture. Explicit local `storage_probe_report.json` export contains only metadata (type, sub, slot/packet counts), never inventory item IDs or names.
 - `src/45_live.lua`: forwards iface 52 payloads to observer via protected call, then executes the existing trunk/trade handlers unchanged.
 - `src/60e_storage_probe_ui.lua` and `src/60b_carbon_storage.lua`: native mimgui controls inside Storage > Scan.
 - `build.py`: include both modules in the standalone build.
 - `tests/test_v250_storage_probe.lua`, `tests/test_v250_storage_probe_ui.lua`: pure Lua model tests.
 
-Usage: Storage > Scan > choose inventory/cabinet/warehouse > start 40s > close Palatka > open only the chosen container in game > reopen Palatka > stop > view candidates. Saving requires a separate click. Every candidate is **unverified / potentially partial**; the displayed type is a packet type, not a proven container category. User-provided container label is not a trustworthy protocol identity. Unknown item count stays unknown. Never mix sub 0/2 and never merge trunk type 8 into other views. The save contains a local snapshot only; no packets leave the device.
+Usage: Storage > Scan > choose inventory/cabinet/warehouse > start 40s > close Palatka > open only the chosen container in game > reopen Palatka > stop > view candidates. Saving requires a separate click. An optional **Create safe report** button writes `PalatkaAI/storage_probe_report.json` locally; it is never uploaded automatically. Every candidate is **unverified / potentially partial**; the displayed type is a packet type, not a proven container category. User-provided container label is not a trustworthy protocol identity. Unknown item count stays unknown. Never mix sub 0/2 and never merge trunk type 8 into other views. The save contains a local snapshot only; no packets leave the device.
 
 No screen scraping, injected clicks, gameplay automation, network requests, authentication or remote upload.
 
