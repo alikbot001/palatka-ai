@@ -1970,9 +1970,9 @@ return true
     if DSP.flog then DSP.flog('Palatka v2.8.7 original UI restored; arbitration checks ready')end
     return true
   end
-  -- v2.8.8: universal opt-in command queue in the original Palatka interface.
+  -- v2.8.8: universal opt-in command queue in original Palatka.
   local function install_v288()
-    if not install_v287() then return false end
+    if not install_v287()then return false end
     if DSP._v288_installed then DSP.version='2.8.8';return true end
     local ok,err=pcall(function()
       local function _v288_promo_model()
@@ -2095,7 +2095,7 @@ function P.start(now)
     if #P.steps()==0 then return false,'\196\238\225\224\226\252 \232 \226\234\235\254\247\232 \245\238\242\255 \225\251 \238\228\237\243 \241\242\240\238\234\243'end
     local s=settings()
     if not s.continuous and P.session_count>=P.MAX_SESSION then
-        return false,'\196\238\241\242\232\227\237\243\242 \235\232\236\232\242 12 \241\242\240\238\234 \231\224 \241\229\241\241\232\254'end
+        return false,'\196\238\241\242\232\227\237\243\242 \235\232\236\232\242 12 \241\242\240\238\234 \231\224 \241\229\241\241\232\254'
     end
     P.running=true;P.pause_reason=nil;P.last_error=nil
     P.cursor=1
@@ -2104,7 +2104,7 @@ function P.start(now)
     s.enabled=true
     if not persist()then
         P.running=false;s.enabled=false
-        return false,'\205\229 \243\228\224\235\238\241\252 \241\238\245\240\224\237\232\242\252 \240\229\230\232\236'end
+        return false,'\205\229 \243\228\224\235\238\241\252 \241\238\245\240\224\237\232\242\252 \240\229\230\232\236'
     end
     return true
 end
