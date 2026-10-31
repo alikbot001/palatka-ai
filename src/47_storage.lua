@@ -535,8 +535,16 @@ end
 
 -- Refresh timeout status when the scanner panel is drawn, even if no more packets arrive.
 function S.trunk_state()
-    if T.pending and os.time()-T.pending.started>PENDING_TIMEOUT then
+    local now=os.time()
+    if T.pending and now-T.pending.started>PENDING_TIMEOUT then
         T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
+    end
+    if T.requested_at and now-T.requested_at>60 then
+        T.requested_at=nil
+        if T.status=='waiting' or T.status=='receiving' then
+            T.status='no_packets'
+            T.last_error='No complete trunk snapshot within 60 seconds. Open the trunk normally.'
+        end
     end
     return T
 end
