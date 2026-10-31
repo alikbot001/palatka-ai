@@ -1,8 +1,8 @@
 -- Market Helper-inspired trade log: concise receipts and totals, no loot/stat dashboard.
 -- All events originate from Palatka's verified journal; no invented transactions.
 local C,V=DSP.craglog,DSP.ui22
-if C._trade291_installed then return true end
-C._trade291_installed=true
+if C._trade292_installed then return true end
+C._trade292_installed=true
 local function u(s)return DSP.utf8(tostring(s or''))end
 local function b(s,id,w,active)return V.button(s,'trade291_'..id,w,active,false,38)end
 local function money(n)return DSP.money(math.floor(tonumber(n)or 0))end
@@ -73,6 +73,7 @@ function V.journal()
         if b('Мини-окно','mini',160)then C.set_minimized(false);DSP.settings.craglog.open=true;DSP.save_settings()end
     end,178)
     V.muted('Подтверждённые продажи и покупки. Без наград и лишней статистики.')
+    V.muted('Торговый журнал / сборка 2.9.2')
     V.journal_trade_period=V.journal_trade_period or'today'
     if b('Сегодня','today',136,V.journal_trade_period=='today')then V.journal_trade_period='today'end
     V.inline(6)
