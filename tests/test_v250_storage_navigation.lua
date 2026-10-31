@@ -4,7 +4,7 @@ local pressed,last_kind,last_title,last_probe = '','','',''
 DSP={ui21={},mobile={},storage={snapshots={},
     textdraw_state=function()return 'idle' end,
     trunk_state=function()return {status='idle',received=0}end,
-    accept=function(kind,title,text)last_kind=kind;last_title=title;return trueend}}
+    accept=function(kind,title,text)last_kind=kind;last_title=title;return true end}}
 local V=DSP.ui21
 function V.button(label,id,w,on,primary)return id==pressed end
 function V.heading(title,fn,w)if fn then fn()end end
