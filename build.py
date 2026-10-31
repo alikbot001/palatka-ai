@@ -142,12 +142,14 @@ for name in MODULES:
         # Some legacy UTF-8 files contain Latin-1 renderings of CP1251
         # bytes (e.g. 'çàãðóæåí' instead of Russian). Recover Cyrillic
         # byte-for-byte rather than replacing unsupported characters.
-        repaired = "".join(
-            chr(0x0410 + ord(c) - 0xC0) if 0xC0 <= ord(c) <= 0xDF else
-            chr(0x0430 + ord(c) - 0xE0) if 0xE0 <= ord(c) <= 0xFF else
-            ("Ё" if ord(c) == 0xA8 else "ё" if ord(c) == 0xB8 else c)
-            for c in text
-        )
+        def cp1251_from_latin1(ch):
+            number = ord(ch)
+            if 0x80 <= number <= 0xFF:
+                recovered = bytes([number]).decode("cp1251", errors="replace")
+                if recovered != "\\ufffd":
+                    return recovered
+            return ch
+        repaired = "".join(cp1251_from_latin1(c) for c in text)
         try:
             repaired.encode("cp1251")
         except UnicodeEncodeError as exc:
