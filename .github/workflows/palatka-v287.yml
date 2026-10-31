@@ -1,4 +1,4 @@
-name: Palatka 2.9.0 production build
+name: Palatka 2.9.1 production build
 on:
   pull_request:
     paths:
@@ -72,6 +72,15 @@ jobs:
           assert "trade_feed_lines" in log
           print('MH-inspired editor and log UI verified')
           PY
+      - name: Test MH-style promo template options
+        run: luajit tests/test_promo_mh_options.lua
+      - name: Test compact buy/sell journal
+        run: luajit tests/test_mh_trade_journal.lua
+      - name: Check every new module compiles
+        run: |
+          for lua in src/49b_promo_mh_options.lua src/66c_mh_trade_journal.lua src/68b_promo_universal_ui.lua src/69b_arbitrage_agent_ui.lua; do
+            luajit -b "$lua" /dev/null
+          done
       - name: Verify OTA Lua syntax
         run: luajit -b updates/palatka_update.lua /dev/null
       - name: Verify OTA version and byte size
@@ -81,10 +90,13 @@ jobs:
           from pathlib import Path
           release=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert release['version']=='2.9.0'
+          assert release['version']=='2.9.1'
           assert len(ota)==release['size'], (len(ota),release['size'])
-          assert b"PALATKA_UPDATE_VERSION = '2.9.0'" in ota
+          assert b"PALATKA_UPDATE_VERSION = '2.9.1'" in ota
           assert b'local function _v286_mcr_classic()' not in ota
+          assert b'local function _v291_arb_agent_native()' in ota
+          assert b'local function _v291_compact_journal()' in ota
+          assert b'local function _v291_promo_ui()' in ota
           print('OTA version and size verified:',len(ota))
           PY
       - name: Build full standalone Palatka script
@@ -94,8 +106,10 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.0' in data[:1000]
+          assert b'Palatka AI v2.9.1' in data[:1000]
           assert b'##palatka_arbitrage_agent' in data
+          assert 'Сделки'.encode('cp1251') in data
+          assert 'Добавить строку'.encode('cp1251') in data
           assert b'MCR CLASSIC  /  PALATKA AI' not in data
           assert 'Арбитраж'.encode('cp1251') in data
           assert b'##palatka_mobile' in data
@@ -110,13 +124,13 @@ jobs:
           if git diff --cached --quiet; then
             echo "Full script already up to date"
           else
-            git commit -m "release: publish Palatka AI v2.9.0 standalone Lua"
+            git commit -m "release: publish Palatka AI v2.9.1 standalone Lua"
             git push origin HEAD:main
           fi
       - name: Upload verified standalone artifact
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-v290-full-build
+          name: palatka-v291-full-build
           path: palatka_ai.lua
           if-no-files-found: error
           retention-days: 7

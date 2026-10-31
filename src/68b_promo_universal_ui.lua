@@ -1,6 +1,8 @@
 -- Market Helper pattern: template title and editable chat commands in one panel.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
+if V._promo291_installed then return true end
+V._promo291_installed=true
 local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
 local function txt(s)return DSP.utf8(tostring(s or''))end
 local function buff(str,n)
@@ -18,7 +20,9 @@ local function open_editor(index)
         buffers[i]=buff(r.text,512)
     end
     V.mhpromo_edit={index=index,name=buff(t and t.name or'Новый шаблон',96),
-        rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false}
+        rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false,
+        interval_min={value=t and t.interval_min or 0},interval_max={value=t and t.interval_max or 0},
+        auto_limit={value=t and t.auto_limit or 0},random_line=t and t.random_line==true or false}
 end
 local function editor(e)
     V.heading('Пиар / Редактор',function()
@@ -28,8 +32,9 @@ local function editor(e)
     imgui.SetNextItemWidth(-1)
     imgui.InputText('##mhpromo_name',e.name,96)
     V.muted('Каждая строка — отдельная игровая команда; отправляются по очереди.')
+    V.muted('Как в Market Helper: название, строки и настройки одного шаблона.')
     local rm=nil
-    if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,300),true)then
+    if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,math.max(135,math.min(290,imgui.GetContentRegionAvail().y-225))),true)then
         for i,row in ipairs(e.rows)do
             imgui.PushID(i)
             V.muted('Строка '..i)
@@ -46,6 +51,16 @@ local function editor(e)
             end
             V.inline(4)
             if button('Удалить','rm_'..i,94)then rm=i end
+            V.inline(4)
+            if button('^','up_'..i,42) and i>1 then
+                e.rows[i],e.rows[i-1]=e.rows[i-1],e.rows[i]
+                e.buffers[i],e.buffers[i-1]=e.buffers[i-1],e.buffers[i]
+            end
+            V.inline(4)
+            if button('v','down_'..i,42) and i<#e.rows then
+                e.rows[i],e.rows[i+1]=e.rows[i+1],e.rows[i]
+                e.buffers[i],e.buffers[i+1]=e.buffers[i+1],e.buffers[i]
+            end
             imgui.Separator()
             imgui.PopID()
         end
@@ -70,18 +85,35 @@ local function editor(e)
         end
     end
     V.muted('Макрос {shop} вставляет кликабельную ссылку на свою лавку.')
+    if button(e.random_line and'Случайная строка: ВКЛ' or'Случайная строка: ВЫКЛ',
+        'random',235,e.random_line)then e.random_line=not e.random_line end
+    V.muted('Интервал повтора: 0 = индивидуальный интервал каждой строки.')
+    V.muted('Минимум повтора, сек:')
+    M.compact_number(e.interval_min,'value','mhpromo_imin',160,0)
+    V.inline(6)
+    V.muted('Максимум, сек:')
+    M.compact_number(e.interval_max,'value','mhpromo_imax',160,0)
+    V.muted('Лимит отправок шаблона: 0 = без лимита')
+    M.compact_number(e.auto_limit,'value','mhpromo_limit',170,0)
     if e.error then V.red(e.error)end
     if button('СОХРАНИТЬ ШАБЛОН','save',250,true)then
         local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
         local ok,reason=P.save_template(e.index,name,e.rows,e.enabled)
-        if ok then V.mhpromo_edit=nil else e.error=tostring(reason)end
+        if ok then
+            local list=P.settings().templates
+            local idx=e.index or #list
+            local saved,err=P.save_template_options(idx,{
+                interval_min=e.interval_min.value,interval_max=e.interval_max.value,
+                auto_limit=e.auto_limit.value,random_line=e.random_line})
+            if saved then V.mhpromo_edit=nil else e.error=tostring(err)end
+        else e.error=tostring(reason)end
     end
     V.inline(4)
     if button('Отмена','cancel',120)then V.mhpromo_edit=nil end
 end
 function V.promo_screen()
     if V.mhpromo_edit then
-        return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end)
+        return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end,{footer=true})
     end
     local settings=P.settings()
     V.heading('Автопиар · Palatka',function()
