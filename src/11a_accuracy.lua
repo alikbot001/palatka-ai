@@ -35,7 +35,9 @@ function A.quantity(row,side,offer,now)
     now=tonumber(now) or os.time()
     local sid=tonumber(M.state and M.state.sid)
     local shop=tonumber(offer.shop)
-    if not sid or not shop then return nil end
+    local owner=tostring(offer.owner or '')
+    -- Never join anonymous API stalls to live scans by numeric id alone.
+    if not sid or not shop or owner=='' or owner=='?' then return nil end
     local live=DSP.live and DSP.live.shop
     if live and live.scan_complete==true and tonumber(live.server)==sid
         and tonumber(live.num)==shop and (live.menu_closed or 0)==0
