@@ -118,6 +118,7 @@ function V.storage_screen()
             if t.snapshot and t.status=='saved' then
                 imgui.Separator()
                 V.green('ГОТОВО · 180 / 180')
+                if t.last_warning then V.muted(V.fit(t.last_warning,w)) end
                 V.text('Занято слотов: '..tostring(t.snapshot.occupied_slots or 0))
                 V.text('Всего предметов: '..tostring(t.snapshot.count_known or 0))
                 local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
