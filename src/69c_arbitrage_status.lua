@@ -86,8 +86,9 @@ function A.mark_unavailable(index,reason)
         ensure()[quote]={at=now(),reason='item_missing',sid=s.sid}
         block_related(shop,quote,'item_missing','manual')
     end
+    s.focus=index
+    A.show(true)
     changed()
-    A.next(1)
     return true
 end
 function A.restore_unavailable(index)

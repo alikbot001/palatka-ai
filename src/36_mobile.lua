@@ -52,32 +52,47 @@ end
 -- child. Never steal drags from text fields, sliders and other active controls.
 function M.touch_scroll(io,screen)
     if not imgui.IsWindowHovered or not imgui.GetScrollY or not imgui.SetScrollY then return end
-    local hovered=imgui.IsWindowHovered()
+    screen=tostring(screen or 'default')
+    M._touch_scroll_states=M._touch_scroll_states or {}
+    local st=M._touch_scroll_states[screen]
+    if not st then st={velocity=0,travel=0,was_down=false};M._touch_scroll_states[screen]=st end
     local held=false
     if io and io.MouseDown then
         local ok,value=pcall(function() return io.MouseDown[0] end)
         held=ok and value and true or false
     end
-    M._touch_distance=M._touch_distance or {}
-    if not held then
-        M._touch_distance={}
-        M._touch_screen=nil
+    local hovered=false
+    local ok_hover,value_hover=pcall(imgui.IsWindowHovered,
+        (imgui.HoveredFlags and imgui.HoveredFlags.ChildWindows or 0))
+    hovered=ok_hover and value_hover or imgui.IsWindowHovered()
+    local max=imgui.GetScrollMaxY and imgui.GetScrollMaxY() or 1000000
+    local current=imgui.GetScrollY() or 0
+    local delta=io and io.MouseDelta and (io.MouseDelta.y or 0) or 0
+    local dx=io and io.MouseDelta and (io.MouseDelta.x or 0) or 0
+    if held then
+        if not st.was_down then st.travel=0;st.velocity=0 end
+        st.was_down=true
+        if not hovered or (io and io.WantTextInput) then st.velocity=0;return end
+        st.travel=st.travel+math.abs(delta)+math.abs(dx)
+        local active=imgui.IsAnyItemActive and imgui.IsAnyItemActive() or false
+        if active and (st.travel<8 or math.abs(delta)<math.abs(dx)*1.20) then return end
+        if math.abs(delta)>.01 then
+            local step=-delta
+            imgui.SetScrollY(DSP.clamp(current+step,0,max))
+            st.velocity=st.velocity*.35+step*.65
+        end
         return
     end
-    if not hovered or (io and io.WantTextInput) then return end
-    local delta=io.MouseDelta and (io.MouseDelta.y or 0) or 0
-    local dx=io.MouseDelta and (io.MouseDelta.x or 0) or 0
-    local travel=(M._touch_distance[screen] or 0)+math.abs(delta)
-    M._touch_distance[screen]=travel
-    local active=imgui.IsAnyItemActive and imgui.IsAnyItemActive() or false
-    if active and (travel<6 or math.abs(delta)<math.abs(dx)*1.25) then return end
-    local frame=imgui.GetFrameCount and imgui.GetFrameCount()
-    if frame and M._touch_scroll_frame==frame then return end
-    if math.abs(delta)>.01 then
-        local max=imgui.GetScrollMaxY and imgui.GetScrollMaxY() or 100000
-        imgui.SetScrollY(DSP.clamp((imgui.GetScrollY() or 0)-delta*1.15,0,max))
-        M._touch_scroll_frame=frame
-    end
+    if st.was_down then st.was_down=false;st.travel=0 end
+    if math.abs(st.velocity)>.08 then
+        local next_y=DSP.clamp(current+st.velocity,0,max)
+        imgui.SetScrollY(next_y)
+        if next_y<=0 or next_y>=max then st.velocity=0
+        else
+            local dt=io and tonumber(io.DeltaTime) or (1/60)
+            st.velocity=st.velocity*math.pow(.86,math.max(.25,dt*60))
+        end
+    else st.velocity=0 end
 end
 -- UI edits are saved after a short idle period instead of writing JSON once
 -- per keystroke (a noticeable delay on low-end Android storage).
@@ -94,11 +109,11 @@ function M.scroll_rail(height)
     local h=math.max(48,(height-80)/2)
     imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(8,5))
     M.paint_button('rail',false)
-    if imgui.Button(DSP.utf8('ВВЕРХ')..'##mobile_rail_up',imgui.ImVec2(-1,h)) then M.queue_scroll(-1) end
-    if imgui.Button(DSP.utf8('ВНИЗ')..'##mobile_rail_down',imgui.ImVec2(-1,h)) then M.queue_scroll(1) end
+    if imgui.Button(DSP.utf8('Г‚Г‚Г…ГђГ•')..'##mobile_rail_up',imgui.ImVec2(-1,h)) then M.queue_scroll(-1) end
+    if imgui.Button(DSP.utf8('Г‚ГЌГ€Г‡')..'##mobile_rail_down',imgui.ImVec2(-1,h)) then M.queue_scroll(1) end
     local step=tonumber(DSP.settings.scroll_step) or 300
-    local name=step<=150 and 'короткий' or step<=300 and 'средний' or 'длинный'
-    if imgui.Button(DSP.utf8('Шаг\n'..name)..'##scroll_step',imgui.ImVec2(-1,60)) then
+    local name=step<=150 and 'ГЄГ®Г°Г®ГІГЄГЁГ©' or step<=300 and 'Г±Г°ГҐГ¤Г­ГЁГ©' or 'Г¤Г«ГЁГ­Г­Г»Г©'
+    if imgui.Button(DSP.utf8('ГГ ГЈ\n'..name)..'##scroll_step',imgui.ImVec2(-1,60)) then
         DSP.settings.scroll_step=step<=150 and 300 or step<=300 and 600 or 150
         DSP.save_settings()
     end
@@ -115,13 +130,13 @@ M.icon_usage={}
 M.icon_clock=0
 local function icon_kind(it)
     local n=DSP.lower(DSP.clean_text(tostring(it.name or '')))
-    if n:find('аптеч',1,true) or n:find('бинт',1,true) or n:find('медицин',1,true) then return 'medical' end
-    if n:find('патрон',1,true) or n:find('пистолет',1,true) or n:find('deagle',1,true) then return 'ammo' end
-    if n:find('рюкзак',1,true) or n:find('сумка',1,true) then return 'bag' end
-    if n:find('металл',1,true) or n:find('слиток',1,true) then return 'metal' end
-    if n:find('пластик',1,true) or n:find('провод',1,true) or n:find('микросхем',1,true) then return 'electronics' end
-    if n:find('бронежилет',1,true) then return 'armor' end
-    if n:find('ключ',1,true) or n:find('отмычк',1,true) then return 'tool' end
+    if n:find('Г ГЇГІГҐГ·',1,true) or n:find('ГЎГЁГ­ГІ',1,true) or n:find('Г¬ГҐГ¤ГЁГ¶ГЁГ­',1,true) then return 'medical' end
+    if n:find('ГЇГ ГІГ°Г®Г­',1,true) or n:find('ГЇГЁГ±ГІГ®Г«ГҐГІ',1,true) or n:find('deagle',1,true) then return 'ammo' end
+    if n:find('Г°ГѕГЄГ§Г ГЄ',1,true) or n:find('Г±ГіГ¬ГЄГ ',1,true) then return 'bag' end
+    if n:find('Г¬ГҐГІГ Г«Г«',1,true) or n:find('Г±Г«ГЁГІГ®ГЄ',1,true) then return 'metal' end
+    if n:find('ГЇГ«Г Г±ГІГЁГЄ',1,true) or n:find('ГЇГ°Г®ГўГ®Г¤',1,true) or n:find('Г¬ГЁГЄГ°Г®Г±ГµГҐГ¬',1,true) then return 'electronics' end
+    if n:find('ГЎГ°Г®Г­ГҐГ¦ГЁГ«ГҐГІ',1,true) then return 'armor' end
+    if n:find('ГЄГ«ГѕГ·',1,true) or n:find('Г®ГІГ¬Г»Г·ГЄ',1,true) then return 'tool' end
     return 'other'
 end
 M.icon_descriptors={};M.icon_descriptor_count=0
@@ -335,7 +350,7 @@ function M.number(label,id,item,key,minimum,width)
         if M.apply_number(item,key,buf,minimum) then M.defer_save(); return true end
     end
     if not ffi.string(buf):match('^%d+$') then
-        imgui.TextColored(DSP.theme.col('bad',1), DSP.utf8('Введите целое положительное число'))
+        imgui.TextColored(DSP.theme.col('bad',1), DSP.utf8('Г‚ГўГҐГ¤ГЁГІГҐ Г¶ГҐГ«Г®ГҐ ГЇГ®Г«Г®Г¦ГЁГІГҐГ«ГјГ­Г®ГҐ Г·ГЁГ±Г«Г®'))
     end
     return false
 end
@@ -350,34 +365,34 @@ function DSP.screens.set(id)
     set_screen(found and id or 'palatka')
     M.reset_scroll=true
 end
-DSP.screens.list[1].label='ПАЛАТКА'
-DSP.screens.list[2].label='ЛАВКИ'
-DSP.screens.list[6].label='СТАТИСТИКА'
-DSP.screens.list[5].label='ИСТОРИЯ'
+DSP.screens.list[1].label='ГЏГЂГ‹ГЂГ’ГЉГЂ'
+DSP.screens.list[2].label='Г‹ГЂГ‚ГЉГ€'
+DSP.screens.list[6].label='Г‘Г’ГЂГ’Г€Г‘Г’Г€ГЉГЂ'
+DSP.screens.list[5].label='Г€Г‘Г’ГЋГђГ€Гџ'
 -- Four primary actions; less-used utilities remain under "More".
 -- The original screen ids and routing remain unchanged for compatibility.
 function DSP.screens.topbar()
     M.title('PALATKA  /  v'..tostring(DSP.version))
     imgui.Separator()
     local primary={
-        {'palatka','Моя лавка'},
-        {'arbitrage','Арбитраж'},
-        {'logs','Журнал'},
-        {'search','Поиск товара'},
+        {'palatka','ГЊГ®Гї Г«Г ГўГЄГ '},
+        {'arbitrage','ГЂГ°ГЎГЁГІГ°Г Г¦'},
+        {'logs','Г†ГіГ°Г­Г Г«'},
+        {'search','ГЏГ®ГЁГ±ГЄ ГІГ®ГўГ Г°Г '},
     }
     for i,e in ipairs(primary) do
         if M.button(e[2],'nav_main_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
     end
     imgui.Separator()
-    if M.button(M.more_open and 'Скрыть остальное' or 'Ещё', 'nav_more',-1,M.more_open,'nav') then
+    if M.button(M.more_open and 'Г‘ГЄГ°Г»ГІГј Г®Г±ГІГ Г«ГјГ­Г®ГҐ' or 'Г…Г№Вё', 'nav_more',-1,M.more_open,'nav') then
         M.more_open=not M.more_open
     end
     if M.more_open then
         for i,e in ipairs({
-            {'lavki','Все лавки'},
-            {'stats','Статистика'},
-            {'notes','Заметки'},
-            {'settings','Настройки'},
+            {'lavki','Г‚Г±ГҐ Г«Г ГўГЄГЁ'},
+            {'stats','Г‘ГІГ ГІГЁГ±ГІГЁГЄГ '},
+            {'notes','Г‡Г Г¬ГҐГІГЄГЁ'},
+            {'settings','ГЌГ Г±ГІГ°Г®Г©ГЄГЁ'},
         }) do
             if M.button(e[2],'nav_extra_'..i,-1,DSP.ui.screen==e[1],'nav') then DSP.screens.set(e[1]) end
         end
@@ -389,12 +404,12 @@ function M.draw_pager(total,per,id)
     local pages=math.max(1, math.ceil(total/per))
     local page=math.min(pages,DSP.screens.page_of(id))
     local width=math.min(230,(imgui.GetContentRegionAvail().x-24)/3)
-    if M.button('< Назад','prev'..id,width) then page=math.max(1,page-1) end
+    if M.button('< ГЌГ Г§Г Г¤','prev'..id,width) then page=math.max(1,page-1) end
     M.inline()
-    local prefix=id=='trade_history' and 'Сделки ' or id=='stall_history' and 'Лавки ' or ''
+    local prefix=id=='trade_history' and 'Г‘Г¤ГҐГ«ГЄГЁ ' or id=='stall_history' and 'Г‹Г ГўГЄГЁ ' or ''
     if M.button(prefix..page..' / '..pages,'page'..id,width) then page=1 end
     M.inline()
-    if M.button('Вперёд >','next'..id,width) then page=math.min(pages,page+1) end
+    if M.button('Г‚ГЇГҐГ°ВёГ¤ >','next'..id,width) then page=math.min(pages,page+1) end
     DSP.screens.set_page(id,page)
     return (page-1)*per+1, math.min(total,page*per)
 end
@@ -416,7 +431,7 @@ local function workspace()
     local screen=DSP.ui.screen
     local entry=DSP.screens.list[DSP.screens.index_by_id(screen)]
     -- One compact header; the previous UI spent 150 px on a redundant scroll rail.
-    if M.button(M.nav_open and 'Скрыть меню' or 'Меню','nav_toggle',158) then M.nav_open=not M.nav_open end
+    if M.button(M.nav_open and 'Г‘ГЄГ°Г»ГІГј Г¬ГҐГ­Гѕ' or 'ГЊГҐГ­Гѕ','nav_toggle',158) then M.nav_open=not M.nav_open end
     M.inline()
     imgui.TextColored(DSP.theme.col('text',1),DSP.utf8(entry.label))
     M.inline()
@@ -446,19 +461,19 @@ local function workspace()
             M.draw_pager(entry.total,entry.per,entry.id)
         end
     else
-        if M.button('ВВЕРХ','content_page_up',160) then M.queue_scroll(-1) end
+        if M.button('Г‚Г‚Г…ГђГ•','content_page_up',160) then M.queue_scroll(-1) end
         M.inline()
-        if M.button('ВНИЗ','content_page_down',160) then M.queue_scroll(1) end
+        if M.button('Г‚ГЌГ€Г‡','content_page_down',160) then M.queue_scroll(1) end
     end
 end
 function DSP.ui.header()
     local st=DSP.market.state
-    M.title('РЫНОК / '..tostring(st.sid))
-    M.text(string.format('%s | %d лавок | %d предложений | %s',
-        st.status=='loading' and 'Загрузка' or st.status=='error' and 'Ошибка обновления' or 'База рынка',
+    M.title('ГђГ›ГЌГЋГЉ / '..tostring(st.sid))
+    M.text(string.format('%s | %d Г«Г ГўГ®ГЄ | %d ГЇГ°ГҐГ¤Г«Г®Г¦ГҐГ­ГЁГ© | %s',
+        st.status=='loading' and 'Г‡Г ГЈГ°ГіГ§ГЄГ ' or st.status=='error' and 'ГЋГёГЁГЎГЄГ  Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї' or 'ГЃГ Г§Г  Г°Г»Г­ГЄГ ',
         st.shops or 0,st.offers or 0,DSP.market.freshness()))
     if st.status=='error' then M.text(st.error or '') end
-    if M.button('Обновить рынок','refresh',260) then DSP.market.pull(st.sid) end
+    if M.button('ГЋГЎГ­Г®ГўГЁГІГј Г°Г»Г­Г®ГЄ','refresh',260) then DSP.market.pull(st.sid) end
     imgui.Separator()
 end
 function DSP.ui.draw()
@@ -486,7 +501,7 @@ function DSP.ui.draw()
     if imgui.Begin('##palatka_mobile',DSP.ui.open_ref,flags) then
         if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.05 * M.scale() / 1.25) end
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('PALATKA AI   /   ДВИГАТЬ ОКНО'),imgui.ImVec2(-1,32))
+        imgui.Button(DSP.utf8('PALATKA AI   /   Г„Г‚Г€ГѓГЂГ’Гњ ГЋГЉГЌГЋ'),imgui.ImVec2(-1,32))
         imgui.PopStyleColor(4)
         local handle_active=false
         if imgui.IsItemActive and imgui.IsItemActive() then
@@ -512,7 +527,7 @@ function DSP.ui.draw()
         end
         M.child('content_'..DSP.ui.screen,0,content_height,workspace)
         M.paint_button('quiet',false)
-        imgui.Button(DSP.utf8('/  Размер окна'),imgui.ImVec2(160,30))
+        imgui.Button(DSP.utf8('/  ГђГ Г§Г¬ГҐГ° Г®ГЄГ­Г '),imgui.ImVec2(160,30))
         imgui.PopStyleColor(4)
         if imgui.IsItemActive and imgui.IsItemActive() then
             handle_active=true

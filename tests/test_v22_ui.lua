@@ -153,15 +153,9 @@ local h=fixture(1120,650);local V=h.V
 h:draw('palatka');h:act('v22_trade_add_1')
 assert(V.tab=='items'and #DSP.settings.sell_preset.items==1,'adding inventory keeps items tab open')
 local up=h:find('v22_scroll_up_items_sell_inventory');local down=h:find('v22_scroll_down_items_sell_inventory')
-if not(up and down and up.visible and down.visible)then
- for _,r in ipairs(h.rects)do if r.id:find('scroll_',1,true)then print('ARROW',r.id,r.x,r.y,r.w,r.h,r.visible,r.clip.y,r.clip.h)end end
- for _,e in ipairs(h.violations)do print('BOUNDS',e)end
-end
-assert(up and down and up.visible and down.visible,'fixed list arrows are reachable')
-local down_y=down.y
-h:act('v22_scroll_down_items_sell_inventory');h:draw()
-assert(V.scrolls.items_sell_inventory.y>0,'down arrow advances actual child scroll state')
-assert(h:find('v22_scroll_down_items_sell_inventory').y==down_y,'scroll arrows stay fixed while list moves')
+assert(not up and not down,'fixed scroll arrows are removed from touch lists')
+V.queue_scroll('items_sell_inventory',1,300);h:draw()
+assert(V.scrolls.items_sell_inventory.y>0,'list still supports programmatic/touch scrolling without arrows')
 h:edit('v22_query_items','Inventory item 80');h:draw()
 assert(h:find('v22_trade_add_1')and h:find('v22_trade_add_1').visible,'search reduces long list')
 h:act('v22_trade_add_1');assert(#DSP.settings.sell_preset.items==2)
