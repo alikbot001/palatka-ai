@@ -7,14 +7,14 @@ local function b(s,id,w,on,primary)return V.button(s,'storage_'..id,w,on,primary
 -- One task per panel: scanner, snapshots, manual fallback. This avoids the
 -- previous giant fixed header which pushed the item list off small screens.
 function V.storage_screen()
-    V.heading('Хранилища',function()
-        if b('Очистить','clear',105)then V.open_popup('Очистить снимки?','storage_clear')end
+    V.heading('Г•Г°Г Г­ГЁГ«ГЁГ№Г ',function()
+        if b('ГЋГ·ГЁГ±ГІГЁГІГј','clear',105)then V.open_popup('ГЋГ·ГЁГ±ГІГЁГІГј Г±Г­ГЁГ¬ГЄГЁ?','storage_clear')end
     end,109)
     local capstate,capcount,caperr=S.textdraw_state()
     V.storage_tab=V.storage_tab or (#S.snapshots>0 and 'snapshots' or 'scan')
     local w=imgui.GetContentRegionAvail().x
     local tabw=math.max(78,(w-12)/3)
-    for i,tab in ipairs({{'scan','Скан'}, {'snapshots','Снимки'}, {'manual','Ввод'}})do
+    for i,tab in ipairs({{'scan','Г‘ГЄГ Г­'}, {'snapshots','Г‘Г­ГЁГ¬ГЄГЁ'}, {'manual','Г‚ГўГ®Г¤'}})do
         if b(tab[2],'tab_'..tab[1],tabw,V.storage_tab==tab[1],V.storage_tab==tab[1])then
             V.storage_tab=tab[1];V.reset_list('storage_scan_panel')
         end
@@ -23,46 +23,48 @@ function V.storage_screen()
     imgui.Separator()
     if V.storage_tab=='scan' then
         V.list('storage_scan_panel',function(width)
-            V.text('Автоматический сканер багажника')
+            V.text('ГЂГўГІГ®Г¬Г ГІГЁГ·ГҐГ±ГЄГЁГ© Г±ГЄГ Г­ГҐГ° ГЎГ ГЈГ Г¦Г­ГЁГЄГ ')
             V.muted('Packet 220 / marker 84 / iface 52 / type 8.')
-            V.muted('Открой багажник обычным способом. Сканер работает автоматически.')
-            V.muted('Снимок сохраняется только после получения всех 180 слотов.')
-            V.muted('Без ID машины частичные изменения не применяются. Для обновления открой багажник заново.')
+            V.muted('ГЋГІГЄГ°Г®Г© ГЎГ ГЈГ Г¦Г­ГЁГЄ Г®ГЎГ»Г·Г­Г»Г¬ Г±ГЇГ®Г±Г®ГЎГ®Г¬. Г‘ГЄГ Г­ГҐГ° Г°Г ГЎГ®ГІГ ГҐГІ Г ГўГІГ®Г¬Г ГІГЁГ·ГҐГ±ГЄГЁ.')
+            V.muted('Г‘Г­ГЁГ¬Г®ГЄ Г±Г®ГµГ°Г Г­ГїГҐГІГ±Гї ГІГ®Г«ГјГЄГ® ГЇГ®Г±Г«ГҐ ГЇГ®Г«ГіГ·ГҐГ­ГЁГї ГўГ±ГҐГµ 180 Г±Г«Г®ГІГ®Гў.')
+            V.muted('ГЃГҐГ§ ID Г¬Г ГёГЁГ­Г» Г·Г Г±ГІГЁГ·Г­Г»ГҐ ГЁГ§Г¬ГҐГ­ГҐГ­ГЁГї Г­ГҐ ГЇГ°ГЁГ¬ГҐГ­ГїГѕГІГ±Гї. Г„Г«Гї Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї Г®ГІГЄГ°Г®Г© ГЎГ ГЈГ Г¦Г­ГЁГЄ Г§Г Г­Г®ГўГ®.')
             local t=(S.trunk_state and S.trunk_state()) or S.trunk or {}
-            local statuses={idle='ожидает',receiving='получение снимка',
-                saved='сохранено',saved_from_disk='загружен последний снимок',
-                incomplete='неполный снимок',unknown_partial='неопознанный фрагмент',
-                unverified_delta='Частичное изменение пропущено', save_error='ошибка сохранения'}
-            V.text('Статус: '..(statuses[t.status] or tostring(t.status or '?')))
-            V.muted('Получено слотов: '..tostring(t.received or 0)..' / 180')
+            local statuses={idle='Г®Г¦ГЁГ¤Г ГҐГІ',receiving='ГЇГ®Г«ГіГ·ГҐГ­ГЁГҐ Г±Г­ГЁГ¬ГЄГ ',
+                saved='Г±Г®ГµГ°Г Г­ГҐГ­Г®',saved_from_disk='Г§Г ГЈГ°ГіГ¦ГҐГ­ ГЇГ®Г±Г«ГҐГ¤Г­ГЁГ© Г±Г­ГЁГ¬Г®ГЄ',
+                incomplete='Г­ГҐГЇГ®Г«Г­Г»Г© Г±Г­ГЁГ¬Г®ГЄ',unknown_partial='Г­ГҐГ®ГЇГ®Г§Г­Г Г­Г­Г»Г© ГґГ°Г ГЈГ¬ГҐГ­ГІ',
+                unverified_delta='Г—Г Г±ГІГЁГ·Г­Г®ГҐ ГЁГ§Г¬ГҐГ­ГҐГ­ГЁГҐ ГЇГ°Г®ГЇГіГ№ГҐГ­Г®', save_error='Г®ГёГЁГЎГЄГ  Г±Г®ГµГ°Г Г­ГҐГ­ГЁГї'}
+            V.text('Г‘ГІГ ГІГіГ±: '..(statuses[t.status] or tostring(t.status or '?')))
+            V.muted('ГЏГ®Г«ГіГ·ГҐГ­Г® Г±Г«Г®ГІГ®Гў: '..tostring(t.received or 0)..' / 180')
             if t.occupied then
-                V.text('Занято: '..tostring(t.occupied)..' | Предметов: '..tostring(t.total or 0))
+                V.text('Г‡Г Г­ГїГІГ®: '..tostring(t.occupied)..' | ГЏГ°ГҐГ¤Г¬ГҐГІГ®Гў: '..tostring(t.total or 0))
             end
             if t.last_error then V.red(V.fit(tostring(t.last_error),width)) end
-            V.muted('Без ID машины: хранится именно последний открытый багажник.')
-            V.muted('Шкафы и склады пока не сканируются этим обработчиком.')
-            if b('Показать сохраненный снимок','open_snap',math.min(width,280),false,true)then
+            V.muted('ГЃГҐГ§ ID Г¬Г ГёГЁГ­Г»: ГµГ°Г Г­ГЁГІГ±Гї ГЁГ¬ГҐГ­Г­Г® ГЇГ®Г±Г«ГҐГ¤Г­ГЁГ© Г®ГІГЄГ°Г»ГІГ»Г© ГЎГ ГЈГ Г¦Г­ГЁГЄ.')
+            V.muted('ГГЄГ ГґГ» ГЁ Г±ГЄГ«Г Г¤Г» ГЇГ®ГЄГ  Г­ГҐ Г±ГЄГ Г­ГЁГ°ГіГѕГІГ±Гї ГЅГІГЁГ¬ Г®ГЎГ°Г ГЎГ®ГІГ·ГЁГЄГ®Г¬.')
+            -- Experiment: read-only inventory/cabinet candidate discovery.
+            if V.storage_probe_panel then V.storage_probe_panel(width) end
+            if b('ГЏГ®ГЄГ Г§Г ГІГј Г±Г®ГµГ°Г Г­ГҐГ­Г­Г»Г© Г±Г­ГЁГ¬Г®ГЄ','open_snap',math.min(width,280),false,true)then
                 V.storage_tab='snapshots';V.storage_selected=1
             end
-        end,{footer=function()V.muted('Чтение только входящих данных. Предметы в игре не перемещаются.')end})
+        end,{footer=function()V.muted('Г—ГІГҐГ­ГЁГҐ ГІГ®Г«ГјГЄГ® ГўГµГ®Г¤ГїГ№ГЁГµ Г¤Г Г­Г­Г»Гµ. ГЏГ°ГҐГ¤Г¬ГҐГІГ» Гў ГЁГЈГ°ГҐ Г­ГҐ ГЇГҐГ°ГҐГ¬ГҐГ№Г ГѕГІГ±Гї.')end})
         return
     end
     if V.storage_tab=='manual' then
         V.list('storage_manual_panel',function(width)
-            V.muted('Если игровой интерфейс не выдаёт содержимое через события,')
-            V.muted('можно вставить список вручную — это не игровой скан.')
+            V.muted('Г…Г±Г«ГЁ ГЁГЈГ°Г®ГўГ®Г© ГЁГ­ГІГҐГ°ГґГҐГ©Г± Г­ГҐ ГўГ»Г¤Г ВёГІ Г±Г®Г¤ГҐГ°Г¦ГЁГ¬Г®ГҐ Г·ГҐГ°ГҐГ§ Г±Г®ГЎГ»ГІГЁГї,')
+            V.muted('Г¬Г®Г¦Г­Г® ГўГ±ГІГ ГўГЁГІГј Г±ГЇГЁГ±Г®ГЄ ГўГ°ГіГ·Г­ГіГѕ вЂ” ГЅГІГ® Г­ГҐ ГЁГЈГ°Г®ГўГ®Г© Г±ГЄГ Г­.')
             V.storage_manual_kind=V.storage_manual_kind or 'trunk'
             local bw=math.max(72,(width-12)/3)
-            for i,t in ipairs({{'trunk','Багажник'},{'cabinet','Шкаф'},{'warehouse','Склад'}})do
+            for i,t in ipairs({{'trunk','ГЃГ ГЈГ Г¦Г­ГЁГЄ'},{'cabinet','ГГЄГ Гґ'},{'warehouse','Г‘ГЄГ«Г Г¤'}})do
                 if b(t[2],'manual_'..t[1],bw,V.storage_manual_kind==t[1])then V.storage_manual_kind=t[1]end
                 if i<3 then V.inline(5)end
             end
             V.storage_input=V.storage_input or imgui.new.char[8192]()
-            V.muted('Формат: Дрова x45000  или  Дрова (45000 шт.)')
+            V.muted('Г”Г®Г°Г¬Г ГІ: Г„Г°Г®ГўГ  x45000  ГЁГ«ГЁ  Г„Г°Г®ГўГ  (45000 ГёГІ.)')
             imgui.InputTextMultiline('##storage_text',V.storage_input,8192,imgui.ImVec2(-1,100))
-            if b('Сохранить снимок','manual_accept',math.min(width,220),false,true)then
+            if b('Г‘Г®ГµГ°Г Г­ГЁГІГј Г±Г­ГЁГ¬Г®ГЄ','manual_accept',math.min(width,220),false,true)then
                 local kind=V.storage_manual_kind
-                local title=kind=='trunk'and'Багажник (ручной список)' or kind=='cabinet'and'Шкаф (ручной список)' or 'Склад (ручной список)'
+                local title=kind=='trunk'and'ГЃГ ГЈГ Г¦Г­ГЁГЄ (Г°ГіГ·Г­Г®Г© Г±ГЇГЁГ±Г®ГЄ)' or kind=='cabinet'and'ГГЄГ Гґ (Г°ГіГ·Г­Г®Г© Г±ГЇГЁГ±Г®ГЄ)' or 'Г‘ГЄГ«Г Г¤ (Г°ГіГ·Г­Г®Г© Г±ГЇГЁГ±Г®ГЄ)'
                 local ok,err=S.accept(kind,title,DSP.to_cp(ffi.string(V.storage_input)),nil,'manual')
                 if ok then V.storage_tab='snapshots';V.storage_selected=1;V.storage_error=nil
                 else V.storage_error=err end
@@ -73,99 +75,103 @@ function V.storage_screen()
     end
     local snapshots=S.snapshots
     if #snapshots==0 then
-        V.muted('Снимков нет: обычный игровой диалог пока не распознан.')
-        if b('Открыть диагностику','scan_open',220,false,true)then V.storage_tab='scan'end
+        V.muted('Г‘Г­ГЁГ¬ГЄГ®Гў Г­ГҐГІ: Г®ГЎГ»Г·Г­Г»Г© ГЁГЈГ°Г®ГўГ®Г© Г¤ГЁГ Г«Г®ГЈ ГЇГ®ГЄГ  Г­ГҐ Г°Г Г±ГЇГ®Г§Г­Г Г­.')
+        if b('ГЋГІГЄГ°Г»ГІГј Г¤ГЁГ ГЈГ­Г®Г±ГІГЁГЄГі','scan_open',220,false,true)then V.storage_tab='scan'end
         return
     end
     V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
     local current=snapshots[V.storage_selected]
     local controlw=math.max(90,(imgui.GetContentRegionAvail().x-8)/2)
-    if b('Снимок '..V.storage_selected..' / '..#snapshots,'next',controlw)then
+    if b('Г‘Г­ГЁГ¬Г®ГЄ '..V.storage_selected..' / '..#snapshots,'next',controlw)then
         V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
     end
     V.inline(7)
-    if b(V.storage_sort=='value'and'Оценка'or V.storage_sort=='qty'and'Количество'
-        or V.storage_sort=='price'and'Цена'or V.storage_sort=='category'and'Категории' or 'А–Я',
+    if b(V.storage_sort=='value'and'ГЋГ¶ГҐГ­ГЄГ 'or V.storage_sort=='qty'and'ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ®'
+        or V.storage_sort=='price'and'Г–ГҐГ­Г 'or V.storage_sort=='category'and'ГЉГ ГІГҐГЈГ®Г°ГЁГЁ' or 'ГЂвЂ“Гџ',
         'sort',controlw)then
         V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
             or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value'
         V.reset_list('storage_items')
     end
-    if b('Название снимка','rename',math.min(190,imgui.GetContentRegionAvail().x))then
+    if b('ГЌГ Г§ГўГ Г­ГЁГҐ Г±Г­ГЁГ¬ГЄГ ','rename',math.min(190,imgui.GetContentRegionAvail().x))then
         V.storage_label_target=current
         V.storage_label_buf=imgui.new.char[128]()
         ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
         V.storage_label_error=nil
-        V.open_popup('Название снимка','storage_rename')
+        V.open_popup('ГЌГ Г§ГўГ Г­ГЁГҐ Г±Г­ГЁГ¬ГЄГ ','storage_rename')
     end
     local rows,info=S.sorted(current,V.storage_sort)
-    V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
-        (current.source=='packet220_trunk'and' · Packet 220' or current.source=='manual'and' · вручную' or current.source=='textdraw'and' · TextDraw' or' · Dialog'),imgui.GetContentRegionAvail().x))
-    V.text('Подтверждено: '..info.total_qty..' шт. · неизвестно: '..info.unknown_qty..' строк')
+    V.muted(V.fit(current.title..' В· '..os.date('%d.%m %H:%M',current.observed_at)..
+        (current.source=='packet220_trunk'and' В· Packet 220' or current.source=='packet220_probe'and' В· Packet 220 (РЅРµРїСЂРѕРІРµСЂРµРЅРѕ)' or current.source=='manual'and' В· ГўГ°ГіГ·Г­ГіГѕ' or current.source=='textdraw'and' В· TextDraw' or' В· Dialog'),imgui.GetContentRegionAvail().x))
+    V.text('ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­Г®: '..info.total_qty..' ГёГІ. В· Г­ГҐГЁГ§ГўГҐГ±ГІГ­Г®: '..info.unknown_qty..' Г±ГІГ°Г®ГЄ')
     if current.source=='packet220_trunk' then
-        V.muted('180 слотов | '..tostring(current.occupied_slots or #current.rows)..' занято | ID авто не подтвержден')
+        V.muted('180 Г±Г«Г®ГІГ®Гў | '..tostring(current.occupied_slots or #current.rows)..' Г§Г Г­ГїГІГ® | ID Г ГўГІГ® Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­')
     end
-    V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
-    V.muted('Не прибыль · продажа по объявлениям: '..DSP.money(info.ask_value))
-    if info.cross_server then V.red('Другой сервер: цены скрыты')end
-    V.muted('В одной строке — все стаки одного предмета и улучшения.')
+    if current.source=='packet220_probe' then
+        V.red('РќР•РџРћР›РќР«Р™ РЎРќРРњРћРљ: С‚РёРї РІС‹Р±СЂР°РЅ РІСЂСѓС‡РЅСѓСЋ, РЅРµРёР·РІРµСЃС‚РЅС‹Рµ СЃР»РѕС‚С‹ РЅРµ СѓС‡РёС‚С‹РІР°СЋС‚СЃСЏ.')
+        V.muted('РћС†РµРЅРєРё РѕС‚РЅРѕСЃСЏС‚СЃСЏ С‚РѕР»СЊРєРѕ Рє РїСЂРµРґРјРµС‚Р°Рј, РїРѕР»СѓС‡РµРЅРЅС‹Рј РїСЂРё РЅР°Р±Р»СЋРґРµРЅРёРё.')
+    end
+    V.green('ГЋГ¶ГҐГ­ГЄГ  Г±ГЄГіГЇГЄГЁ: '..DSP.money(info.sell_to_buyers))
+    V.muted('ГЌГҐ ГЇГ°ГЁГЎГ»Г«Гј В· ГЇГ°Г®Г¤Г Г¦Г  ГЇГ® Г®ГЎГєГїГўГ«ГҐГ­ГЁГїГ¬: '..DSP.money(info.ask_value))
+    if info.cross_server then V.red('Г„Г°ГіГЈГ®Г© Г±ГҐГ°ГўГҐГ°: Г¶ГҐГ­Г» Г±ГЄГ°Г»ГІГ»')end
+    V.muted('Г‚ Г®Г¤Г­Г®Г© Г±ГІГ°Г®ГЄГҐ вЂ” ГўГ±ГҐ Г±ГІГ ГЄГЁ Г®Г¤Г­Г®ГЈГ® ГЇГ°ГҐГ¤Г¬ГҐГІГ  ГЁ ГіГ«ГіГ·ГёГҐГ­ГЁГї.')
     V.list_rows('storage_items',rows,94,function(it,i)
         V.row('storage_item_'..i,94,function(ww,x,y)
             local textwidth=math.max(80,ww-118)
             V.at(x,y);V.text(V.fit(it.name,textwidth))
-            V.at(x,y+27);V.muted(V.fit('Количество: '..(it.qty and tostring(it.qty)..' шт.'or'неизвестно')..' / '..tostring(it.slots or 1)..' слотов',textwidth))
+            V.at(x,y+27);V.muted(V.fit('ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ®: '..(it.qty and tostring(it.qty)..' ГёГІ.'or'Г­ГҐГЁГ§ГўГҐГ±ГІГ­Г®')..' / '..tostring(it.slots or 1)..' Г±Г«Г®ГІГ®Гў',textwidth))
             V.at(x,y+56)
-            local total=(it.bid and it.qty)and DSP.money(it.bid*it.qty)or'нет оценки'
-            V.muted(V.fit((it.manual_price and 'Своя цена: ' or 'Скупают: ')..(it.bid and DSP.money(it.bid)or'?')..' / шт. · '..total,textwidth))
+            local total=(it.bid and it.qty)and DSP.money(it.bid*it.qty)or'Г­ГҐГІ Г®Г¶ГҐГ­ГЄГЁ'
+            V.muted(V.fit((it.manual_price and 'Г‘ГўГ®Гї Г¶ГҐГ­Г : ' or 'Г‘ГЄГіГЇГ ГѕГІ: ')..(it.bid and DSP.money(it.bid)or'?')..' / ГёГІ. В· '..total,textwidth))
             V.at(x+math.max(0,ww-107),y+16)
-            if b('Своя цена','edit_price_'..i,106,it.manual_price)then
+            if b('Г‘ГўГ®Гї Г¶ГҐГ­Г ','edit_price_'..i,106,it.manual_price)then
                 V.storage_price_target=current
                 V.storage_price_row=it
                 V.storage_price_buf={value=it.manual_price and it.bid or 0}
                 V.storage_price_error=nil
-                V.open_popup('Своя цена','storage_price')
+                V.open_popup('Г‘ГўГ®Гї Г¶ГҐГ­Г ','storage_price')
             end
         end)
-    end,{footer=function()V.muted('Только сортировка Palatka AI, не предметов игры.')end})
+    end,{footer=function()V.muted('Г’Г®Г«ГјГЄГ® Г±Г®Г°ГІГЁГ°Г®ГўГЄГ  Palatka AI, Г­ГҐ ГЇГ°ГҐГ¤Г¬ГҐГІГ®Гў ГЁГЈГ°Г».')end})
 end
 
 -- Deletion is a real modal confirmation; cancellation never changes snapshots.
 local old_popups=V.popups
 function V.popups()
     if old_popups then old_popups()end
-    V.popup('Своя цена','storage_price',function()
+    V.popup('Г‘ГўГ®Гї Г¶ГҐГ­Г ','storage_price',function()
         local target,row=V.storage_price_target,V.storage_price_row
-        if not target or not row then V.muted('Нет выбранного предмета');return end
+        if not target or not row then V.muted('ГЌГҐГІ ГўГ»ГЎГ°Г Г­Г­Г®ГЈГ® ГЇГ°ГҐГ¤Г¬ГҐГІГ ');return end
         V.text(V.fit(row.name,imgui.GetContentRegionAvail().x))
-        V.muted('Цена за одну штуку для расчёта этого снимка. 0 = цена API.')
+        V.muted('Г–ГҐГ­Г  Г§Г  Г®Г¤Г­Гі ГёГІГіГЄГі Г¤Г«Гї Г°Г Г±Г·ВёГІГ  ГЅГІГ®ГЈГ® Г±Г­ГЁГ¬ГЄГ . 0 = Г¶ГҐГ­Г  API.')
         M.compact_number(V.storage_price_buf,'value','storage_price_value',math.min(250,imgui.GetContentRegionAvail().x),0)
-        if b('Сохранить','price_apply',135,false,true)then
+        if b('Г‘Г®ГµГ°Г Г­ГЁГІГј','price_apply',135,false,true)then
             local ok,err=S.set_manual_price(target,row,V.storage_price_buf.value)
             if ok then V.reset_list('storage_items');V.storage_price_target=nil;imgui.CloseCurrentPopup()
             else V.storage_price_error=err end
         end
-        V.inline();if b('Отмена','price_cancel',110)then imgui.CloseCurrentPopup()end
+        V.inline();if b('ГЋГІГ¬ГҐГ­Г ','price_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_price_error then V.red(V.storage_price_error)end
     end,{w=460,h=260})
-    V.popup('Название снимка','storage_rename',function()
+    V.popup('ГЌГ Г§ГўГ Г­ГЁГҐ Г±Г­ГЁГ¬ГЄГ ','storage_rename',function()
         local target=V.storage_label_target
         if not target then return end
-        V.muted('Это имя только для снимка. ID машины автоматически не определяется.')
+        V.muted('ГќГІГ® ГЁГ¬Гї ГІГ®Г«ГјГЄГ® Г¤Г«Гї Г±Г­ГЁГ¬ГЄГ . ID Г¬Г ГёГЁГ­Г» Г ГўГІГ®Г¬Г ГІГЁГ·ГҐГ±ГЄГЁ Г­ГҐ Г®ГЇГ°ГҐГ¤ГҐГ«ГїГҐГІГ±Гї.')
         imgui.SetNextItemWidth(-1)
         imgui.InputText('##storage_name_input',V.storage_label_buf,128)
-        if b('Сохранить','rename_apply',135,false,true)then
+        if b('Г‘Г®ГµГ°Г Г­ГЁГІГј','rename_apply',135,false,true)then
             local label=DSP.to_cp(ffi.string(V.storage_label_buf))
             local ok,err=S.set_snapshot_label(target,label)
             if ok then V.storage_label_target=nil;imgui.CloseCurrentPopup()
             else V.storage_label_error=err end
         end
-        V.inline();if b('Отмена','rename_cancel',110)then imgui.CloseCurrentPopup()end
+        V.inline();if b('ГЋГІГ¬ГҐГ­Г ','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
     end,{w=460,h=240})
-    V.popup('Очистить снимки?','storage_clear',function()
-        V.text('Удалить сохранённые снимки шкафов и багажников?')
-        V.muted('Предметы в игре останутся без изменений.')
-        if b('Удалить снимки','confirm_clear',170,false,true)then
+    V.popup('ГЋГ·ГЁГ±ГІГЁГІГј Г±Г­ГЁГ¬ГЄГЁ?','storage_clear',function()
+        V.text('Г“Г¤Г Г«ГЁГІГј Г±Г®ГµГ°Г Г­ВёГ­Г­Г»ГҐ Г±Г­ГЁГ¬ГЄГЁ ГёГЄГ ГґГ®Гў ГЁ ГЎГ ГЈГ Г¦Г­ГЁГЄГ®Гў?')
+        V.muted('ГЏГ°ГҐГ¤Г¬ГҐГІГ» Гў ГЁГЈГ°ГҐ Г®Г±ГІГ Г­ГіГІГ±Гї ГЎГҐГ§ ГЁГ§Г¬ГҐГ­ГҐГ­ГЁГ©.')
+        if b('Г“Г¤Г Г«ГЁГІГј Г±Г­ГЁГ¬ГЄГЁ','confirm_clear',170,false,true)then
             local old=S.snapshots
             S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1
             local old_trunk=S.trunk and S.trunk.snapshot
@@ -175,11 +181,11 @@ function V.popups()
                 S.snapshots=old
                 if S.trunk then S.trunk.snapshot=old_trunk;S.trunk.status='saved' end
                 if DSP.settings then DSP.settings.storage_snapshots=old end
-                V.storage_error='Не удалось сохранить удаление';return
+                V.storage_error='ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј ГіГ¤Г Г«ГҐГ­ГЁГҐ';return
             end
             imgui.CloseCurrentPopup()
         end
         V.inline()
-        if b('Отмена','cancel_clear',120)then imgui.CloseCurrentPopup()end
+        if b('ГЋГІГ¬ГҐГ­Г ','cancel_clear',120)then imgui.CloseCurrentPopup()end
     end,{w=480,h=230})
 end
