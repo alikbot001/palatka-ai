@@ -51,7 +51,8 @@ function V.storage_screen()
                 local statuses={idle='Ожидает открытия',receiving='Получение данных',
                     saved='Последний багажник сохранён',saved_from_disk='Есть старый снимок',
                     incomplete='Недостаточно слотов',unknown_partial='Получена лишь часть',
-                    unverified_delta='Непроверенное изменение',save_error='Ошибка сохранения'}
+                    unverified_delta='Непроверенное изменение',save_error='Ошибка сохранения',
+                    no_packets='Полный снимок не получен'}
                 V.text('БАГАЖНИК · сканирование')
                 if b((t.autoscan_enabled and 'Автоскан: ВКЛ' or 'Автоскан: ВЫКЛ'),
                      'toggle_trunk_auto',math.min(width,250),t.autoscan_enabled,t.autoscan_enabled) then
@@ -105,15 +106,41 @@ function V.storage_screen()
                             V.muted('Нет цен для '..info.missing_prices..' строк.')
                         end
                     end
-                    if b('НАЗВАТЬ И СОХРАНИТЬ','name_trunk',math.min(width,310),false,true)then
-                        V.storage_name_target=t.snapshot
-                        V.storage_name_buf=imgui.new.char[128]()
-                        V.storage_name_error=nil
-                        V.open_popup('Сохранить багажник','storage_trunk_name')
+                    local update_target=t.completed_update_target_id and S.find_snapshot(t.completed_update_target_id)
+                    if update_target then
+                        V.green('ГОТОВО ДЛЯ ОБНОВЛЕНИЯ: '..tostring(update_target.title))
+                        V.muted('Новый скан ещё НЕ записан поверх сохранённого хранилища.')
+                        if b('ПРИМЕНИТЬ К '..tostring(update_target.title),'apply_update',math.min(width,330),false,true)then
+                            local ok,updated=S.apply_latest_to_saved(update_target.id)
+                            if ok then
+                                local _,idx=S.find_snapshot(updated.id)
+                                V.storage_selected=idx or 1
+                                V.storage_library_page='detail'
+                                V.storage_tab='snapshots'
+                                V.storage_error=nil
+                                return
+                            else
+                                V.storage_error=tostring(updated)
+                            end
+                        end
+                        if b('СОХРАНИТЬ КАК НОВОЕ','save_update_as_new',math.min(width,300))then
+                            V.storage_name_target=t.snapshot
+                            V.storage_name_buf=imgui.new.char[128]()
+                            V.storage_name_error=nil
+                            V.open_popup('Сохранить багажник','storage_trunk_name')
+                        end
+                    else
+                        if b('СОХРАНИТЬ КАК НОВОЕ','name_trunk',math.min(width,300),false,true)then
+                            V.storage_name_target=t.snapshot
+                            V.storage_name_buf=imgui.new.char[128]()
+                            V.storage_name_error=nil
+                            V.open_popup('Сохранить багажник','storage_trunk_name')
+                        end
                     end
-                    V.muted('Название относится к этому снимку, не к ID автомобиля.')
-                    if b('Посмотреть последний багажник','view_trunk',math.min(width,310),false,true)then
+                    V.muted('Название закрепляется за сохранённой записью, не за последним сканом.')
+                    if b('Открыть последний скан','view_trunk',math.min(width,280))then
                         V.storage_tab='snapshots'
+                        V.storage_library_page='detail'
                         for i,snap in ipairs(S.snapshots or {})do
                             if snap==t.snapshot or (snap.source=='packet220_trunk' and snap.kind=='trunk') then
                                 V.storage_selected=i;break
@@ -127,8 +154,8 @@ function V.storage_screen()
             else
                 V.red('Диагностика этого контейнера недоступна в данной сборке.')
             end
-            if b('Снимки и сохранённые вещи','show_snapshots',math.min(width,290))then
-                V.storage_tab='snapshots';V.storage_selected=1
+            if b('МОИ ХРАНИЛИЩА','show_snapshots',math.min(width,260),false,true)then
+                V.storage_tab='snapshots';V.storage_library_page='list'
             end
             if b('Ввести список вручную','manual_open',math.min(width,250))then
                 V.storage_tab='manual'
@@ -167,64 +194,139 @@ function V.storage_screen()
         return
     end
     local snapshots=S.snapshots
-    if #snapshots==0 then
-        V.muted('Снимков нет: обычный игровой диалог пока не распознан.')
-        if b('Открыть сканер','scan_open',220,false,true)then V.storage_tab='scan'end
+    V.storage_library_page=V.storage_library_page or 'list'
+    local library=S.library and S.library() or {}
+    local live=nil
+    local live_index=nil
+    for i,snap in ipairs(snapshots)do
+        if snap.source=='packet220_trunk' then live=snap;live_index=i;break end
+    end
+    if V.storage_library_page=='list' then
+        if b('+ СКАНИРОВАТЬ НОВОЕ','library_new_scan',math.min(290,imgui.GetContentRegionAvail().x),false,true)then
+            V.storage_tab='scan'
+            V.storage_scan_mode='trunk'
+            S.begin_trunk_scan()
+            V.reset_list('storage_scan_panel')
+            return
+        end
+        V.apply_font((V.font_pixels or 18)*1.24)
+        V.text('МОИ ХРАНИЛИЩА')
+        V.apply_font()
+        V.muted('Последний скан отдельно. Сохранённые названия не перезаписываются.')
+        if live then
+            local info=S.evaluate(live)
+            V.text('ПОСЛЕДНИЙ СКАН · НЕ СОХРАНЁН')
+            V.muted(os.date('%d.%m %H:%M',live.observed_at)..' · '..tostring(live.occupied_slots or 0)..' занятых слотов')
+            V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
+            if b('Открыть последний скан','library_live',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
+                V.storage_selected=live_index
+                V.storage_library_page='detail'
+                V.reset_list('storage_items')
+                return
+            end
+            imgui.Separator()
+        end
+        if #library==0 then
+            V.muted('Сохранённых хранилищ пока нет.')
+            V.muted('После полного скана выбери «Сохранить как новое» и задай имя.')
+        else
+            V.list_rows('storage_library',library,76,function(entry,i,w)
+                local snap=entry.snapshot
+                local kind=snap.kind=='trunk'and'Багажник' or snap.kind=='cabinet'and'Шкаф'
+                    or snap.kind=='warehouse'and'Склад' or snap.kind=='inventory'and'Инвентарь' or'Хранилище'
+                V.row('storage_library_'..i,76,function(rw,x,y)
+                    V.at(x,y)
+                    V.apply_font((V.font_pixels or 18)*1.12)
+                    if V.text_button(V.fit(tostring(snap.title or kind),rw),'storage_library_open_'..i,rw,false,34)then
+                        V.storage_selected=entry.index
+                        V.storage_library_page='detail'
+                        V.reset_list('storage_items')
+                    end
+                    V.apply_font()
+                    V.at(x,y+39)
+                    V.muted(V.fit(kind..' · '..os.date('%d.%m %H:%M',snap.observed_at or os.time())..
+                        ' · '..tostring(snap.count_known or 0)..' шт.',rw))
+                end)
+            end,{count=#library,footer=function()
+                V.muted('Сохранено: '..#library..' / '..tostring(S.max_saved or 20))
+            end})
+        end
+        if b('Удалить все сохранённые','clear_snapshots',math.min(250,imgui.GetContentRegionAvail().x))then
+            V.open_popup('Очистить снимки?','storage_clear')
+        end
         return
     end
-    if b('Сканировать ещё один контейнер','back_to_scan',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
-        V.storage_tab='scan'
-        V.reset_list('storage_scan_panel')
-    end
-    if b('Удалить все сохранённые снимки','clear_snapshots',math.min(300,imgui.GetContentRegionAvail().x))then
-        V.open_popup('Очистить снимки?','storage_clear')
-    end
+
+    if #snapshots==0 then V.storage_library_page='list';return end
     V.storage_selected=math.max(1,math.min(#snapshots,V.storage_selected or 1))
     local current=snapshots[V.storage_selected]
-    if V.storage_ask_name then
-        V.storage_ask_name=nil
-        V.storage_label_target=current
-        V.storage_label_buf=imgui.new.char[128]()
-        -- Suggest a default name but let the player replace it.
-        local current_title=DSP.utf8(tostring(current.title or ''))
-        ffi.copy(V.storage_label_buf,current_title:sub(1,120))
-        V.storage_label_error=nil
-        V.open_popup('Название снимка','storage_rename')
+    if not current then V.storage_library_page='list';return end
+    if b('< МОИ ХРАНИЛИЩА','library_back',math.min(230,imgui.GetContentRegionAvail().x))then
+        V.storage_library_page='list'
+        return
     end
-    local controlw=math.max(90,(imgui.GetContentRegionAvail().x-8)/2)
-    if b('Снимок '..V.storage_selected..' / '..#snapshots,'next',controlw)then
-        V.storage_selected=V.storage_selected%#snapshots+1;V.reset_list('storage_items')
+    V.apply_font((V.font_pixels or 18)*1.32)
+    V.text(V.fit(tostring(current.title or 'Без названия'),imgui.GetContentRegionAvail().x))
+    V.apply_font()
+    local is_live=current.source=='packet220_trunk'
+    local is_named_trunk=current.source=='packet220_trunk_named'
+    if is_live then
+        V.green('ПОСЛЕДНИЙ СКАН · НЕ СОХРАНЁН')
+    else
+        V.muted('СОХРАНЁННОЕ ХРАНИЛИЩЕ')
     end
-    V.inline(7)
-    if b(V.storage_sort=='value'and'Оценка'or V.storage_sort=='qty'and'Количество'
-        or V.storage_sort=='price'and'Цена'or V.storage_sort=='category'and'Категории' or 'А–Я',
-        'sort',controlw)then
+    V.muted(os.date('%d.%m.%Y %H:%M',current.observed_at or os.time()))
+    if is_live then
+        if b('СОХРАНИТЬ КАК НОВОЕ','library_save_live',math.min(300,imgui.GetContentRegionAvail().x),false,true)then
+            V.storage_name_target=current
+            V.storage_name_buf=imgui.new.char[128]()
+            V.storage_name_error=nil
+            V.open_popup('Сохранить багажник','storage_trunk_name')
+        end
+    elseif is_named_trunk then
+        if b('ОБНОВИТЬ ЭТОТ БАГАЖНИК','library_update_named',math.min(310,imgui.GetContentRegionAvail().x),false,true)then
+            S.begin_trunk_scan(current.id)
+            V.storage_tab='scan'
+            V.storage_scan_mode='trunk'
+            V.reset_list('storage_scan_panel')
+            return
+        end
+        if b('Переименовать','rename',math.min(180,imgui.GetContentRegionAvail().x))then
+            V.storage_label_target=current
+            V.storage_label_buf=imgui.new.char[128]()
+            ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
+            V.storage_label_error=nil
+            V.open_popup('Название снимка','storage_rename')
+        end
+    else
+        if b('Переименовать','rename',math.min(180,imgui.GetContentRegionAvail().x))then
+            V.storage_label_target=current
+            V.storage_label_buf=imgui.new.char[128]()
+            ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
+            V.storage_label_error=nil
+            V.open_popup('Название снимка','storage_rename')
+        end
+    end
+
+    local controlw=math.max(110,(imgui.GetContentRegionAvail().x-8)/2)
+    if b(V.storage_sort=='value'and'Сортировка: оценка'or V.storage_sort=='qty'and'Сортировка: количество'
+        or V.storage_sort=='price'and'Сортировка: цена'or V.storage_sort=='category'and'Сортировка: категории' or 'Сортировка: А–Я',
+        'sort',math.min(controlw*2+8,imgui.GetContentRegionAvail().x))then
         V.storage_sort=V.storage_sort=='value'and'qty'or V.storage_sort=='qty'and'price'
             or V.storage_sort=='price'and'category'or V.storage_sort=='category'and'name'or'value'
         V.reset_list('storage_items')
     end
-    if b('Название снимка','rename',math.min(190,imgui.GetContentRegionAvail().x))then
-        V.storage_label_target=current
-        V.storage_label_buf=imgui.new.char[128]()
-        ffi.copy(V.storage_label_buf,DSP.utf8(tostring(current.title or '')):sub(1,120))
-        V.storage_label_error=nil
-        V.open_popup('Название снимка','storage_rename')
-    end
     local rows,info=S.sorted(current,V.storage_sort)
-    V.muted(V.fit(current.title..' · '..os.date('%d.%m %H:%M',current.observed_at)..
-        (current.source=='packet220_trunk'and' · Packet 220' or current.source=='packet220_probe'and' · Packet 220 (непроверено)' or current.source=='manual'and' · вручную' or current.source=='textdraw'and' · TextDraw' or' · Dialog'),imgui.GetContentRegionAvail().x))
     V.text('Подтверждено: '..info.total_qty..' шт. · неизвестно: '..info.unknown_qty..' строк')
-    if current.source=='packet220_trunk' then
-        V.muted('180 слотов | '..tostring(current.occupied_slots or #current.rows)..' занято | ID авто не подтвержден')
+    if current.kind=='trunk' then
+        V.muted(tostring(current.slots_count or 180)..' слотов · '..tostring(current.occupied_slots or #current.rows)..' занято')
     end
     if current.source=='packet220_probe' then
-        V.red('НЕПОЛНЫЙ СНИМОК: тип выбран вручную, неизвестные слоты не учитываются.')
-        V.muted('Оценки относятся только к предметам, полученным при наблюдении.')
+        V.red('НЕПОЛНЫЙ СНИМОК: тип контейнера пока не подтверждён.')
     end
     V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
-    V.muted('Не прибыль · продажа по объявлениям: '..DSP.money(info.ask_value))
+    V.muted('По объявлениям: '..DSP.money(info.ask_value)..' · это не чистая прибыль')
     if info.cross_server then V.red('Другой сервер: цены скрыты')end
-    V.muted('В одной строке — все стаки одного предмета и улучшения.')
     V.list_rows('storage_items',rows,94,function(it,i)
         V.row('storage_item_'..i,94,function(ww,x,y)
             local textwidth=math.max(80,ww-118)
@@ -242,7 +344,7 @@ function V.storage_screen()
                 V.open_popup('Своя цена','storage_price')
             end
         end)
-    end,{footer=function()V.muted('Только сортировка Palatka AI, не предметов игры.')end})
+    end,{footer=function()V.muted('Скан не перемещает предметы в игре.')end})
 end
 
 -- Deletion is a real modal confirmation; cancellation never changes snapshots.
@@ -279,6 +381,7 @@ function V.popups()
                 V.storage_name_target=nil
                 V.storage_name_error=nil
                 V.storage_tab='snapshots'
+                V.storage_library_page='detail'
                 for i,saved in ipairs(S.snapshots or {})do
                     if saved==snapshot then V.storage_selected=i;break end
                 end
@@ -312,9 +415,17 @@ function V.popups()
         imgui.InputText('##storage_name_input',V.storage_label_buf,128)
         if b('Сохранить','rename_apply',135,false,true)then
             local label=DSP.to_cp(ffi.string(V.storage_label_buf))
-            local ok,err=S.set_snapshot_label(target,label)
-            if ok then V.storage_label_target=nil;imgui.CloseCurrentPopup()
-            else V.storage_label_error=err end
+            local ok,result=S.set_snapshot_label(target,label)
+            if ok then
+                V.storage_label_target=nil
+                if type(result)=='table' then
+                    for i,saved in ipairs(S.snapshots or {})do
+                        if saved==result then V.storage_selected=i;break end
+                    end
+                    V.storage_library_page='detail'
+                end
+                imgui.CloseCurrentPopup()
+            else V.storage_label_error=result end
         end
         V.inline();if b('Отмена','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
@@ -324,7 +435,7 @@ function V.popups()
         V.muted('Предметы в игре останутся без изменений.')
         if b('Удалить снимки','confirm_clear',170,false,true)then
             local old=S.snapshots
-            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1
+            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1;V.storage_library_page='list'
             local old_trunk=S.trunk and S.trunk.snapshot
             if S.trunk then S.trunk.snapshot=nil;S.trunk.pending=nil;S.trunk.status='idle';S.trunk.received=0 end
             if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end

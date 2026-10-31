@@ -5,6 +5,7 @@ local S = DSP.storage
 S.snapshots = S.snapshots or (DSP.settings and DSP.settings.storage_snapshots) or {}
 S.last_error = nil
 S.max_rows = 180
+S.max_saved = 20
 
 local function normal(s)
     s = DSP.clean_text(tostring(s or ''))
@@ -157,8 +158,14 @@ function S.set_snapshot_label(snapshot,label)
     label=DSP.trim(DSP.clean_text(label))
     if #label>66 or label=='' then return false,'name must be 1-66 bytes' end
     local found=false
-    for _,s in ipairs(S.snapshots or{})do if s==snapshot then found=true;break end end
+    for _,saved in ipairs(S.snapshots or{})do if saved==snapshot then found=true;break end end
     if not found then return false,'stale snapshot' end
+    -- The live trunk is disposable by design. Renaming it must create a
+    -- persistent library entry, otherwise the next scan would erase the name.
+    if snapshot.source=='packet220_trunk' then
+        if not S.save_named_trunk then return false,'archive function unavailable' end
+        return S.save_named_trunk(snapshot,label)
+    end
     local previous=snapshot.title
     snapshot.title=label
     if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
@@ -166,7 +173,7 @@ function S.set_snapshot_label(snapshot,label)
         local called,ok,err=pcall(DSP.save_settings)
         if not called or not ok then snapshot.title=previous;return false,tostring(err or ok or 'save error')end
     end
-    return true
+    return true,snapshot
 end
 function S.evaluate(snapshot,lookup)
     lookup=lookup or market_lookup
@@ -328,6 +335,7 @@ local function save_snapshot(slots, source_reason)
     local rows, total, occupied = build_rows(slots)
     local previous = active_snapshot()
     local requested_at=T.requested_at
+    local update_target_id=T.update_target_id
     local snap={
         id=previous and previous.id or ('trunk_latest_'..tostring(ts)),
         kind='trunk',
@@ -360,6 +368,8 @@ local function save_snapshot(slots, source_reason)
     if requested_at then
         T.last_completed_request_at=ts
         T.requested_at=nil
+        T.completed_update_target_id=update_target_id
+        T.update_target_id=nil
     end
     if DSP.save_settings then
         local called,ok,err=pcall(DSP.save_settings)
@@ -371,6 +381,8 @@ local function save_snapshot(slots, source_reason)
             T.last_saved_at=old_saved_at
             T.last_completed_request_at=old_completed_at
             T.requested_at=requested_at
+            T.update_target_id=update_target_id
+            T.completed_update_target_id=nil
             T.status='save_error'
             T.last_error=tostring(called and (err or 'save_settings returned false') or ok)
             if DSP.flog then DSP.flog('TRUNK save failed: '..T.last_error) end
@@ -407,13 +419,19 @@ function S.on_inventory_packet(sub, raw)
     if T.pending and (ts-T.pending.started)>PENDING_TIMEOUT then
         T.pending=nil;T.status='incomplete';T.last_error='Incomplete 180-slot batch timed out'
     end
-    local starts_full=(sub==0 and #items>=8 and items[1].slot==0)
-    if starts_full then
-        T.pending={slots={},seen={},count=0,started=ts}
+    -- A trunk may arrive in chunks whose first chunk is not slot 0.
+    -- type=8 is already the confirmed trunk namespace; large batches start a
+    -- fresh capture, while tiny <=5 slot deltas remain ignored.
+    local starts_capture=(not T.pending and #items>5)
+    local explicit_restart=(T.pending and #items>5 and items[1] and items[1].slot==0 and T.pending.seen[0])
+    local stale_restart=(T.pending and #items>5 and T.pending.last_at and (ts-T.pending.last_at)>3)
+    if starts_capture or explicit_restart or stale_restart then
+        T.pending={slots={},seen={},count=0,started=ts,last_at=ts}
         T.status='receiving';T.received=0;T.last_error=nil
     end
     if T.pending then
         local p=T.pending
+        p.last_at=ts
         for _,v in ipairs(items) do
             if not p.seen[v.slot] then p.seen[v.slot]=true;p.count=p.count+1 end
             p.slots[v.slot+1]=v
@@ -469,14 +487,34 @@ function S.set_trunk_autoscan(enabled)
     return true
 end
 
-function S.begin_trunk_scan()
+function S.begin_trunk_scan(update_target_id)
     T.pending=nil
     T.received=0
     T.last_error=nil
     T.last_completed_request_at=nil
+    T.completed_update_target_id=nil
+    T.update_target_id=update_target_id
     T.requested_at=os.time()
     T.status='waiting'
     return true
+end
+
+function S.find_snapshot(id)
+    if not id then return nil end
+    for i,saved in ipairs(S.snapshots or {}) do
+        if tostring(saved.id)==tostring(id) then return saved,i end
+    end
+    return nil
+end
+
+function S.library()
+    local rows={}
+    for i,saved in ipairs(S.snapshots or {}) do
+        if saved.source~='packet220_trunk' then
+            rows[#rows+1]={snapshot=saved,index=i}
+        end
+    end
+    return rows
 end
 
 -- Keep manually named copies independent from the latest automatically opened
@@ -506,6 +544,11 @@ function S.save_named_trunk(snapshot,label)
         observed_at=snapshot.observed_at,server=snapshot.server,
         slots_count=TRUNK_SLOTS,occupied_slots=snapshot.occupied_slots,
         count_known=snapshot.count_known,rows=rows}
+    for _,existing in ipairs(S.snapshots or {}) do
+        if existing.source~='packet220_trunk' and DSP.lower(tostring(existing.title or ''))==DSP.lower(name) then
+            return false,'Такое название уже есть. Открой его и выбери «Обновить».'
+        end
+    end
     local prior=S.snapshots
     local prior_saved=DSP.settings and DSP.settings.storage_snapshots
     local fresh={}
@@ -516,7 +559,7 @@ function S.save_named_trunk(snapshot,label)
     for _,existing in ipairs(prior) do
         if existing~=named and existing~=fresh[1] then
             fresh[#fresh+1]=existing
-            if #fresh>=8 then break end
+            if #fresh>=S.max_saved+1 then break end
         end
     end
     S.snapshots=fresh
@@ -529,8 +572,49 @@ function S.save_named_trunk(snapshot,label)
             return false,tostring(err or saved or 'save failed')
         end
     end
+    T.completed_update_target_id=nil
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,named
+end
+
+function S.apply_latest_to_saved(target_id)
+    local live=T.snapshot
+    local target=S.find_snapshot(target_id)
+    if not live or live.source~='packet220_trunk' or live.slots_count~=TRUNK_SLOTS then
+        return false,'Нет полного нового скана'
+    end
+    if not target or target.source~='packet220_trunk_named' then
+        return false,'Сохранённый багажник не найден'
+    end
+    local backup={
+        rows=target.rows,observed_at=target.observed_at,server=target.server,
+        occupied_slots=target.occupied_slots,count_known=target.count_known,
+        slots_count=target.slots_count,updated_at=target.updated_at
+    }
+    local rows={}
+    for i,row in ipairs(live.rows or {}) do
+        rows[i]={slot=row.slot,id=row.id,name=row.name,ench=row.ench,
+            qty=row.qty,quantity_confirmed=row.quantity_confirmed}
+    end
+    target.rows=rows
+    target.observed_at=live.observed_at
+    target.updated_at=os.time()
+    target.server=live.server
+    target.occupied_slots=live.occupied_slots
+    target.count_known=live.count_known
+    target.slots_count=TRUNK_SLOTS
+    if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+    if DSP.save_settings then
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            for k,v in pairs(backup) do target[k]=v end
+            if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
+            return false,tostring(err or ok or 'save error')
+        end
+    end
+    T.completed_update_target_id=nil
+    S.sort_cache=setmetatable({},{__mode='k'})
+    return true,target
 end
 
 -- Refresh timeout status when the scanner panel is drawn, even if no more packets arrive.
@@ -541,6 +625,7 @@ function S.trunk_state()
     end
     if T.requested_at and now-T.requested_at>60 then
         T.requested_at=nil
+        T.update_target_id=nil
         if T.status=='waiting' or T.status=='receiving' then
             T.status='no_packets'
             T.last_error='No complete trunk snapshot within 60 seconds. Open the trunk normally.'

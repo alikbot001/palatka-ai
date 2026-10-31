@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feat/storage-readonly-probe-v1
+      - fix/storage-smart-library-v281
   pull_request:
     paths:
       - 'src/**'
