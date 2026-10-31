@@ -3,7 +3,7 @@
   "version": "2.8.4",
   "mode": "overlay",
   "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua",
-  "size": 97594,
+  "size": 104672,
   "published_at": "2026-10-31",
   "changelog": [
     "Поиск предметов по всем сохранённым хранилищам: для каждого совпадения видны название машины, предмет, подтверждённое количество и оценка именно найденного товара.",
