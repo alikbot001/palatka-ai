@@ -61,7 +61,11 @@ function V.storage_screen()
                 V.muted('Автоскан может сохранять полные снимки без кнопки запуска.')
                 V.text('Статус: '..(statuses[t.status] or (t.status=='waiting' and 'Ожидаю открытия багажника') or
                     t.status=='disabled' and 'Автоскан выключен' or tostring(t.status or 'ожидание')))
-                V.muted('Пакетов багажника: '..tostring(t.packet_events or 0))
+                V.muted('Пакеты type 8: '..tostring(t.raw_packet_events or 0)..
+                    ' · разобрано: '..tostring(t.packet_events or 0))
+                if (t.invalid_packet_events or 0)>0 then
+                    V.red('Ошибки формата пакетов: '..tostring(t.invalid_packet_events))
+                end
                 V.muted('Слотов: '..tostring(t.received or 0)..' / 180')
                 if t.last_packet_at then
                     V.muted('Последний пакет: '..os.date('%H:%M:%S',t.last_packet_at))
@@ -74,8 +78,12 @@ function V.storage_screen()
                 if t.last_error then V.red(V.fit(tostring(t.last_error),width))end
                 if V.storage_error then V.red(V.fit(V.storage_error,width))end
                 if t.snapshot then
-                    local fresh=t.last_completed_request_at and t.last_completed_request_at >= (t.requested_at or 0)
-                    if fresh and t.status=='saved' then V.green('СКАН ЗАВЕРШЁН: 180 / 180 СЛОТОВ')end
+                    if t.status=='saved' then
+                        V.green('СКАН ЗАВЕРШЁН: 180 / 180 СЛОТОВ')
+                    elseif t.requested_at then
+                        V.red('Новый скан ещё не завершён. Ниже предыдущий снимок.')
+                    end
+                    V.muted('Время снимка: '..os.date('%d.%m %H:%M:%S',t.snapshot.observed_at))
                     V.text('Последний багажник: '..tostring(t.snapshot.occupied_slots or 0)..' занятых слотов')
                     V.text('Всего единиц предметов: '..tostring(t.snapshot.count_known or 0))
                     local sig=tostring(t.last_saved_at or t.snapshot.observed_at)..'/'..
