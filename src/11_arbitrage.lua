@@ -105,11 +105,11 @@ function M.on_shop_lookup_feedback(text, timestamp)
         return false
     end
     local cleaned=DSP.lower(DSP.clean_text(text or '')):gsub('%s+',' ')
-    local has_stall=cleaned:find('ëàâê' ,1,true) ~= nil
-    local no_stall=cleaned:find('íå ñóùåñòâóåò' ,1,true)
-        or cleaned:find('íå íàéäåíà' ,1,true)
-        or cleaned:find('íå íàéäåíî' ,1,true)
-        or cleaned:find('îòñóòñòâóåò' ,1,true)
+    local has_stall=cleaned:find('Ð»Ð°Ð²Ðº' ,1,true) ~= nil
+    local no_stall=cleaned:find('Ð½Ðµ ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚' ,1,true)
+        or cleaned:find('Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°' ,1,true)
+        or cleaned:find('Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾' ,1,true)
+        or cleaned:find('Ð¾Ñ‚ÑÑƒÑ‚ÑÑ‚Ð²ÑƒÐµÑ‚' ,1,true)
     if not has_stall or not no_stall then return false end
     -- Prefer an explicit number, if the server includes one. A different
     -- number means this response is not for our request.
@@ -118,7 +118,7 @@ function M.on_shop_lookup_feedback(text, timestamp)
     M.pending_find=nil
     if not M.mark_shop_missing_from_game(pending.shop,now) then return false end
     if DSP.shop_marker and DSP.shop_marker.clear then DSP.shop_marker.clear() end
-    if DSP.add_log then DSP.add_log('Èãðà: ëàâêà #'..tostring(pending.shop)..' íå ñóùåñòâóåò. Óäàëåíà èç API-ìàðøðóòîâ.','error') end
+    if DSP.add_log then DSP.add_log('Ð˜Ð³Ñ€Ð°: Ð»Ð°Ð²ÐºÐ° #'..tostring(pending.shop)..' Ð½Ðµ ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚. Ð£Ð´Ð°Ð»ÐµÐ½Ð° Ð¸Ð· API-Ð¼Ð°Ñ€ÑˆÑ€ÑƒÑ‚Ð¾Ð².','error') end
     if DSP.flog then DSP.flog('FINDILAVKA missing shop='..tostring(pending.shop)..' sid='..tostring(pending.sid)) end
     return true
 end
@@ -156,6 +156,10 @@ local function after_tax(gross, tax_bp)
     return math.floor(gross / 10000) * factor + math.floor((gross % 10000) * factor / 10000)
 end
 
+local function offer_qty(row,side,offer,now)
+    if M.offer_quantity then return M.offer_quantity(row,side,offer,now) end
+    return integer(offer.qty),{source='api'}
+end
 local function fresh(offer, now, filters)
     if M.state.status=='cache' or M.state.status=='error' then return false end
     if M.is_shop_missing(offer.shop,now,offer.ts) then return false end
@@ -186,10 +190,12 @@ local function opportunities(filters, now, rows, selections)
     for _, row in ipairs(rows or M.state.rows or {}) do
         for _, seller in ipairs(row.sell.offers or {}) do
             if (not selections or selections.sell[seller]) and fresh(seller, now, filters) then
-                sellers_left[seller] = integer(seller.qty)
+                local seller_qty,seller_meta=offer_qty(row,'sell',seller,now)
+                sellers_left[seller] = seller_qty
                 for _, buyer in ipairs(row.buy.offers or {}) do
                     checkpoint()
                     local p_buy, p_sell = integer(seller.price), integer(buyer.price)
+                    local buyer_qty,buyer_meta=offer_qty(row,'buy',buyer,now)
                     if (not selections or selections.buy[buyer])
                         and (seller.ench or 0) == (buyer.ench or 0)
                         and fresh(buyer, now, filters)
@@ -198,9 +204,9 @@ local function opportunities(filters, now, rows, selections)
                         and (shop_mode == 0
                             or (shop_mode == 1 and tostring(seller.shop)==tostring(buyer.shop))
                             or (shop_mode == 2 and tostring(seller.shop)~=tostring(buyer.shop)))
-                        and integer(seller.qty) >= math.max(1, min_stock)
-                        and integer(buyer.qty) >= math.max(1, min_stock) then
-                        local demand_qty = integer(buyer.qty)
+                        and seller_qty >= math.max(1, min_stock)
+                        and buyer_qty >= math.max(1, min_stock) then
+                        local demand_qty = buyer_qty
                         if not buyer.verified_at then
                             local factor=100-reserve_pct
                             -- Exact up to 2^53: do not overflow precision by multiplying
@@ -211,16 +217,21 @@ local function opportunities(filters, now, rows, selections)
                         -- On a one-unit quote, a 10% reserve cannot be a
                         -- fractional item. Retain 1 as a *potential* trade,
                         -- not as a guarantee that the order still exists.
-                        if integer(buyer.qty)>0 and reserve_pct<100 then
+                        if buyer_qty>0 and reserve_pct<100 then
                             demand_qty=math.max(1,demand_qty)
                         end
-                        buyers_left[buyer] = demand_qty
+                        -- Several sellers can share one buyer. Do not replenish
+                        -- the same demand pool for every candidate!
+                        if buyers_left[buyer]==nil then buyers_left[buyer] = demand_qty end
                         -- Tax is rounded on the batch, not on each individual item.
                         local fraction = ((p_sell % 10000) * tax_factor(tax_bp) % 10000) / 10000
                         local unit_profit = after_tax(p_sell, tax_bp) - p_buy + fraction
                         if unit_profit > 0 and unit_profit >= min_unit_profit then
                             candidates[#candidates+1] = {
                                 row=row, seller=seller, buyer=buyer,
+                                qty_seller=seller_qty,qty_buyer=buyer_qty,
+                                seller_source=seller_meta and seller_meta.source or 'api',
+                                buyer_source=buyer_meta and buyer_meta.source or 'api',
                                 p_buy=p_buy, p_sell=p_sell, unit_profit=unit_profit,
                                 unit_roi=unit_profit / p_buy,
                             }
@@ -271,12 +282,13 @@ local function opportunities(filters, now, rows, selections)
                         row=c.row, name=c.row.display, ench=c.row.ench,
                         sell_offer=seller, buy_offer=buyer,
                         p_buy=c.p_buy, p_sell=c.p_sell,
-                        qty_seller=integer(seller.qty), qty_buyer=integer(buyer.qty),
+                        qty_seller=c.qty_seller, qty_buyer=c.qty_buyer,
+                        seller_source=c.seller_source, buyer_source=c.buyer_source,
                         available_qty=available, tradable_qty=qty, partial=qty<available,
                         total_cost=cost, net_revenue=revenue, net_profit=profit,
                         roi=roi, unit_profit=c.unit_profit,
                         sell_age=seller.ts or 0, buy_age=buyer.ts or 0,
-                        shared_stock=available<math.min(integer(seller.qty),integer(buyer.qty)),
+                        shared_stock=available<math.min(c.qty_seller,c.qty_buyer),
                         same_shop=tostring(seller.shop)==tostring(buyer.shop),
                         demand_verified=(tonumber(buyer.verified_at) or 0)>0,
                         reserve_pct=(tonumber(buyer.verified_at) or 0)>0 and 0 or reserve_pct,
@@ -369,6 +381,7 @@ function M.arbitrage_filtered()
         f.tax_bp or 'global',f.min_unit_profit or 0,f.max_buy_price or 0,
         f.min_stock or 0,f.shop_mode or 0,M.missing_revision or 0}, '|')
     if cache and sig == signature and not M.arb_dirty and now < expires then return cache end
+    M.accuracy_next_expiry=nil
     cache, signature = opportunities(f, now), sig
     expires = math.huge
     local max_age = integer(f.max_age,300)
@@ -386,18 +399,19 @@ function M.arbitrage_filtered()
                 end
             end
     end
+    if M.accuracy_next_expiry then expires=math.min(expires,M.accuracy_next_expiry) end
     M.arb_dirty = false
     return cache
 end
 
 function M.offer_freshness(ts)
     ts = tonumber(ts) or 0
-    if ts <= 0 then return 'âðåìÿ íåèçâåñòíî', 'muted' end
+    if ts <= 0 then return 'Ð²Ñ€ÐµÐ¼Ñ Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ð¾', 'muted' end
     local age = os.time() - ts
-    if age < -60 then return 'îøèáêà âðåìåíè', 'warn' end
-    if age < 180 then return 'ñâåæåå', 'good' end
-    if age < 600 then return math.floor(age / 60) .. ' ìèí íàçàä', 'warn' end
-    return math.floor(age / 60) .. ' ìèí íàçàä', 'muted'
+    if age < -60 then return 'Ð¾ÑˆÐ¸Ð±ÐºÐ° Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸', 'warn' end
+    if age < 180 then return 'ÑÐ²ÐµÐ¶ÐµÐµ', 'good' end
+    if age < 600 then return math.floor(age / 60) .. ' Ð¼Ð¸Ð½ Ð½Ð°Ð·Ð°Ð´', 'warn' end
+    return math.floor(age / 60) .. ' Ð¼Ð¸Ð½ Ð½Ð°Ð·Ð°Ð´', 'muted'
 end
 
 -- Direct observations from a currently open mobile stall are independent of

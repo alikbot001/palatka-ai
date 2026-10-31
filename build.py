@@ -21,6 +21,7 @@ MODULES = [
     "08_icons.lua",
     "10_market.lua",
     "11_arbitrage.lua",
+    "11a_accuracy.lua",
     "12_arbitrage_groups.lua",
     "13_arbitrage_async.lua",
     "15_prices.lua",
@@ -42,8 +43,14 @@ MODULES = [
     "41_trade_listing.lua",
     "42_trade_buy.lua",
     "43_calculator_nav.lua",
+    "44_item_registry.lua",
     "45_live.lua",
+    "45a_shop_identity.lua",
     "46_shop_scan.lua",
+    "46a_shop_store.lua",
+    "46b_local_arbitrage.lua",
+    "46c_lombard.lua",
+    "46d_lombard_packets.lua",
     "47_shop_marker.lua",
     "47_storage.lua",
     "47a_storage_textdraw.lua",
@@ -67,11 +74,13 @@ MODULES = [
     "61_ui21_trade.lua",
     "62_ui21_shops.lua",
     "63_ui21_arbitrage.lua",
+    "63a_ui_local_arbitrage.lua",
     "64_ui21_journal_calc.lua",
     "65_ui22_tools.lua",
     "66_ui22_journal.lua",
     "67_ui22_shop_scan.lua",
     "68_ui22_flip_promo.lua",
+    "60f_lombard_ui.lua",
     "99_main.lua",
 ]
 
@@ -119,7 +128,34 @@ for name in MODULES:
     path = SRC / name
     if not path.exists():
         sys.exit(f"missing module: {path}")
-    text = path.read_text(encoding="utf-8")
+    raw_source = path.read_bytes()
+    try:
+        text = raw_source.decode("utf-8")
+    except UnicodeDecodeError:
+        # Legacy Lua sources can already be CP1251. Normalize their text
+        # before concatenation; the final standalone is CP1251 as before.
+        text = raw_source.decode("cp1251")
+        print(f"legacy CP1251 module: {name}")
+    try:
+        text.encode("cp1251")
+    except UnicodeEncodeError:
+        # Some legacy UTF-8 files contain Latin-1 renderings of CP1251
+        # bytes (e.g. 'çàãðóæåí' instead of Russian). Recover Cyrillic
+        # byte-for-byte rather than replacing unsupported characters.
+        def cp1251_from_latin1(ch):
+            number = ord(ch)
+            if 0x80 <= number <= 0xFF:
+                recovered = bytes([number]).decode("cp1251", errors="replace")
+                if recovered != "\\ufffd":
+                    return recovered
+            return ch
+        repaired = "".join(cp1251_from_latin1(c) for c in text)
+        try:
+            repaired.encode("cp1251")
+        except UnicodeEncodeError as exc:
+            sys.exit(f"non-CP1251 characters in {name}: {repr(repaired[exc.start:exc.end])} at {exc.start}")
+        text = repaired
+        print(f"fixed legacy Latin1 mojibake: {name}")
     fn = "__mod_" + name.replace(".lua", "").replace("-", "_")
     parts.append(f"local function {fn}()\n")
     parts.append(text)

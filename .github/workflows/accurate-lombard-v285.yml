@@ -1,0 +1,51 @@
+name: Palatka Accurate Trade and Lombard v2.8.5
+on:
+  push:
+    branches:
+      - fix/accurate-arbitrage-lombard-v285
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'updates/**'
+      - 'version.json'
+      - '.github/workflows/accurate-lombard-v285.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Test shared demand and live quantity reconciliation
+        run: luajit tests/test_v285_market_accuracy.lua
+      - name: Test pawnshop submenu and native read-only scan
+        run: luajit tests/test_v285_lombard.lua
+      - name: Check standalone build
+        run: python3 build.py
+      - name: Checkout main regression baseline
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: baseline
+      - name: Compare regression suite with main
+        shell: bash
+        run: |
+          (cd baseline && python3 run_tests.py) || true
+          python3 run_tests.py || true
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          baseline={r['check']:r['exit_code'] for r in json.loads(Path('baseline/docs/test-results.json').read_text())}
+          current={r['check']:r['exit_code'] for r in json.loads(Path('docs/test-results.json').read_text())}
+          newly=[name for name,code in current.items() if code!=0 and (name not in baseline or baseline[name]==0)]
+          fixed=[name for name,code in current.items() if code==0 and name in baseline and baseline[name]!=0]
+          print(f"baseline passes {sum(x==0 for x in baseline.values())}/{len(baseline)}")
+          print(f"current passes {sum(x==0 for x in current.values())}/{len(current)}")
+          print('Newly failing checks:',newly)
+          print('Fixed checks:',fixed)
+          if newly: raise SystemExit(1)
+          PY
+      - name: Check OTA Lua syntax
+        run: luajit -b updates/palatka_update.lua /dev/null

@@ -312,6 +312,9 @@ function L.commit_shop_autoscan(defer_io)
     row=row or saved_row
     if not verified then scan_diag('error',s,'missing saved snapshot');return false,'error' end
     L._auto_scan_pending=false;L._auto_scan_stable_ticks=0;s.scan_complete=true
+    -- Recalculate plans once a stable shop scan has been observed.
+    -- Never mutate API stock and never claim a complete authoritative snapshot.
+    if DSP.market and DSP.market.invalidate_arbitrage then DSP.market.invalidate_arbitrage() end
     L.auto_scan.shop=tostring((row and row.num)or s.num or '')
     L.auto_scan.identity=tostring((row and row.identity)or s.local_identity or '')
     L.auto_scan.owner=tostring((row and row.owner)or s.owner or '')
@@ -459,7 +462,14 @@ function L.handle_shop_owner(raw)
     if (s.items_updated or 0)>0 then L.queue_shop_autoscan() end
 end
 
+-- Mark the source hook so OTA overlays cannot double-subscribe it.
+L._lombard_packet_hooked=true
 function L.handle(iface, sub, raw)
+    -- Passive pawnshop packet observation; never consumes existing game events.
+    if DSP.lombard and DSP.lombard.on_packet then
+        local ok,err=pcall(DSP.lombard.on_packet,iface,sub,raw)
+        if not ok and DSP.flog then DSP.flog('LOMBARD probe: '..tostring(err)) end
+    end
     -- Passive discovery subscriber. Never consumes the packet or changes trade logic.
     if iface==52 and DSP.storage_probe and DSP.storage_probe.on_packet then
         local ok,err=pcall(DSP.storage_probe.on_packet,sub,raw)
@@ -508,7 +518,10 @@ function L.handle(iface, sub, raw)
         -- Finalize pending game data before the menu becomes closed. The save
         -- itself is deferred; disk writes during a network callback cause lag.
         if L._auto_scan_pending then L.commit_shop_autoscan(L._auto_scan_worker==true) end
-        if L.shop and (L.shop.menu_closed or 0)==0 then L.shop.menu_closed=now();shop_changed(L.shop) end
+        if L.shop and (L.shop.menu_closed or 0)==0 then
+            L.shop.menu_closed=now();shop_changed(L.shop)
+            if DSP.market and DSP.market.invalidate_arbitrage then DSP.market.invalidate_arbitrage() end
+        end
         if DSP.local_arb and DSP.local_arb.flush and not L._auto_scan_worker then
             -- Test/fallback hosts do not run the background save coroutine.
             local ok,err=pcall(DSP.local_arb.flush)

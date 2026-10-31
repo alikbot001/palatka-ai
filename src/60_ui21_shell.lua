@@ -312,7 +312,7 @@ local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'storage','Х�
  {'arbitrage','Арбитраж'},{'resale','Перепродажа'},{'promo','Автопиар'},
  {'scan','Скан лавки'},{'search','Поиск товара'},{'calculator','Калькулятор'},
  {'logs','Журнал'},{'stats','Статистика'},{'notes','Заметки'},
- {'market','Рынок'},{'history','История'},{'settings','Настройки'}}
+ {'market','Рынок'},{'lombard','Ломбард'},{'history','История'},{'settings','Настройки'}}
 function V.set_screen(id)
     if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
     if id=='storage' then
