@@ -1,5 +1,5 @@
 -- Palatka AI 2.8.3: compatible trunk sizes, suggestion dialog and settings protection.
-PALATKA_UPDATE_VERSION = '2.8.3'
+PALATKA_UPDATE_VERSION = '2.8.4'
 return function(DSP)
   -- Install settings guard before any other overlay can save preferences.
   local function module_settings_safety()
@@ -1319,6 +1319,77 @@ end
   end
   install_beta_rollback()
 
+  local function module_storage_search()
+-- Search saved containers by item name; all totals are scoped to the
+-- user's query, never the entire trunk. Works only with user-saved snapshots.
+local S=DSP.storage
+
+function S.search_library(query,lookup)
+    local needle=DSP.lower(DSP.trim(query or ''))
+    local report={
+        query=needle, results={},storage_count=0,match_groups=0,
+        known_qty=0,unknown_slots=0,priced_value=0,unpriced_groups=0,
+        different_server=0
+    }
+    if needle=='' then return report end
+    for _,entry in ipairs(S.library())do
+        local snap=entry.snapshot
+        local info=S.evaluate(snap,lookup)
+        local hits={}
+        local qty,unknown,value,unpriced=0,0,0,0
+        for _,item in ipairs(info.rows or {})do
+            if DSP.lower(tostring(item.name or '')):find(needle,1,true) then
+                local known=tonumber(item.qty) or 0
+                local missing=tonumber(item.unknown_slots) or 0
+                local bid=not info.cross_server and tonumber(item.bid) or nil
+                local estimated=bid and known*bid or nil
+                hits[#hits+1]={
+                    name=item.name, key=item.key,id=item.id,ench=item.ench,
+                    qty=known,unknown_slots=missing,
+                    unit_buy=bid,total_buy=estimated,
+                    market_unavailable=info.cross_server
+                }
+                qty=qty+known
+                unknown=unknown+missing
+                if estimated then value=value+estimated
+                elseif known>0 then unpriced=unpriced+1 end
+            end
+        end
+        table.sort(hits,function(a,b)
+            if a.qty~=b.qty then return a.qty>b.qty end
+            return tostring(a.name)<tostring(b.name)
+        end)
+        local title_hit=DSP.lower(tostring(snap.title or '')):find(needle,1,true)~=nil
+        if #hits>0 or title_hit then
+            local line={
+                index=entry.index,snapshot=snap,matched_items=hits,title_only=title_hit and #hits==0,
+                known_qty=qty,unknown_slots=unknown,
+                priced_value=value,unpriced_groups=unpriced,
+                cross_server=info.cross_server
+            }
+            report.results[#report.results+1]=line
+            report.storage_count=report.storage_count+1
+            report.match_groups=report.match_groups+#hits
+            report.known_qty=report.known_qty+qty
+            report.unknown_slots=report.unknown_slots+unknown
+            report.priced_value=report.priced_value+value
+            report.unpriced_groups=report.unpriced_groups+unpriced
+            if info.cross_server and #hits>0 then
+                report.different_server=report.different_server+1
+            end
+        end
+    end
+    table.sort(report.results,function(a,b)
+        if a.title_only~=b.title_only then return not a.title_only end
+        if a.known_qty~=b.known_qty then return a.known_qty>b.known_qty end
+        return tostring(a.snapshot.title)<tostring(b.snapshot.title)
+    end)
+    return report
+end
+
+  end
+  module_storage_search()
+
   local function module_storage_ui()
 -- Safe container analyzer; cannot read bespoke game UIs without a packet parser.
 local ffi=require('ffi')
@@ -1519,6 +1590,90 @@ function V.storage_screen()
         V.muted('\207\206\200\209\202: \239\238 \237\224\231\226\224\237\232\254 \245\240\224\237\232\235\232\249\224 \232\235\232 \239\240\229\228\236\229\242\224')
         local query=V.search and V.search('storage_all','\205\224\231\226\224\237\232\229 \232\235\232 \239\240\229\228\236\229\242...',math.min(380,width)) or ''
         query=DSP.lower(DSP.trim(query or ''))
+        -- Search results are item-centric: show quantities of matched
+        -- items per named container. Do NOT show the entire trunk count/value.
+        if query~='' and S.search_library then
+            local report=S.search_library(query)
+            V.apply_font((V.font_pixels or 18)*1.12)
+            V.text('\205\192\201\196\197\205\206 \194 '..tostring(report.storage_count)..' \213\208\192\205\200\203\200\217\192\213')
+            V.apply_font()
+            V.text('\207\238\228\242\226\229\240\230\228\229\237\238 \239\238 \231\224\239\240\238\241\243: '..tostring(report.known_qty)..' \248\242.')
+            if report.unknown_slots>0 then
+                V.red('\193\229\231 \242\238\247\237\238\227\238 \234\238\235\232\247\229\241\242\226\224: '..tostring(report.unknown_slots)..' \241\235\238\242\238\226')
+            end
+            V.green('\206\246\229\237\234\224 \237\224\233\228\229\237\237\251\245 \239\240\229\228\236\229\242\238\226: '..DSP.money(report.priced_value))
+            if report.unpriced_groups>0 then
+                V.muted('\193\229\231 \246\229\237\251: '..report.unpriced_groups..' \226\232\228\238\226 \239\240\229\228\236\229\242\238\226')
+            end
+            if report.different_server>0 then
+                V.muted('\209 \228\240\243\227\238\227\238 \241\229\240\226\229\240\224: '..report.different_server..' \245\240\224\237\232\235\232\249 (\225\229\231 \246\229\237\251)')
+            end
+            V.muted('\209\243\236\236\224 \239\238 \241\238\245\240\224\237\184\237\237\251\236 \241\237\232\236\234\224\236. \194\238\231\236\238\230\237\251 \239\238\226\242\238\240\237\251\229 \243\247\184\242\251.')
+            local matches={}
+            for _,entry in ipairs(report.results)do
+                if entry.title_only then
+                    matches[#matches+1]={entry=entry}
+                else
+                    for _,it in ipairs(entry.matched_items)do
+                        matches[#matches+1]={entry=entry,item=it}
+                    end
+                end
+            end
+            if #matches==0 then
+                V.muted('\210\224\234\232\245 \239\240\229\228\236\229\242\238\226 \232\235\232 \245\240\224\237\232\235\232\249 \237\229\242.')
+                return
+            end
+            V.list_rows('storage_search_results',matches,136,function(match,i)
+                local entry=match.entry
+                local snap=entry.snapshot
+                local it=match.item
+                V.row('storage_result_'..i,136,function(rw,x,y)
+                    V.at(x,y)
+                    V.apply_font((V.font_pixels or 18)*1.09)
+                    V.text(V.fit(tostring(snap.title or '\193\229\231 \237\224\231\226\224\237\232\255'),rw))
+                    V.apply_font()
+                    if it then
+                        V.at(x,y+31)
+                        V.text(V.fit(tostring(it.name or '\207\240\229\228\236\229\242'),rw))
+                        V.at(x,y+60)
+                        local qty=tostring(it.qty)..' \248\242.'
+                        if it.unknown_slots>0 then
+                            qty=qty..' + ? ('..it.unknown_slots..' \241\235.)'
+                        end
+                        V.muted('\202\238\235\232\247\229\241\242\226\238: '..qty)
+                        V.at(x,y+88)
+                        if it.total_buy then
+                            V.green(V.fit('\209\234\243\239\234\224: '..DSP.money(it.total_buy)..
+                                ' \183 '..DSP.money(it.unit_buy)..'/\248\242.',rw))
+                        else
+                            V.muted('\209\234\243\239\234\224: \237\229\242 \224\234\242\243\224\235\252\237\238\233 \246\229\237\251')
+                        end
+                    else
+                        V.at(x,y+40)
+                        V.muted('\209\238\226\239\224\235\238 \237\224\231\226\224\237\232\229 \245\240\224\237\232\235\232\249\224, \237\229 \237\224\231\226\224\237\232\229 \239\240\229\228\236\229\242\224')
+                        V.at(x,y+75)
+                        V.muted('\205\224\230\236\232, \247\242\238\225\251 \239\238\241\236\238\242\240\229\242\252 \241\238\228\229\240\230\232\236\238\229')
+                    end
+                    V.at(x,y)
+                    local pressed
+                    if imgui.InvisibleButton then
+                        pressed=imgui.InvisibleButton('##storage_search_open',
+                            imgui.ImVec2(rw,124))
+                    else
+                        pressed=V.text_button('\206\242\234\240\251\242\252','storage_search_fallback',rw,false,124)
+                    end
+                    if pressed and not V.dragged then
+                        V.storage_selected=entry.index
+                        V.storage_detail_key=it and it.key or nil
+                        V.storage_library_page='detail'
+                        V.reset_list('storage_items')
+                    end
+                end)
+            end,{footer=function()
+                V.muted('\208\229\231\243\235\252\242\224\242\238\226: '..#matches..' \183 \237\224\230\236\232 \234\224\240\242\238\247\234\243 \228\235\255 \239\240\238\241\236\238\242\240\224')
+            end})
+            return
+        end
         local filtered={}
         local grand,missing=0,0
         for _,entry in ipairs(library)do
@@ -1564,6 +1719,7 @@ function V.storage_screen()
                 end
                 if hit and not V.dragged then
                     V.storage_selected=entry.index
+                    V.storage_detail_key=nil
                     V.storage_library_page='detail'
                     V.reset_list('storage_items')
                 end
@@ -1611,14 +1767,48 @@ function V.storage_screen()
     end
 
     local rows,info=S.sorted(current,V.storage_sort)
-    V.text('\207\240\229\228\236\229\242\238\226: '..info.total_qty..' \248\242.')
+    if V.storage_detail_key then
+        local only={}
+        for _,it in ipairs(rows)do
+            if it.key==V.storage_detail_key then only[#only+1]=it end
+        end
+        if #only>0 then
+            rows=only
+            V.muted('\207\238\234\224\231\224\237 \237\224\233\228\229\237\237\251\233 \239\240\229\228\236\229\242 \183 '..tostring(only[1].name))
+            if b('\207\206\202\192\199\192\210\220 \194\209\168','show_all_contents',math.min(200,width))then
+                V.storage_detail_key=nil
+                V.reset_list('storage_items')
+            end
+        else
+            V.storage_detail_key=nil
+        end
+    end
+    if V.storage_detail_key then
+        V.text('\205\224\233\228\229\237\238: '..tostring(rows[1].qty or 0)..' \248\242.')
+        if (rows[1].unknown_slots or 0)>0 then
+            V.muted('\197\241\242\252 \241\235\238\242\251 \225\229\231 \239\238\228\242\226\229\240\230\228\184\237\237\238\227\238 \234\238\235\232\247\229\241\242\226\224: '..rows[1].unknown_slots)
+        end
+    else
+        V.text('\207\240\229\228\236\229\242\238\226: '..info.total_qty..' \248\242.')
+    end
     if current.kind=='trunk' then
-        V.muted('\199\224\237\255\242\238 \241\235\238\242\238\226: '..tostring(current.occupied_slots or #current.rows)..' / 180')
+        V.muted('\199\224\237\255\242\238 \241\235\238\242\238\226: '..tostring(current.occupied_slots or #current.rows)..
+            ' / '..tostring(current.slots_count or 180))
     elseif current.source=='packet220_probe' then
         V.red('\207\240\229\228\226\224\240\232\242\229\235\252\237\251\233 \241\237\232\236\238\234: \239\238\235\237\251\233 \244\238\240\236\224\242 \253\242\238\227\238 \245\240\224\237\232\235\232\249\224 \229\249\184 \239\240\238\226\229\240\255\229\242\241\255.')
     end
-    V.green('\206\246\229\237\234\224 \241\234\243\239\234\232: '..DSP.money(info.sell_to_buyers))
-    V.muted('\207\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(info.ask_value)..' \183 \237\229 \247\232\241\242\224\255 \239\240\232\225\251\235\252')
+    if V.storage_detail_key and #rows==1 then
+        local item=rows[1]
+        if not info.cross_server and item.bid then
+            V.green('\206\246\229\237\234\224 \253\242\238\227\238 \239\240\229\228\236\229\242\224: '..DSP.money((item.qty or 0)*item.bid))
+            V.muted('\214\229\237\224 \241\234\243\239\234\232: '..DSP.money(item.bid)..' / \248\242.')
+        else
+            V.muted('\205\229\242 \224\234\242\243\224\235\252\237\238\233 \246\229\237\251 \241\234\243\239\234\232 \228\235\255 \237\224\233\228\229\237\237\238\227\238 \239\240\229\228\236\229\242\224.')
+        end
+    else
+        V.green('\206\246\229\237\234\224 \241\234\243\239\234\232 \226\241\229\227\238 \245\240\224\237\232\235\232\249\224: '..DSP.money(info.sell_to_buyers))
+        V.muted('\207\238 \238\225\250\255\226\235\229\237\232\255\236: '..DSP.money(info.ask_value)..' \183 \237\229 \247\232\241\242\224\255 \239\240\232\225\251\235\252')
+    end
 
     V.list_rows('storage_items',rows,82,function(it,i)
         V.row('storage_item_'..i,82,function(rw,x,y)
@@ -1859,7 +2049,7 @@ end
     end
   end
 
-  DSP.version='2.8.3'
-  if DSP.flog then DSP.flog('Scanner beta v2.8.3 with settings safety; CRR rollback -> 2.7.0') end
+  DSP.version='2.8.4'
+  if DSP.flog then DSP.flog('Storage search beta v2.8.4 with settings safety; CRR rollback -> 2.7.0') end
   return true
 end

@@ -197,6 +197,90 @@ function V.storage_screen()
         V.muted('ПОИСК: по названию хранилища или предмета')
         local query=V.search and V.search('storage_all','Название или предмет...',math.min(380,width)) or ''
         query=DSP.lower(DSP.trim(query or ''))
+        -- Search results are item-centric: show quantities of matched
+        -- items per named container. Do NOT show the entire trunk count/value.
+        if query~='' and S.search_library then
+            local report=S.search_library(query)
+            V.apply_font((V.font_pixels or 18)*1.12)
+            V.text('НАЙДЕНО В '..tostring(report.storage_count)..' ХРАНИЛИЩАХ')
+            V.apply_font()
+            V.text('Подтверждено по запросу: '..tostring(report.known_qty)..' шт.')
+            if report.unknown_slots>0 then
+                V.red('Без точного количества: '..tostring(report.unknown_slots)..' слотов')
+            end
+            V.green('Оценка найденных предметов: '..DSP.money(report.priced_value))
+            if report.unpriced_groups>0 then
+                V.muted('Без цены: '..report.unpriced_groups..' видов предметов')
+            end
+            if report.different_server>0 then
+                V.muted('С другого сервера: '..report.different_server..' хранилищ (без цены)')
+            end
+            V.muted('Сумма по сохранённым снимкам. Возможны повторные учёты.')
+            local matches={}
+            for _,entry in ipairs(report.results)do
+                if entry.title_only then
+                    matches[#matches+1]={entry=entry}
+                else
+                    for _,it in ipairs(entry.matched_items)do
+                        matches[#matches+1]={entry=entry,item=it}
+                    end
+                end
+            end
+            if #matches==0 then
+                V.muted('Таких предметов или хранилищ нет.')
+                return
+            end
+            V.list_rows('storage_search_results',matches,136,function(match,i)
+                local entry=match.entry
+                local snap=entry.snapshot
+                local it=match.item
+                V.row('storage_result_'..i,136,function(rw,x,y)
+                    V.at(x,y)
+                    V.apply_font((V.font_pixels or 18)*1.09)
+                    V.text(V.fit(tostring(snap.title or 'Без названия'),rw))
+                    V.apply_font()
+                    if it then
+                        V.at(x,y+31)
+                        V.text(V.fit(tostring(it.name or 'Предмет'),rw))
+                        V.at(x,y+60)
+                        local qty=tostring(it.qty)..' шт.'
+                        if it.unknown_slots>0 then
+                            qty=qty..' + ? ('..it.unknown_slots..' сл.)'
+                        end
+                        V.muted('Количество: '..qty)
+                        V.at(x,y+88)
+                        if it.total_buy then
+                            V.green(V.fit('Скупка: '..DSP.money(it.total_buy)..
+                                ' · '..DSP.money(it.unit_buy)..'/шт.',rw))
+                        else
+                            V.muted('Скупка: нет актуальной цены')
+                        end
+                    else
+                        V.at(x,y+40)
+                        V.muted('Совпало название хранилища, не название предмета')
+                        V.at(x,y+75)
+                        V.muted('Нажми, чтобы посмотреть содержимое')
+                    end
+                    V.at(x,y)
+                    local pressed
+                    if imgui.InvisibleButton then
+                        pressed=imgui.InvisibleButton('##storage_search_open',
+                            imgui.ImVec2(rw,124))
+                    else
+                        pressed=V.text_button('Открыть','storage_search_fallback',rw,false,124)
+                    end
+                    if pressed and not V.dragged then
+                        V.storage_selected=entry.index
+                        V.storage_detail_key=it and it.key or nil
+                        V.storage_library_page='detail'
+                        V.reset_list('storage_items')
+                    end
+                end)
+            end,{footer=function()
+                V.muted('Результатов: '..#matches..' · нажми карточку для просмотра')
+            end})
+            return
+        end
         local filtered={}
         local grand,missing=0,0
         for _,entry in ipairs(library)do
@@ -242,6 +326,7 @@ function V.storage_screen()
                 end
                 if hit and not V.dragged then
                     V.storage_selected=entry.index
+                    V.storage_detail_key=nil
                     V.storage_library_page='detail'
                     V.reset_list('storage_items')
                 end
@@ -289,14 +374,48 @@ function V.storage_screen()
     end
 
     local rows,info=S.sorted(current,V.storage_sort)
-    V.text('Предметов: '..info.total_qty..' шт.')
+    if V.storage_detail_key then
+        local only={}
+        for _,it in ipairs(rows)do
+            if it.key==V.storage_detail_key then only[#only+1]=it end
+        end
+        if #only>0 then
+            rows=only
+            V.muted('Показан найденный предмет · '..tostring(only[1].name))
+            if b('ПОКАЗАТЬ ВСЁ','show_all_contents',math.min(200,width))then
+                V.storage_detail_key=nil
+                V.reset_list('storage_items')
+            end
+        else
+            V.storage_detail_key=nil
+        end
+    end
+    if V.storage_detail_key then
+        V.text('Найдено: '..tostring(rows[1].qty or 0)..' шт.')
+        if (rows[1].unknown_slots or 0)>0 then
+            V.muted('Есть слоты без подтверждённого количества: '..rows[1].unknown_slots)
+        end
+    else
+        V.text('Предметов: '..info.total_qty..' шт.')
+    end
     if current.kind=='trunk' then
-        V.muted('Занято слотов: '..tostring(current.occupied_slots or #current.rows)..' / 180')
+        V.muted('Занято слотов: '..tostring(current.occupied_slots or #current.rows)..
+            ' / '..tostring(current.slots_count or 180))
     elseif current.source=='packet220_probe' then
         V.red('Предварительный снимок: полный формат этого хранилища ещё проверяется.')
     end
-    V.green('Оценка скупки: '..DSP.money(info.sell_to_buyers))
-    V.muted('По объявлениям: '..DSP.money(info.ask_value)..' · не чистая прибыль')
+    if V.storage_detail_key and #rows==1 then
+        local item=rows[1]
+        if not info.cross_server and item.bid then
+            V.green('Оценка этого предмета: '..DSP.money((item.qty or 0)*item.bid))
+            V.muted('Цена скупки: '..DSP.money(item.bid)..' / шт.')
+        else
+            V.muted('Нет актуальной цены скупки для найденного предмета.')
+        end
+    else
+        V.green('Оценка скупки всего хранилища: '..DSP.money(info.sell_to_buyers))
+        V.muted('По объявлениям: '..DSP.money(info.ask_value)..' · не чистая прибыль')
+    end
 
     V.list_rows('storage_items',rows,82,function(it,i)
         V.row('storage_item_'..i,82,function(rw,x,y)
