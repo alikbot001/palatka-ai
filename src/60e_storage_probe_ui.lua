@@ -64,8 +64,21 @@ function V.storage_probe_panel(width,kind)
     if not info then V.red(tostring(err));return end
     local e=info.entry
     V.text('type='..e.type..', sub='..e.sub..' · слотов получено '..e.count)
+    V.muted('Обнаружено слотов: '..e.count..
+        (e.capacity and (' / '..e.capacity) or ' / полная ёмкость неизвестна'))
     V.muted('Найдено предметных слотов: '..info.occupied)
     V.muted('Подтверждено единиц: '..info.known..' · без числа: '..info.unknown_qty)
+    if DSP.storage and DSP.storage.evaluate then
+        local estimate=DSP.storage.evaluate({kind=kind,rows=info.rows,
+            server=DSP.market and DSP.market.state and DSP.market.state.sid})
+        if not estimate.cross_server then
+            V.green('Оценка скупки найденного: '..DSP.money(estimate.sell_to_buyers))
+            V.muted('По объявлениям: '..DSP.money(estimate.ask_value)..' (не чистая прибыль)')
+            if estimate.missing_prices>0 then
+                V.muted('Нет цен для '..estimate.missing_prices..' строк')
+            end
+        end
+    end
     for i=1,math.min(4,#info.rows)do
         local it=info.rows[i]
         V.muted(V.fit(it.name..' · '..(it.qty and tostring(it.qty)..' шт.' or 'количество неизвестно'),width))
@@ -76,6 +89,8 @@ function V.storage_probe_panel(width,kind)
             local ok,saved=P.save(selected)
             if ok then
                 V.probe_error=nil;V.storage_tab='snapshots';V.storage_selected=1
+                -- Use the existing native rename dialog on the following frame.
+                V.storage_ask_name=true
             else V.probe_error=tostring(saved)end
         end
     end
