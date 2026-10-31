@@ -1,11 +1,11 @@
 {
   "schema": 2,
-  "version": "2.6.1-webui-redesign",
+  "version": "2.6.2-webui-loader-fix",
   "bootstrap": {
     "path": "updates/palatka_update.lua",
     "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua",
-    "size": 47115,
-    "version": "2.6.1-webui-redesign"
+    "size": 15484,
+    "version": "2.6.2-webui-loader-fix"
   },
   "assets": [
     {
