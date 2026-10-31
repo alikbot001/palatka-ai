@@ -80,7 +80,13 @@ function R.remember_address()
     if not ok then return false end
     host,port=address(host,port)
     if not host then return false end
+    local old=R.server_key()
     R.host,R.port=host,port
+    if old and old~=R.server_key()then
+        R.options={}
+        R.dialog_id=nil
+        R.spawn_pending=nil
+    end
     return true
 end
 function R.server_key()
@@ -218,7 +224,7 @@ function R.tick(at)
     if type(sampIsLocalPlayerSpawned)=='function' then
         local ok,spawned=pcall(sampIsLocalPlayerSpawned)
         if ok and spawned then
-            if R.state=='connecting' or R.state=='scheduled'then R.connected(at)end
+            if R.state=='connecting'then R.connected(at)end
             if not R.last_seen_at or at-R.last_seen_at>=15 then R.last_seen_at=at;R.remember_address()end
         end
     end
@@ -228,7 +234,7 @@ function R.tick(at)
         local still=true
         if type(sampIsDialogActive)=='function' then
             local ok,val=pcall(sampIsDialogActive)
-            still=ok and val==true
+            still=ok and not not val
         end
         if still and type(sampGetCurrentDialogId)=='function' then
             local ok,id=pcall(sampGetCurrentDialogId)
