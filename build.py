@@ -145,7 +145,7 @@ for name in MODULES:
         repaired = "".join(
             chr(0x0410 + ord(c) - 0xC0) if 0xC0 <= ord(c) <= 0xDF else
             chr(0x0430 + ord(c) - 0xE0) if 0xE0 <= ord(c) <= 0xFF else
-            ("Ё" if c == "\\u00a8" else "ё" if c == "\\u00b8" else c)
+            ("Ё" if ord(c) == 0xA8 else "ё" if ord(c) == 0xB8 else c)
             for c in text
         )
         try:
