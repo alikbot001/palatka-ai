@@ -66,34 +66,6 @@ function V.journal()
         cycle_period();V.inline()
         if b('Ìèíè-æóðíàë','mini',150)then DSP.settings.craglog.open=true;M.defer_save()end
     end,296)
-    -- MCR-inspired mini-log controls: fully reversible, no action affects accounting.
-    local st=DSP.settings.craglog or {}
-    DSP.settings.craglog=st
-    if st.compact==nil then st.compact=true end
-    if st.alpha==nil then st.alpha=.28 end
-    if b(st.compact and 'Компактный лог' or 'Расширенный лог','mini_layout',174,st.compact)then
-        st.compact=not st.compact;M.defer_save()
-    end
-    V.inline()
-    if b(st.click_through and 'Касания: насквозь' or 'Касания: управление','mini_touch',208,st.click_through)then
-        st.click_through=not st.click_through;M.defer_save()
-    end
-    V.inline()
-    if b('Открыть лог','mini_open',124)then st.open=true;M.defer_save()end
-    if b(st.pinned and 'Разблокировать положение' or 'Закрепить положение','mini_pin',230,st.pinned)then
-        C.set_pinned(not st.pinned)
-    end
-    V.inline()
-    if b(st.minimized and 'Развернуть лог' or 'Свернуть лог','mini_collapse',150,st.minimized)then
-        C.set_minimized(not st.minimized)
-    end
-    V.muted('Окно сохраняет позицию после перетаскивания. Закреплять вручную не нужно.')
-    local alpha=imgui.new.float(tonumber(st.alpha)or .28)
-    imgui.SetNextItemWidth(math.min(260,imgui.GetContentRegionAvail().x))
-    if imgui.SliderFloat('##mini_alpha',alpha,.08,1)then
-        st.alpha=math.max(.08,math.min(1,alpha[0]));M.defer_save()
-    end
-    V.inline();V.muted('Непрозрачность: '..math.floor((st.alpha or .28)*100)..'%')
     local w=imgui.GetContentRegionAvail().x
     if b('Äîáû÷à','loot_mode',120,V.journal_mode=='loot')then V.journal_mode='loot'end
     V.inline();if b('Ñîáûòèÿ','events_mode',120,V.journal_mode=='events')then V.journal_mode='events'end
