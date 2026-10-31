@@ -92,7 +92,7 @@ function S.accept(kind,title,text,ts,source)
     snap.id=tostring(ts or os.time())..'_'..tostring(#S.snapshots+1)
     snap.server=DSP.market and DSP.market.state and DSP.market.state.sid or nil
     table.insert(S.snapshots,1,snap)
-    while #S.snapshots>8 do table.remove(S.snapshots)end
+    while #S.snapshots>S.max_saved+1 do table.remove(S.snapshots)end
     S.last_signature=signature;S.last_snapshot=snap;S.last_ts=ts or os.time();S.last_error=nil
     if DSP.settings and DSP.save_settings then
         DSP.settings.storage_snapshots=S.snapshots
@@ -351,7 +351,7 @@ local function save_snapshot(slots, source_reason)
     for _, old in ipairs(S.snapshots or {}) do
         if old.source ~= 'packet220_trunk' then
             new_list[#new_list+1]=old
-            if #new_list >= 8 then break end
+            if #new_list >= S.max_saved+1 then break end
         end
     end
     -- Keep the old verified snapshot until the new one is safely persisted.
@@ -390,6 +390,9 @@ local function save_snapshot(slots, source_reason)
         end
     end
     T.last_error=nil
+    T.scan_generation=(T.scan_generation or 0)+1
+    T.review_generation=T.scan_generation
+    T.review_needed=true
     if DSP.flog then DSP.flog('TRUNK '..source_reason..' slots=180 occupied='..occupied..' count='..total) end
     return true
 end
@@ -503,6 +506,7 @@ function S.begin_trunk_scan(update_target_id)
     T.last_error=nil
     T.last_completed_request_at=nil
     T.completed_update_target_id=nil
+    T.review_needed=false
     T.update_target_id=update_target_id
     T.requested_at=os.time()
     T.scan_started_at=T.requested_at
@@ -599,6 +603,59 @@ function S.library()
     return rows
 end
 
+-- Candidate detection is only a suggestion, never a vehicle identifier.
+-- Compare item IDs and enchantments across slots, not slot positions or amounts.
+-- Only fully saved, named type-8 trunk snapshots are eligible.
+local function trunk_types(snapshot)
+    local keys, count={},0
+    for _,row in ipairs(snapshot and snapshot.rows or {}) do
+        local id=tonumber(row.id)
+        if id and id>0 and id%1==0 then
+            local enchant=tonumber(row.ench) or 0
+            local key=tostring(id)..':'..tostring(enchant)
+            if not keys[key] then keys[key]=true;count=count+1 end
+        end
+    end
+    return keys,count
+end
+
+function S.match_saved_trunks(snapshot)
+    if type(snapshot)~='table' or snapshot.kind~='trunk'
+        or snapshot.source~='packet220_trunk' or snapshot.slots_count~=TRUNK_SLOTS
+        or type(snapshot.rows)~='table' then return {} end
+    local current,total=trunk_types(snapshot)
+    if total==0 then return {} end
+    local matches={}
+    for _,saved in ipairs(S.snapshots or {}) do
+        if saved.source=='packet220_trunk_named' and saved.kind=='trunk'
+            and type(saved.rows)=='table'
+            and (snapshot.server==nil or saved.server==nil
+                 or tostring(snapshot.server)==tostring(saved.server)) then
+            local previous,count=trunk_types(saved)
+            if count>0 then
+                local common=0
+                for key in pairs(current)do if previous[key] then common=common+1 end end
+                if common>0 then
+                    local union=total+count-common
+                    matches[#matches+1]={
+                        id=saved.id,title=saved.title,shared=common,
+                        current_types=total,saved_types=count,
+                        similarity=math.floor(100*common/math.max(1,union)+.5),
+                        observed_at=tonumber(saved.observed_at) or 0
+                    }
+                end
+            end
+        end
+    end
+    table.sort(matches,function(a,b)
+        if a.similarity~=b.similarity then return a.similarity>b.similarity end
+        if a.shared~=b.shared then return a.shared>b.shared end
+        if a.observed_at~=b.observed_at then return a.observed_at>b.observed_at end
+        return tostring(a.id)<tostring(b.id)
+    end)
+    return matches
+end
+
 -- Keep manually named copies independent from the latest automatically opened
 -- vehicle. The packet has no trusted vehicle ID: do NOT auto-assign old labels
 -- when a different trunk is opened.
@@ -655,6 +712,7 @@ function S.save_named_trunk(snapshot,label)
         end
     end
     T.completed_update_target_id=nil
+    T.review_needed=false
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,named
 end
@@ -695,6 +753,7 @@ function S.apply_latest_to_saved(target_id)
         end
     end
     T.completed_update_target_id=nil
+    T.review_needed=false
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,target
 end
