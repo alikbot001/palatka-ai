@@ -290,7 +290,7 @@ function V.popups()
             if ok then
                 V.storage_name_target=nil
                 V.storage_name_error=nil
-                V.storage_tab='snapshots'
+                V.storage_tab='library'
                 V.storage_library_page='detail'
                 for i,saved in ipairs(S.snapshots or {})do
                     if saved==snapshot then V.storage_selected=i;break end
@@ -340,6 +340,25 @@ function V.popups()
         V.inline();if b('Отмена','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
     end,{w=460,h=240})
+    V.popup('Удалить хранилище','storage_delete_one',function()
+        local target=V.storage_delete_target
+        if not target then V.muted('Хранилище уже не выбрано.');return end
+        V.text('Удалить «'..tostring(target.title or 'Без названия')..'»?')
+        V.muted('Удаляется только запись Palatka AI. Предметы в игре не меняются.')
+        if b('УДАЛИТЬ','delete_one_confirm',150,false,true)then
+            local ok,err=S.delete_snapshot(target)
+            if ok then
+                V.storage_delete_target=nil
+                V.storage_delete_error=nil
+                V.storage_selected=1
+                V.storage_library_page='list'
+                imgui.CloseCurrentPopup()
+            else V.storage_delete_error=tostring(err) end
+        end
+        V.inline()
+        if b('Отмена','delete_one_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_delete_error then V.red(V.storage_delete_error)end
+    end,{w=470,h=250})
     V.popup('Очистить снимки?','storage_clear',function()
         V.text('Удалить сохранённые снимки шкафов и багажников?')
         V.muted('Предметы в игре останутся без изменений.')
