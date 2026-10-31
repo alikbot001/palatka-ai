@@ -22,6 +22,9 @@ local function selected(s)
     return s.routes[i],i
 end
 local function flag(e)
+    if e.unavailable_reason=='shop_missing' then return 'НЕТ ЛАВКИ' end
+    if e.unavailable_reason=='item_missing' then return 'НЕТ ПРЕДМЕТА' end
+    if e.unavailable_reason=='owner_changed' then return 'СМЕНА ВЛАДЕЛЬЦА' end
     if e.skipped then return 'ПРОПУЩЕНО' end
     if e.sold==e.qty then return 'ЗАВЕРШЕНО' end
     if e.bought==0 then return 'КУПИТЬ' end
@@ -139,7 +142,14 @@ function A.draw()
                 muted('Куплено '..e.bought..' / '..e.qty..' | Продано '..e.sold..' / '..e.qty)
                 -- Confirming each step updates the local offer ledger, never cash history.
                 if e.skipped then
-                    if btn('Вернуть','restore',-1)then A.skip(index,false)end
+                    if e.unavailable_reason then
+                        bad('Исключено: '..flag(e)..' ('..tostring(e.unavailable_source or 'ручная')..')')
+                        if e.bought>e.sold then bad('Остались купленные товары: '..(e.bought-e.sold)..' шт.') end
+                    end
+                    if btn('Вернуть маршрут','restore',-1)then
+                        if e.unavailable_reason then A.restore_unavailable(index)
+                        else A.skip(index,false)end
+                    end
                 else
                     local side=e.bought<e.qty and'buy'or'sell'
                     local remaining=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
@@ -152,6 +162,16 @@ function A.draw()
                         text('x'..remaining..' | '..fmt(unit)..'/шт.')
                         if btn('Найти лавку #'..shop,'target',-1)then
                             if not M.mark_shop(shop)then notify('Метка недоступна')end
+                        end
+                        if btn('Нет лавки','missing_shop',-1,32)then
+                            local ok,why=A.mark_unavailable(index,'shop')
+                            if ok then A.qty_key=nil;notify('Лавка #'..shop..' исключена из планов')
+                            else notify(tostring(why))end
+                        end
+                        if btn('Нет предмета / нет скупки','missing_item',-1,32)then
+                            local ok,why=A.mark_unavailable(index,'item')
+                            if ok then A.qty_key=nil;notify('Предложение исключено до новой проверки')
+                            else notify(tostring(why))end
                         end
                         local input_key=e.id..':'..side
                         if A.qty_key~=input_key then A.qty_key=input_key;A.qty_field=imgui.new.int(remaining)end
