@@ -699,15 +699,13 @@ function S.save_named_trunk(snapshot,label)
     end
     local prior=S.snapshots
     local prior_saved=DSP.settings and DSP.settings.storage_snapshots
-    local fresh={}
-    if prior[1] and prior[1].source=='packet220_trunk' then
-        fresh[#fresh+1]=prior[1]
-    end
-    fresh[#fresh+1]=named
+    local fresh={named}
     for _,existing in ipairs(prior) do
-        if existing~=named and existing~=fresh[1] then
+        -- Old releases wrote a nameless live scan into settings. Keep ONLY
+        -- deliberately saved user records in the persistent library.
+        if existing.source~='packet220_trunk' then
             fresh[#fresh+1]=existing
-            if #fresh>=S.max_saved+1 then break end
+            if #fresh>=S.max_saved then break end
         end
     end
     S.snapshots=fresh
