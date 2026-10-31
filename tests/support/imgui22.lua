@@ -204,12 +204,14 @@ function H.new(sw,sh)
     im.IsItemActive=function()return false end;im.IsAnyItemActive=function()return false end
     im.IsWindowHovered=function()return false end;im.IsMouseDown=function()return false end
     im.IsMouseDragging=function()return false end;im.GetFrameCount=function()return h.frame end
+    im.GetWindowPos=function()local c=ctx();return{x=c.px,y=c.py}end
+    im.GetWindowSize=function()local c=ctx();return{x=c.w,y=c.h}end
     im.GetColorU32=function(index,alpha)
         local c=type(index)=='table'and rgba(index)or rgba(assert(style_colors[index],'unknown color index'))
         local function byte(v)return math.floor(math.max(0,math.min(1,v))*255+.5)end
         return bit.bor(byte(c.x),bit.lshift(byte(c.y),8),bit.lshift(byte(c.z),16),bit.lshift(byte(c.w*(alpha or 1)*native_style.Alpha),24))
     end
-    im.GetWindowDrawList=function()return strict({AddRect=function()end,AddRectFilled=function()end,AddTriangleFilled=function()end},'drawlist')end
+    im.GetWindowDrawList=function()return strict({AddRect=function()end,AddRectFilled=function()end,AddTriangleFilled=function()end,AddLine=function()end},'drawlist')end
     h.imgui=strict(im,'imgui')
     function h:begin_frame()
         assert(#self.contexts==0,'window stack leaked before frame')
