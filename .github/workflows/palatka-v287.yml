@@ -1,4 +1,4 @@
-name: Palatka 2.9.2 production build
+name: Palatka 2.9.3 production build
 on:
   pull_request:
     paths:
@@ -95,8 +95,8 @@ jobs:
           assert src.index('"68_ui22_flip_promo.lua"') < src.index('"68b_promo_universal_ui.lua"')
           assert src.index('"69b_arbitrage_agent_ui.lua"') < src.index('"69d_runtime_diagnostic.lua"')
           ota=Path('updates/palatka_update.lua').read_text()
-          assert 'local function _v292_runtime_diagnostic()' in ota
-          assert 'local function install_v292()' in ota
+          assert 'local function _v293_src_69d_runtime_diagnostic()' in ota
+          assert 'local function install_v293()' in ota
           PY
       - name: Verify OTA Lua syntax
         run: luajit -b updates/palatka_update.lua /dev/null
@@ -107,9 +107,9 @@ jobs:
           from pathlib import Path
           release=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert release['version']=='2.9.2'
+          assert release['version']=='2.9.3'
           assert len(ota)==release['size'], (len(ota),release['size'])
-          assert b"PALATKA_UPDATE_VERSION = '2.9.2'" in ota
+          assert b"PALATKA_UPDATE_VERSION = '2.9.3'" in ota
           assert b'local function _v286_mcr_classic()' not in ota
           assert b'local function _v291_arb_agent_native()' in ota
           assert b'local function _v291_compact_journal()' in ota
@@ -123,7 +123,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.2' in data[:1000]
+          assert b'Palatka AI v2.9.3' in data[:1000]
           assert b'##palatka_arbitrage_agent' in data
           assert 'Сделки'.encode('cp1251') in data
           assert 'Добавить строку'.encode('cp1251') in data
@@ -141,13 +141,13 @@ jobs:
           if git diff --cached --quiet; then
             echo "Full script already up to date"
           else
-            git commit -m "release: publish Palatka AI v2.9.2 standalone Lua"
+            git commit -m "release: publish Palatka AI v2.9.3 standalone Lua"
             git push origin HEAD:main
           fi
       - name: Upload verified standalone artifact
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-v291-full-build
+          name: palatka-v293-full-build
           path: palatka_ai.lua
           if-no-files-found: error
           retention-days: 7
