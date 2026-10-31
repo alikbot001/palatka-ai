@@ -8,11 +8,15 @@ local function b(s,id,w,on,primary)return V.button(s,'storage_'..id,w,on,primary
 -- previous giant fixed header which pushed the item list off small screens.
 function V.storage_screen()
     V.heading('Хранилища',function()
-        if b('Сканер','quick_scan',105) then
+        if DSP.storage_beta_rollback then
+            if b('CRR ОТКАТ','beta_rollback',145,false,true) then
+                V.open_popup('CRR откат','storage_beta_rollback')
+            end
+        elseif b('Сканер','quick_scan',105) then
             V.storage_tab='scan'
             V.reset_list('storage_scan_panel')
         end
-    end,109)
+    end,DSP.storage_beta_rollback and 149 or 109)
     local capstate,capcount,caperr=S.textdraw_state()
     V.storage_tab=V.storage_tab or 'scan'
     V.storage_scan_mode=V.storage_scan_mode or 'trunk'
@@ -245,6 +249,21 @@ end
 local old_popups=V.popups
 function V.popups()
     if old_popups then old_popups()end
+    V.popup('CRR откат','storage_beta_rollback',function()
+        V.text('Вернуть стабильную Palatka AI с обычным интерфейсом?')
+        V.muted('Тестовый сканер будет отключён. Настройки, пресеты и снимки не удаляются.')
+        if b('ПОДТВЕРДИТЬ ОТКАТ','beta_rollback_confirm',230,false,true)then
+            local ok,err=DSP.storage_beta_rollback()
+            if ok then
+                imgui.CloseCurrentPopup()
+            else
+                V.storage_rollback_error=tostring(err)
+            end
+        end
+        V.inline()
+        if b('Отмена','beta_rollback_cancel',110)then imgui.CloseCurrentPopup()end
+        if V.storage_rollback_error then V.red(V.fit(V.storage_rollback_error,imgui.GetContentRegionAvail().x))end
+    end,{w=480,h=260})
     V.popup('Сохранить багажник','storage_trunk_name',function()
         local target=V.storage_name_target
         if not target then V.red('Нет полного снимка багажника.');return end
