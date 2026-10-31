@@ -31,7 +31,7 @@ pressed='probe_stop';V.storage_probe_panel(320,'cabinet')
 assert(not P.armed)
 P.order={{type=4,sub=2,count=30}}
 pressed='probe_save';V.storage_probe_panel(320,'cabinet')
-assert(V.storage_tab=='snapshots' and V.storage_selected==1)
+assert(V.storage_tab=='snapshots' and V.storage_selected==1 and V.storage_ask_name==true)
 -- Switching to inventory must not show previous cabinet data as inventory.
 V.storage_tab='scan'
 pressed='';V.storage_probe_panel(320,'inventory')
