@@ -1,5 +1,5 @@
 -- Palatka AI 2.8.3: compatible trunk sizes, suggestion dialog and settings protection.
-PALATKA_UPDATE_VERSION = '2.9.1'
+PALATKA_UPDATE_VERSION = '2.9.2'
 return function(DSP)
   -- v2.8.6: Independent, additive UI + multi-deal arbitration patch.
   local function install_v286()
@@ -3324,6 +3324,596 @@ return true
     if DSP.flog then DSP.flog('Palatka 2.9.1 MH-style trade UI installed')end
     return true
   end
+  -- v2.9.2: verify actual loaded UI, independently restore vital screens.
+  local function install_v292()
+    local parent_ok=install_v291()
+    if not parent_ok and DSP.flog then
+      DSP.flog('v2.9.2 predecessor failed: repairing core UI directly')
+    end
+    if DSP._v292_installed then DSP.version='2.9.2';return true end
+    local ok,err=pcall(function()
+      local function _v292_agent_active()
+-- Palatka AI arbitration companion: native Carbon controls, compact game-safe panel.
+-- All trades remain manually acknowledged; no packet, teleport or server automation.
+local A,M,V=DSP.arb_agent,DSP.market,DSP.ui22
+local function u(s)return DSP.utf8(tostring(s or ''))end
+local function label(s)imgui.Text(u(s))end
+local function quiet(s)imgui.TextDisabled(u(s))end
+local function green(s)imgui.TextColored(DSP.theme.col('good',1),u(s))end
+local function red(s)imgui.TextColored(DSP.theme.col('bad',1),u(s))end
+local function b(name,id,w,active) return V.button(name,'agent291_'..id,w,active,false,38)end
+local function money(v)return DSP.money(tonumber(v)or 0)end
+local function selected(s)
+    local index=math.max(1,math.min(tonumber(s.focus)or 1,#s.routes))
+    return s.routes[index],index
+end
+local function status(e)
+    if e.unavailable_reason=='shop_missing' then return '\205\229\242 \235\224\226\234\232' end
+    if e.unavailable_reason=='item_missing' then return '\205\229\242 \239\240\229\228\236\229\242\224' end
+    if e.unavailable_reason=='owner_changed' then return '\209\236\229\237\224 \226\235\224\228\229\235\252\246\224' end
+    if e.skipped then return '\207\240\238\239\243\249\229\237\238' end
+    if e.sold>=e.qty then return '\199\224\226\229\240\248\229\237\238' end
+    if e.bought<e.qty then return '\207\238\234\243\239\234\224' end
+    return '\207\240\238\228\224\230\224'
+end
+local function rect(io)
+    DSP.settings.arb_agent_window=DSP.settings.arb_agent_window or{}
+    local p=DSP.settings.arb_agent_window
+    local sw,sh=io.DisplaySize.x,io.DisplaySize.y
+    local w=DSP.clamp(tonumber(p.w)or 440,math.min(305,sw-16),math.max(305,sw-16))
+    local h=DSP.clamp(tonumber(p.h)or 390,math.min(250,sh-16),math.max(250,sh-16))
+    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w-12),0,math.max(0,sw-w)),
+        y=DSP.clamp(tonumber(p.y)or 110,0,math.max(0,sh-h))}
+end
+local function drag(g,io,resize)
+    local d=io.MouseDelta
+    if not d or (d.x==0 and d.y==0) then return end
+    local w=resize and DSP.clamp(g.w+d.x,math.min(305,io.DisplaySize.x-16),io.DisplaySize.x-g.x)or g.w
+    local h=resize and DSP.clamp(g.h+d.y,math.min(250,io.DisplaySize.y-16),io.DisplaySize.y-g.y)or g.h
+    local x=resize and g.x or DSP.clamp(g.x+d.x,0,io.DisplaySize.x-w)
+    local y=resize and g.y or DSP.clamp(g.y+d.y,0,io.DisplaySize.y-h)
+    DSP.settings.arb_agent_window={x=x,y=y,w=w,h=h}
+    A._geometry_dirty=true
+end
+local function notice(msg)A.ui_message=msg end
+local function route_queue(s)
+    local total=#s.routes
+    if total==0 then return end
+    local pages=math.max(1,math.ceil(total/4))
+    A.queue_page=DSP.clamp(tonumber(A.queue_page)or 1,1,pages)
+    quiet('\204\224\240\248\240\243\242\251: '..total..'  |  \209\242\240\224\237\232\246\224 '..A.queue_page..'/'..pages)
+    local from=(A.queue_page-1)*4+1
+    for i=from,math.min(total,from+3)do
+        local e=s.routes[i]
+        if b(V.fit(i..'. '..e.name..' \183 '..status(e),math.max(100,imgui.GetContentRegionAvail().x-20)),
+            'route_'..i,-1,s.focus==i)then
+            A.focus(i);A.qty_key=nil
+        end
+    end
+    if pages>1 then
+        if b('\208\224\237\229\229','pageprev',110)then A.queue_page=math.max(1,A.queue_page-1)end
+        imgui.SameLine(0,8)
+        if b('\196\224\235\229\229','pagenext',110)then A.queue_page=math.min(pages,A.queue_page+1)end
+    end
+end
+local function route_info(e,index,total)
+    if not e then quiet('\205\238\226\251\245 \236\224\240\248\240\243\242\238\226 \239\238\234\224 \237\229\242');return end
+    quiet('\209\228\229\235\234\224 '..index..' \232\231 '..total..' \183 '..status(e))
+    label(V.fit(e.name,math.max(120,imgui.GetContentRegionAvail().x-12)))
+    quiet('\207\235\224\237 '..e.qty..' \248\242.  |  \206\230\232\228\224\229\236\224\255 \239\240\232\225\251\235\252 ~ '..money(e.proposed_profit))
+    quiet('\202\243\239\235\229\237\238 '..e.bought..' \183 \207\240\238\228\224\237\238 '..e.sold)
+    if e.skipped then
+        if e.bought>e.sold then red('\210\238\226\224\240\238\226 \237\224 \240\243\234\224\245: '..(e.bought-e.sold)..' \248\242.')end
+        if b('\194\229\240\237\243\242\252 \236\224\240\248\240\243\242','restore',-1)then
+            if e.unavailable_reason then A.restore_unavailable(index)else A.skip(index,false)end
+        end
+        return
+    end
+    if e.sold>=e.qty then green('\209\228\229\235\234\224 \231\224\226\229\240\248\229\237\224');return end
+    local buying=e.bought<e.qty
+    local side=buying and 'buy' or 'sell'
+    local shop=buying and e.seller_shop or e.buyer_shop
+    local owner=buying and e.seller_owner or e.buyer_owner
+    local price=buying and e.buy_price or e.sell_price
+    local remaining=buying and(e.qty-e.bought)or(e.bought-e.sold)
+    if remaining<=0 then return end
+    green(buying and '\202\243\239\232\242\252' or '\207\240\238\228\224\242\252')
+    label('\203\224\226\234\224 #'..shop..' \183 '..tostring(owner or'?'))
+    quiet('\206\241\242\224\235\238\241\252 '..remaining..' \248\242.  |  '..money(price)..' / \248\242.')
+    if b('\204\229\242\234\224 \237\224 \235\224\226\234\243 #'..shop,'mark',-1)then
+        if not M.mark_shop(shop)then notice('\204\229\242\234\224 \237\229\228\238\241\242\243\239\237\224')end
+    end
+    if b('\205\229\242 \235\224\226\234\232','missing_shop',145)then
+        local ok,err=A.mark_unavailable(index,'shop')
+        notice(ok and '\203\224\226\234\224 \232\241\234\235\254\247\229\237\224 \232\231 \239\235\224\237\238\226' or tostring(err))
+    end
+    imgui.SameLine(0,6)
+    if b('\205\229\242 \239\240\229\228\236\229\242\224','missing_item',160)then
+        local ok,err=A.mark_unavailable(index,'item')
+        notice(ok and '\207\240\229\228\235\238\230\229\237\232\229 \232\241\234\235\254\247\229\237\238' or tostring(err))
+    end
+    local key=e.id..':'..side
+    if A.qty_key~=key then A.qty_key=key;A.qty_field=imgui.new.int(remaining)end
+    quiet('\207\238\228\242\226\229\240\230\228\229\237\232\229 \234\238\235\232\247\229\241\242\226\224:')
+    imgui.SetNextItemWidth(math.min(160,imgui.GetContentRegionAvail().x))
+    imgui.InputInt('##agent291_qty',A.qty_field,1,10)
+    if b(buying and '\207\238\228\242\226\229\240\228\232\242\252 \239\238\234\243\239\234\243' or '\207\238\228\242\226\229\240\228\232\242\252 \239\240\238\228\224\230\243','confirm',-1,true)then
+        local ok,err=A.confirm(index,side,A.qty_field[0])
+        if ok then A.qty_key=nil;notice('\202\238\235\232\247\229\241\242\226\238 \231\224\239\232\241\224\237\238')else notice(tostring(err))end
+    end
+    local hint=A.hint
+    if hint and hint.route_id==e.id and hint.side==side then
+        quiet('\206\225\237\224\240\243\230\229\237 \239\238\245\238\230\232\233 \247\229\234: '..hint.qty..' \248\242.')
+        if b('\207\240\232\237\255\242\252 \228\224\237\237\251\229 \247\229\234\224','receipt',-1)then
+            local ok,err=A.confirm(index,side,hint.qty)
+            if ok then A.qty_key=nil;notice('\215\229\234 \239\238\228\242\226\229\240\230\228\184\237')else notice(tostring(err))end
+        end
+    end
+end
+function A.draw()
+    local s=A.active()
+    if not s then A.show(false);return end
+    if A.review_market then A.review_market()end
+    local io=imgui.GetIO()
+    local g=rect(io)
+    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
+    imgui.SetNextWindowBgAlpha(.94)
+    local color_count=DSP.theme.push_window()
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(9,8))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(6,6))
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,9)
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse
+    if imgui.Begin('##palatka_arbitrage_agent',nil,flags)then
+        if V.apply_font then V.apply_font()end
+        if b('\192\240\225\232\242\240\224\230 \183 \239\229\240\229\236\229\241\242\232\242\252','handle',math.max(100,g.w-112))then end
+        if imgui.IsItemActive() and io.MouseDelta then drag(g,io,false)end
+        imgui.SameLine(0,5)
+        if b(A.queue_expanded and '-' or '+','queue',40)then A.queue_expanded=not A.queue_expanded end
+        imgui.SameLine(0,5)
+        if b('X','close',43)then A.show(false)end
+        local st=A.stats()
+        quiet('\199\224\226\229\240\248\229\237\238 '..st.done..'/'..st.routes..' \183 \194 \240\224\225\238\242\229 '..st.pending)
+        green('\206\230\232\228\224\229\236\251\233 \240\229\231\243\235\252\242\224\242 ~ '..money(st.profit_estimate))
+        quiet('\204\232\237\232-\224\227\229\237\242 Palatka / \241\225\238\240\234\224 2.9.2')
+        imgui.Separator()
+        if A.queue_expanded then
+            route_queue(s)
+            if not A.end_confirm then
+                if b('\199\224\234\238\237\247\232\242\252 \241\229\241\241\232\254','end',-1)then A.end_confirm=true end
+            else
+                red('\199\224\226\229\240\248\232\242\252 \241\229\241\241\232\254?')
+                if b('\199\224\226\229\240\248\232\242\252','endyes',140)then A.stop();A.end_confirm=false end
+                imgui.SameLine(0,5)
+                if b('\206\242\236\229\237\224','endno',130)then A.end_confirm=false end
+            end
+            imgui.Separator()
+        end
+        if imgui.BeginChild('##agent291_content',imgui.ImVec2(0,-80),false)then
+            local e,i=selected(s)
+            route_info(e,i,#s.routes)
+        end
+        imgui.EndChild()
+        if A.ui_message then quiet(V.fit(A.ui_message,math.max(120,g.w-35)))end
+        if A.save_error then red('\205\229 \241\238\245\240\224\237\229\237\238: '..tostring(A.save_error))end
+        if b('< \207\240\229\228\251\228\243\249\224\255','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
+        imgui.SameLine(0,6)
+        if b('\209\235\229\228\243\254\249\224\255 >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
+        -- Native ImGui drag-resize grip, visually aligned to Palatka corners.
+        imgui.SetCursorPos(imgui.ImVec2(g.w-39,g.h-36))
+        if b('//','resize',29)then end
+        if imgui.IsItemActive()and io.MouseDelta then drag(g,io,true)end
+    end
+    imgui.End()
+    imgui.PopStyleVar(3)
+    if color_count and color_count>0 then imgui.PopStyleColor(color_count)end
+    if A._geometry_dirty and not imgui.IsMouseDown(0)then
+        A._geometry_dirty=false
+        if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
+    end
+end
+return true
+
+      end
+      local ok_module,why_module=pcall(_v292_agent_active)
+      if not ok_module then error('_v292_agent_active: '..tostring(why_module))end
+
+      local function _v292_journal_active()
+-- Market Helper-inspired trade log: concise receipts and totals, no loot/stat dashboard.
+-- All events originate from Palatka's verified journal; no invented transactions.
+local C,V=DSP.craglog,DSP.ui22
+if C._trade292_installed then return true end
+C._trade292_installed=true
+local function u(s)return DSP.utf8(tostring(s or''))end
+local function b(s,id,w,active)return V.button(s,'trade291_'..id,w,active,false,38)end
+local function money(n)return DSP.money(math.floor(tonumber(n)or 0))end
+local function kind(e)
+    if e.type=='market' then return e.direction=='sell' and 'sell' or e.direction=='buy' and 'buy'end
+    if e.type=='trade' then
+        local get,give=tonumber(e.money_get)or 0,tonumber(e.money_give)or 0
+        if get>0 and give==0 then return 'sell' end
+        if give>0 and get==0 then return 'buy' end
+    end
+end
+local function value(e,k)
+    if e.type=='market' then return tonumber(e.amount)or 0 end
+    return tonumber(k=='sell' and e.money_get or e.money_give)or 0
+end
+local function description(e,k)
+    if e.type=='market' then return tostring(e.item_name or e.item or'?') end
+    local items=k=='sell'and e.items_give or e.items_get
+    if type(items)=='table'and #items>0 then
+        local parts={}
+        for i=1,math.min(2,#items)do
+            local it=items[i];parts[#parts+1]=tostring(it.name or'?')..' x'..tostring(it.qty or 1)
+        end
+        return table.concat(parts,', ')
+    end
+    return tostring(e.partner or '\210\238\240\227\238\226\224\255 \238\239\229\240\224\246\232\255')
+end
+function C.trade_rows(period)
+    local list={}
+    local today=os.date('%d.%m.%Y')
+    for _,e in ipairs(C.ring_recent(C.ring_count))do
+        local k=kind(e)
+        if k and (not C.event_visible or C.event_visible(e)) then
+            local when=tonumber(e.ts)or 0
+            if period~='today' or os.date('%d.%m.%Y',when)==today then
+                list[#list+1]={kind=k,ts=when,name=description(e,k),amount=value(e,k),
+                    qty=tonumber(e.qty)or 1,source=e.source or'game'}
+            end
+        end
+    end
+    return list
+end
+function C.trade_totals(rows)
+    local summary={sells=0,buys=0,sell_count=0,buy_count=0}
+    for _,e in ipairs(rows)do
+        if e.kind=='sell'then
+            summary.sells=summary.sells+e.amount;summary.sell_count=summary.sell_count+1
+        else
+            summary.buys=summary.buys+e.amount;summary.buy_count=summary.buy_count+1
+        end
+    end
+    return summary
+end
+local function stats(t)
+    V.green('\207\240\238\228\224\237\238: '..money(t.sells)..' ('..t.sell_count..')')
+    V.muted('\202\243\239\235\229\237\238: '..money(t.buys)..' ('..t.buy_count..')')
+end
+local function show_row(row,compact)
+    local tag=row.kind=='sell'and '[+] 'or '[-] '
+    local val=(row.kind=='sell'and '+' or '-')..money(row.amount)
+    local stamp=os.date(compact and'%H:%M' or'%d.%m %H:%M',row.ts)
+    local line=tag..stamp..'  '..row.name..'  '..val
+    if compact then line=V.fit(line,math.max(100,imgui.GetContentRegionAvail().x-9))end
+    imgui.TextColored(DSP.theme.col(row.kind=='sell'and'good'or'accent',1),u(line))
+end
+function V.journal()
+    V.heading('\198\243\240\237\224\235 \241\228\229\235\238\234',function()
+        if b('\204\232\237\232-\238\234\237\238','mini',160)then C.set_minimized(false);DSP.settings.craglog.open=true;DSP.save_settings()end
+    end,178)
+    V.muted('\207\238\228\242\226\229\240\230\228\184\237\237\251\229 \239\240\238\228\224\230\232 \232 \239\238\234\243\239\234\232. \193\229\231 \237\224\227\240\224\228 \232 \235\232\248\237\229\233 \241\242\224\242\232\241\242\232\234\232.')
+    V.muted('\210\238\240\227\238\226\251\233 \230\243\240\237\224\235 / \241\225\238\240\234\224 2.9.2')
+    V.journal_trade_period=V.journal_trade_period or'today'
+    if b('\209\229\227\238\228\237\255','today',136,V.journal_trade_period=='today')then V.journal_trade_period='today'end
+    V.inline(6)
+    if b('\194\241\184 \226\240\229\236\255','all',145,V.journal_trade_period=='all')then V.journal_trade_period='all'end
+    local rows=C.trade_rows(V.journal_trade_period)
+    local totals=C.trade_totals(rows)
+    stats(totals)
+    local reverse={}
+    for i=#rows,1,-1 do reverse[#reverse+1]=rows[i]end
+    V.list_rows('simple_trade_'..V.journal_trade_period,reverse,62,function(e,i)
+        V.row('trade_'..i,62,function(w,x,y)
+            V.at(x,y)
+            if e.kind=='sell'then V.green('\207\208\206\196\192\198\192  +'..money(e.amount))
+            else V.red('\207\206\202\211\207\202\192  -'..money(e.amount))end
+            V.at(x,y+27)
+            V.muted(V.fit(os.date('%H:%M',e.ts)..'  '..e.name,w-14))
+        end)
+    end,{count=#reverse})
+end
+local function config()
+    DSP.settings.craglog=DSP.settings.craglog or{}
+    return DSP.settings.craglog
+end
+-- Existing timestamps and ring persist. Only the mobile presentation changes.
+local previous_geometry=C.geometry
+function C.geometry(sw,sh)
+    local s=config()
+    if not s.trade_compact_initialized then
+        s.trade_compact_initialized=true
+        s.w=math.min(math.max(360,sw*.37),math.max(360,sw-16))
+        s.h=math.min(305,math.max(280,sh-16))
+    end
+    return previous_geometry(sw,sh)
+end
+function C.draw()
+    local io=imgui.GetIO();local s=config();local g=C.geometry(io.DisplaySize.x,io.DisplaySize.y)
+    C.active_geometry=g
+    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
+    if not C._trade_size_set then imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always);C._trade_size_set=true end
+    imgui.SetNextWindowBgAlpha(.78)
+    local colors=DSP.theme.push_window()
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,10)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(8,7))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(5,5))
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse
+    if imgui.Begin('##palatka_trade_journal',nil,flags)then
+        if V.apply_font then V.apply_font()end
+        if b('\209\228\229\235\234\232 \183 \239\229\240\229\236\229\241\242\232\242\252','move',math.max(95,g.w-143))then end
+        if not s.pinned and imgui.IsItemActive()and io.MouseDelta then
+            C.drag(io.MouseDelta.x,io.MouseDelta.y)
+        end
+        if not imgui.IsMouseDown(0)then C.end_drag()end
+        imgui.SameLine(0,5)
+        if b(s.pinned and'P' or'pin','pin',46,s.pinned)then C.set_pinned(not s.pinned)end
+        imgui.SameLine(0,5)
+        if b('X','close',45)then s.open=false;DSP.save_settings()end
+        local filter=s.trade_period or'today'
+        local rows=C.trade_rows(filter)
+        local total=C.trade_totals(rows)
+        if b('\209\229\227\238\228\237\255','today',116,filter=='today')then s.trade_period='today';DSP.save_settings()end
+        imgui.SameLine(0,5)
+        if b('\194\241\229','all',86,filter=='all')then s.trade_period='all';DSP.save_settings()end
+        imgui.Separator()
+        if imgui.BeginChild('##trade291_scroll',imgui.ImVec2(0,-60),false)then
+            if #rows==0 then V.muted('\207\238\228\242\226\229\240\230\228\184\237\237\251\245 \241\228\229\235\238\234 \239\238\234\224 \237\229\242.')end
+            local max=math.min(#rows,60)
+            for i=#rows,#rows-max+1,-1 do
+                local e=rows[i]
+                if e then show_row(e,true)end
+            end
+        end
+        imgui.EndChild()
+        imgui.Separator()
+        V.green('\207\240\238\228\224\237\238 '..money(total.sells)..' \183 '..total.sell_count)
+        V.muted('\202\243\239\235\229\237\238 '..money(total.buys)..' \183 '..total.buy_count)
+        C.remember_size(imgui.GetWindowSize().x,imgui.GetWindowSize().y)
+    end
+    imgui.End()
+    if C.end_resize then C.end_resize()end
+    imgui.PopStyleVar(3)
+    if colors and colors>0 then imgui.PopStyleColor(colors)end
+end
+return true
+
+      end
+      local ok_module,why_module=pcall(_v292_journal_active)
+      if not ok_module then error('_v292_journal_active: '..tostring(why_module))end
+
+      local function _v292_promo_active()
+-- Market Helper pattern: template title and editable chat commands in one panel.
+local ffi=require('ffi')
+local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
+if V._promo292_installed then return true end
+V._promo292_installed=true
+local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
+local function txt(s)return DSP.utf8(tostring(s or''))end
+local function buff(str,n)
+    local b=imgui.new.char[n]()
+    local raw=DSP.to_u8(tostring(str or''))
+    ffi.fill(b,n);ffi.copy(b,raw:sub(1,n-1))
+    return b
+end
+local function open_editor(index)
+    local t=P.settings().templates[index]
+    local rows={}
+    local buffers={}
+    for i,r in ipairs(t and t.rows or{})do
+        rows[i]={text=r.text,interval=r.interval,auto=r.auto~=false}
+        buffers[i]=buff(r.text,512)
+    end
+    V.mhpromo_edit={index=index,name=buff(t and t.name or'\205\238\226\251\233 \248\224\225\235\238\237',96),
+        rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false,
+        interval_min={value=t and t.interval_min or 0},interval_max={value=t and t.interval_max or 0},
+        auto_limit={value=t and t.auto_limit or 0},random_line=t and t.random_line==true or false}
+end
+local function editor(e)
+    V.heading('\207\232\224\240 / \208\229\228\224\234\242\238\240',function()
+        if button('\205\224\231\224\228','back',120)then V.mhpromo_edit=nil end
+    end,142)
+    V.text('\205\224\231\226\224\237\232\229 \248\224\225\235\238\237\224')
+    imgui.SetNextItemWidth(-1)
+    imgui.InputText('##mhpromo_name',e.name,96)
+    V.muted('\202\224\230\228\224\255 \241\242\240\238\234\224 \151 \238\242\228\229\235\252\237\224\255 \232\227\240\238\226\224\255 \234\238\236\224\237\228\224; \238\242\239\240\224\226\235\255\254\242\241\255 \239\238 \238\247\229\240\229\228\232.')
+    V.muted('\202\224\234 \226 Market Helper: \237\224\231\226\224\237\232\229, \241\242\240\238\234\232 \232 \237\224\241\242\240\238\233\234\232 \238\228\237\238\227\238 \248\224\225\235\238\237\224.')
+    local rm=nil
+    if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,math.max(135,math.min(290,imgui.GetContentRegionAvail().y-225))),true)then
+        for i,row in ipairs(e.rows)do
+            imgui.PushID(i)
+            V.muted('\209\242\240\238\234\224 '..i)
+            imgui.SetNextItemWidth(-1)
+            if imgui.InputTextWithHint('##line',txt('/vr \210\229\234\241\242 \240\229\234\235\224\236\251'),
+                e.buffers[i],512)then
+                row.text=DSP.to_cp(ffi.string(e.buffers[i]))
+            end
+            V.muted('\207\224\243\231\224 \239\238\241\235\229, \241\229\234\243\237\228')
+            M.compact_number(row,'interval','mhpromo_delay_'..i,145,60)
+            V.inline(4)
+            if button(row.auto~=false and '\194\202\203' or '\194\219\202\203','on_'..i,68,row.auto~=false)then
+                row.auto=not(row.auto~=false)
+            end
+            V.inline(4)
+            if button('\211\228\224\235\232\242\252','rm_'..i,94)then rm=i end
+            V.inline(4)
+            if button('^','up_'..i,42) and i>1 then
+                e.rows[i],e.rows[i-1]=e.rows[i-1],e.rows[i]
+                e.buffers[i],e.buffers[i-1]=e.buffers[i-1],e.buffers[i]
+            end
+            V.inline(4)
+            if button('v','down_'..i,42) and i<#e.rows then
+                e.rows[i],e.rows[i+1]=e.rows[i+1],e.rows[i]
+                e.buffers[i],e.buffers[i+1]=e.buffers[i+1],e.buffers[i]
+            end
+            imgui.Separator()
+            imgui.PopID()
+        end
+    end
+    imgui.EndChild()
+    if rm then table.remove(e.rows,rm);table.remove(e.buffers,rm)end
+    if button('+ \196\238\225\224\226\232\242\252 \241\242\240\238\234\243','add',225,true)then
+        if #e.rows<24 then
+            e.rows[#e.rows+1]={text='/vr ',interval=180,auto=true}
+            e.buffers[#e.buffers+1]=buff('/vr ',512)
+        else e.error='\205\229 \225\238\235\229\229 24 \241\242\240\238\234'end
+    end
+    V.inline(6)
+    if button('\194\241\242\224\226\232\242\252 \235\224\226\234\243','shop',160)then
+        local i=#e.rows
+        if i>0 then
+            local value=ffi.string(e.buffers[i])
+            if #value<495 then
+                e.buffers[i]=buff(DSP.to_cp(value..' {shop}'),512)
+                e.rows[i].text=DSP.to_cp(ffi.string(e.buffers[i]))
+            end
+        end
+    end
+    V.muted('\204\224\234\240\238\241 {shop} \226\241\242\224\226\235\255\229\242 \234\235\232\234\224\225\229\235\252\237\243\254 \241\241\251\235\234\243 \237\224 \241\226\238\254 \235\224\226\234\243.')
+    if button(e.random_line and'\209\235\243\247\224\233\237\224\255 \241\242\240\238\234\224: \194\202\203' or'\209\235\243\247\224\233\237\224\255 \241\242\240\238\234\224: \194\219\202\203',
+        'random',235,e.random_line)then e.random_line=not e.random_line end
+    V.muted('\200\237\242\229\240\226\224\235 \239\238\226\242\238\240\224: 0 = \232\237\228\232\226\232\228\243\224\235\252\237\251\233 \232\237\242\229\240\226\224\235 \234\224\230\228\238\233 \241\242\240\238\234\232.')
+    V.muted('\204\232\237\232\236\243\236 \239\238\226\242\238\240\224, \241\229\234:')
+    M.compact_number(e.interval_min,'value','mhpromo_imin',160,0)
+    V.inline(6)
+    V.muted('\204\224\234\241\232\236\243\236, \241\229\234:')
+    M.compact_number(e.interval_max,'value','mhpromo_imax',160,0)
+    V.muted('\203\232\236\232\242 \238\242\239\240\224\226\238\234 \248\224\225\235\238\237\224: 0 = \225\229\231 \235\232\236\232\242\224')
+    M.compact_number(e.auto_limit,'value','mhpromo_limit',170,0)
+    if e.error then V.red(e.error)end
+    if button('\209\206\213\208\192\205\200\210\220 \216\192\193\203\206\205','save',250,true)then
+        local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
+        local ok,reason=P.save_template(e.index,name,e.rows,e.enabled)
+        if ok then
+            local list=P.settings().templates
+            local idx=e.index or #list
+            local saved,err=P.save_template_options(idx,{
+                interval_min=e.interval_min.value,interval_max=e.interval_max.value,
+                auto_limit=e.auto_limit.value,random_line=e.random_line})
+            if saved then V.mhpromo_edit=nil else e.error=tostring(err)end
+        else e.error=tostring(reason)end
+    end
+    V.inline(4)
+    if button('\206\242\236\229\237\224','cancel',120)then V.mhpromo_edit=nil end
+end
+function V.promo_screen()
+    if V.mhpromo_edit then
+        return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end,{footer=true})
+    end
+    local settings=P.settings()
+    V.heading('\192\226\242\238\239\232\224\240 \183 Palatka',function()
+        if button('+ \216\224\225\235\238\237','new',155,true)then open_editor(nil)end
+    end,172)
+    if P.running then
+        if button('\209\210\206\207','stop',127,true)then P.stop()end
+    else
+        if button('\207\211\209\202','start',127,true)then
+            local ok,why=P.start()
+            V.mhpromo_error=ok and nil or tostring(why)
+        end
+    end
+    V.inline(5)
+    if button(settings.continuous and '\214\232\234\235: \194\202\203' or '\214\232\234\235: \194\219\202\203',
+        'loop',152,settings.continuous)then
+        P.set_option('continuous',not settings.continuous)
+    end
+    V.inline(5)
+    if button(settings.resume_on_login and'\207\240\232 \226\245\238\228\229: \194\202\203' or'\207\240\232 \226\245\238\228\229: \194\219\202\203',
+        'resume',191,settings.resume_on_login)then
+        P.set_option('resume_on_login',not settings.resume_on_login)
+    end
+    V.muted('\206\242\239\240\224\226\235\229\237\238: '..tostring(P.session_count)..
+        (settings.continuous and' | \225\229\231 \235\232\236\232\242\224' or' / 12')..
+        ' | '..(P.running and(P.pause_reason or'\240\224\225\238\242\224\229\242')or'\226\251\234\235\254\247\229\237'))
+    if V.mhpromo_error then V.red(V.mhpromo_error)end
+    V.muted('\216\224\225\235\238\237\251 \241\238 \241\242\240\238\234\224\236\232 /vr, /fam, /gd, /s, /ad \232 \228\240\243\227\232\245 \247\224\242\238\226.')
+    V.muted('\200\237\242\229\240\244\229\233\241 Palatka MH / \241\225\238\240\234\224 2.9.2')
+    V.list_rows('mhpromo_templates',settings.templates,96,function(t,i)
+        V.row('mhpromo_t_'..i,96,function(w,x,y)
+            V.at(x,y);V.text(V.fit(t.name or'\216\224\225\235\238\237',math.max(80,w-155)))
+            V.at(x,y+27);V.muted(#(t.rows or{})..' \241\242\240\238\234')
+            V.at(x,y+53)
+            if button(t.auto~=false and'\192\226\242\238: \194\202\203' or'\192\226\242\238: \194\219\202\203',
+                'enable_'..i,132,t.auto~=false)then
+                local was=t.auto;t.auto=not(t.auto~=false)
+                if DSP.save_settings and DSP.save_settings()==false then t.auto=was end
+            end
+            V.at(x+w-143,y+4)
+            if button('\200\231\236\229\237\232\242\252','edit_'..i,140)then open_editor(i)end
+            V.at(x+w-143,y+52)
+            if button('\211\228\224\235\232\242\252','del_'..i,140)then
+                V.mhpromo_del=i;V.open_popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','mhpromo_delete')
+            end
+        end)
+    end)
+end
+local previous=V.popups
+function V.popups()
+    if previous then previous()end
+    V.popup('\211\228\224\235\232\242\252 \248\224\225\235\238\237','mhpromo_delete',function()
+        V.text('\211\228\224\235\232\242\252 \248\224\225\235\238\237 \241\238 \226\241\229\236\232 \241\242\240\238\234\224\236\232?')
+        if button('\196\224','yes',105)then
+            if P.remove(V.mhpromo_del)then imgui.CloseCurrentPopup()end
+        end
+        V.inline(5);V.cancel('mhpromo_delete')
+    end,{w=415,h=225})
+end
+return true
+
+      end
+      local ok_module,why_module=pcall(_v292_promo_active)
+      if not ok_module then error('_v292_promo_active: '..tostring(why_module))end
+
+      local function _v292_runtime_diagnostic()
+-- In-game verification for actively loaded UI modules, not just the version manifest.
+local V,C,A,P=DSP.ui22,DSP.craglog,DSP.arb_agent,DSP.promo
+DSP.active_ui_build='2.9.2'
+DSP.active_ui_refs={
+    agent=A and A.draw, journal=C and C.draw,
+    journal_tab=V and V.journal, promo=V and V.promo_screen
+}
+local function report()
+    local ref=DSP.active_ui_refs or{}
+    local same=V and C and A and P and
+        A.draw==ref.agent and C.draw==ref.journal and
+        V.journal==ref.journal_tab and V.promo_screen==ref.promo and
+        type(P.save_template_options)=='function' and type(C.trade_rows)=='function'
+    local line='Palatka runtime '..tostring(DSP.version or '?')..
+        ' / UI '..tostring(DSP.active_ui_build or 'none')..
+        ' / screens '..(same and'ACTIVE' or'MISMATCH')
+    if DSP.flog then DSP.flog('CRDIAG '..line)end
+    if sampAddChatMessage then
+        sampAddChatMessage('[Palatka] '..line,0x99FFAA)
+    end
+    return same,line
+end
+DSP.ui_runtime_check=report
+if sampRegisterChatCommand and not DSP._crdiag_registered then
+    sampRegisterChatCommand('crdiag',report)
+    DSP._crdiag_registered=true
+end
+if DSP.flog then
+    local ok,msg=report()
+    DSP.flog('UI modules installed: '..tostring(ok)..' / '..tostring(msg))
+end
+return true
+
+      end
+      local ok_module,why_module=pcall(_v292_runtime_diagnostic)
+      if not ok_module then error('_v292_runtime_diagnostic: '..tostring(why_module))end
+    end)
+    if not ok then
+      if DSP.flog then DSP.flog('Palatka v2.9.2 screen load error: '..tostring(err))end
+      return false
+    end
+    DSP._v292_installed=true
+    DSP.version='2.9.2'
+    if DSP.flog then DSP.flog('Palatka v2.9.2 active screens: '..tostring(DSP.active_ui_build))end
+    return true
+  end
   -- Install settings guard before any other overlay can save preferences.
   local function module_settings_safety()
 -- Palatka Settings Safety: protect user preferences on every OTA update.
@@ -5374,7 +5964,7 @@ end
 
   -- Palatka AI 2.8.5: accurate trade and passive pawnshop read-only scanner.
   if DSP._v285_installed then
-    return install_v291()
+    return install_v292()
   end
   local applied,err=pcall(function()
     do
@@ -6574,5 +7164,5 @@ return true
   DSP._v285_installed=true
   DSP.version='2.8.5'
   if DSP.flog then DSP.flog('Palatka 2.8.5 Accurate Trade / Lombard beta installed') end
-  return install_v291()
+  return install_v292()
 end

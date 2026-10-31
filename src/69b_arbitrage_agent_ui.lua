@@ -141,6 +141,7 @@ function A.draw()
         local st=A.stats()
         quiet('Завершено '..st.done..'/'..st.routes..' · В работе '..st.pending)
         green('Ожидаемый результат ~ '..money(st.profit_estimate))
+        quiet('Мини-агент Palatka / сборка 2.9.2')
         imgui.Separator()
         if A.queue_expanded then
             route_queue(s)

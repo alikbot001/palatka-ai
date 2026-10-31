@@ -1,8 +1,8 @@
 -- Market Helper pattern: template title and editable chat commands in one panel.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
-if V._promo291_installed then return true end
-V._promo291_installed=true
+if V._promo292_installed then return true end
+V._promo292_installed=true
 local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
 local function txt(s)return DSP.utf8(tostring(s or''))end
 local function buff(str,n)
@@ -142,6 +142,7 @@ function V.promo_screen()
         ' | '..(P.running and(P.pause_reason or'работает')or'выключен'))
     if V.mhpromo_error then V.red(V.mhpromo_error)end
     V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
+    V.muted('Интерфейс Palatka MH / сборка 2.9.2')
     V.list_rows('mhpromo_templates',settings.templates,96,function(t,i)
         V.row('mhpromo_t_'..i,96,function(w,x,y)
             V.at(x,y);V.text(V.fit(t.name or'Шаблон',math.max(80,w-155)))
