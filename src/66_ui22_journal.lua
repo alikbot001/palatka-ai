@@ -1,8 +1,8 @@
 -- Journal overview: quantities and estimated loot value, with inspectable receipts.
 local V,M,C=DSP.ui22,DSP.mobile,DSP.craglog
-local periods={{'session','Сессия'},{'day','Сегодня'},{'all','Всё время'}}
-local categories={{'all','Все'},{'loot','Награды'},{'payday','PayDay'},{'sales','Продажи'},
- {'buys','Покупки'},{'income','Доходы'},{'other','Другое'}}
+local periods={{'session','Г‘ГҐГ±Г±ГЁГї'},{'day','Г‘ГҐГЈГ®Г¤Г­Гї'},{'all','Г‚Г±Вё ГўГ°ГҐГ¬Гї'}}
+local categories={{'all','Г‚Г±ГҐ'},{'loot','ГЌГ ГЈГ°Г Г¤Г»'},{'payday','PayDay'},{'sales','ГЏГ°Г®Г¤Г Г¦ГЁ'},
+ {'buys','ГЏГ®ГЄГіГЇГЄГЁ'},{'income','Г„Г®ГµГ®Г¤Г»'},{'other','Г„Г°ГіГЈГ®ГҐ'}}
 V.journal_mode='loot';V.journal_period='day';V.journal_category=1
 local function b(s,id,w,on)return V.button(s,'journal_'..id,w,on)end
 local function cycle_period()
@@ -10,14 +10,14 @@ local function cycle_period()
     if b(periods[pos][2]..' >','period',140,true)then V.journal_period=periods[pos%3+1][1]end
 end
 function C.event_title(e)
-    if e.kind=='item'or e.type=='crate'then return tostring(e.item_name or e.item or 'Неизвестный предмет')..' x'..tostring(e.qty or e.count or 1)end
-    if e.kind=='opening'then return 'Открытие: '..tostring(e.source or 'Источник неизвестен')end
-    if e.kind=='unknown'then return 'Нераспознанная награда'end
-    if e.kind=='cash'then return 'Деньги из награды'end
+    if e.kind=='item'or e.type=='crate'then return tostring(e.item_name or e.item or 'ГЌГҐГЁГ§ГўГҐГ±ГІГ­Г»Г© ГЇГ°ГҐГ¤Г¬ГҐГІ')..' x'..tostring(e.qty or e.count or 1)end
+    if e.kind=='opening'then return 'ГЋГІГЄГ°Г»ГІГЁГҐ: '..tostring(e.source or 'Г€Г±ГІГ®Г·Г­ГЁГЄ Г­ГҐГЁГ§ГўГҐГ±ГІГҐГ­')end
+    if e.kind=='unknown'then return 'ГЌГҐГ°Г Г±ГЇГ®Г§Г­Г Г­Г­Г Гї Г­Г ГЈГ°Г Г¤Г 'end
+    if e.kind=='cash'then return 'Г„ГҐГ­ГјГЈГЁ ГЁГ§ Г­Г ГЈГ°Г Г¤Г»'end
     if e.type=='payday'or e.kind=='payday'then return 'PayDay'end
-    if e.type=='market'then return(e.direction=='sell'and'Продажа: 'or'Покупка: ')..tostring(e.item_name or '?')end
-    if e.type=='income'or e.kind=='income'then return tostring(e.label or 'Доход')end
-    return 'Обмен: '..tostring(e.partner or 'Игрок неизвестен')
+    if e.type=='market'then return(e.direction=='sell'and'ГЏГ°Г®Г¤Г Г¦Г : 'or'ГЏГ®ГЄГіГЇГЄГ : ')..tostring(e.item_name or '?')end
+    if e.type=='income'or e.kind=='income'then return tostring(e.label or 'Г„Г®ГµГ®Г¤')end
+    return 'ГЋГЎГ¬ГҐГ­: '..tostring(e.partner or 'Г€ГЈГ°Г®ГЄ Г­ГҐГЁГ§ГўГҐГ±ГІГҐГ­')
 end
 function C.event_cash(e)
     if e.kind=='cash'then return tonumber(e.cash)or 0 end
@@ -33,91 +33,112 @@ end
 local function footer(key)
     local summary=C.summary(V.journal_period)
     local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY();local w=imgui.GetContentRegionAvail().x
-    if w>800 then V.muted('Доход '..DSP.money(summary.income)..' · Расход '..DSP.money(summary.expense))
-    else V.muted('Денежный итог '..DSP.money(summary.net))end
+    if w>800 then V.muted('Г„Г®ГµГ®Г¤ '..DSP.money(summary.income)..' В· ГђГ Г±ГµГ®Г¤ '..DSP.money(summary.expense))
+    else V.muted('Г„ГҐГ­ГҐГ¦Г­Г»Г© ГЁГІГ®ГЈ '..DSP.money(summary.net))end
     V.at(x+w-126,y);V.scroll_buttons(key)
 end
 local function loot_row(row,i)
     V.row('loot_'..i,60,function(w,x,y)
         M.thumbnail({name=row.name},32)
         V.at(x+42,y-3)
-        if V.text_button(V.fit(row.name,w-280),'journal_loot_'..i,w-270,false,30)then V.loot_detail=row;V.open_popup('Полученная добыча','loot_detail')end
-        V.at(x+42,y+27);V.muted(row.receipts..' получений'..(row.ench>0 and(' · +'..row.ench)or''))
+        if V.text_button(V.fit(row.name,w-280),'journal_loot_'..i,w-270,false,30)then V.loot_detail=row;V.open_popup('ГЏГ®Г«ГіГ·ГҐГ­Г­Г Гї Г¤Г®ГЎГ»Г·Г ','loot_detail')end
+        V.at(x+42,y+27);V.muted(row.receipts..' ГЇГ®Г«ГіГ·ГҐГ­ГЁГ©'..(row.ench>0 and(' В· +'..row.ench)or''))
         V.at(x+w-220,y+5);V.text('x'..row.qty)
         V.at(x+w-150,y+4)
-        if row.estimated>0 then V.green('~ '..DSP.money(row.estimated))else V.muted('Цена неизвестна')end
+        if row.estimated>0 then V.green('~ '..DSP.money(row.estimated))else V.muted('Г–ГҐГ­Г  Г­ГҐГЁГ§ГўГҐГ±ГІГ­Г ')end
         V.at(x+w-150,y+27)
-        if row.unpriced_qty>0 then V.muted('Без цены: '..row.unpriced_qty)
-        elseif row.unit_estimate then V.muted('~ '..DSP.money(row.unit_estimate)..'/шт.')end
+        if row.unpriced_qty>0 then V.muted('ГЃГҐГ§ Г¶ГҐГ­Г»: '..row.unpriced_qty)
+        elseif row.unit_estimate then V.muted('~ '..DSP.money(row.unit_estimate)..'/ГёГІ.')end
     end)
 end
 local function event_row(e,i)
     V.row('event_'..i,58,function(w,x,y)
         V.at(x,y-3)
         if V.text_button(V.fit(C.event_title(e),w-180),'tools_entry_'..i,w-168,false,30)then
-            V.journal_detail=e;V.open_popup('Событие','event')
+            V.journal_detail=e;V.open_popup('Г‘Г®ГЎГ»ГІГЁГҐ','event')
         end
-        V.at(x,y+27);V.muted(V.fit(os.date('%d.%m %H:%M',e.ts or 0)..' · '..tostring(e.source or e.label or 'Подробности по нажатию'),w-180))
+        V.at(x,y+27);V.muted(V.fit(os.date('%d.%m %H:%M',e.ts or 0)..' В· '..tostring(e.source or e.label or 'ГЏГ®Г¤Г°Г®ГЎГ­Г®Г±ГІГЁ ГЇГ® Г­Г Г¦Г ГІГЁГѕ'),w-180))
         V.at(x+w-160,y+6);cash_text(C.event_cash(e))
     end)
 end
 function V.journal()
-    V.heading('Журнал',function()
+    V.heading('Г†ГіГ°Г­Г Г«',function()
         cycle_period();V.inline()
-        if b('Мини-журнал','mini',150)then DSP.settings.craglog.open=true;M.defer_save()end
+        if b('ГЊГЁГ­ГЁ-Г¦ГіГ°Г­Г Г«','mini',150)then DSP.settings.craglog.open=true;M.defer_save()end
     end,296)
+    -- MCR-inspired mini-log controls: fully reversible, no action affects accounting.
+    local st=DSP.settings.craglog or {}
+    DSP.settings.craglog=st
+    if st.compact==nil then st.compact=true end
+    if st.alpha==nil then st.alpha=.28 end
+    if b(st.compact and 'РљРѕРјРїР°РєС‚РЅС‹Р№ Р»РѕРі' or 'Р Р°СЃС€РёСЂРµРЅРЅС‹Р№ Р»РѕРі','mini_layout',174,st.compact)then
+        st.compact=not st.compact;M.defer_save()
+    end
+    V.inline()
+    if b(st.click_through and 'РљР°СЃР°РЅРёСЏ: РЅР°СЃРєРІРѕР·СЊ' or 'РљР°СЃР°РЅРёСЏ: СѓРїСЂР°РІР»РµРЅРёРµ','mini_touch',208,st.click_through)then
+        st.click_through=not st.click_through;M.defer_save()
+    end
+    V.inline()
+    if b('РћС‚РєСЂС‹С‚СЊ Р»РѕРі','mini_open',124)then st.open=true;M.defer_save()end
+    V.muted('РћРєРЅРѕ СЃРѕС…СЂР°РЅСЏРµС‚ РїРѕР·РёС†РёСЋ РїРѕСЃР»Рµ РїРµСЂРµС‚Р°СЃРєРёРІР°РЅРёСЏ. Р—Р°РєСЂРµРїР»СЏС‚СЊ РІСЂСѓС‡РЅСѓСЋ РЅРµ РЅСѓР¶РЅРѕ.')
+    local alpha=imgui.new.float(tonumber(st.alpha)or .28)
+    imgui.SetNextItemWidth(math.min(260,imgui.GetContentRegionAvail().x))
+    if imgui.SliderFloat('##mini_alpha',alpha,.08,1)then
+        st.alpha=math.max(.08,math.min(1,alpha[0]));M.defer_save()
+    end
+    V.inline();V.muted('РќРµРїСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ: '..math.floor((st.alpha or .28)*100)..'%')
     local w=imgui.GetContentRegionAvail().x
-    if b('Добыча','loot_mode',120,V.journal_mode=='loot')then V.journal_mode='loot'end
-    V.inline();if b('События','events_mode',120,V.journal_mode=='events')then V.journal_mode='events'end
+    if b('Г„Г®ГЎГ»Г·Г ','loot_mode',120,V.journal_mode=='loot')then V.journal_mode='loot'end
+    V.inline();if b('Г‘Г®ГЎГ»ГІГЁГї','events_mode',120,V.journal_mode=='events')then V.journal_mode='events'end
     V.inline()
     if V.journal_mode=='events'then
         local pos=V.journal_category
         if b(categories[pos][2]..' >','category',112,true)then V.journal_category=pos%#categories+1 end
         V.inline()
     end
-    local query,edited=V.search('journal','Поиск предмета или источника',-1)
+    local query,edited=V.search('journal','ГЏГ®ГЁГ±ГЄ ГЇГ°ГҐГ¤Г¬ГҐГІГ  ГЁГ«ГЁ ГЁГ±ГІГ®Г·Г­ГЁГЄГ ',-1)
     if edited then
         V.reset_list('journal_loot_'..V.journal_period)
         V.reset_list('journal_events_'..V.journal_period..V.journal_category)
     end
     if V.journal_mode=='loot'then
         local summary=C.loot_summary(V.journal_period,query)
-        V.muted(V.fit(summary.qty..' шт. · Продажа ~ '..DSP.money(summary.estimated)..' · Без цены '..summary.unpriced_qty..' шт.',w))
+        V.muted(V.fit(summary.qty..' ГёГІ. В· ГЏГ°Г®Г¤Г Г¦Г  ~ '..DSP.money(summary.estimated)..' В· ГЃГҐГ§ Г¶ГҐГ­Г» '..summary.unpriced_qty..' ГёГІ.',w))
         V.list_rows('journal_loot_'..V.journal_period,summary.items,60,loot_row,{toolbar=footer})
     else
         local from=C.period_start(V.journal_period);local all=C.history and C.history(categories[V.journal_category][1],query)or C.filtered(categories[V.journal_category][1])
         local rows=V.memo('journal_period_rows',tostring(all)..'/'..from,function()
             local out={};for _,e in ipairs(all)do if(e.ts or 0)>=from then out[#out+1]=e end end;return out
         end)
-        V.muted(#rows..' событий · нажмите строку для подробностей')
+        V.muted(#rows..' Г±Г®ГЎГ»ГІГЁГ© В· Г­Г Г¦Г¬ГЁГІГҐ Г±ГІГ°Г®ГЄГі Г¤Г«Гї ГЇГ®Г¤Г°Г®ГЎГ­Г®Г±ГІГҐГ©')
         V.list_rows('journal_events_'..V.journal_period..V.journal_category,rows,58,event_row,{toolbar=footer})
     end
 end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
-    V.popup('Полученная добыча','loot_detail',function()
+    V.popup('ГЏГ®Г«ГіГ·ГҐГ­Г­Г Гї Г¤Г®ГЎГ»Г·Г ','loot_detail',function()
         local row=V.loot_detail;if not row then return end
         V.text(row.name..(row.ench>0 and(' (+'..row.ench..')')or''))
-        V.muted('Получено '..row.qty..' шт. · '..row.receipts..' отдельных получений')
-        if row.estimated>0 then V.green('Примерная продажа ~ '..DSP.money(row.estimated))end
-        if row.unpriced_qty>0 then V.muted('Цена неизвестна для '..row.unpriced_qty..' шт.')end
-        V.muted(tostring(row.price_source or 'Нет рыночной оценки')..(row.price_ts and(' · '..os.date('%d.%m %H:%M',row.price_ts))or''))
-        V.muted('Оценка не гарантирует продажу всего количества по этой цене')
+        V.muted('ГЏГ®Г«ГіГ·ГҐГ­Г® '..row.qty..' ГёГІ. В· '..row.receipts..' Г®ГІГ¤ГҐГ«ГјГ­Г»Гµ ГЇГ®Г«ГіГ·ГҐГ­ГЁГ©')
+        if row.estimated>0 then V.green('ГЏГ°ГЁГ¬ГҐГ°Г­Г Гї ГЇГ°Г®Г¤Г Г¦Г  ~ '..DSP.money(row.estimated))end
+        if row.unpriced_qty>0 then V.muted('Г–ГҐГ­Г  Г­ГҐГЁГ§ГўГҐГ±ГІГ­Г  Г¤Г«Гї '..row.unpriced_qty..' ГёГІ.')end
+        V.muted(tostring(row.price_source or 'ГЌГҐГІ Г°Г»Г­Г®Г·Г­Г®Г© Г®Г¶ГҐГ­ГЄГЁ')..(row.price_ts and(' В· '..os.date('%d.%m %H:%M',row.price_ts))or''))
+        V.muted('ГЋГ¶ГҐГ­ГЄГ  Г­ГҐ ГЈГ Г°Г Г­ГІГЁГ°ГіГҐГІ ГЇГ°Г®Г¤Г Г¦Гі ГўГ±ГҐГЈГ® ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ  ГЇГ® ГЅГІГ®Г© Г¶ГҐГ­ГҐ')
         V.loot_tab=V.loot_tab or 'receipts'
-        if b('Получения','receipts',145,V.loot_tab=='receipts')then V.loot_tab='receipts'end
-        V.inline();if b('Источники','sources',145,V.loot_tab=='sources')then V.loot_tab='sources'end
+        if b('ГЏГ®Г«ГіГ·ГҐГ­ГЁГї','receipts',145,V.loot_tab=='receipts')then V.loot_tab='receipts'end
+        V.inline();if b('Г€Г±ГІГ®Г·Г­ГЁГЄГЁ','sources',145,V.loot_tab=='sources')then V.loot_tab='sources'end
         local h=math.max(48,imgui.GetContentRegionAvail().y-50)
         if V.loot_tab=='sources'then
             V.list('loot_sources',function()
-                for source,qty in pairs(row.sources)do V.text(source..' · x'..qty)end
-            end,{height=h,footer=function()if b('Закрыть','loot_close',140)then imgui.CloseCurrentPopup()end end})
+                for source,qty in pairs(row.sources)do V.text(source..' В· x'..qty)end
+            end,{height=h,footer=function()if b('Г‡Г ГЄГ°Г»ГІГј','loot_close',140)then imgui.CloseCurrentPopup()end end})
         else
             V.list_rows('loot_receipts',row.events,52,function(e,i)
-                if V.text_button(V.fit(os.date('%d.%m %H:%M',e.ts or 0)..' · x'..tostring(e.qty or e.count or 1)..' · '..tostring(e.source or 'Неизвестный источник'),imgui.GetContentRegionAvail().x-12),'journal_receipt_'..i,-1)then
-                    V.journal_detail=e;imgui.CloseCurrentPopup();V.open_popup('Событие','event')
+                if V.text_button(V.fit(os.date('%d.%m %H:%M',e.ts or 0)..' В· x'..tostring(e.qty or e.count or 1)..' В· '..tostring(e.source or 'ГЌГҐГЁГ§ГўГҐГ±ГІГ­Г»Г© ГЁГ±ГІГ®Г·Г­ГЁГЄ'),imgui.GetContentRegionAvail().x-12),'journal_receipt_'..i,-1)then
+                    V.journal_detail=e;imgui.CloseCurrentPopup();V.open_popup('Г‘Г®ГЎГ»ГІГЁГҐ','event')
                 end
-            end,{height=h,footer=function()if b('Закрыть','loot_close',140)then imgui.CloseCurrentPopup()end end})
+            end,{height=h,footer=function()if b('Г‡Г ГЄГ°Г»ГІГј','loot_close',140)then imgui.CloseCurrentPopup()end end})
         end
     end,{w=720,h=520})
 end
