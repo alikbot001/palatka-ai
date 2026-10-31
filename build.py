@@ -48,6 +48,7 @@ MODULES = [
     "47_storage.lua",
     "47a_storage_textdraw.lua",
     "47b_storage_probe.lua",
+    "47c_storage_search.lua",
     "48_flip_intel.lua",
     "49_promo.lua",
     "50_overlay.lua",
