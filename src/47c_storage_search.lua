@@ -19,7 +19,7 @@ function S.search_library(query,lookup)
             if DSP.lower(tostring(item.name or '')):find(needle,1,true) then
                 local known=tonumber(item.qty) or 0
                 local missing=tonumber(item.unknown_slots) or 0
-                local bid=tonumber(item.bid)
+                local bid=not info.cross_server and tonumber(item.bid) or nil
                 local estimated=bid and known*bid or nil
                 hits[#hits+1]={
                     name=item.name, key=item.key,id=item.id,ench=item.ench,
