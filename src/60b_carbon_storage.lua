@@ -381,6 +381,7 @@ function V.popups()
                 V.storage_name_target=nil
                 V.storage_name_error=nil
                 V.storage_tab='snapshots'
+                V.storage_library_page='detail'
                 for i,saved in ipairs(S.snapshots or {})do
                     if saved==snapshot then V.storage_selected=i;break end
                 end
@@ -414,9 +415,17 @@ function V.popups()
         imgui.InputText('##storage_name_input',V.storage_label_buf,128)
         if b('Сохранить','rename_apply',135,false,true)then
             local label=DSP.to_cp(ffi.string(V.storage_label_buf))
-            local ok,err=S.set_snapshot_label(target,label)
-            if ok then V.storage_label_target=nil;imgui.CloseCurrentPopup()
-            else V.storage_label_error=err end
+            local ok,result=S.set_snapshot_label(target,label)
+            if ok then
+                V.storage_label_target=nil
+                if type(result)=='table' then
+                    for i,saved in ipairs(S.snapshots or {})do
+                        if saved==result then V.storage_selected=i;break end
+                    end
+                    V.storage_library_page='detail'
+                end
+                imgui.CloseCurrentPopup()
+            else V.storage_label_error=result end
         end
         V.inline();if b('Отмена','rename_cancel',110)then imgui.CloseCurrentPopup()end
         if V.storage_label_error then V.red(V.storage_label_error)end
@@ -426,7 +435,7 @@ function V.popups()
         V.muted('Предметы в игре останутся без изменений.')
         if b('Удалить снимки','confirm_clear',170,false,true)then
             local old=S.snapshots
-            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1
+            S.snapshots={};S.last_signature=nil;S.last_snapshot=nil;V.storage_selected=1;V.storage_library_page='list'
             local old_trunk=S.trunk and S.trunk.snapshot
             if S.trunk then S.trunk.snapshot=nil;S.trunk.pending=nil;S.trunk.status='idle';S.trunk.received=0 end
             if DSP.settings then DSP.settings.storage_snapshots=S.snapshots end
