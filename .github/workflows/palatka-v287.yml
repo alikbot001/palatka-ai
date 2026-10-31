@@ -84,7 +84,7 @@ jobs:
       - name: Test drop/sale/inventory statistics
         run: luajit tests/test_drop_sales_stats.lua
       - name: Test touch-first UI without fixed scroll arrows
-        run: luajit tests/test_v22_ui.lua
+        run: luajit tests/test_touch_scroll_v293.lua
       - name: Verify active UI module order and runtime bindings
         run: |
           luajit tests/test_active_ui_runtime.lua

@@ -12,7 +12,7 @@ function H.new(sw,sh)
         clicks={},edits={},opened={},ids={},colors=0,color_stack={},palette_events={},windows={},vars={},repeats=0,frame=0,
         style={padding={x=10,y=8},spacing={x=6,y=4},frame={x=8,y=10}},font=1}
     local im={}
-    im.WindowFlags=enum({'NoTitleBar','NoResize','NoMove','NoSavedSettings','NoScrollbar','NoScrollWithMouse','AlwaysAutoResize','NoCollapse'})
+    im.WindowFlags=enum({'NoTitleBar','NoResize','NoMove','NoSavedSettings','NoScrollbar','AlwaysAutoResize','NoCollapse'})
     local color_names={'Text','TextDisabled','WindowBg','ChildBg','PopupBg','Border','BorderShadow',
         'FrameBg','FrameBgHovered','FrameBgActive','TitleBg','TitleBgActive','TitleBgCollapsed','MenuBarBg',
         'ScrollbarBg','ScrollbarGrab','ScrollbarGrabHovered','ScrollbarGrabActive','CheckMark','SliderGrab',
@@ -22,7 +22,6 @@ function H.new(sw,sh)
     im.Col=strict(color_enum,'Col')
     im.StyleVar=enum({'WindowPadding','ItemSpacing','FramePadding','WindowRounding','FrameRounding','ButtonTextAlign'})
     im.Cond=enum({'Always','Appearing'});im.InputTextFlags=enum({'Password'})
-    im.HoveredFlags=enum({'ChildWindows','AllowWhenBlockedByActiveItem','AllowWhenBlockedByPopup'})
     im.new={char=setmetatable({},{__index=function(_,n)return function()return ffi.new('char[?]',n)end end}),
         bool=function(v)return ffi.new('bool[1]',v or false)end,int=function(v)return ffi.new('int[1]',v or 0)end,
         float=function(v)return ffi.new('float[1]',v or 0)end}
@@ -144,7 +143,6 @@ function H.new(sw,sh)
     im.InputTextMultiline=function(label,buf,n,sz)return input(label,buf,n,sz)end
     im.Checkbox=function(label,buffer)local r=add('checkbox',label,textsize(label).x+24,22,true);if consume(h.clicks,r)then buffer[0]=not buffer[0];return true end;return false end
     im.SetNextWindowSize=function(sz)h.next_size=sz end
-    im.SetNextWindowSizeConstraints=function()end
     im.SetNextWindowPos=function(p,_,pivot)h.next_pos=p;h.next_pivot=pivot end
     im.SetNextWindowBgAlpha=function(alpha)h.next_bg_alpha=alpha end
     im.Begin=function(label)return window(label)end
@@ -206,14 +204,12 @@ function H.new(sw,sh)
     im.IsItemActive=function()return false end;im.IsAnyItemActive=function()return false end
     im.IsWindowHovered=function()return false end;im.IsMouseDown=function()return false end
     im.IsMouseDragging=function()return false end;im.GetFrameCount=function()return h.frame end
-    im.GetWindowPos=function()local c=ctx();return{x=c.px,y=c.py}end
-    im.GetWindowSize=function()local c=ctx();return{x=c.w,y=c.h}end
     im.GetColorU32=function(index,alpha)
         local c=type(index)=='table'and rgba(index)or rgba(assert(style_colors[index],'unknown color index'))
         local function byte(v)return math.floor(math.max(0,math.min(1,v))*255+.5)end
         return bit.bor(byte(c.x),bit.lshift(byte(c.y),8),bit.lshift(byte(c.z),16),bit.lshift(byte(c.w*(alpha or 1)*native_style.Alpha),24))
     end
-    im.GetWindowDrawList=function()return strict({AddRect=function()end,AddRectFilled=function()end,AddTriangleFilled=function()end,AddLine=function()end},'drawlist')end
+    im.GetWindowDrawList=function()return strict({AddRect=function()end,AddRectFilled=function()end,AddTriangleFilled=function()end},'drawlist')end
     h.imgui=strict(im,'imgui')
     function h:begin_frame()
         assert(#self.contexts==0,'window stack leaked before frame')
