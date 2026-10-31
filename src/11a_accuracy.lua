@@ -39,7 +39,10 @@ function A.quantity(row,side,offer,now)
     -- Never join anonymous API stalls to live scans by numeric id alone.
     if not sid or not shop or owner=='' or owner=='?' then return nil end
     local live=DSP.live and DSP.live.shop
-    if live and live.scan_complete==true and tonumber(live.server)==sid
+    if live and tonumber(live.server)==sid
+        -- Native pages can arrive as fragments: wait for the 2-second quiet
+        -- window unless the existing scan worker already marked it stable.
+        and (live.scan_complete==true or now-(tonumber(live.items_updated) or now)>=2)
         and tonumber(live.num)==shop and (live.menu_closed or 0)==0
         and equal(live.owner,offer.owner)
         and now-(tonumber(live.items_updated) or 0)>=0
