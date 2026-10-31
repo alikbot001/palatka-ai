@@ -94,17 +94,19 @@ function V.storage_screen()
             V.muted('Если игровой интерфейс не выдаёт содержимое через события,')
             V.muted('можно вставить список вручную — это не игровой скан.')
             V.storage_manual_kind=V.storage_manual_kind or 'trunk'
-            local bw=math.max(72,(width-12)/3)
-            for i,t in ipairs({{'trunk','Багажник'},{'cabinet','Шкаф'},{'warehouse','Склад'}})do
-                if b(t[2],'manual_'..t[1],bw,V.storage_manual_kind==t[1])then V.storage_manual_kind=t[1]end
-                if i<3 then V.inline(5)end
+            local bw=math.max(90,math.floor((width-12)/2))
+            for i,t in ipairs({{'trunk','Багажник'},{'inventory','Инвентарь'},
+                               {'cabinet','Шкаф'},{'warehouse','Склад'}})do
+                if b(t[2],'manual_'..t[1],bw,V.storage_manual_kind==t[1],V.storage_manual_kind==t[1])then V.storage_manual_kind=t[1]end
+                if i%2==1 then V.inline(6)end
             end
             V.storage_input=V.storage_input or imgui.new.char[8192]()
             V.muted('Формат: Дрова x45000  или  Дрова (45000 шт.)')
             imgui.InputTextMultiline('##storage_text',V.storage_input,8192,imgui.ImVec2(-1,100))
             if b('Сохранить снимок','manual_accept',math.min(width,220),false,true)then
                 local kind=V.storage_manual_kind
-                local title=kind=='trunk'and'Багажник (ручной список)' or kind=='cabinet'and'Шкаф (ручной список)' or 'Склад (ручной список)'
+                local title=kind=='trunk'and'Багажник (ручной список)' or kind=='inventory'and'Инвентарь (ручной список)'
+                    or kind=='cabinet'and'Шкаф (ручной список)' or 'Склад (ручной список)'
                 local ok,err=S.accept(kind,title,DSP.to_cp(ffi.string(V.storage_input)),nil,'manual')
                 if ok then V.storage_tab='snapshots';V.storage_selected=1;V.storage_error=nil
                 else V.storage_error=err end
