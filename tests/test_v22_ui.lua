@@ -131,7 +131,7 @@ for _,size in ipairs(sizes)do
     h:act('v22_menu','palatka');assert(h.V.nav,'drawer opens');capture(h,'drawer_trade');h:draw();capture(h,'drawer_trade_idle')
     h:act('v22_nav_2');assert(h.V.screen=='lavki'and not h.V.nav,'legacy screen IDs preserved by navigation')
     h:draw('arbitrage');h:act('v22_arb_group_1');capture(h,'arb_details')
-    h:act('v22_arb_close_details')
+    h:act('v22_modal_x_arb_details')
     h:draw('notes');h:act('v22_tools22_note_open_1');capture(h,'notes_editor')
     h:act('v22_tools22_note_delete');capture(h,'notes_delete_modal');h:act('v22_tools22_note_delete_cancel')
     for _,kind in ipairs({'sell','buy'})do
@@ -181,7 +181,7 @@ h:act('v22_arb_route');assert(V.arb_route,'route view opens')
 h:act('v22_arb_route_sell_1');assert(h.marked,'route pin action reaches engine')
 imgui=h.imgui
 -- Close modal through its actual visible control, or the route back and close path.
-h:act('v22_arb_back_offers');h:act('v22_arb_close_details')
+h:act('v22_arb_back_offers');h:act('v22_modal_x_arb_details')
 h:draw('notes');h:act('v22_tools22_note_open_1');assert(DSP.ui.note_current)
 h:act('v22_tools22_note_delete');local note_count=#DSP.settings.notes;local deleted_title=DSP.ui.note_current.title
 h:act('v22_tools22_note_delete_cancel');assert(#DSP.settings.notes==note_count)
