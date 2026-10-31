@@ -135,7 +135,7 @@ function A.draw()
         if b('Арбитраж · переместить','handle',math.max(100,g.w-112))then end
         if imgui.IsItemActive() and io.MouseDelta then drag(g,io,false)end
         imgui.SameLine(0,5)
-        if b(A.queue_expanded and '−' or '+','queue',40)then A.queue_expanded=not A.queue_expanded end
+        if b(A.queue_expanded and '-' or '+','queue',40)then A.queue_expanded=not A.queue_expanded end
         imgui.SameLine(0,5)
         if b('X','close',43)then A.show(false)end
         local st=A.stats()
@@ -161,9 +161,9 @@ function A.draw()
         imgui.EndChild()
         if A.ui_message then quiet(V.fit(A.ui_message,math.max(120,g.w-35)))end
         if A.save_error then red('Не сохранено: '..tostring(A.save_error))end
-        if b('← Предыдущая','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
+        if b('< Предыдущая','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
         imgui.SameLine(0,6)
-        if b('Следующая →','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
+        if b('Следующая >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
         -- Native ImGui drag-resize grip, visually aligned to Palatka corners.
         imgui.SetCursorPos(imgui.ImVec2(g.w-39,g.h-36))
         if b('//','resize',29)then end
