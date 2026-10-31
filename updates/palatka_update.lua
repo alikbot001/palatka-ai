@@ -271,7 +271,13 @@ return function(DSP)
         -- Hide even when a previous callback lost browser_visible state.
         if W.web and W.created then
             pcall(function() W.web.setClickable(W.bid, false) end)
-            pcall(function() W.web.setVisible(W.bid, false) end)
+            local ok, ret = pcall(W.web.setVisible, W.bid, false)
+            if not ok or ret == false then
+                -- Best-effort Android fallback if visibility cannot be changed.
+                pcall(function() W.web.setPos(W.bid, -99999, -99999) end)
+                pcall(function() W.web.setSize(W.bid, 1, 1) end)
+                W.last_rect = {x=-99999,y=-99999,w=0,h=0}
+            end
         end
         W.browser_visible = false
     end
@@ -342,6 +348,11 @@ return function(DSP)
     local function create_browser()
         if W.created then return true end
         if not W.web then return false, 'webviews missing' end
+        for _, method in ipairs({'createBrowser','setVisible','setClickable','setPos','setSize'}) do
+            if type(W.web[method]) ~= 'function' then
+                return false, 'webviews.' .. method .. ' missing'
+            end
+        end
         install_bridge()
         local url = 'file://' .. W.html_path .. '?v=' .. W.version
         local ok, e = pcall(function() W.web.createBrowser(W.bid, url) end)
@@ -357,7 +368,7 @@ return function(DSP)
         end)
         if not hidden or ret == false then
             W.geometry_error = 'Cannot hide WebView after creation'
-            W.created = false
+            hide_browser()
             return false, W.geometry_error
         end
         return true
