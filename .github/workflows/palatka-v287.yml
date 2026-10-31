@@ -99,9 +99,9 @@ jobs:
           assert src.index('"66a_trade_log_tab_mh.lua"') < src.index('"66c_mh_trade_journal.lua"')
           assert src.index('"68_ui22_flip_promo.lua"') < src.index('"68b_promo_universal_ui.lua"')
           assert src.index('"69b_arbitrage_agent_ui.lua"') < src.index('"69d_runtime_diagnostic.lua"')
-          ota=Path('updates/palatka_update.lua').read_text()
-          assert 'local function _v293_src_69d_runtime_diagnostic()' in ota
-          assert 'local function install_v293()' in ota
+          ota=Path('updates/palatka_update.lua').read_bytes()
+          assert b'local function _v293_runtime_diagnostic()' in ota
+          assert b'local function install_v293()' in ota
           PY
       - name: Verify OTA Lua syntax
         run: luajit -b updates/palatka_update.lua /dev/null
