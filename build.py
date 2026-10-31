@@ -136,6 +136,10 @@ for name in MODULES:
         # before concatenation; the final standalone is CP1251 as before.
         text = raw_source.decode("cp1251")
         print(f"legacy CP1251 module: {name}")
+    try:
+        text.encode("cp1251")
+    except UnicodeEncodeError as exc:
+        sys.exit(f"non-CP1251 characters in {name}: {repr(text[exc.start:exc.end])} at {exc.start}")
     fn = "__mod_" + name.replace(".lua", "").replace("-", "_")
     parts.append(f"local function {fn}()\n")
     parts.append(text)
