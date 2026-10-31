@@ -24,7 +24,7 @@ local function begin_template(index)
     for _,v in ipairs(t and t.rows or{})do
         rows[#rows+1]={text=v.text,interval=v.interval,auto=v.auto~=false}
     end
-    V.unipromo_draft={rows=rows,auto=t and t.auto~=false or true}
+    V.unipromo_draft={rows=rows,auto=(t==nil or t.auto~=false)}
     V.unipromo_error=nil
 end
 local function begin_line(index)
@@ -33,7 +33,7 @@ local function begin_line(index)
     local row=V.unipromo_draft.rows[index]
     fill(V.unipromo_line,row and row.text or'/vr ',512)
     V.unipromo_line_interval={value=row and row.interval or 180}
-    V.unipromo_line_enabled=row and row.auto~=false or true
+    V.unipromo_line_enabled=(row==nil or row.auto~=false)
     V.unipromo_line_error=nil
     V.open_popup('Строка рекламы','unipromo_line')
 end
