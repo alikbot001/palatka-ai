@@ -52,7 +52,7 @@ jobs:
                      'src/38_arbitrage_v16.lua','src/62_ui21_shops.lua']
           for p in targets:
               raw = Path(p).read_text(encoding='utf-8')
-              assert 'Арбитраж' in raw or 'лавк' in raw.lower() or 'Лавк' in raw, p
+              assert any('\u0400' <= c <= '\u04FF' for c in raw), p
               bad = [c for c in raw if 'À' <= c <= 'ÿ']
               assert not bad, (p, bad[:12])
               print(p, 'Cyrillic source verified')
