@@ -112,7 +112,8 @@ local function record_snapshot(route,sid)
     local buy=route.buy_offer
     local cut=cycle_start(os.time())
     -- Do not requeue a previous server-day quote after the expected 05:00 restart.
-    if (num(sell.ts,1)and sell.ts<cut)or(num(buy.ts,1)and buy.ts<cut)then return nil end
+    local sell_at,buy_at=num(sell.ts,1),num(buy.ts,1)
+    if (sell_at and sell_at<cut)or(buy_at and buy_at<cut)then return nil end
     local sk=key(sid,row,'sell',sell)
     local bk=key(sid,row,'buy',buy)
     local ts=os.time()
