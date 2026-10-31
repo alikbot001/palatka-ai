@@ -9,6 +9,8 @@ local G = DSP.settings_safety or {}
 DSP.settings_safety = G
 if not G.installed then
     local path = DSP.settings_path
+    local release=tostring(PALATKA_UPDATE_VERSION or DSP.version or 'before_update')
+        :gsub('[^%w_%-]','_')
     local original_save = DSP.save_settings
 
     local function read_all(filename)
@@ -116,7 +118,7 @@ if not G.installed then
         local ui_path=DSP.ui_state_path
         local ui_raw=read_all(ui_path)
         if ui_raw and valid_json(ui_raw) then
-            local checkpoint=ui_path..'.checkpoint_v283'
+            local checkpoint=ui_path..'.checkpoint_'..release
             if not read_all(checkpoint) then
                 local copied=write_bytes(checkpoint..'.tmp',ui_raw)
                 if copied then pcall(os.rename,checkpoint..'.tmp',checkpoint) end
@@ -165,7 +167,7 @@ if not G.installed then
     -- Do not enumerate or discard unknown settings during an update.
     G.installed=true
     G.original_save=original_save
-    local ok,detail=G.checkpoint('v283')
+    local ok,detail=G.checkpoint(release)
     if DSP.flog then
         pcall(DSP.flog,'SETTINGS SAFETY checkpoint: '..tostring(ok)..' '..tostring(detail))
     end
