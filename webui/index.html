@@ -92,12 +92,79 @@ linear-gradient(120deg,rgba(255,173,51,.1),rgba(255,122,26,.035) 38%,rgba(17,21,
   .mnav{border:0;background:transparent;border-radius:11px;color:#77818e;padding:5px 2px;font-size:8px}.mnav svg{width:18px;height:18px;margin:0 auto 3px}.mnav.on{color:var(--accent);background:rgba(255,173,51,.07)}
   .modal{align-items:flex-end;padding:0}.dialog{width:100%;border-radius:22px 22px 0 0;border-bottom:0;max-height:88vh;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
 }
+
+/* Mobile-first readability hotfix: the WebView is a floating in-game window,
+   not a full-size desktop browser. Keep controls tappable in landscape. */
+:root{--muted:#aab5c5;--line:#303a49}
+html,body{font-size:14px;line-height:1.4}
+.navlabel,.eyebrow,.kpilabel,.kpifoot,.tiny,.small,.meta,.itemsub,
+.quick span,.storagefoot,.badge,.pagesub,.mnav,.toast{font-size:12px}
+.name,.money,.itemname,.paneltitle,.quick strong{font-size:14px}
+.pricebtn{font-size:12px;min-height:42px;padding:8px 4px}
+.fullbtn,.search,.field,.ghostbtn,.primarybtn,.navbtn,.iconbtn,
+.backbtn{min-height:44px}
+.seg button{min-height:44px;font-size:12px}
+.kpivalue{font-size:24px}
+.hero h1{font-size:23px;line-height:1.24}
+.hero p,.placeholder p{font-size:13px;line-height:1.5}
+.quick{min-height:92px}.quick:hover,.storagecard:hover{transform:none}
+.content{overscroll-behavior:contain}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:1060px){
+  .shell{display:block}
+  .sidebar{display:none}
+  .main{height:100%;grid-template-rows:60px minmax(0,1fr) 70px}
+  .topbar{padding:0 12px}
+  .topactions .ghostbtn{display:none}
+  .content{padding:12px 14px 22px}
+  .hero{padding:14px 17px;border-radius:16px}
+  .hero h1{font-size:19px;max-width:unset;margin:5px 0}
+  .heroactions{margin-top:12px}
+  .heroactions button{min-height:44px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .kpi{padding:11px 13px}
+  .dashboardgrid,.storagegrid{grid-template-columns:1fr}
+  .quickgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .itemtable{border:0;background:transparent;overflow:visible}
+  .itemrow{grid-template-columns:minmax(0,1fr) 66px;gap:9px;
+    border:1px solid var(--line);border-radius:14px;
+    background:#11161e;margin-bottom:9px;padding:13px}
+  .itemrow .money{grid-column:1/2}
+  .prices{grid-column:1/3;gap:6px}
+  .mobilebar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;
+    border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+    background:rgba(9,11,16,.96)}
+  .mnav{border:0;background:transparent;border-radius:11px;color:#aeb9c7;
+    min-height:52px;padding:6px 2px;font-size:12px;line-height:1.1}
+  .mnav svg{width:21px;height:21px;margin:0 auto 4px}
+  .mnav.on{color:var(--accent);background:rgba(255,173,51,.10)}
+  .modal{align-items:flex-end;padding:0}
+  .dialog{width:100%;border-radius:19px 19px 0 0;border-bottom:0;
+    max-height:87vh;padding-bottom:calc(15px + env(safe-area-inset-bottom))}
+}
+@media(max-width:520px){
+  .topactions .primarybtn{display:none}
+  .hero h1{font-size:18px}
+  .heroactions{flex-wrap:wrap}
+  .heroactions button{flex:1;min-width:130px}
+  .quickgrid{grid-template-columns:1fr 1fr}
+  .mnav{font-size:11px}
+}
+@media(max-height:540px){
+  .hero{padding:10px 14px}
+  .hero .eyebrow{display:none}
+  .hero p{font-size:12px}
+  .heroactions{margin-top:8px}
+  .content{padding-top:10px}
+  .kpi{padding:8px 12px}
+  .kpi .kpivalue{font-size:20px;margin-top:3px}
+}
 </style>
 </head>
 <body>
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand"><div class="logo">P</div><div class="brandtxt"><b>Palatka AI</b><span id="sideVersion">Web dashboard</span></div></div>
+    <div class="brand"><div class="logo">P</div><div class="brandtxt"><b>Palatka AI</b><span id="sideVersion">Мобильный помощник</span></div></div>
     <div class="navgroup">
       <div class="navlabel">Рабочее пространство</div>
       <button class="navbtn on" data-nav="home" onclick="go('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-7h6v7"/></svg><span>Главная</span></button>
@@ -127,8 +194,8 @@ linear-gradient(120deg,rgba(255,173,51,.1),rgba(255,122,26,.035) 38%,rgba(17,21,
     <main class="content">
       <section class="page active" data-page="home">
         <div class="hero">
-          <div class="eyebrow">Palatka intelligence workspace</div>
-          <h1>Рынок, торговля и твои запасы — в одном интерфейсе.</h1>
+          <div class="eyebrow">PALATKA AI · ОБЗОР</div>
+          <h1>Торговля, рынок и хранилища</h1>
           <p id="heroStatus">Получаю данные из Lua Core…</p>
           <div class="heroactions">
             <button class="primarybtn" onclick="send('refresh_market')">Обновить данные</button>
@@ -145,7 +212,7 @@ linear-gradient(120deg,rgba(255,173,51,.1),rgba(255,122,26,.035) 38%,rgba(17,21,
 
         <div class="dashboardgrid">
           <div class="panel">
-            <div class="panelhead"><div><div class="paneltitle">Быстрые действия</div><div class="tiny muted" style="margin-top:3px">Самые частые операции</div></div><span class="badge">Lua Core online</span></div>
+            <div class="panelhead"><div><div class="paneltitle">Быстрые действия</div><div class="tiny muted" style="margin-top:3px">Самые частые операции</div></div><span class="badge">Данные из Lua</span></div>
             <div class="panelbody"><div class="quickgrid">
               <button class="quick" onclick="send('refresh_market')"><div class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6v6h-6"/><path d="M4 18v-6h6"/><path d="M18.5 9a7 7 0 0 0-12-3L4 8"/><path d="M5.5 15a7 7 0 0 0 12 3l2.5-2"/></svg></div><strong>Обновить рынок</strong><span>Подтянуть API и локальные данные</span></button>
               <button class="quick" onclick="go('storage')"><div class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18v14H3z"/><path d="M5 3h14v4H5z"/></svg></div><strong>Мои хранилища</strong><span>Поиск, оценка и выбор источника цены</span></button>
@@ -185,7 +252,7 @@ linear-gradient(120deg,rgba(255,173,51,.1),rgba(255,122,26,.035) 38%,rgba(17,21,
       <button class="mnav on" data-nav="home" onclick="go('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Главная</button>
       <button class="mnav" data-nav="market" onclick="go('market')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19V9M10 19V5M16 19v-7"/></svg>Рынок</button>
       <button class="mnav" data-nav="trade" onclick="go('trade')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m7 7 3-3 3 3M10 4v12M17 17l-3 3-3-3M14 20V8"/></svg>Торговля</button>
-      <button class="mnav" data-nav="storage" onclick="go('storage')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18v14H3zM5 3h14v4H5z"/></svg>Склад</button>
+      <button class="mnav" data-nav="storage" onclick="go('storage')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18v14H3zM5 3h14v4H5z"/></svg>Запасы</button>
       <button class="mnav" data-nav="more" onclick="go('more')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>Ещё</button>
     </nav>
   </section>
