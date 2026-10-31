@@ -226,24 +226,20 @@ end
 function C.end_drag() if C.drag_dirty then persist(); C.drag_dirty=false end end
 function C.geometry(sw,sh)
     local s=settings()
-    -- Compact MCR-style log is the default; a drag always persists its anchor.
-    if s.compact==nil then s.compact=true end
-    if s.alpha==nil then s.alpha=.28 end
-    s.lines=math.max(2,math.min(8,math.floor(tonumber(s.lines)or 4)))
-    local wide=math.max(250,sw-16)
-    local w=math.max(250,math.min(tonumber(s.w)or math.min(440,sw*.48),wide))
-    local desired=s.compact and (49+25*s.lines) or (tonumber(s.h)or math.min(340,sh*.58))
-    local expanded=math.max(80,math.min(desired,math.max(80,sh-16)))
-    local x=math.max(8,math.min(tonumber(s.x)or 24,math.max(8,sw-w-8)))
-    local y=math.max(8,math.min(tonumber(s.y)or (sh-expanded-50),math.max(8,sh-expanded-8)))
-    return {x=x,y=y,w=w,h=s.minimized and 45 or expanded,touch=32,
+    local default_w=math.min(700,sw*.45)
+    local default_h=math.min(620,sh*.69)
+    local w=math.max(360,math.min(tonumber(s.w) or default_w,math.max(360,sw-16)))
+    local expanded=math.max(280,math.min(tonumber(s.h) or default_h,math.max(280,sh-16)))
+    local x=math.max(8,math.min(tonumber(s.x) or 24,math.max(8,sw-w-8)))
+    local y=math.max(8,math.min(tonumber(s.y) or 120,math.max(8,sh-expanded-8)))
+    return {x=x,y=y,w=w,h=s.minimized and 84 or expanded,touch=54,
         max_x=math.max(8,sw-w-8),max_y=math.max(8,sh-expanded-8)}
 end
 function C.remember_size(w,h)
     local s=settings(); if s.minimized then return false end
-    w=math.floor((tonumber(w)or 0)+.5);h=math.floor((tonumber(h)or 0)+.5)
-    if w<250 or h<80 then return false end
-    if math.abs((tonumber(s.w)or 0)-w)<1 and math.abs((tonumber(s.h)or 0)-h)<1 then return false end
+    w=math.floor((tonumber(w) or 0)+0.5);h=math.floor((tonumber(h) or 0)+0.5)
+    if w<360 or h<280 then return false end
+    if math.abs((tonumber(s.w) or 0)-w)<1 and math.abs((tonumber(s.h) or 0)-h)<1 then return false end
     s.w,s.h=w,h;C.size_dirty=true;return true
 end
 function C.end_resize()

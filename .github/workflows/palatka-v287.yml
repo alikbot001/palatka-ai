@@ -1,0 +1,91 @@
+name: Palatka 2.8.8 production build
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'updates/**'
+      - 'version.json'
+      - 'build.py'
+      - '.github/workflows/palatka-v287.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'updates/**'
+      - 'version.json'
+      - 'build.py'
+      - '.github/workflows/palatka-v287.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Compile new modules individually
+        run: |
+          for file in src/49a_promo_universal.lua src/68b_promo_universal_ui.lua src/69a_arbitrage_agent.lua src/69b_arbitrage_agent_ui.lua src/69c_arbitrage_status.lua; do
+            echo "Compiling $file"
+            luajit -b "$file" /dev/null
+          done
+      - name: Check arbitrage agent accounting
+        run: luajit tests/test_arbitrage_session.lua
+      - name: Check missing shop and item handling
+        run: luajit tests/test_arbitrage_status.lua
+      - name: Test universal promotion scheduler
+        run: luajit tests/test_promo_universal.lua
+      - name: Verify OTA Lua syntax
+        run: luajit -b updates/palatka_update.lua /dev/null
+      - name: Verify OTA version and byte size
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          release=json.loads(Path('version.json').read_text())
+          ota=Path('updates/palatka_update.lua').read_bytes()
+          assert release['version']=='2.8.8'
+          assert len(ota)==release['size'], (len(ota),release['size'])
+          assert b"PALATKA_UPDATE_VERSION = '2.8.8'" in ota
+          assert b'local function _v286_mcr_classic()' not in ota
+          print('OTA version and size verified:',len(ota))
+          PY
+      - name: Build full standalone Palatka script
+        run: python3 build.py
+      - name: Verify original main UI and retained agent
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          data=Path('palatka_ai.lua').read_bytes()
+          assert b'Palatka AI v2.8.8' in data[:1000]
+          assert b'##palatka_arbitrage_agent' in data
+          assert b'MCR CLASSIC  /  PALATKA AI' not in data
+          assert b'##palatka_mobile' in data
+          print('Main UI verified; arbitrage agent present; no MCR shell')
+          PY
+      - name: Publish full palatka_ai.lua to main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add palatka_ai.lua
+          if git diff --cached --quiet; then
+            echo "Full script already up to date"
+          else
+            git commit -m "release: publish Palatka AI v2.8.8 standalone Lua"
+            git push origin HEAD:main
+          fi
+      - name: Upload verified standalone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-v287-full-build
+          path: palatka_ai.lua
+          if-no-files-found: error
+          retention-days: 7

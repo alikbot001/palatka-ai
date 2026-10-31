@@ -1,123 +1,104 @@
--- Compact MCR-inspired trade overlay; journal/event semantics stay in Palatka.
+-- Phone journal: one stable anchor, fixed controls, and readable event cards.
 local C=DSP.craglog
-local function cp(s)return DSP.utf8(tostring(s or ''))end
-local function state()
-    DSP.settings.craglog=DSP.settings.craglog or {}
-    return DSP.settings.craglog
+local function cp(s) return DSP.utf8(tostring(s or '')) end
+local function text(s) imgui.TextWrapped(cp(s)) end
+local function button(label,id,w,active)
+    if active then imgui.PushStyleColor(imgui.Col.Button,DSP.theme.col('accent',.7)) end
+    local hit=imgui.Button(cp(label)..'##mini_'..id,imgui.ImVec2(w,54))
+    if active then imgui.PopStyleColor(1) end
+    return hit
 end
-local function changed()if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end end
-local function button(label,id,w)
-    return imgui.Button(cp(label)..'##compact_log_'..id,imgui.ImVec2(w,28))
+local function inline() imgui.SameLine(0,8) end
+local function state() return DSP.settings.craglog end
+local function header(g)
+    local s=state()
+    local handle=s.pinned and 'ÆÓÐÍÀË / ÇÀÊÐÅÏË¨Í' or 'ÆÓÐÍÀË / ÏÅÐÅÒÀÙÈÒÜ'
+    button(handle,'handle',g.w-300,false)
+    if not s.pinned and imgui.IsItemActive() and imgui.IsMouseDragging(0) then
+        local delta=imgui.GetIO().MouseDelta
+        C.drag(delta.x,delta.y)
+    end
+    if not imgui.IsMouseDown(0) then C.end_drag() end
+    inline()
+    if button(s.pinned and 'PIN: ÄÀ' or 'PIN: ÍÅÒ','pin',120,s.pinned) then C.set_pinned(not s.pinned) end
+    inline()
+    if button(s.minimized and '+' or '-','collapse',60) then C.set_minimized(not s.minimized) end
+    inline()
+    if button('X','close',60) then s.open=false; DSP.save_settings() end
 end
-local function short(s,max_width)
-    s=tostring(s or '')
-    if not imgui.CalcTextSize then return s end
-    if imgui.CalcTextSize(cp(s)).x<=max_width then return s end
-    local l,r=0,#s
-    while l<r do
-        local m=math.floor((l+r+1)/2)
-        if imgui.CalcTextSize(cp(s:sub(1,m)..'...')).x<=max_width then l=m else r=m-1 end
-    end
-    return s:sub(1,l)..'...'
-end
-local function draw_header(s,g)
-    local width=imgui.GetContentRegionAvail().x
-    local right=s.click_through and 0 or 116
-    if button(s.minimized and 'J  /  ОТКРЫТЬ' or 'J  /  ТОРГОВЫЙ ЖУРНАЛ',
-        'drag',math.max(65,width-right))then
-        if s.minimized then C.set_minimized(false)end
-    end
-    if not s.pinned and not s.click_through and imgui.IsItemActive() and imgui.GetIO().MouseDelta then
-        local d=imgui.GetIO().MouseDelta
-        if d.x~=0 or d.y~=0 then C.drag(d.x,d.y)end
-    end
-    if not imgui.IsMouseDown(0)then C.end_drag()end
-    if not s.click_through then
-        imgui.SameLine(0,4)
-        if button(s.minimized and '+' or '-','collapse',33)then C.set_minimized(not s.minimized)end
-        imgui.SameLine(0,4)
-        if button('X','close',33)then s.open=false;changed()end
-    end
-end
-local function draw_compact(s,g)
-    local events=C.filtered(s.filter or 'all')
-    local n=#events
-    local lines=s.lines or 4
-    if n==0 then
-        imgui.TextDisabled(cp('Нет новых событий. История сохранена в Palatka AI.'))
-    end
-    for i=n,math.max(1,n-lines+1),-1 do
-        local e=events[i]
-        if e then
-            local when=os.date('%H:%M',e.ts or os.time())
-            local desc=C.describe(e)
-            local label=when..'  '..desc
-            imgui.Text(cp(short(label,math.max(80,imgui.GetContentRegionAvail().x-8))))
+local function filters(g)
+    local s=state()
+    for i,pair in ipairs({{'all','Âñå'},{'loot','Òàéíèêè'},{'payday','PayDay'},
+                           {'sales','Ïðîäàæè'},{'buys','Ñêóïêà'},{'income','Äîõîäû'}}) do
+        if button(pair[2],'filter_'..pair[1],(g.w-42)/3,s.filter==pair[1]) then
+            s.filter=pair[1]; C.scroll=0; DSP.save_settings()
         end
-    end
-    if C.last_error then
-        imgui.TextColored(DSP.theme.col('bad',1),cp(short('Журнал: '..C.last_error,g.w-16)))
+        if i%3~=0 then inline() end
     end
 end
-local function draw_expanded(s,g)
-    local summary=C.summary('day')
-    imgui.TextDisabled(cp('Приход '..DSP.money(summary.income)..' | Расход '..DSP.money(summary.expense)))
-    imgui.TextColored(DSP.theme.col('good',1),cp('Итог за сегодня: '..DSP.money(summary.net)))
-    for _,row in ipairs({{'all','Все'},{'sales','Продажи'},{'buys','Скупка'},{'loot','Добыча'}})do
-        if button(row[2],'filter_'..row[1],92)then s.filter=row[1];changed()end
-        imgui.SameLine(0,4)
+local function row_card(entry)
+    local kind=entry.kind or entry.type
+    local tag=kind=='item' and 'ÍÀÃÐÀÄÀ' or kind=='cash' and 'ÄÅÍÜÃÈ' or kind=='opening' and 'ÒÀÉÍÈÊ'
+        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'ÄÎÕÎÄ' or 'ÑÄÅËÊÀ'
+    imgui.TextColored(DSP.theme.col('accent',1),cp(os.date('%H:%M:%S',entry.ts or 0)..'  '..tag))
+    text(C.describe(entry))
+    if entry.source then
+        text('Èñòî÷íèê: '..entry.source..(entry.association=='inferred' and ' (ïî ÷àòó)' or ''))
     end
-    imgui.NewLine()
-    if imgui.BeginChild('##compact_log_events',imgui.ImVec2(0,0),false)then
-        draw_compact(s,g)
-    end
-    imgui.EndChild()
+    imgui.Separator()
 end
 function C.draw()
-    local s=state()
-    if s.compact==nil then s.compact=true end
-    if s.alpha==nil then s.alpha=.28 end
-    s.alpha=math.max(.08,math.min(1,tonumber(s.alpha)or .28))
     local io=imgui.GetIO()
     local g=C.geometry(io.DisplaySize.x,io.DisplaySize.y)
+    local s=state()
     C.active_geometry=g
     imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
-    if s.compact or s.minimized or not C._window_size_initialized then
-        imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
-    else
-        imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Appearing)
-        if imgui.SetNextWindowSizeConstraints then
-            imgui.SetNextWindowSizeConstraints(imgui.ImVec2(250,100),
-                imgui.ImVec2(math.max(250,io.DisplaySize.x-16),math.max(100,io.DisplaySize.y-16)))
-        end
+    local force_size=(not C._window_size_initialized) or C._last_minimized~=s.minimized
+    if force_size then imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always) end
+    if not s.minimized and imgui.SetNextWindowSizeConstraints then
+        imgui.SetNextWindowSizeConstraints(imgui.ImVec2(360,280),imgui.ImVec2(math.max(360,io.DisplaySize.x-16),math.max(280,io.DisplaySize.y-16)))
     end
-    C._window_size_initialized=true
-    local colors=DSP.theme.push_overlay(1)
-    imgui.SetNextWindowBgAlpha(s.alpha)
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,5))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(4,2))
-    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
-        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+
-        imgui.WindowFlags.NoFocusOnAppearing
-    if s.compact or s.minimized then flags=flags+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar end
-    if s.click_through then flags=flags+imgui.WindowFlags.NoInputs end
-    if imgui.Begin('##palatka_mini_journal',nil,flags)then
-        if imgui.SetWindowFontScale then
-            local base=imgui.GetFontSize and imgui.GetFontSize()or 16
-            imgui.SetWindowFontScale(math.min(1,14/math.max(1,base)))
-        end
-        if not s.click_through then draw_header(s,g)end
+    C._window_size_initialized=true;C._last_minimized=s.minimized
+    imgui.SetNextWindowBgAlpha(.96)
+    local colors=DSP.theme.push_overlay(.98)
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,16)
+    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,9)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(12,12))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(8,8))
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove
+        +imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+imgui.WindowFlags.NoFocusOnAppearing
+    if imgui.Begin('##palatka_mini_journal',nil,flags) then
+        if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.15) end
+        header(g)
         if not s.minimized then
-            if s.compact then draw_compact(s,g)else draw_expanded(s,g)end
+            filters(g)
+            local events=C.filtered(s.filter or 'all')
+            local per=3
+            C.scroll=math.max(0,math.min(C.scroll,math.max(0,#events-per)))
+            local start=#events-C.scroll
+            text('Ïîñëåäíèå ñîáûòèÿ: '..#events..' / '..C.ring_cap..'   |   PIN ôèêñèðóåò ïîëîæåíèå')
+            if button('ÂÂÅÐÕ / ÍÎÂÅÅ','up',(g.w-40)/2,C.scroll>0) then C.scroll=math.max(0,C.scroll-per) end
+            inline()
+            if button('ÂÍÈÇ / ÑÒÀÐØÅ','down',(g.w-40)/2,start>per) then C.scroll=math.min(math.max(0,#events-per),C.scroll+per) end
+            start=#events-C.scroll
+            local shown=imgui.BeginChild('##mini_cards',imgui.ImVec2(0,0),false)
+            if shown then
+                if #events==0 then
+                    text('Çäåñü ïîÿâÿòñÿ ñäåëêè, äåíüãè è íàãðàäû èç èãðîâîãî ÷àòà.')
+                    text('Ïîëíàÿ èñòîðèÿ äîñòóïíà â ãëàâíîì ìåíþ.')
+                end
+                for i=start,math.max(1,start-per+1),-1 do if events[i] then row_card(events[i]) end end
+                if C.last_error then text('Îøèáêà çàïèñè: '..C.last_error) end
+            end
+            imgui.EndChild()
         end
     end
-    if not s.compact and not s.minimized and imgui.GetWindowSize then
-        local wh=imgui.GetWindowSize();C.remember_size(wh.x,wh.y)
+    if not s.minimized and imgui.GetWindowSize then
+        local ws=imgui.GetWindowSize();C.remember_size(ws.x,ws.y)
     end
     C.end_resize()
     imgui.End()
-    imgui.PopStyleVar(3)
-    if colors and colors>0 then imgui.PopStyleColor(colors)end
+    imgui.PopStyleVar(4)
+    if colors and colors>0 then imgui.PopStyleColor(colors) end
 end
 return true
