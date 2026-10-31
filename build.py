@@ -64,6 +64,7 @@ MODULES = [
     "55_craglog.lua",
     "56_mini_journal.lua",
     "57_journal_v16.lua",
+    "57a_trade_feed_mh.lua",
     "58_journal_delete.lua",
     "59_history.lua",
     "59a_loot_summary.lua",
@@ -79,6 +80,7 @@ MODULES = [
     "64_ui21_journal_calc.lua",
     "65_ui22_tools.lua",
     "66_ui22_journal.lua",
+    "66a_trade_log_tab_mh.lua",
     "67_ui22_shop_scan.lua",
     "68_ui22_flip_promo.lua",
     "68b_promo_universal_ui.lua",
@@ -89,10 +91,10 @@ MODULES = [
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v2.8.9 mobile release, built from src/*.lua
+HEADER = """-- Palatka AI v2.9.0 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.8.9')
+script_version('2.9.0')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
