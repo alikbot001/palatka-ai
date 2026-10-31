@@ -1,7 +1,7 @@
 -- Focused v2.9.3 regression for drag/swipe list scrolling.
 local scroll,max_scroll=100,500
 local io={DisplaySize={x=800,y=600},MouseDown={[0]=true},MouseDelta={x=0,y=-20},WantTextInput=false,DeltaTime=1/60}
-local separator_count,arrow_count=0,child_open=false
+local separator_count,arrow_count,child_open=0,0,false
 imgui={
     HoveredFlags={ChildWindows=1},
     WindowFlags={NoScrollbar=1},
