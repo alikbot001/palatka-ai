@@ -12,9 +12,11 @@ function M.touch_scroll(io,screen)
         local ok,value=pcall(function()return io.MouseDown[0]end)
         held=ok and value and true or false
     end
-    local flags=imgui.HoveredFlags and imgui.HoveredFlags.ChildWindows or 0
-    local ok_hover,hovered=pcall(imgui.IsWindowHovered,flags)
-    if not ok_hover then hovered=imgui.IsWindowHovered()end
+    local flags=0
+    pcall(function() flags=(imgui.HoveredFlags and imgui.HoveredFlags.ChildWindows) or 0 end)
+    local hovered=false
+    local ok_hover=pcall(function() hovered=imgui.IsWindowHovered(flags) end)
+    if not ok_hover then pcall(function() hovered=imgui.IsWindowHovered() end) end
     local max=imgui.GetScrollMaxY and imgui.GetScrollMaxY()or 1000000
     local current=imgui.GetScrollY()or 0
     local dy=io and io.MouseDelta and(io.MouseDelta.y or 0)or 0
@@ -24,7 +26,8 @@ function M.touch_scroll(io,screen)
         st.was_down=true
         if not hovered or(io and io.WantTextInput)then st.velocity=0;return end
         st.travel=st.travel+math.abs(dy)+math.abs(dx)
-        local active=imgui.IsAnyItemActive and imgui.IsAnyItemActive()or false
+        local active=false
+        pcall(function() active=imgui.IsAnyItemActive() and true or false end)
         if active and(st.travel<8 or math.abs(dy)<math.abs(dx)*1.20)then return end
         if math.abs(dy)>.01 then
             local step=-dy
