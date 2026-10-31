@@ -3,7 +3,7 @@
   "version": "2.8.3",
   "mode": "overlay",
   "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua",
-  "size": 94403,
+  "size": 94524,
   "published_at": "2026-10-31",
   "changelog": [
     "Настройки и интерфейс: прежние значения сохраняются; до обновления создаются локальные контрольные копии standalone_settings.json и ui_state.json; записи проверяются и защищены от повреждения.",
