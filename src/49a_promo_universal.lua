@@ -117,7 +117,7 @@ function P.start(now)
     if #P.steps()==0 then return false,'Добавь и включи хотя бы одну строку'end
     local s=settings()
     if not s.continuous and P.session_count>=P.MAX_SESSION then
-        return false,'Достигнут лимит 12 строк за сессию'end
+        return false,'Достигнут лимит 12 строк за сессию'
     end
     P.running=true;P.pause_reason=nil;P.last_error=nil
     P.cursor=1
@@ -126,7 +126,7 @@ function P.start(now)
     s.enabled=true
     if not persist()then
         P.running=false;s.enabled=false
-        return false,'Не удалось сохранить режим'end
+        return false,'Не удалось сохранить режим'
     end
     return true
 end
