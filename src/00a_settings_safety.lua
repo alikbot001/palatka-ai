@@ -105,6 +105,57 @@ if not G.installed then
         return true
     end
 
+    -- Protect the second settings file too: window position, CR button
+    -- placement, theme and opacity must survive application updates.
+    if type(DSP.ui_state_path)=='string' then
+        local ui_path=DSP.ui_state_path
+        local ui_raw=read_all(ui_path)
+        if ui_raw and valid_json(ui_raw) then
+            local checkpoint=ui_path..'.checkpoint_v283'
+            if not read_all(checkpoint) then
+                local copied=write_bytes(checkpoint..'.tmp',ui_raw)
+                if copied then pcall(os.rename,checkpoint..'.tmp',checkpoint) end
+            end
+        end
+        DSP.save_ui_state=function()
+            local previous=read_all(ui_path)
+            if previous and not valid_json(previous) then
+                return false,'Existing UI state corrupt; preserving file'
+            end
+            local pack={
+                cr_pos=DSP.settings.cr_pos or {x=28,y=215},
+                screen=DSP.settings.screen or 'palatka',
+                theme=(DSP.theme and DSP.theme.current) or DSP.settings.theme,
+                opacity=(DSP.theme and DSP.theme.opacity) or DSP.settings.opacity,
+                saved_at=os.time()
+            }
+            local encoded,body=pcall(encodeJson,pack)
+            if not encoded or not valid_json(body) then return false,'Invalid UI state JSON' end
+            local temp=ui_path..'.safe_new'
+            local wrote,err=write_bytes(temp,body)
+            if not wrote then return false,err end
+            if previous then
+                local backed,why=backup_valid(ui_path,ui_path..'.bak')
+                if not backed then pcall(os.remove,temp);return false,'UI backup failed: '..tostring(why) end
+                local old=ui_path..'.old'
+                pcall(os.remove,old)
+                local moved,why2=os.rename(ui_path,old)
+                if not moved then pcall(os.remove,temp);return false,'UI move failed: '..tostring(why2) end
+                local renamed,why3=os.rename(temp,ui_path)
+                if not renamed then
+                    pcall(os.rename,old,ui_path)
+                    pcall(os.remove,temp)
+                    return false,'UI write failed: '..tostring(why3)
+                end
+                pcall(os.remove,old)
+            else
+                local renamed,why=os.rename(temp,ui_path)
+                if not renamed then pcall(os.remove,temp);return false,tostring(why) end
+            end
+            return true
+        end
+    end
+
     -- Old files can contain a richer schema than the current build.
     -- Do not enumerate or discard unknown settings during an update.
     G.installed=true
