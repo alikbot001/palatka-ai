@@ -18,7 +18,7 @@ local function best_plan(g)
     local p=DSP.market.plan_offers(g,nil,nil,{
         extra=V.arb_extra_enabled and V.arb_extra and V.arb_extra.value or 0})
     if p.qty<=0 then
-        V.arb_best_error='Нет выгодного маршрута при текущих фильтрах'
+        V.arb_best_error='ГЌГҐГІ ГўГ»ГЈГ®Г¤Г­Г®ГЈГ® Г¬Г Г°ГёГ°ГіГІГ  ГЇГ°ГЁ ГІГҐГЄГіГ№ГЁГµ ГґГЁГ«ГјГІГ°Г Гµ'
         return
     end
     V.arb_sellers={};V.arb_buyers={}
@@ -58,31 +58,31 @@ local function offer_row(o,i)
     local missing=DSP.market.is_shop_missing and DSP.market.is_shop_missing(o.shop,os.time(),o.ts)
     V.row('arb_offer_'..V.arb_tab..i,100,function(w,x,y)
         local right=math.max(155,w-170)
-        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),right-8))
+        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' В· '..tostring(o.owner or'?'),right-8))
         local count=DSP.market.format_units(o.qty)
         local row=V.arb_detail_group and V.arb_detail_group.row
         local live_qty=DSP.market.live_offer_quantity(row,V.arb_tab,o)
-        local status=o.qty_source=='game' and 'проверено: игра' or
-            o.qty_source=='manual' and 'проверено вручную' or 'API, не подтверждено'
-        V.at(x,y+26);V.muted(V.fit(count..' шт. · '..status..
-            (live_qty and (' · Игра: '..DSP.market.format_units(live_qty)) or ''),right-8))
-        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.offer_freshness(o.ts),right-8))
+        local status=o.qty_source=='game' and 'ГЇГ°Г®ГўГҐГ°ГҐГ­Г®: ГЁГЈГ°Г ' or
+            o.qty_source=='manual' and 'ГЇГ°Г®ГўГҐГ°ГҐГ­Г® ГўГ°ГіГ·Г­ГіГѕ' or 'API, Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­Г®'
+        V.at(x,y+26);V.muted(V.fit(count..' ГёГІ. В· '..status..
+            (live_qty and (' В· Г€ГЈГ°Г : '..DSP.market.format_units(live_qty)) or ''),right-8))
+        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/ГёГІ. В· '..DSP.market.offer_freshness(o.ts),right-8))
         if missing then
-            V.at(x,y+76);V.red('Лавка недоступна: исключена из плана')
+            V.at(x,y+76);V.red('Г‹Г ГўГЄГ  Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г : ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г  ГЁГ§ ГЇГ«Г Г­Г ')
         elseif o.qty==1 and not o.verified_at then
-            V.at(x,y+76);V.muted(V.fit('Внимание: 1 может быть количеством слотов',right-8))
+            V.at(x,y+76);V.muted(V.fit('Г‚Г­ГЁГ¬Г Г­ГЁГҐ: 1 Г¬Г®Г¦ГҐГІ ГЎГ»ГІГј ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ®Г¬ Г±Г«Г®ГІГ®Гў',right-8))
         end
         V.at(x+right,y+1)
-        if not missing and b(checked and 'Снять выбор' or 'Выбрать','select_'..i,160,checked)then
+        if not missing and b(checked and 'Г‘Г­ГїГІГј ГўГ»ГЎГ®Г°' or 'Г‚Г»ГЎГ°Г ГІГј','select_'..i,160,checked)then
             selected[key]=not checked or nil;V.arb_revision=V.arb_revision+1
         end
         V.at(x+right,y+49)
-        if b('Уточнить','verify_'..V.arb_tab..i,80,false)then
+        if b('Г“ГІГ®Г·Г­ГЁГІГј','verify_'..V.arb_tab..i,80,false)then
             V.arb_verify={offer=o,side=V.arb_tab,source=live_qty and 'game' or 'manual'}
             V.arb_verify_value={qty=live_qty or tonumber(o.qty) or 0}
         end
         V.inline(4)
-        if b(missing and 'Вернуть' or 'Нет лавки','gone_'..V.arb_tab..i,82,missing)then
+        if b(missing and 'Г‚ГҐГ°Г­ГіГІГј' or 'ГЌГҐГІ Г«Г ГўГЄГЁ','gone_'..V.arb_tab..i,82,missing)then
             if missing then DSP.market.restore_shop(o.shop) else DSP.market.mark_shop_missing(o.shop,30)end
             V.arb_revision=V.arb_revision+1;V.arb_route=false;V.cache.arb_plan=nil;M.defer_save()
         end
@@ -91,27 +91,27 @@ end
 local function route_rows(p)
     return function(r,i)
         V.row('route_'..i,100,function(w,x,y)
-            V.text(V.fit('КУПИТЬ '..r.tradable_qty..' шт. у лавки #'..tostring(r.sell_offer.shop)..' · '..DSP.money(r.p_buy)..'/шт.',w))
-            V.at(x,y+26);V.text(V.fit('ПРОДАТЬ скупщику #'..tostring(r.buy_offer.shop)..' · '..DSP.money(r.p_sell)..'/шт.',w))
+            V.text(V.fit('ГЉГ“ГЏГ€Г’Гњ '..r.tradable_qty..' ГёГІ. Гі Г«Г ГўГЄГЁ #'..tostring(r.sell_offer.shop)..' В· '..DSP.money(r.p_buy)..'/ГёГІ.',w))
+            V.at(x,y+26);V.text(V.fit('ГЏГђГЋГ„ГЂГ’Гњ Г±ГЄГіГЇГ№ГЁГЄГі #'..tostring(r.buy_offer.shop)..' В· '..DSP.money(r.p_sell)..'/ГёГІ.',w))
             V.at(x,y+52)
-            if b('К продавцу','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
-            V.inline();if b('К скупщику','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
+            if b('ГЉ ГЇГ°Г®Г¤Г ГўГ¶Гі','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
+            V.inline();if b('ГЉ Г±ГЄГіГЇГ№ГЁГЄГі','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
             V.inline();V.green('~ +'..DSP.money(r.net_profit))
             if r.same_shop then
-                V.at(x,y+78);V.red('Одна лавка: возможность обратной сделки проверьте в игре')
+                V.at(x,y+78);V.red('ГЋГ¤Г­Г  Г«Г ГўГЄГ : ГўГ®Г§Г¬Г®Г¦Г­Г®Г±ГІГј Г®ГЎГ°Г ГІГ­Г®Г© Г±Г¤ГҐГ«ГЄГЁ ГЇГ°Г®ГўГҐГ°ГјГІГҐ Гў ГЁГЈГ°ГҐ')
             end
         end)
     end
 end
 local function finance(p,compact)
     -- Planned, not executed. Display each money component explicitly.
-    V.muted('Расчёт по заявкам API, не совершённая сделка')
-    V.text('Закупка: -'..DSP.money(p.cost or 0))
-    V.text('Продажа, до комиссии: +'..DSP.money(p.gross or 0))
-    V.muted('Комиссия (принятая): -'..DSP.money(p.fee or 0))
-    V.muted('Поступления после комиссии: '..DSP.money(p.revenue or 0))
-    if (p.extra or 0)>0 then V.muted('Доп. расходы: -'..DSP.money(p.extra))end
-    local result='ОЖИДАЕМАЯ ПРИБЫЛЬ: '..DSP.money(p.profit or 0)
+    V.muted('ГђГ Г±Г·ВёГІ ГЇГ® Г§Г ГїГўГЄГ Г¬ API, Г­ГҐ Г±Г®ГўГҐГ°ГёВёГ­Г­Г Гї Г±Г¤ГҐГ«ГЄГ ')
+    V.text('Г‡Г ГЄГіГЇГЄГ : -'..DSP.money(p.cost or 0))
+    V.text('ГЏГ°Г®Г¤Г Г¦Г , Г¤Г® ГЄГ®Г¬ГЁГ±Г±ГЁГЁ: +'..DSP.money(p.gross or 0))
+    V.muted('ГЉГ®Г¬ГЁГ±Г±ГЁГї (ГЇГ°ГЁГ­ГїГІГ Гї): -'..DSP.money(p.fee or 0))
+    V.muted('ГЏГ®Г±ГІГіГЇГ«ГҐГ­ГЁГї ГЇГ®Г±Г«ГҐ ГЄГ®Г¬ГЁГ±Г±ГЁГЁ: '..DSP.money(p.revenue or 0))
+    if (p.extra or 0)>0 then V.muted('Г„Г®ГЇ. Г°Г Г±ГµГ®Г¤Г»: -'..DSP.money(p.extra))end
+    local result='ГЋГ†Г€Г„ГЂГ…ГЊГЂГџ ГЏГђГ€ГЃГ›Г‹Гњ: '..DSP.money(p.profit or 0)
     if (p.profit or 0)>=0 then V.green(result)else V.red(result)end
 end
 
@@ -120,24 +120,24 @@ local function details(g)
     local compact=imgui.GetContentRegionAvail().y<400
     V.arb_extra=V.arb_extra or{value=0}
     local function extra_control()
-        if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
+        if b(V.arb_extra_enabled and 'x ГђГ Г±ГµГ®Г¤Г»' or '+ ГђГ Г±ГµГ®Г¤Г»','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
         if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
     end
     V.text(V.fit(g.name,imgui.GetContentRegionAvail().x-(compact and 290 or 0)))
     if compact then V.inline();extra_control()end
-    V.muted('Продают '..(g.row.sell.qty or g.supply)..' · Скупают '..(g.row.buy.qty or g.demand)..' · План '..p.qty..' шт.')
+    V.muted('ГЏГ°Г®Г¤Г ГѕГІ '..(g.row.sell.qty or g.supply)..' В· Г‘ГЄГіГЇГ ГѕГІ '..(g.row.buy.qty or g.demand)..' В· ГЏГ«Г Г­ '..p.qty..' ГёГІ.')
     local changed=V.arb_snapshot~=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
-    if not compact then V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
-        (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))end
+    if not compact then V.muted(V.fit('Г‘Г­ГЁГ¬Г®ГЄ '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
+        (changed and ' В· ГҐГ±ГІГј Г­Г®ГўГ»ГҐ Г¤Г Г­Г­Г»ГҐ, Г®ГІГЄГ°Г®Г©ГІГҐ Г§Г Г­Г®ГўГ®'or ' В· API, Г­Г Г«ГЁГ·ГЁГҐ ГЇГ°Г®ГўГҐГ°ГјГІГҐ Гў ГЁГЈГ°ГҐ'),imgui.GetContentRegionAvail().x))end
     finance(p,compact)
     local f=DSP.settings.arb_filters or {}
-    if not compact then V.muted('План условный: доступность не забронирована. Запас спроса: '
-        ..tostring(f.safety_pct or 0)..'%; обновите и проверьте скупку перед закупкой.')end
+    if not compact then V.muted('ГЏГ«Г Г­ ГіГ±Г«Г®ГўГ­Г»Г©: Г¤Г®Г±ГІГіГЇГ­Г®Г±ГІГј Г­ГҐ Г§Г ГЎГ°Г®Г­ГЁГ°Г®ГўГ Г­Г . Г‡Г ГЇГ Г± Г±ГЇГ°Г®Г±Г : '
+        ..tostring(f.safety_pct or 0)..'%; Г®ГЎГ­Г®ГўГЁГІГҐ ГЁ ГЇГ°Г®ГўГҐГ°ГјГІГҐ Г±ГЄГіГЇГЄГі ГЇГҐГ°ГҐГ¤ Г§Г ГЄГіГЇГЄГ®Г©.')end
     if V.arb_verify and V.arb_verify_value then
         local vr=V.arb_verify
-        V.muted(V.fit('Фактически проверено в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'),imgui.GetContentRegionAvail().x))
+        V.muted(V.fit('Г”Г ГЄГІГЁГ·ГҐГ±ГЄГЁ ГЇГ°Г®ГўГҐГ°ГҐГ­Г® Гў ГЁГЈГ°ГҐ: #'..tostring(vr.offer.shop)..' В· '..tostring(vr.side=='buy' and 'Г±ГЄГіГЇГ ГҐГІ' or 'ГЇГ°Г®Г¤Г ВёГІ'),imgui.GetContentRegionAvail().x))
         M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',130,0)
-        V.inline();if b('Применить','verify_save',112)then
+        V.inline();if b('ГЏГ°ГЁГ¬ГҐГ­ГЁГІГј','verify_save',112)then
             local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
             local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
             local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
@@ -147,41 +147,60 @@ local function details(g)
                 V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
             else V.arb_best_error=tostring(err)end
         end
-        V.inline();if b('Отмена','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
+        V.inline();if b('ГЋГІГ¬ГҐГ­Г ','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
         if V.arb_best_error then V.red(V.fit(V.arb_best_error,imgui.GetContentRegionAvail().x))end
         return
     end
     if V.arb_route then
-        if b('< Предложения','back_offers',170)then V.arb_route=false end
+        if b('< ГЏГ°ГҐГ¤Г«Г®Г¦ГҐГ­ГЁГї','back_offers',170)then V.arb_route=false end
+        V.inline()
+        if DSP.arb_agent and b('Р’ РњРРќР-РђР“Р•РќРў','route_to_agent',176,true)then
+            local ok,why=DSP.arb_agent.add_plan(p)
+            if ok then
+                DSP.arb_agent.show(true)
+                imgui.CloseCurrentPopup()
+            else DSP.notify('РђРіРµРЅС‚: '..tostring(why))end
+        end
         V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
-            if p.profit>=0 then V.green(DSP.money(p.profit)..' чистой прибыли')
-            else V.red(DSP.money(p.profit)..' итогового убытка')end
+            if p.profit>=0 then V.green(DSP.money(p.profit)..' Г·ГЁГ±ГІГ®Г© ГЇГ°ГЁГЎГ»Г«ГЁ')
+            else V.red(DSP.money(p.profit)..' ГЁГІГ®ГЈГ®ГўГ®ГЈГ® ГіГЎГ»ГІГЄГ ')end
         end})
         return
     end
     local tw=imgui.GetContentRegionAvail().x
-    if b('Продают · купить '..#g.sellers,'sell',tw*.23,V.arb_tab=='sell')then V.arb_tab='sell'end
-    V.inline();if b('Скупают · продать '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
-    V.inline();if b('Лучший план >','best',tw*.27)then best_plan(g)end
-    V.inline();if b('Сброс','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
+    if b('ГЏГ°Г®Г¤Г ГѕГІ В· ГЄГіГЇГЁГІГј '..#g.sellers,'sell',tw*.23,V.arb_tab=='sell')then V.arb_tab='sell'end
+    V.inline();if b('Г‘ГЄГіГЇГ ГѕГІ В· ГЇГ°Г®Г¤Г ГІГј '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
+    V.inline();if b('Г‹ГіГ·ГёГЁГ© ГЇГ«Г Г­ >','best',tw*.27)then best_plan(g)end
+    V.inline();if b('Г‘ГЎГ°Г®Г±','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
     if not compact then extra_control()end
     if V.arb_best_error then V.red(V.arb_best_error)end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
     V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{footer=function()
-        if b('Маршрут >','route',142,true)then V.arb_route=true end
-        V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
+        if b('ГЊГ Г°ГёГ°ГіГІ >','route',142,true)then V.arb_route=true end
+        V.inline();if b('Г‡Г ГЄГ°Г»ГІГј','close_details',116)then imgui.CloseCurrentPopup()end
     end})
 end
 function V.arbitrage()
     local st=DSP.market.state
-    V.text('Арбитраж');V.inline();V.muted('Снимок: '..DSP.market.freshness())
-    V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',120)then DSP.market.pull(st.sid)end
+    V.text('ГЂГ°ГЎГЁГІГ°Г Г¦');V.inline();V.muted('Г‘Г­ГЁГ¬Г®ГЄ: '..DSP.market.freshness())
+    if DSP.arb_agent then
+        V.inline()
+        if b(DSP.arb_agent.active()and'РњРРќР-РђР“Р•РќРў >'or'РќРђР§РђРўР¬ РЎР•РЎРЎРР®','session_start',190,true)then
+            local ok,why
+            if DSP.arb_agent.active()then DSP.arb_agent.show(true);ok=true
+            else ok,why=DSP.arb_agent.start_market()end
+            if not ok then DSP.notify('РђРіРµРЅС‚ Р°СЂР±РёС‚СЂР°Р¶Р°: '..tostring(why))end
+        end
+        local st_agent=DSP.arb_agent.stats()
+        if st_agent.routes>0 then V.muted('РЎРµСЃСЃРёСЏ: '..st_agent.done..'/'..st_agent.routes..' РјР°СЂС€СЂСѓС‚РѕРІ')end
+    end
+    V.inline();if b(st.status=='loading' and 'Г‡Г ГЈГ°ГіГ§ГЄГ ...' or 'ГЋГЎГ­Г®ГўГЁГІГј','refresh',120)then DSP.market.pull(st.sid)end
     V.arb_source=V.arb_source or 'api'
     if b('API','source_api',116,V.arb_source=='api')then
         V.arb_source='api';V.reset_list('arb_main')
     end
     V.inline()
-    if b('МОИ СКАНЫ','source_local',175,V.arb_source=='local')then
+    if b('ГЊГЋГ€ Г‘ГЉГЂГЌГ›','source_local',175,V.arb_source=='local')then
         V.arb_source='local';V.reset_list('local_arb_items')
     end
     if V.arb_source=='local' then
@@ -190,41 +209,41 @@ function V.arbitrage()
     end
     if st.error then
         local delay=(tonumber(st.next_auto_retry) or 0)-os.time()
-        V.red(V.fit('API: '..tostring(st.error)..(delay>0 and (' · авто-повтор через '..delay..'с')or ''),
+        V.red(V.fit('API: '..tostring(st.error)..(delay>0 and (' В· Г ГўГІГ®-ГЇГ®ГўГІГ®Г° Г·ГҐГ°ГҐГ§ '..delay..'Г±')or ''),
             imgui.GetContentRegionAvail().x))
     end
     local af=DSP.settings.arb_filters or {}
-    V.muted(V.fit('Фильтры: '..(tonumber(af.max_age)==0 and 'без ограничения времени' or
-        (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' мин'))..
-        ' · ROI от '..tostring(af.min_roi or 0)..'% · резерв '..tostring(af.safety_pct or 0)..
-        '% · комиссия '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
+    V.muted(V.fit('Г”ГЁГ«ГјГІГ°Г»: '..(tonumber(af.max_age)==0 and 'ГЎГҐГ§ Г®ГЈГ°Г Г­ГЁГ·ГҐГ­ГЁГї ГўГ°ГҐГ¬ГҐГ­ГЁ' or
+        (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' Г¬ГЁГ­'))..
+        ' В· ROI Г®ГІ '..tostring(af.min_roi or 0)..'% В· Г°ГҐГ§ГҐГ°Гў '..tostring(af.safety_pct or 0)..
+        '% В· ГЄГ®Г¬ГЁГ±Г±ГЁГї '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
         imgui.GetContentRegionAvail().x))
-    local query,edited=V.search('arb','Поиск предмета',-1)
+    local query,edited=V.search('arb','ГЏГ®ГЁГ±ГЄ ГЇГ°ГҐГ¤Г¬ГҐГІГ ',-1)
     if edited then V.reset_list('arb_main')end
-    if b(V.arb_sort=='az' and 'А—Я' or 'Прибыль: больше','sort',143,V.arb_sort=='az')then
+    if b(V.arb_sort=='az' and 'ГЂВ—Гџ' or 'ГЏГ°ГЁГЎГ»Г«Гј: ГЎГ®Г«ГјГёГҐ','sort',143,V.arb_sort=='az')then
         V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
         V.reset_list('arb_main')
     end
     V.inline()
-    if b('Фильтры','filters',120,V.arb_filters)then
-        V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+    if b('Г”ГЁГ«ГјГІГ°Г»','filters',120,V.arb_filters)then
+        V.arb_filters=true;V.open_popup('Г”ГЁГ«ГјГІГ°Г» Г Г°ГЎГЁГІГ°Г Г¦Г ','arb_filters')
     end
     -- Direct game observation does not require the external API to refresh.
     local live=DSP.market.live_shop_spreads and DSP.market.live_shop_spreads() or {}
     if #live>0 then
-        V.green('НАЙДЕНО В ОТКРЫТОЙ ЛАВКЕ: '..tostring(#live))
+        V.green('ГЌГЂГ‰Г„Г…ГЌГЋ Г‚ ГЋГ’ГЉГђГ›Г’ГЋГ‰ Г‹ГЂГ‚ГЉГ…: '..tostring(#live))
         V.list_rows('arb_live_shop',live,86,function(deal,i)
             V.row('arb_live_row_'..i,86,function(w,x,y)
-                V.at(x,y+2);V.text(V.fit(deal.name..' · лавка #'..tostring(deal.shop),w))
-                V.at(x,y+27);V.muted(V.fit('Купить '..DSP.money(deal.buy_price)..' / сдать '..DSP.money(deal.sell_price),w))
-                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/шт. после комиссии · '..
-                    (deal.verified_quantity and ('до '..tostring(deal.quantity)..' шт.') or 'количество неизвестно'),w))
+                V.at(x,y+2);V.text(V.fit(deal.name..' В· Г«Г ГўГЄГ  #'..tostring(deal.shop),w))
+                V.at(x,y+27);V.muted(V.fit('ГЉГіГЇГЁГІГј '..DSP.money(deal.buy_price)..' / Г±Г¤Г ГІГј '..DSP.money(deal.sell_price),w))
+                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/ГёГІ. ГЇГ®Г±Г«ГҐ ГЄГ®Г¬ГЁГ±Г±ГЁГЁ В· '..
+                    (deal.verified_quantity and ('Г¤Г® '..tostring(deal.quantity)..' ГёГІ.') or 'ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г­ГҐГЁГ§ГўГҐГ±ГІГ­Г®'),w))
             end)
         end,{height=math.min(180,math.max(90,imgui.GetContentRegionAvail().y*.30)),footer=false})
     end
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
-    if status=='loading'then V.muted('Расчёт рынка...')elseif status=='error'then V.red('Ошибка расчёта. См. журнал')end
+    if status=='loading'then V.muted('ГђГ Г±Г·ВёГІ Г°Г»Г­ГЄГ ...')elseif status=='error'then V.red('ГЋГёГЁГЎГЄГ  Г°Г Г±Г·ВёГІГ . Г‘Г¬. Г¦ГіГ°Г­Г Г«')end
     local sig=tostring(groups)..'|'..DSP.lower(query)..'|'..tostring(V.arb_sort)
     local filtered=V.memo('arb_rows',sig,function()
         local out={};local q=DSP.lower(query)
@@ -238,42 +257,42 @@ function V.arbitrage()
         end)
         return out
     end)
-    if st.status=='cache' then V.red(V.fit('Сеть недоступна: расчёт по сохранённому снимку, наличие не подтверждено',imgui.GetContentRegionAvail().x))end
+    if st.status=='cache' then V.red(V.fit('Г‘ГҐГІГј Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г : Г°Г Г±Г·ВёГІ ГЇГ® Г±Г®ГµГ°Г Г­ВёГ­Г­Г®Г¬Гі Г±Г­ГЁГ¬ГЄГі, Г­Г Г«ГЁГ·ГЁГҐ Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­Г®',imgui.GetContentRegionAvail().x))end
     if status~='loading' and #groups==0 and DSP.market.arbitrage_visibility then
         local d=DSP.market.arbitrage_visibility()
         if d.pairs>0 then
-            V.muted(V.fit('В API есть '..d.pairs..' ценовых разрывов (в одной лавке: '..d.same_shop..
-                '), но фильтр свежести/объёма/комиссии исключил маршруты.',imgui.GetContentRegionAvail().x))
+            V.muted(V.fit('Г‚ API ГҐГ±ГІГј '..d.pairs..' Г¶ГҐГ­Г®ГўГ»Гµ Г°Г Г§Г°Г»ГўГ®Гў (Гў Г®Г¤Г­Г®Г© Г«Г ГўГЄГҐ: '..d.same_shop..
+                '), Г­Г® ГґГЁГ«ГјГІГ° Г±ГўГҐГ¦ГҐГ±ГІГЁ/Г®ГЎГєВёГ¬Г /ГЄГ®Г¬ГЁГ±Г±ГЁГЁ ГЁГ±ГЄГ«ГѕГ·ГЁГ« Г¬Г Г°ГёГ°ГіГІГ».',imgui.GetContentRegionAvail().x))
         end
     end
     if #filtered==0 and status~='loading' then
         local age=tonumber((DSP.settings.arb_filters or{}).max_age)or 300
-        local reason=#groups>0 and 'По запросу ничего не найдено' or
-            (#(st.rows or{})==0 and 'Нет рынка: нажмите «Обновить»' or
-            ('Нет выгодных связок по фильтрам'..(age>0 and (' · старше '..math.floor(age/60)..'м исключены')or '')))
+        local reason=#groups>0 and 'ГЏГ® Г§Г ГЇГ°Г®Г±Гі Г­ГЁГ·ГҐГЈГ® Г­ГҐ Г­Г Г©Г¤ГҐГ­Г®' or
+            (#(st.rows or{})==0 and 'ГЌГҐГІ Г°Г»Г­ГЄГ : Г­Г Г¦Г¬ГЁГІГҐ В«ГЋГЎГ­Г®ГўГЁГІГјВ»' or
+            ('ГЌГҐГІ ГўГ»ГЈГ®Г¤Г­Г»Гµ Г±ГўГїГ§Г®ГЄ ГЇГ® ГґГЁГ«ГјГІГ°Г Г¬'..(age>0 and (' В· Г±ГІГ Г°ГёГҐ '..math.floor(age/60)..'Г¬ ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г»')or '')))
         V.muted(V.fit(reason,imgui.GetContentRegionAvail().x))
     end
     V.list_rows('arb_main',filtered,92,function(g,i)
         V.row('arb_group_'..i,92,function(w,x,y)
             M.thumbnail({name=g.name,id=g.row and g.row.id},34)
             V.at(x+44,y+2);V.text(V.fit(g.name,w-220))
-            V.at(x+44,y+29);V.muted(V.fit('Купить: '..DSP.market.format_units(g.supply)..
-                ' · Сдать: '..DSP.market.format_units(g.demand)..' шт. (API)',w-220))
-            V.at(x+44,y+54);V.muted(V.fit('План '..DSP.market.format_units(g.planned)..
-                ' шт. · Оценка прибыли '..DSP.money(g.profit),w-220))
+            V.at(x+44,y+29);V.muted(V.fit('ГЉГіГЇГЁГІГј: '..DSP.market.format_units(g.supply)..
+                ' В· Г‘Г¤Г ГІГј: '..DSP.market.format_units(g.demand)..' ГёГІ. (API)',w-220))
+            V.at(x+44,y+54);V.muted(V.fit('ГЏГ«Г Г­ '..DSP.market.format_units(g.planned)..
+                ' ГёГІ. В· ГЋГ¶ГҐГ­ГЄГ  ГЇГ°ГЁГЎГ»Г«ГЁ '..DSP.money(g.profit),w-220))
             V.at(x+w-164,y+15)
-            if b('Предложения >','group_'..i,160,false)then
+            if b('ГЏГ°ГҐГ¤Г«Г®Г¦ГҐГ­ГЁГї >','group_'..i,160,false)then
                 V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                 V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
-                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
+                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('ГЂГ°ГЎГЁГІГ°Г Г¦','arb_details')
             end
         end)
-    end,{footer=function()V.muted('Оценка по API, не гарантированная прибыль. Количество у скупщика может уменьшиться.')end})
+    end,{footer=function()V.muted('ГЋГ¶ГҐГ­ГЄГ  ГЇГ® API, Г­ГҐ ГЈГ Г°Г Г­ГІГЁГ°Г®ГўГ Г­Г­Г Гї ГЇГ°ГЁГЎГ»Г«Гј. ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ® Гі Г±ГЄГіГЇГ№ГЁГЄГ  Г¬Г®Г¦ГҐГІ ГіГ¬ГҐГ­ГјГёГЁГІГјГ±Гї.')end})
 end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
-    if V.arb_filters then V.popup('Фильтры арбитража','arb_filters',function()
+    if V.arb_filters then V.popup('Г”ГЁГ«ГјГІГ°Г» Г Г°ГЎГЁГІГ°Г Г¦Г ','arb_filters',function()
         local f=DSP.settings.arb_filters or {};DSP.settings.arb_filters=f
         -- Fields are saved as numeric settings and never trigger requests per frame.
         -- 0 seconds means any age; percentage fields use explicit units.
@@ -286,34 +305,34 @@ function V.popups()
             end
         end
         V.list('arb_filter_controls',function(w)
-            number('Свежесть данных: максимум секунд (0 = без ограничения, 3600 = час)', 'max_age',0,2592000)
-            if b('10 мин','age10',110) then f.max_age=600;M.refresh_buffer(f,'max_age');changed=true end
-            V.inline();if b('1 час','age60',110)then f.max_age=3600;M.refresh_buffer(f,'max_age');changed=true end
-            V.inline();if b('Любой возраст','age_any',170)then f.max_age=0;M.refresh_buffer(f,'max_age');changed=true end
-            number('Комиссия в базисных пунктах: 100 = 1%, 250 = 2.5%', 'tax_bp',0,10000)
-            number('Резерв спроса (%) от 0 до 90: оставлять непроверенный объём', 'safety_pct',0,90)
-            number('Минимальная рентабельность ROI (%)', 'min_roi',0,100000)
-            number('Минимальная чистая прибыль на маршрут ($)', 'min_profit',0)
-            number('Минимальная прибыль с одной штуки ($)', 'min_unit_profit',0)
-            number('Максимальная цена закупки за штуку ($; 0 = без лимита)', 'max_buy_price',0)
-            number('Минимальный запас И спрос API (шт.; 0 = без лимита)', 'min_stock',0)
-            number('Бюджет на все маршруты ($; 0 = без лимита)', 'budget',0)
-            number('Максимум штук на маршрут (0 = без лимита)', 'max_qty',0)
-            V.muted('Лавки: любое сочетание / только одна и та же / только разные')
-            for i,opt in ipairs({{0,'Любые'},{1,'Одна'},{2,'Разные'}})do
+            number('Г‘ГўГҐГ¦ГҐГ±ГІГј Г¤Г Г­Г­Г»Гµ: Г¬Г ГЄГ±ГЁГ¬ГіГ¬ Г±ГҐГЄГіГ­Г¤ (0 = ГЎГҐГ§ Г®ГЈГ°Г Г­ГЁГ·ГҐГ­ГЁГї, 3600 = Г·Г Г±)', 'max_age',0,2592000)
+            if b('10 Г¬ГЁГ­','age10',110) then f.max_age=600;M.refresh_buffer(f,'max_age');changed=true end
+            V.inline();if b('1 Г·Г Г±','age60',110)then f.max_age=3600;M.refresh_buffer(f,'max_age');changed=true end
+            V.inline();if b('Г‹ГѕГЎГ®Г© ГўГ®Г§Г°Г Г±ГІ','age_any',170)then f.max_age=0;M.refresh_buffer(f,'max_age');changed=true end
+            number('ГЉГ®Г¬ГЁГ±Г±ГЁГї Гў ГЎГ Г§ГЁГ±Г­Г»Гµ ГЇГіГ­ГЄГІГ Гµ: 100 = 1%, 250 = 2.5%', 'tax_bp',0,10000)
+            number('ГђГҐГ§ГҐГ°Гў Г±ГЇГ°Г®Г±Г  (%) Г®ГІ 0 Г¤Г® 90: Г®Г±ГІГ ГўГ«ГїГІГј Г­ГҐГЇГ°Г®ГўГҐГ°ГҐГ­Г­Г»Г© Г®ГЎГєВёГ¬', 'safety_pct',0,90)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г Гї Г°ГҐГ­ГІГ ГЎГҐГ«ГјГ­Г®Г±ГІГј ROI (%)', 'min_roi',0,100000)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г Гї Г·ГЁГ±ГІГ Гї ГЇГ°ГЁГЎГ»Г«Гј Г­Г  Г¬Г Г°ГёГ°ГіГІ ($)', 'min_profit',0)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г Гї ГЇГ°ГЁГЎГ»Г«Гј Г± Г®Г¤Г­Г®Г© ГёГІГіГЄГЁ ($)', 'min_unit_profit',0)
+            number('ГЊГ ГЄГ±ГЁГ¬Г Г«ГјГ­Г Гї Г¶ГҐГ­Г  Г§Г ГЄГіГЇГЄГЁ Г§Г  ГёГІГіГЄГі ($; 0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'max_buy_price',0)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г»Г© Г§Г ГЇГ Г± Г€ Г±ГЇГ°Г®Г± API (ГёГІ.; 0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'min_stock',0)
+            number('ГЃГѕГ¤Г¦ГҐГІ Г­Г  ГўГ±ГҐ Г¬Г Г°ГёГ°ГіГІГ» ($; 0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'budget',0)
+            number('ГЊГ ГЄГ±ГЁГ¬ГіГ¬ ГёГІГіГЄ Г­Г  Г¬Г Г°ГёГ°ГіГІ (0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'max_qty',0)
+            V.muted('Г‹Г ГўГЄГЁ: Г«ГѕГЎГ®ГҐ Г±Г®Г·ГҐГІГ Г­ГЁГҐ / ГІГ®Г«ГјГЄГ® Г®Г¤Г­Г  ГЁ ГІГ  Г¦ГҐ / ГІГ®Г«ГјГЄГ® Г°Г Г§Г­Г»ГҐ')
+            for i,opt in ipairs({{0,'Г‹ГѕГЎГ»ГҐ'},{1,'ГЋГ¤Г­Г '},{2,'ГђГ Г§Г­Г»ГҐ'}})do
                 if i>1 then V.inline()end
                 if b(opt[2],'shop_mode_'..opt[1],110,f.shop_mode==opt[1])then f.shop_mode=opt[1];changed=true end
             end
-            V.muted('Порядок расчёта (при бюджете приоритет ROI)')
-            for i,opt in ipairs({{1,'Прибыль'},{2,'За штуку'},{3,'ROI'}})do
+            V.muted('ГЏГ®Г°ГїГ¤Г®ГЄ Г°Г Г±Г·ВёГІГ  (ГЇГ°ГЁ ГЎГѕГ¤Г¦ГҐГІГҐ ГЇГ°ГЁГ®Г°ГЁГІГҐГІ ROI)')
+            for i,opt in ipairs({{1,'ГЏГ°ГЁГЎГ»Г«Гј'},{2,'Г‡Г  ГёГІГіГЄГі'},{3,'ROI'}})do
                 if i>1 then V.inline()end
                 if b(opt[2],'sort_mode_'..opt[1],110,f.sort==opt[1])then f.sort=opt[1];changed=true end
             end
-            if b(f.allow_partial==false and '[ ] Частичные маршруты' or '[x] Частичные маршруты',
+            if b(f.allow_partial==false and '[ ] Г—Г Г±ГІГЁГ·Г­Г»ГҐ Г¬Г Г°ГёГ°ГіГІГ»' or '[x] Г—Г Г±ГІГЁГ·Г­Г»ГҐ Г¬Г Г°ГёГ°ГіГІГ»',
                 'allow_partial',290)then f.allow_partial=not(f.allow_partial~=false);changed=true end
-            if b(f.include_unknown==true and '[x] Без отметки времени' or '[ ] Без отметки времени',
+            if b(f.include_unknown==true and '[x] ГЃГҐГ§ Г®ГІГ¬ГҐГІГЄГЁ ГўГ°ГҐГ¬ГҐГ­ГЁ' or '[ ] ГЃГҐГ§ Г®ГІГ¬ГҐГІГЄГЁ ГўГ°ГҐГ¬ГҐГ­ГЁ',
                 'include_unknown',290)then f.include_unknown=not(f.include_unknown==true);changed=true end
-            if b('Сбросить фильтры','reset_filters',210)then
+            if b('Г‘ГЎГ°Г®Г±ГЁГІГј ГґГЁГ«ГјГІГ°Г»','reset_filters',210)then
                 local defaults={budget=0,min_profit=0,min_roi=0,sort=1,max_age=300,max_qty=0,
                     safety_pct=10,allow_partial=true,include_unknown=false,
                     tax_bp=DSP.settings.tax_bp or 200,min_unit_profit=0,max_buy_price=0,
@@ -321,29 +340,29 @@ function V.popups()
                 for k,v in pairs(defaults)do f[k]=v;M.refresh_buffer(f,k)end
                 changed=true
             end
-            V.muted('Возраст 0 означает показ даже старых офферов; это не гарантия наличия.')
+            V.muted('Г‚Г®Г§Г°Г Г±ГІ 0 Г®Г§Г­Г Г·Г ГҐГІ ГЇГ®ГЄГ Г§ Г¤Г Г¦ГҐ Г±ГІГ Г°Г»Гµ Г®ГґГґГҐГ°Г®Гў; ГЅГІГ® Г­ГҐ ГЈГ Г°Г Г­ГІГЁГї Г­Г Г«ГЁГ·ГЁГї.')
         end,{footer=true})
         if changed then
             DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1
             V.reset_list('arb_main');M.defer_save()
         end
-        if b('Применить и закрыть','filters_done',220,true)then
+        if b('ГЏГ°ГЁГ¬ГҐГ­ГЁГІГј ГЁ Г§Г ГЄГ°Г»ГІГј','filters_done',220,true)then
             V.arb_filters=false;imgui.CloseCurrentPopup()
         end
     end,{w=690,h=570})end
-    V.popup('Арбитраж','arb_details',function()
+    V.popup('ГЂГ°ГЎГЁГІГ°Г Г¦','arb_details',function()
         local st=DSP.market.state
         if V.arb_server~=st.sid then
-            V.text('Выбран другой сервер');V.muted('Откройте предмет повторно для нового расчёта')
-            if b('Закрыть','stale_close',150)then imgui.CloseCurrentPopup()end
+            V.text('Г‚Г»ГЎГ°Г Г­ Г¤Г°ГіГЈГ®Г© Г±ГҐГ°ГўГҐГ°');V.muted('ГЋГІГЄГ°Г®Г©ГІГҐ ГЇГ°ГҐГ¤Г¬ГҐГІ ГЇГ®ГўГІГ®Г°Г­Г® Г¤Г«Гї Г­Г®ГўГ®ГЈГ® Г°Г Г±Г·ВёГІГ ')
+            if b('Г‡Г ГЄГ°Г»ГІГј','stale_close',150)then imgui.CloseCurrentPopup()end
             return
         end
         -- Never keep showing the old route after a market refresh: source
         -- offer tables are replaced, not updated in place.
         if V.arb_snapshot~=tostring(st.sid)..'/'..tostring(st.version)
             or st.status=='loading' then
-            V.red('Данные изменились или обновляются. Старый маршрут заблокирован.')
-            if b('Пересчитать','refresh_selected',164)then
+            V.red('Г„Г Г­Г­Г»ГҐ ГЁГ§Г¬ГҐГ­ГЁГ«ГЁГ±Гј ГЁГ«ГЁ Г®ГЎГ­Г®ГўГ«ГїГѕГІГ±Гї. Г‘ГІГ Г°Г»Г© Г¬Г Г°ГёГ°ГіГІ Г§Г ГЎГ«Г®ГЄГЁГ°Г®ГўГ Г­.')
+            if b('ГЏГҐГ°ГҐГ±Г·ГЁГІГ ГІГј','refresh_selected',164)then
                 local groups,status
                 if DSP.market.arbitrage_grouped_ui then
                     groups,status=DSP.market.arbitrage_grouped_ui()
@@ -354,21 +373,21 @@ function V.popups()
                         V.arb_detail_group=g;choose_all(g);V.arb_route=false
                         V.arb_verify=nil;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                         V.arb_snapshot_time=os.time()
-                    else V.arb_best_error='После обновления подходящий маршрут отсутствует'end
+                    else V.arb_best_error='ГЏГ®Г±Г«ГҐ Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї ГЇГ®Г¤ГµГ®Г¤ГїГ№ГЁГ© Г¬Г Г°ГёГ°ГіГІ Г®ГІГ±ГіГІГ±ГІГўГіГҐГІ'end
                 end
             end
-            V.inline();if b('Закрыть','stale_close_version',140)then imgui.CloseCurrentPopup()end
+            V.inline();if b('Г‡Г ГЄГ°Г»ГІГј','stale_close_version',140)then imgui.CloseCurrentPopup()end
             -- Keep the inspected snapshot browsable, but expose no old route,
             -- quantity confirmation or marker actions after a refresh.
             local snapshot=V.arb_detail_group
             if snapshot then
-                if b('Продают · снимок','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
-                V.inline();if b('Скупают · снимок','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
+                if b('ГЏГ°Г®Г¤Г ГѕГІ В· Г±Г­ГЁГ¬Г®ГЄ','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
+                V.inline();if b('Г‘ГЄГіГЇГ ГѕГІ В· Г±Г­ГЁГ¬Г®ГЄ','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
                 local offers=V.arb_tab=='sell'and snapshot.sellers or snapshot.buyers
                 V.list_rows('arb_stale_'..snapshot.key..'_'..V.arb_tab,offers,76,function(o,i)
                     V.row('stale_offer_'..i,76,function(w,x,y)
-                        V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),w))
-                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.format_units(o.qty)..' шт. · старый API-снимок',w))
+                        V.text(V.fit('#'..tostring(o.shop)..' В· '..tostring(o.owner or '?'),w))
+                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/ГёГІ. В· '..DSP.market.format_units(o.qty)..' ГёГІ. В· Г±ГІГ Г°Г»Г© API-Г±Г­ГЁГ¬Г®ГЄ',w))
                     end)
                 end)
             end
@@ -376,8 +395,8 @@ function V.popups()
         end
         local g=V.arb_detail_group
         if g then details(g)else
-            V.muted('Связка больше не проходит фильтры')
-            if b('Закрыть','empty_close',140)then imgui.CloseCurrentPopup()end
+            V.muted('Г‘ГўГїГ§ГЄГ  ГЎГ®Г«ГјГёГҐ Г­ГҐ ГЇГ°Г®ГµГ®Г¤ГЁГІ ГґГЁГ«ГјГІГ°Г»')
+            if b('Г‡Г ГЄГ°Г»ГІГј','empty_close',140)then imgui.CloseCurrentPopup()end
         end
     end,{w=850,h=560})
 end
