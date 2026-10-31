@@ -1,7 +1,7 @@
--- Palatka AI v2.2.11 mobile release, built from src/*.lua
+-- Palatka AI v2.8.8 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.2.11')
+script_version('2.8.8')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1734666
+DSP.item_icon_blob_offset = 1741077
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.4.2'
+DSP.version = '2.8.8'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -39294,6 +39294,235 @@ end
 end
 __mod_49_promo()
 
+local function __mod_49a_promo_universal()
+-- Universal promotion scheduler. Built on Palatka's existing settings and
+-- game connection; never bypasses server chat cooldowns or auto-posts by default.
+local P=DSP.promo
+P.MIN_INTERVAL=60
+P.MAX_SESSION=12
+P.MAX_TEMPLATES=32
+P.MAX_STEP_BYTES=200
+P.running=P.running==true
+P.cursor=P.cursor or 1
+P.next_at=P.next_at or 0
+P.cycle_count=P.cycle_count or 0
+P.pause_reason=nil
+local function num(n,lo,hi)
+    n=tonumber(n)
+    if n and n==n and n%1==0 then return math.max(lo,math.min(hi,math.floor(n)))end
+end
+local function persist()
+    if DSP.save_settings then return DSP.save_settings()~=false end
+    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
+    return true
+end
+local function settings()
+    local s=P.settings()
+    if s.continuous==nil then s.continuous=false end
+    if s.resume_on_login==nil then s.resume_on_login=false end
+    if s.enabled==nil then s.enabled=false end
+    s.start_delay=num(s.start_delay,10,120)or 20
+    return s
+end
+local function online()
+    if not sampSendChat then return false end
+    if sampIsSampAvailable and not sampIsSampAvailable()then return false end
+    if sampIsLocalPlayerSpawned and not sampIsLocalPlayerSpawned()then return false end
+    return true
+end
+local function trim(s)return tostring(s or ''):match('^%s*(.-)%s*$')end
+function P.validate(text)
+    if type(text)~='string' or #text==0 or #text>1500 then
+        return false,'Введите команду или текст (до 1500 байт)'end
+    if text:find('[%z\1-\8\11\12\14-\31]')then
+        return false,'Управляющие символы запрещены'end
+    local n=0
+    for _,line in ipairs(P.lines(text))do
+        n=n+1
+        if n>12 then return false,'Не более 12 команд в одном старом шаблоне'end
+        if #line>P.MAX_STEP_BYTES then return false,'Длина строки более 200 байт'end
+        -- This scheduler sends chat commands only; no arbitrary raw packets.
+        if not line:match('^/[%w_]+[%s%S]*$') then
+            return false,'Строка должна начинаться с /команды'end
+    end
+    return n>0,n==0 and 'Пустой шаблон' or nil
+end
+local function normalize_item(name,text,interval,auto)
+    local ok,err=P.validate(text);if not ok then return nil,err end
+    local item={name=trim(name):sub(1,48),text=trim(text),
+        interval=num(interval,P.MIN_INTERVAL,3600)or 180,auto=auto~=false,
+        last_sent=0,line_index=0}
+    if item.name==''then item.name='Строка'end
+    return item
+end
+function P.add(name,text,interval)
+    local s=settings()
+    if #s.templates>=P.MAX_TEMPLATES then return false,'Лимит 32 строк'end
+    local item,err=normalize_item(name,text,interval,true);if not item then return false,err end
+    s.templates[#s.templates+1]=item
+    if not persist()then table.remove(s.templates);return false,'Настройки не сохранены'end
+    return true
+end
+function P.update(index,name,text,interval)
+    local s=settings();local old=s.templates[index]
+    if not old then return false,'Строка не найдена'end
+    local new,err=normalize_item(name,text,interval,old.auto);if not new then return false,err end
+    new.last_sent=old.last_sent or 0;new.line_index=old.line_index or 0
+    s.templates[index]=new
+    if not persist()then s.templates[index]=old;return false,'Настройки не сохранены'end
+    return true
+end
+function P.remove(index)
+    local s=settings()
+    if not s.templates[index]then return false end
+    local old=table.remove(s.templates,index)
+    if not persist()then table.insert(s.templates,index,old);return false end
+    P.cursor=math.max(1,math.min(P.cursor,#s.templates))
+    return true
+end
+function P.move(index,delta)
+    local rows=settings().templates;local next_index=index+delta
+    if not rows[index]or not rows[next_index]then return false end
+    rows[index],rows[next_index]=rows[next_index],rows[index]
+    if not persist()then rows[index],rows[next_index]=rows[next_index],rows[index];return false end
+    P.cursor=next_index
+    return true
+end
+function P.set_option(option,value)
+    if option~='continuous'and option~='resume_on_login'and option~='start_delay' then
+        return false,'Неизвестный параметр'end
+    local s=settings();local before=s[option]
+    s[option]=option=='start_delay' and (num(value,10,120)or 20)or(value==true)
+    if not persist()then s[option]=before;return false,'Настройки не сохранены'end
+    return true
+end
+function P.steps()
+    local rows={}
+    for idx,t in ipairs(settings().templates)do
+        if t.auto then
+            for line_no,cmd in ipairs(P.lines(t.text or''))do
+                local ok=P.validate(cmd)
+                if ok then rows[#rows+1]={index=idx,line=line_no,command=cmd,
+                    interval=num(t.interval,P.MIN_INTERVAL,3600)or 180,
+                    name=t.name}end
+            end
+        end
+    end
+    return rows
+end
+function P.start(now)
+    if #P.steps()==0 then return false,'Добавь и включи хотя бы одну строку'end
+    local s=settings()
+    if not s.continuous and P.session_count>=P.MAX_SESSION then
+        return false,'Достигнут лимит 12 строк за сессию'
+    end
+    P.running=true;P.pause_reason=nil;P.last_error=nil
+    P.cursor=1
+    P.next_at=(now or os.time())+s.start_delay
+    P.started=now or os.time();P.was_online=false
+    s.enabled=true
+    if not persist()then
+        P.running=false;s.enabled=false
+        return false,'Не удалось сохранить режим'
+    end
+    return true
+end
+function P.stop()
+    P.running=false;P.pause_reason=nil
+    settings().enabled=false
+    persist()
+end
+function P.bootstrap(now)
+    local s=settings()
+    -- Persisted template flags do not implicitly authorize unattended posting.
+    P.running=false;P.pause_reason=nil;P.was_online=false
+    P.session_count=0;P.cursor=1;P.next_at=0;P.last_sent=0
+    if s.resume_on_login and s.enabled and #P.steps()>0 then
+        P.running=true
+        P.next_at=(now or os.time())+s.start_delay
+        P.pause_reason='Ожидание подключения'
+    end
+end
+function P.send_once(index,at,send,connected)
+    at=at or os.time()
+    local t=settings().templates[index]
+    if not t then return false,'Строка не найдена'end
+    local ok,err=P.validate(t.text);if not ok then return false,err end
+    local lines=P.lines(t.text)
+    if #lines==0 then return false,'Пустая строка'end
+    if P.last_sent>0 and at-P.last_sent<P.MIN_INTERVAL then
+        return false,'Пауза до следующей отправки'end
+    if connected==nil then connected=online()end
+    if not connected then return false,'Нет подключения к игре'end
+    local i=((num(t.line_index,0,1000)or 0)%#lines)+1
+    local resolved,why=P.expand(lines[i])
+    if not resolved then return false,why end
+    if #resolved>P.MAX_STEP_BYTES then return false,'После подстановки текст длиннее 200 байт'end
+    local sender=send or sampSendChat
+    if type(sender)~='function'then return false,'Отправка чата недоступна'end
+    local success,outcome=pcall(sender,resolved)
+    if not success or outcome==false then return false,'Отправка не удалась'end
+    P.last_sent=at;P.session_count=P.session_count+1
+    t.last_sent=at;t.line_index=i
+    P.last_command=resolved;P.last_error=nil
+    return true
+end
+function P.tick(at,send,connected)
+    if not P.running then return false end
+    local s=settings();at=at or os.time()
+    if connected==nil then connected=online()end
+    if not connected then
+        P.pause_reason='Нет соединения: отправка приостановлена'
+        P.was_online=false
+        return false
+    end
+    if not P.was_online then
+        P.was_online=true
+        P.next_at=math.max(P.next_at,at+s.start_delay)
+        P.pause_reason='Ожидание после входа'
+        return false
+    end
+    local steps=P.steps()
+    if #steps==0 then P.running=false;P.pause_reason='Нет включённых строк';return false end
+    if not s.continuous and P.session_count>=P.MAX_SESSION then
+        P.running=false;P.pause_reason='Лимит 12 сообщений за сессию'
+        s.enabled=false;persist();return false
+    end
+    if at<(P.next_at or 0)then return false end
+    if P.last_sent>0 and at-P.last_sent<P.MIN_INTERVAL then
+        P.next_at=P.last_sent+P.MIN_INTERVAL
+        return false
+    end
+    local index=((P.cursor-1)%#steps)+1
+    local step=steps[index]
+    local ok,why=P.send_once(step.index,at,send,connected)
+    if not ok then
+        P.last_error=why;P.pause_reason=why
+        P.next_at=at+math.max(P.MIN_INTERVAL,step.interval)
+        return false
+    end
+    P.pause_reason=nil
+    P.cursor=index%#steps+1
+    if P.cursor==1 then P.cycle_count=(P.cycle_count or 0)+1 end
+    P.next_at=at+math.max(P.MIN_INTERVAL,step.interval)
+    if not s.continuous and P.session_count>=P.MAX_SESSION then
+        P.running=false;P.pause_reason='Лимит отправок исчерпан'
+        s.enabled=false;persist()
+    end
+    return true
+end
+-- Preserve Palatka's original background thread; replace only the scheduler.
+local previous_install=P.install
+function P.install()
+    if P.installed then return end
+    previous_install()
+    P.bootstrap(os.time())
+end
+return true
+
+end
+__mod_49a_promo_universal()
+
 local function __mod_50_overlay()
 -- 50_overlay.lua
 -- v1.2 overlay windows: trade eval + shop scan + crlog mini-window.
@@ -40107,24 +40336,20 @@ end
 function C.end_drag() if C.drag_dirty then persist(); C.drag_dirty=false end end
 function C.geometry(sw,sh)
     local s=settings()
-    -- Compact MCR-style log is the default; a drag always persists its anchor.
-    if s.compact==nil then s.compact=true end
-    if s.alpha==nil then s.alpha=.28 end
-    s.lines=math.max(2,math.min(8,math.floor(tonumber(s.lines)or 4)))
-    local wide=math.max(250,sw-16)
-    local w=math.max(250,math.min(tonumber(s.w)or math.min(440,sw*.48),wide))
-    local desired=s.compact and (49+25*s.lines) or (tonumber(s.h)or math.min(340,sh*.58))
-    local expanded=math.max(80,math.min(desired,math.max(80,sh-16)))
-    local x=math.max(8,math.min(tonumber(s.x)or 24,math.max(8,sw-w-8)))
-    local y=math.max(8,math.min(tonumber(s.y)or (sh-expanded-50),math.max(8,sh-expanded-8)))
-    return {x=x,y=y,w=w,h=s.minimized and 45 or expanded,touch=32,
+    local default_w=math.min(700,sw*.45)
+    local default_h=math.min(620,sh*.69)
+    local w=math.max(360,math.min(tonumber(s.w) or default_w,math.max(360,sw-16)))
+    local expanded=math.max(280,math.min(tonumber(s.h) or default_h,math.max(280,sh-16)))
+    local x=math.max(8,math.min(tonumber(s.x) or 24,math.max(8,sw-w-8)))
+    local y=math.max(8,math.min(tonumber(s.y) or 120,math.max(8,sh-expanded-8)))
+    return {x=x,y=y,w=w,h=s.minimized and 84 or expanded,touch=54,
         max_x=math.max(8,sw-w-8),max_y=math.max(8,sh-expanded-8)}
 end
 function C.remember_size(w,h)
     local s=settings(); if s.minimized then return false end
-    w=math.floor((tonumber(w)or 0)+.5);h=math.floor((tonumber(h)or 0)+.5)
-    if w<250 or h<80 then return false end
-    if math.abs((tonumber(s.w)or 0)-w)<1 and math.abs((tonumber(s.h)or 0)-h)<1 then return false end
+    w=math.floor((tonumber(w) or 0)+0.5);h=math.floor((tonumber(h) or 0)+0.5)
+    if w<360 or h<280 then return false end
+    if math.abs((tonumber(s.w) or 0)-w)<1 and math.abs((tonumber(s.h) or 0)-h)<1 then return false end
     s.w,s.h=w,h;C.size_dirty=true;return true
 end
 function C.end_resize()
@@ -40205,127 +40430,108 @@ end
 __mod_55_craglog()
 
 local function __mod_56_mini_journal()
--- Compact MCR-inspired trade overlay; journal/event semantics stay in Palatka.
+-- Phone journal: one stable anchor, fixed controls, and readable event cards.
 local C=DSP.craglog
-local function cp(s)return DSP.utf8(tostring(s or ''))end
-local function state()
-    DSP.settings.craglog=DSP.settings.craglog or {}
-    return DSP.settings.craglog
+local function cp(s) return DSP.utf8(tostring(s or '')) end
+local function text(s) imgui.TextWrapped(cp(s)) end
+local function button(label,id,w,active)
+    if active then imgui.PushStyleColor(imgui.Col.Button,DSP.theme.col('accent',.7)) end
+    local hit=imgui.Button(cp(label)..'##mini_'..id,imgui.ImVec2(w,54))
+    if active then imgui.PopStyleColor(1) end
+    return hit
 end
-local function changed()if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end end
-local function button(label,id,w)
-    return imgui.Button(cp(label)..'##compact_log_'..id,imgui.ImVec2(w,28))
+local function inline() imgui.SameLine(0,8) end
+local function state() return DSP.settings.craglog end
+local function header(g)
+    local s=state()
+    local handle=s.pinned and 'ЖУРНАЛ / ЗАКРЕПЛЁН' or 'ЖУРНАЛ / ПЕРЕТАЩИТЬ'
+    button(handle,'handle',g.w-300,false)
+    if not s.pinned and imgui.IsItemActive() and imgui.IsMouseDragging(0) then
+        local delta=imgui.GetIO().MouseDelta
+        C.drag(delta.x,delta.y)
+    end
+    if not imgui.IsMouseDown(0) then C.end_drag() end
+    inline()
+    if button(s.pinned and 'PIN: ДА' or 'PIN: НЕТ','pin',120,s.pinned) then C.set_pinned(not s.pinned) end
+    inline()
+    if button(s.minimized and '+' or '-','collapse',60) then C.set_minimized(not s.minimized) end
+    inline()
+    if button('X','close',60) then s.open=false; DSP.save_settings() end
 end
-local function short(s,max_width)
-    s=tostring(s or '')
-    if not imgui.CalcTextSize then return s end
-    if imgui.CalcTextSize(cp(s)).x<=max_width then return s end
-    local l,r=0,#s
-    while l<r do
-        local m=math.floor((l+r+1)/2)
-        if imgui.CalcTextSize(cp(s:sub(1,m)..'...')).x<=max_width then l=m else r=m-1 end
-    end
-    return s:sub(1,l)..'...'
-end
-local function draw_header(s,g)
-    local width=imgui.GetContentRegionAvail().x
-    local right=s.click_through and 0 or 116
-    if button(s.minimized and 'J  /  ОТКРЫТЬ' or 'J  /  ТОРГОВЫЙ ЖУРНАЛ',
-        'drag',math.max(65,width-right))then
-        if s.minimized then C.set_minimized(false)end
-    end
-    if not s.pinned and not s.click_through and imgui.IsItemActive() and imgui.GetIO().MouseDelta then
-        local d=imgui.GetIO().MouseDelta
-        if d.x~=0 or d.y~=0 then C.drag(d.x,d.y)end
-    end
-    if not imgui.IsMouseDown(0)then C.end_drag()end
-    if not s.click_through then
-        imgui.SameLine(0,4)
-        if button(s.minimized and '+' or '-','collapse',33)then C.set_minimized(not s.minimized)end
-        imgui.SameLine(0,4)
-        if button('X','close',33)then s.open=false;changed()end
-    end
-end
-local function draw_compact(s,g)
-    local events=C.filtered(s.filter or 'all')
-    local n=#events
-    local lines=s.lines or 4
-    if n==0 then
-        imgui.TextDisabled(cp('Нет новых событий. История сохранена в Palatka AI.'))
-    end
-    for i=n,math.max(1,n-lines+1),-1 do
-        local e=events[i]
-        if e then
-            local when=os.date('%H:%M',e.ts or os.time())
-            local desc=C.describe(e)
-            local label=when..'  '..desc
-            imgui.Text(cp(short(label,math.max(80,imgui.GetContentRegionAvail().x-8))))
+local function filters(g)
+    local s=state()
+    for i,pair in ipairs({{'all','Все'},{'loot','Тайники'},{'payday','PayDay'},
+                           {'sales','Продажи'},{'buys','Скупка'},{'income','Доходы'}}) do
+        if button(pair[2],'filter_'..pair[1],(g.w-42)/3,s.filter==pair[1]) then
+            s.filter=pair[1]; C.scroll=0; DSP.save_settings()
         end
-    end
-    if C.last_error then
-        imgui.TextColored(DSP.theme.col('bad',1),cp(short('Журнал: '..C.last_error,g.w-16)))
+        if i%3~=0 then inline() end
     end
 end
-local function draw_expanded(s,g)
-    local summary=C.summary('day')
-    imgui.TextDisabled(cp('Приход '..DSP.money(summary.income)..' | Расход '..DSP.money(summary.expense)))
-    imgui.TextColored(DSP.theme.col('good',1),cp('Итог за сегодня: '..DSP.money(summary.net)))
-    for _,row in ipairs({{'all','Все'},{'sales','Продажи'},{'buys','Скупка'},{'loot','Добыча'}})do
-        if button(row[2],'filter_'..row[1],92)then s.filter=row[1];changed()end
-        imgui.SameLine(0,4)
+local function row_card(entry)
+    local kind=entry.kind or entry.type
+    local tag=kind=='item' and 'НАГРАДА' or kind=='cash' and 'ДЕНЬГИ' or kind=='opening' and 'ТАЙНИК'
+        or entry.type=='payday' and 'PAYDAY' or entry.type=='income' and 'ДОХОД' or 'СДЕЛКА'
+    imgui.TextColored(DSP.theme.col('accent',1),cp(os.date('%H:%M:%S',entry.ts or 0)..'  '..tag))
+    text(C.describe(entry))
+    if entry.source then
+        text('Источник: '..entry.source..(entry.association=='inferred' and ' (по чату)' or ''))
     end
-    imgui.NewLine()
-    if imgui.BeginChild('##compact_log_events',imgui.ImVec2(0,0),false)then
-        draw_compact(s,g)
-    end
-    imgui.EndChild()
+    imgui.Separator()
 end
 function C.draw()
-    local s=state()
-    if s.compact==nil then s.compact=true end
-    if s.alpha==nil then s.alpha=.28 end
-    s.alpha=math.max(.08,math.min(1,tonumber(s.alpha)or .28))
     local io=imgui.GetIO()
     local g=C.geometry(io.DisplaySize.x,io.DisplaySize.y)
+    local s=state()
     C.active_geometry=g
     imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
-    if s.compact or s.minimized or not C._window_size_initialized then
-        imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
-    else
-        imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Appearing)
-        if imgui.SetNextWindowSizeConstraints then
-            imgui.SetNextWindowSizeConstraints(imgui.ImVec2(250,100),
-                imgui.ImVec2(math.max(250,io.DisplaySize.x-16),math.max(100,io.DisplaySize.y-16)))
-        end
+    local force_size=(not C._window_size_initialized) or C._last_minimized~=s.minimized
+    if force_size then imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always) end
+    if not s.minimized and imgui.SetNextWindowSizeConstraints then
+        imgui.SetNextWindowSizeConstraints(imgui.ImVec2(360,280),imgui.ImVec2(math.max(360,io.DisplaySize.x-16),math.max(280,io.DisplaySize.y-16)))
     end
-    C._window_size_initialized=true
-    local colors=DSP.theme.push_overlay(1)
-    imgui.SetNextWindowBgAlpha(s.alpha)
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,5))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(4,2))
-    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
-        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+
-        imgui.WindowFlags.NoFocusOnAppearing
-    if s.compact or s.minimized then flags=flags+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoScrollbar end
-    if s.click_through then flags=flags+imgui.WindowFlags.NoInputs end
-    if imgui.Begin('##palatka_mini_journal',nil,flags)then
-        if imgui.SetWindowFontScale then
-            local base=imgui.GetFontSize and imgui.GetFontSize()or 16
-            imgui.SetWindowFontScale(math.min(1,14/math.max(1,base)))
-        end
-        if not s.click_through then draw_header(s,g)end
+    C._window_size_initialized=true;C._last_minimized=s.minimized
+    imgui.SetNextWindowBgAlpha(.96)
+    local colors=DSP.theme.push_overlay(.98)
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,16)
+    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,9)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(12,12))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(8,8))
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove
+        +imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+imgui.WindowFlags.NoFocusOnAppearing
+    if imgui.Begin('##palatka_mini_journal',nil,flags) then
+        if imgui.SetWindowFontScale then imgui.SetWindowFontScale(1.15) end
+        header(g)
         if not s.minimized then
-            if s.compact then draw_compact(s,g)else draw_expanded(s,g)end
+            filters(g)
+            local events=C.filtered(s.filter or 'all')
+            local per=3
+            C.scroll=math.max(0,math.min(C.scroll,math.max(0,#events-per)))
+            local start=#events-C.scroll
+            text('Последние события: '..#events..' / '..C.ring_cap..'   |   PIN фиксирует положение')
+            if button('ВВЕРХ / НОВЕЕ','up',(g.w-40)/2,C.scroll>0) then C.scroll=math.max(0,C.scroll-per) end
+            inline()
+            if button('ВНИЗ / СТАРШЕ','down',(g.w-40)/2,start>per) then C.scroll=math.min(math.max(0,#events-per),C.scroll+per) end
+            start=#events-C.scroll
+            local shown=imgui.BeginChild('##mini_cards',imgui.ImVec2(0,0),false)
+            if shown then
+                if #events==0 then
+                    text('Здесь появятся сделки, деньги и награды из игрового чата.')
+                    text('Полная история доступна в главном меню.')
+                end
+                for i=start,math.max(1,start-per+1),-1 do if events[i] then row_card(events[i]) end end
+                if C.last_error then text('Ошибка записи: '..C.last_error) end
+            end
+            imgui.EndChild()
         end
     end
-    if not s.compact and not s.minimized and imgui.GetWindowSize then
-        local wh=imgui.GetWindowSize();C.remember_size(wh.x,wh.y)
+    if not s.minimized and imgui.GetWindowSize then
+        local ws=imgui.GetWindowSize();C.remember_size(ws.x,ws.y)
     end
     C.end_resize()
     imgui.End()
-    imgui.PopStyleVar(3)
-    if colors and colors>0 then imgui.PopStyleColor(colors)end
+    imgui.PopStyleVar(4)
+    if colors and colors>0 then imgui.PopStyleColor(colors) end
 end
 return true
 
@@ -41252,10 +41458,6 @@ function U.draw()
             imgui.EndChild()
             imgui.Separator()
             if V.button('Окна','carbon_windows',100,false,true,38)then V.nav=not V.nav end
-            V.inline()
-            if V.button('MCR','switch_to_mcr',76,false,false,38)then
-                DSP.settings.ui_style='mcr';M.defer_save()
-            end
             V.inline()
             local remain=imgui.GetContentRegionAvail().x
             V.muted(V.fit('Palatka AI · '..tostring(DSP.market.state.status or 'offline')..' · без автоматических сделок',math.max(40,remain-6)))
@@ -43693,34 +43895,6 @@ function V.journal()
         cycle_period();V.inline()
         if b('Мини-журнал','mini',150)then DSP.settings.craglog.open=true;M.defer_save()end
     end,296)
-    -- MCR-inspired mini-log controls: fully reversible, no action affects accounting.
-    local st=DSP.settings.craglog or {}
-    DSP.settings.craglog=st
-    if st.compact==nil then st.compact=true end
-    if st.alpha==nil then st.alpha=.28 end
-    if b(st.compact and 'Компактный лог' or 'Расширенный лог','mini_layout',174,st.compact)then
-        st.compact=not st.compact;M.defer_save()
-    end
-    V.inline()
-    if b(st.click_through and 'Касания: насквозь' or 'Касания: управление','mini_touch',208,st.click_through)then
-        st.click_through=not st.click_through;M.defer_save()
-    end
-    V.inline()
-    if b('Открыть лог','mini_open',124)then st.open=true;M.defer_save()end
-    if b(st.pinned and 'Разблокировать положение' or 'Закрепить положение','mini_pin',230,st.pinned)then
-        C.set_pinned(not st.pinned)
-    end
-    V.inline()
-    if b(st.minimized and 'Развернуть лог' or 'Свернуть лог','mini_collapse',150,st.minimized)then
-        C.set_minimized(not st.minimized)
-    end
-    V.muted('Окно сохраняет позицию после перетаскивания. Закреплять вручную не нужно.')
-    local alpha=imgui.new.float(tonumber(st.alpha)or .28)
-    imgui.SetNextItemWidth(math.min(260,imgui.GetContentRegionAvail().x))
-    if imgui.SliderFloat('##mini_alpha',alpha,.08,1)then
-        st.alpha=math.max(.08,math.min(1,alpha[0]));M.defer_save()
-    end
-    V.inline();V.muted('Непрозрачность: '..math.floor((st.alpha or .28)*100)..'%')
     local w=imgui.GetContentRegionAvail().x
     if b('Добыча','loot_mode',120,V.journal_mode=='loot')then V.journal_mode='loot'end
     V.inline();if b('События','events_mode',120,V.journal_mode=='events')then V.journal_mode='events'end
@@ -44463,6 +44637,160 @@ end
 end
 __mod_68_ui22_flip_promo()
 
+local function __mod_68b_promo_universal_ui()
+-- Native Palatka workspace for universal auto-promo. No MCR UI dependencies.
+local ffi=require('ffi')
+local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
+local function b(s,id,w,on)return V.button(s,'unipromo_'..id,w,on)end
+local function save()return DSP.save_settings and DSP.save_settings()~=false end
+local function input(id,hint,buffer,length)
+    imgui.SetNextItemWidth(-1)
+    return imgui.InputTextWithHint('##unipromo_'..id,DSP.utf8(hint),buffer,length)
+end
+local function fill(buf,value,max)
+    local raw=DSP.to_u8(tostring(value or''))
+    ffi.fill(buf,max);ffi.copy(buf,raw:sub(1,max-1))
+end
+local function open_editor(i)
+    local row=P.settings().templates[i]
+    V.unipromo_edit_index=i
+    V.unipromo_name=V.unipromo_name or imgui.new.char[80]()
+    V.unipromo_line=V.unipromo_line or imgui.new.char[512]()
+    fill(V.unipromo_name,row and row.name or 'Новая строка',80)
+    fill(V.unipromo_line,row and row.text or '/fam ',512)
+    V.unipromo_interval={value=row and tonumber(row.interval)or 180}
+    V.unipromo_error=nil
+    V.open_popup('Добавить команду','unipromo_edit')
+end
+local function pretty(s,w)
+    return V.fit(tostring(s or ''),math.max(40,w))
+end
+function V.promo_screen()
+    local settings=P.settings()
+    V.heading('Автопиар · Palatka AI',function()
+        if P.running then
+            if b('ПАУЗА','stop',118,true)then P.stop()end
+        else
+            if b('ЗАПУСК','start',118,true)then
+                local ok,why=P.start()
+                V.unipromo_error=ok and nil or tostring(why)
+            end
+        end
+    end,135)
+    V.muted('Любая игровая /команда. Строки идут по очереди; отдельная пауза после каждой.')
+    V.muted('Не ускоряет серверные ограничения чата. Автовозобновление только при включении.')
+    V.text('Статус: '..(P.running and (P.pause_reason or'Запущен')or'Остановлен'))
+    V.muted('Отправлено: '..tostring(P.session_count)..(settings.continuous and ' | циклический режим' or ' / 12 за запуск'))
+    if P.running and P.next_at and P.next_at>0 then
+        V.muted('Следующая отправка через '..tostring(math.max(0,P.next_at-os.time()))..' с')
+    end
+    if P.last_command then V.muted(pretty('Последняя: '..P.last_command,imgui.GetContentRegionAvail().x))end
+    if V.unipromo_error or P.last_error then V.red(pretty(V.unipromo_error or P.last_error,imgui.GetContentRegionAvail().x))end
+    if b(settings.continuous and 'Цикл: БЕЗ ЛИМИТА' or 'Цикл: 12 сообщений',
+        'continuous',234,settings.continuous)then
+        local ok,err=P.set_option('continuous',not settings.continuous)
+        if not ok then V.unipromo_error=err end
+    end
+    V.inline(5)
+    if b(settings.resume_on_login and 'При входе: ВКЛ' or 'При входе: ВЫКЛ',
+        'resume',230,settings.resume_on_login)then
+        local ok,err=P.set_option('resume_on_login',not settings.resume_on_login)
+        if not ok then V.unipromo_error=err end
+    end
+    V.muted('После входа: задержка '..tostring(settings.start_delay)..' с · при отключении отправка на паузе.')
+    for i,v in ipairs({10,20,30,60})do
+        if b(v..' с','start_delay_'..i,82,settings.start_delay==v)then
+            local ok,err=P.set_option('start_delay',v)
+            if not ok then V.unipromo_error=err end
+        end
+        if i<4 then V.inline(5)end
+    end
+    if b('+ Добавить строку','add',200,true)then open_editor(nil)end
+    V.inline(5)
+    if b('ОСТАНОВИТЬ','stop2',135,P.running)then P.stop()end
+    local rows=settings.templates
+    V.muted('Строк: '..#rows..' / '..P.MAX_TEMPLATES..' · интервал 60–3600 с после строки.')
+    V.list_rows('unipromo_lines',rows,124,function(it,i)
+        V.row('unipromo_row_'..i,124,function(w,x,y)
+            V.at(x,y)
+            V.text(pretty(tostring(i)..'. '..tostring(it.name or 'Строка'),w-165))
+            V.at(x,y+25)
+            V.muted(pretty(it.text or'',w-165))
+            V.at(x,y+49)
+            V.muted('Пауза после: '..tostring(it.interval or 180)..' сек')
+            V.at(x,y+73)
+            if b(it.auto and 'ВКЛ' or 'ВЫКЛ','line_on_'..i,77,it.auto)then
+                it.auto=not it.auto
+                if not save()then it.auto=not it.auto;V.unipromo_error='Не удалось сохранить'end
+            end
+            V.inline(4)
+            if b('Вверх','line_up_'..i,71)then P.move(i,-1)end
+            V.inline(4)
+            if b('Вниз','line_down_'..i,71)then P.move(i,1)end
+            V.at(x+w-155,y+10)
+            if b('Изменить','line_edit_'..i,150)then open_editor(i)end
+            V.at(x+w-155,y+65)
+            if b('Удалить','line_del_'..i,150)then
+                V.unipromo_delete=i;V.open_popup('Удалить команду','unipromo_delete')
+            end
+        end)
+    end,{footer=function()
+        V.muted('Пиар выполняет только указанные тобой команды, с соблюдением заданных пауз.')
+    end})
+end
+local previous_popups=V.popups
+function V.popups()
+    if previous_popups then previous_popups()end
+    V.popup('Добавить команду','unipromo_edit',function()
+        V.text('Название строки')
+        input('name','Например: Семейный чат',V.unipromo_name,80)
+        V.text('Команда с аргументами')
+        input('line','Например: /fam Продам ларцы',V.unipromo_line,512)
+        V.muted('Можно /f, /fam, /vr, /ad, /family и любую другую /команду игры.')
+        V.muted('Если команда открывает меню, оно может мешать игре при каждом цикле.')
+        if b('Вставить {shop}','shopmacro',163)then
+            local raw=ffi.string(V.unipromo_line)
+            local suffix=' {shop}'
+            if #raw+#suffix<511 then fill(V.unipromo_line,raw..suffix,512)end
+        end
+        V.muted('Макрос {shop} вставляет кликабельный номер своей лавки при отправке.')
+        V.text('Интервал после этой строки, секунд')
+        for _,seconds in ipairs({60,120,180,300,600})do
+            if b(tostring(seconds),'interval_'..seconds,69,V.unipromo_interval.value==seconds)then
+                V.unipromo_interval.value=seconds
+            end
+            V.inline(4)
+        end
+        M.compact_number(V.unipromo_interval,'value','unipromo_interval',180,60)
+        if V.unipromo_error then V.red(tostring(V.unipromo_error))end
+        if b('Сохранить строку','save',182,true)then
+            local name=DSP.to_cp(ffi.string(V.unipromo_name))
+            local line=DSP.to_cp(ffi.string(V.unipromo_line))
+            local ok,err
+            if V.unipromo_edit_index then
+                ok,err=P.update(V.unipromo_edit_index,name,line,V.unipromo_interval.value)
+            else
+                ok,err=P.add(name,line,V.unipromo_interval.value)
+            end
+            if ok then V.unipromo_error=nil;imgui.CloseCurrentPopup()
+            else V.unipromo_error=tostring(err)end
+        end
+        V.inline(6);V.cancel('unipromo_edit')
+    end,{w=680,h=470,resizable=true})
+    V.popup('Удалить команду','unipromo_delete',function()
+        V.text('Удалить эту строку из расписания?')
+        if b('Да, удалить','delete_confirm',174)then
+            if P.remove(V.unipromo_delete)then imgui.CloseCurrentPopup()
+            else V.unipromo_error='Ошибка сохранения'end
+        end
+        V.inline(6);V.cancel('unipromo_delete')
+    end,{w=470,h=240})
+end
+return true
+
+end
+__mod_68b_promo_universal_ui()
+
 local function __mod_60f_lombard_ui()
 -- Native mimgui pawnshop panel. No WebView and no item transfer actions.
 local V=DSP.ui21
@@ -44526,330 +44854,6 @@ return true
 
 end
 __mod_60f_lombard_ui()
-
-local function __mod_69_mcr_classic()
--- Original MCR-inspired compact workspace. Palatka models and packet handlers remain authoritative.
--- No third-party authentication, network requests or trade packet code is imported.
-local U,V,M,T = DSP.ui,DSP.ui22,DSP.mobile,DSP.trade_v16
-local Classic={source='inventory',search='',edit=nil}
-DSP.mcr_classic=Classic
-if DSP.settings.ui_style==nil then DSP.settings.ui_style='mcr' end
-if DSP.settings.mcr_classic_alpha==nil then DSP.settings.mcr_classic_alpha=.94 end
-local function cp(s)return DSP.utf8(tostring(s or ''))end
-local function button(s,id,w,active,h)return V.button(s,'mcr_'..id,w,active,false,h or 38)end
-local function save()if M and M.defer_save then M.defer_save()end end
-local function busy()return DSP.auto.sell_running or DSP.auto.buy_running end
-local function current()return V.kind=='sell' and DSP.settings.sell_preset or DSP.settings.buy_preset end
-local function navigate(id)V.set_screen(id);Classic.edit=nil end
-local navigation={
- {'palatka','Торговля'},{'lavki','Лавки ЦР'},{'arbitrage','Арбитраж'},
- {'resale','Перепродажа'},{'scan','Сканер'},{'market','Рынок'},
- {'storage','Хранилища'},{'lombard','Ломбард'},{'logs','Журнал'},
- {'calculator','Калькулятор'},{'stats','Статистика'},{'settings','Настройки'},
- {'search','Поиск'},{'promo','Автопиар'},{'home','Обзор'}
-}
-local function side_panel(width,height)
-    if imgui.BeginChild('##mcr_left',imgui.ImVec2(width,height),true,imgui.WindowFlags.NoScrollbar)then
-        V.apply_font()
-        if button('P','home',-1,V.screen=='home',42)then navigate('home')end
-        V.muted('МЕНЮ')
-        V.list_rows('mcr_nav',navigation,43,function(entry,i)
-            local short=entry[2]
-            if width<110 then
-                local names={palatka='Торг.',lavki='Лавки',arbitrage='Арбитр.',resale='Перепр.',scan='Скан',
-                  market='Рынок',storage='Склад',lombard='Ломб.',logs='Логи',calculator='Счёт',
-                  stats='Стат.',settings='Опции',search='Поиск',promo='Пиар',home='Обзор'}
-                short=names[entry[1]] or short
-            end
-            if button(short,'nav_'..i,-1,V.screen==entry[1],40)then navigate(entry[1])end
-        end,{height=math.max(60,imgui.GetContentRegionAvail().y-54),footer=true,footer_height=44})
-    end
-    imgui.EndChild()
-end
-local function all_items(query)
-    local q=DSP.lower(query or '')
-    local source=Classic.source=='inventory' and (DSP.auto.inv or{}) or (DSP.items.by_id or{})
-    local sig=table.concat({Classic.source,tostring(source),tostring(#(DSP.auto.inv or{})),q},'|')
-    return V.memo('mcr_items',sig,function()
-        local rows={}
-        if Classic.source=='inventory'then
-            for _,it in ipairs(DSP.auto.inv or{})do
-                if q=='' or DSP.lower(it.name or''):find(q,1,true)then rows[#rows+1]=it end
-            end
-        else
-            for id,name in pairs(DSP.items.by_id or{})do
-                if type(name)=='string' and name~='-' and not name:find('DELETED',1,true)
-                    and(q=='' or DSP.lower(name):find(q,1,true) or tostring(id)==q)then
-                    rows[#rows+1]={id=id,name=name}
-                end
-            end
-            table.sort(rows,function(a,b)return a.name<b.name end)
-        end
-        return rows
-    end)
-end
-local function available_row(it,i)
-    V.row('mcr_available_'..i,52,function(w,x,y)
-        local title=V.fit(it.display or it.name or '?',math.max(40,w-12))
-        if V.text_button(title,'mcr_add_'..i,-1,false,27)and not busy()then
-            local ok,msg
-            if Classic.source=='inventory'then ok,msg=T.add_from_inventory(V.kind,it)
-            else ok,msg=T.add_from_catalog(V.kind,it)end
-            if not ok then DSP.notify(tostring(msg or 'Нельзя добавить'))end
-        end
-        V.at(x,y+26)
-        V.muted(Classic.source=='inventory'and('В наличии: '..tostring(it.count or it.qty or 0))or('ID '..tostring(it.id or '?')))
-    end)
-end
-local function selected_row(it,i)
-    V.row('mcr_selected_'..i,58,function(w,x,y)
-        local title=V.fit(it.name or '?',math.max(40,w-14))
-        if V.text_button(title,'mcr_edit_'..i,-1,false,28)then
-            Classic.edit=it;V.open_popup('Позиция','mcr_edit')
-        end
-        V.at(x,y+28)
-        local label=(it.enabled==false and '[OFF] 'or'')..
-            'x'..tostring(it.qty or'?')..' · '..DSP.money(tonumber(it.price)or 0)
-        V.muted(V.fit(label,math.max(40,w-14)))
-    end)
-end
-local function trade_panel()
-    local w=imgui.GetContentRegionAvail().x
-    V.heading('Торговля',function()
-        if button('Продажа','sell',91,V.kind=='sell')then V.kind='sell'end
-        V.inline()
-        if button('Скупка','buy',91,V.kind=='buy')then V.kind='buy'end
-    end,202)
-    local pres=current()
-    V.muted(V.fit('Набор: '..tostring(pres.name or 'Основной'),w))
-    local cols=w>=430
-    if cols then
-        local left=math.max(110,math.floor(w*.46))
-        local right=math.max(110,w-left-6)
-        if imgui.BeginChild('##mcr_stock',imgui.ImVec2(left,0),true)then
-            V.apply_font()
-            if button(Classic.source=='inventory'and'Инвентарь >'or'Каталог >','source',-1)then
-                Classic.source=Classic.source=='inventory'and'catalog'or'inventory'
-                V.reset_list('mcr_stock_list')
-            end
-            local query,edited=V.search('mcr_stock','Поиск предмета',-1)
-            if edited then V.reset_list('mcr_stock_list')end
-            V.list_rows('mcr_stock_list',all_items(query),52,available_row,{footer=true,footer_height=45})
-        end
-        imgui.EndChild()
-        V.inline(6,120)
-        if imgui.BeginChild('##mcr_preset',imgui.ImVec2(0,0),true)then
-            V.apply_font()
-            V.text('Выставляемые товары')
-            V.muted(tostring(#(pres.items or{}))..' позиций · нажми для правки')
-            V.list_rows('mcr_preset_list',pres.items or{},58,selected_row,{footer=true,footer_height=45})
-        end
-        imgui.EndChild()
-    else
-        Classic.tab=Classic.tab or 'stock'
-        if button('Инвентарь','stocktab',110,Classic.tab=='stock')then Classic.tab='stock'end
-        V.inline()
-        if button('Набор ('..#(pres.items or{})..')','presettab',120,Classic.tab=='preset')then Classic.tab='preset'end
-        if Classic.tab=='stock'then
-            if button(Classic.source=='inventory'and'Инвентарь >'or'Каталог >','source',-1)then
-                Classic.source=Classic.source=='inventory'and'catalog'or'inventory'
-            end
-            local query,edited=V.search('mcr_stock','Поиск предмета',-1)
-            if edited then V.reset_list('mcr_stock_list')end
-            V.list_rows('mcr_stock_list',all_items(query),52,available_row,{footer=true})
-        else
-            V.list_rows('mcr_preset_list',pres.items or{},58,selected_row,{footer=true})
-        end
-    end
-end
-local function action_panel(width,height)
-    if imgui.BeginChild('##mcr_right',imgui.ImVec2(width,height),true,imgui.WindowFlags.NoScrollbar)then
-        V.apply_font()
-        if V.screen=='palatka'then
-            V.muted('ДЕЙСТВИЯ')
-            if button('Наборы','presets',-1)then V.open_popup('Наборы','presets')end
-            if button('Скан','scan_inv',-1)then
-                if DSP.auto and DSP.auto.scan_inventory then DSP.auto.scan_inventory()end
-            end
-            if busy()then
-                if button('СТОП','stop',-1,true)then
-                    if DSP.auto.sell_running then DSP.auto.stop_sell()else DSP.auto.stop_buy()end
-                end
-            else
-                if button('Выставить','launch',-1,true,52)then V.open_popup('Выставление','launch')end
-            end
-            local r=T.totals(V.kind)
-            imgui.Separator()
-            V.muted(r.complete and (V.kind=='buy'and'Бюджет' or 'Выручка')or'Проверь цены')
-            if r.complete then
-                V.text(DSP.money(V.kind=='buy'and r.required_funds or r.gross))
-                if V.kind=='sell'then V.muted('Чистыми ~');V.text(DSP.money(r.net))end
-            end
-        else
-            V.muted('БЫСТРО')
-            if button('Торговля','to_trade',-1)then navigate('palatka')end
-            if button('Лавки','to_shops',-1)then navigate('lavki')end
-            if button('Журнал','to_logs',-1)then navigate('logs')end
-        end
-        imgui.Separator()
-        if button('Наш UI','carbon',-1)then DSP.settings.ui_style='carbon';save()end
-        if button('Мини-лог','mini',-1)then
-            DSP.settings.craglog.open=not DSP.settings.craglog.open;save()
-        end
-    end
-    imgui.EndChild()
-end
-local function other_panel()
-    local id=V.screen
-    if id=='home'then V.home()
-    elseif id=='lavki'then V.shops()
-    elseif id=='scan'then V.shops_source='scan';V.shops()
-    elseif id=='market'then V.shops_source='api';V.shops()
-    elseif id=='arbitrage'then V.arbitrage()
-    elseif id=='resale'then V.flip_screen()
-    elseif id=='storage'then V.storage_screen()
-    elseif id=='logs'then V.journal()
-    elseif id=='calculator'then V.calculator()
-    elseif id=='history'then V.journal_mode='events';V.journal()
-    elseif id=='promo'then V.promo_screen()
-    elseif V.tools then V.tools(id)
-    else DSP.screens.draw(id)end
-end
-local function edit_popup()
-    local it=Classic.edit
-    if not it then return end
-    V.text(tostring(it.name or '?'))
-    V.muted('Цена за штуку')
-    if not busy()then M.compact_number(it,'price','mcr_edit_price',190,0)
-    else V.text(DSP.money(it.price or 0))end
-    V.muted('Количество')
-    if not busy()then M.compact_number(it,'qty','mcr_edit_qty',160,1)
-    else V.text(tostring(it.qty or 0))end
-    if not busy()then
-        if button(it.enabled==false and'Включить' or 'Выключить','toggle_item',140,it.enabled~=false)then
-            it.enabled=it.enabled==false and(tonumber(it.price)or 0)>0 or false;save()
-        end
-        V.inline()
-        if button('Удалить','remove_item',130)then
-            V.remove_pending={kind=V.kind,item=it}
-            imgui.CloseCurrentPopup()
-            V.open_popup('Удалить позицию','remove')
-        end
-    end
-    if button('Готово','edit_done',130)then imgui.CloseCurrentPopup()end
-end
-local old_popups=V.popups
-function V.popups()
-    if old_popups then old_popups()end
-    V.popup('Позиция','mcr_edit',edit_popup,{w=470,h=310})
-end
-local function classic_geometry(sw,sh)
-    -- Independent from the Carbon shell: old full-screen geometry is not inherited.
-    local p=DSP.settings.mcr_window or {}
-    local maxw,maxh=math.max(200,sw-16),math.max(160,sh-16)
-    local w=DSP.clamp(tonumber(p.w)or math.min(780,sw*.92),math.min(320,maxw),maxw)
-    local h=DSP.clamp(tonumber(p.h)or math.min(455,sh*.82),math.min(230,maxh),maxh)
-    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w)*.5,0,math.max(0,sw-w)),
-        y=DSP.clamp(tonumber(p.y)or(sh-h)*.5,0,math.max(0,sh-h))}
-end
-local function resize_grip(g,io)
-    V.at(g.w-46,g.h-43)
-    button('//','resize_grip',31,false,29)
-    if imgui.IsItemActive()and io.MouseDelta then
-        local d=io.MouseDelta
-        if d.x~=0 or d.y~=0 then
-            local maxw,maxh=math.max(220,io.DisplaySize.x-g.x-8),math.max(170,io.DisplaySize.y-g.y-8)
-            local w=DSP.clamp(g.w+d.x,math.min(320,maxw),maxw)
-            local h=DSP.clamp(g.h+d.y,math.min(230,maxh),maxh)
-            DSP.settings.mcr_window={x=g.x,y=g.y,w=w,h=h};save()
-        end
-    end
-end
-local original_draw=U.draw
-function Classic.draw()
-    if V and V.track_touch then V.track_touch(imgui.GetIO())end
-    local io=imgui.GetIO();local sz=io.DisplaySize
-    local g=classic_geometry(sz.x,sz.y)
-    if not V.initialized then
-        V.screen=(U.screen and U.screen~='palatka')and U.screen or'palatka'
-        V.initialized=true
-    end
-    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
-    imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
-    local colors=DSP.theme.push_window()
-    imgui.SetNextWindowBgAlpha(DSP.settings.mcr_classic_alpha)
-    -- Warm beige MCR accent on native ImGui, without overwriting Palatka's saved theme.
-    imgui.PushStyleColor(imgui.Col.Button,imgui.ImVec4(.26,.25,.23,1))
-    imgui.PushStyleColor(imgui.Col.ButtonHovered,imgui.ImVec4(.40,.36,.30,1))
-    imgui.PushStyleColor(imgui.Col.ButtonActive,imgui.ImVec4(.48,.41,.33,1))
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,7))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(5,5))
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
-    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
-        imgui.WindowFlags.NoResize+imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar
-    M.flush_save(false)
-    if imgui.Begin('##palatka_mcr_classic',U.open_ref,flags)then
-        V.font_pixels=V.font_scale_for(1,g.w,U.d)
-        V.apply_font()
-        local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
-        local labelw=math.max(75,g.w-178)
-        V.text_button('MCR CLASSIC  /  PALATKA AI', 'mcr_window_drag',labelw,false,31)
-        if imgui.IsItemActive() and io.MouseDelta then
-            local d=io.MouseDelta
-            if d.x~=0 or d.y~=0 then
-                DSP.settings.mcr_window={x=DSP.clamp(g.x+d.x,0,sz.x-g.w),
-                    y=DSP.clamp(g.y+d.y,0,sz.y-g.h),w=g.w,h=g.h};save()
-            end
-        end
-        V.at(x+g.w-143,y)
-        if button('МЕНЮ','menu',81,V.nav,31)then V.nav=not V.nav end
-        V.at(x+g.w-55,y)
-        if button('X','close',39,false,31)then U.set_open(false)end
-        V.at(x,y+39);imgui.Separator()
-        local available=imgui.GetContentRegionAvail()
-        local left=math.min(102,math.max(78,g.w*.14))
-        local right=math.min(124,math.max(88,g.w*.16))
-        if V.nav and g.w<550 then
-            side_panel(math.max(160,available.x),available.y-35)
-        else
-            side_panel(left,available.y-35)
-            V.inline(5,120)
-            local center=math.max(100,available.x-left-right-14)
-            if imgui.BeginChild('##mcr_workspace',imgui.ImVec2(center,available.y-35),false)then
-                V.apply_font()
-                local ok,err=xpcall(function()
-                    if V.screen=='palatka' then trade_panel()else other_panel()end
-                end,debug.traceback)
-                if not ok then
-                    V.errors[V.screen]=err;DSP.flog('MCR Classic UI: '..tostring(err))
-                    V.red('Ошибка экрана. См. standalone.log')
-                end
-            end
-            imgui.EndChild()
-            V.inline(5,80)
-            action_panel(right,available.y-35)
-        end
-        V.at(x,math.max(y+39,g.h-42))
-        V.muted(V.fit('Palatka AI · Mobile 2 · '..tostring(DSP.auto.status or 'готов'),math.max(100,g.w-58)))
-        if V.popup_pending then
-            local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(cp(p.title)..'##v22_'..p.id)
-        end
-        if V.popups then V.popups()end
-        resize_grip(g,io)
-    end
-    imgui.End()
-    imgui.PopStyleVar(3);imgui.PopStyleColor(3)
-    if colors and colors>0 then imgui.PopStyleColor(colors)end
-    if U.open_ref and not U.open_ref[0]then M.flush_save(true);U.open=false end
-end
-function U.draw()
-    if DSP.settings.ui_style=='mcr' then return Classic.draw()end
-    return original_draw()
-end
-return true
-
-end
-__mod_69_mcr_classic()
 
 local function __mod_69a_arbitrage_agent()
 -- Palatka Arbitrage Session: many routes, local execution ledger and a floating guide.
@@ -45258,6 +45262,9 @@ local function selected(s)
     return s.routes[i],i
 end
 local function flag(e)
+    if e.unavailable_reason=='shop_missing' then return 'НЕТ ЛАВКИ' end
+    if e.unavailable_reason=='item_missing' then return 'НЕТ ПРЕДМЕТА' end
+    if e.unavailable_reason=='owner_changed' then return 'СМЕНА ВЛАДЕЛЬЦА' end
     if e.skipped then return 'ПРОПУЩЕНО' end
     if e.sold==e.qty then return 'ЗАВЕРШЕНО' end
     if e.bought==0 then return 'КУПИТЬ' end
@@ -45375,7 +45382,14 @@ function A.draw()
                 muted('Куплено '..e.bought..' / '..e.qty..' | Продано '..e.sold..' / '..e.qty)
                 -- Confirming each step updates the local offer ledger, never cash history.
                 if e.skipped then
-                    if btn('Вернуть','restore',-1)then A.skip(index,false)end
+                    if e.unavailable_reason then
+                        bad('Исключено: '..flag(e)..' ('..tostring(e.unavailable_source or 'ручная')..')')
+                        if e.bought>e.sold then bad('Остались купленные товары: '..(e.bought-e.sold)..' шт.') end
+                    end
+                    if btn('Вернуть маршрут','restore',-1)then
+                        if e.unavailable_reason then A.restore_unavailable(index)
+                        else A.skip(index,false)end
+                    end
                 else
                     local side=e.bought<e.qty and'buy'or'sell'
                     local remaining=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
@@ -45388,6 +45402,16 @@ function A.draw()
                         text('x'..remaining..' | '..fmt(unit)..'/шт.')
                         if btn('Найти лавку #'..shop,'target',-1)then
                             if not M.mark_shop(shop)then notify('Метка недоступна')end
+                        end
+                        if btn('Нет лавки','missing_shop',-1,32)then
+                            local ok,why=A.mark_unavailable(index,'shop')
+                            if ok then A.qty_key=nil;notify('Лавка #'..shop..' исключена из планов')
+                            else notify(tostring(why))end
+                        end
+                        if btn('Нет предмета / нет скупки','missing_item',-1,32)then
+                            local ok,why=A.mark_unavailable(index,'item')
+                            if ok then A.qty_key=nil;notify('Предложение исключено до новой проверки')
+                            else notify(tostring(why))end
                         end
                         local input_key=e.id..':'..side
                         if A.qty_key~=input_key then A.qty_key=input_key;A.qty_field=imgui.new.int(remaining)end
@@ -45444,6 +45468,161 @@ return true
 
 end
 __mod_69b_arbitrage_agent_ui()
+
+local function __mod_69c_arbitrage_status()
+-- Arbitrage agent availability: user-confirmed absence and trusted game evidence.
+-- Quote absence is NOT inferred from a partial shop snapshot.
+local A,M=DSP.arb_agent,DSP.market
+local function now()return os.time()end
+local function sid()return tonumber(M.state and M.state.sid)or tonumber(DSP.settings.server)or 0 end
+local function cycle(t)
+    local d=os.date('*t',t);d.hour=5;d.min=0;d.sec=0
+    local boundary=os.time(d);return t<boundary and boundary-86400 or boundary
+end
+local function text_eq(x,y)
+    local f=DSP.lower or string.lower
+    return f(tostring(x or''))==f(tostring(y or''))
+end
+local function valid_shop(shop)
+    local n=tonumber(shop)
+    return n and n>0 and n<=99999 and n==math.floor(n)
+end
+local function ensure()
+    A.data=A.data or{schema=1,consumed={},history={}}
+    A.data.unavailable=A.data.unavailable or{}
+    return A.data.unavailable
+end
+local old_load=A.load
+function A.load(...)
+    local result=old_load(...)
+    ensure()
+    return result
+end
+ensure()
+local old_remaining=A.remaining
+function A.remaining(row,side,offer,base,meta)
+    local qty,origin=old_remaining(row,side,offer,base,meta)
+    local quote=A.quote_key(sid(),row,side,offer)
+    local denied=quote and ensure()[quote]
+    if denied and tonumber(denied.at)and denied.at>=cycle(now())then
+        -- Trusted positive game observation AFTER the manual absence supersedes it.
+        local evidence=origin and (origin.source=='game_observed' or origin.source=='recent_scan')
+        if evidence and (tonumber(origin.at)or 0)>denied.at and qty>0 then
+            ensure()[quote]=nil;A.save()
+            return qty,origin
+        end
+        return 0,{source='confirmed_unavailable',at=denied.at,reason=denied.reason}
+    end
+    return qty,origin
+end
+local function changed()
+    A.revision=(A.revision or 0)+1
+    local ok,err=A.save()
+    A.save_error=ok and nil or tostring(err)
+    if M.invalidate_arbitrage then M.invalidate_arbitrage()end
+    return ok,err
+end
+local function required_leg(e)
+    if e.bought<e.qty then return 'sell',e.seller_shop,e.seller_quote end
+    if e.sold<e.qty then return 'buy',e.buyer_shop,e.buyer_quote end
+end
+local function block_related(shop,quote,reason,source)
+    local s=A.active();if not s then return 0 end
+    local marked=0
+    for _,e in ipairs(s.routes or{})do
+        local side,target,current=required_leg(e)
+        local match=side and ((quote and current==quote)or
+            (not quote and tostring(target)==tostring(shop)))
+        if match and e.sold<e.qty and not e.unavailable_reason then
+            e.unavailable_reason=reason
+            e.unavailable_source=source or'manual'
+            e.unavailable_at=now()
+            e.unavailable_side=side
+            e.skipped=true
+            marked=marked+1
+        end
+    end
+    return marked
+end
+function A.mark_unavailable(index,reason)
+    if reason~='shop'and reason~='item'then return false,'Неверная причина'end
+    local e,s=A.get(index)
+    if not e or not s then return false,'Маршрут не выбран'end
+    local side,shop,quote=required_leg(e)
+    if not side then return false,'Маршрут уже завершён'end
+    if reason=='shop' then
+        if not valid_shop(shop)then return false,'Номер лавки неизвестен'end
+        if not M.mark_shop_missing(shop,30)then return false,'Не удалось отметить лавку'end
+        block_related(shop,nil,'shop_missing','manual')
+    else
+        ensure()[quote]={at=now(),reason='item_missing',sid=s.sid}
+        block_related(shop,quote,'item_missing','manual')
+    end
+    changed()
+    A.next(1)
+    return true
+end
+function A.restore_unavailable(index)
+    local e=A.get(index)
+    if not e then return false,'Нет маршрута'end
+    if not e.unavailable_reason then return A.skip(index,false)end
+    local reason=e.unavailable_reason
+    local shop=e.unavailable_side=='sell'and e.seller_shop or e.buyer_shop
+    local quote=e.unavailable_side=='sell'and e.seller_quote or e.buyer_quote
+    if reason=='shop_missing' or reason=='owner_changed' then
+        if M.restore_shop and valid_shop(shop) then M.restore_shop(shop) end
+    end
+    if quote then ensure()[quote]=nil end
+    e.unavailable_reason=nil;e.unavailable_at=nil;e.unavailable_side=nil
+    e.unavailable_source=nil;e.skipped=false
+    changed();return true
+end
+-- Server's response to our own /findilavka, not arbitrary chat, is authoritative.
+local former_game=M.mark_shop_missing_from_game
+if type(former_game)=='function' then
+    M.mark_shop_missing_from_game=function(shop,timestamp)
+        local ok=former_game(shop,timestamp)
+        if ok and block_related(shop,nil,'shop_missing','game')>0 then changed()end
+        return ok
+    end
+end
+-- A stable, numbered, owner-identified shop observed in game may prove that
+-- the old owner no longer runs this shop; missing ITEM still needs manual review.
+function A.observe_live_shop()
+    local live=DSP.live and DSP.live.shop
+    if not live or not live.scan_complete or tonumber(live.server)~=sid()
+        or not valid_shop(live.num) or tostring(live.owner or'')==''then return false end
+    local s=A.active()
+    if not s or s.sid~=sid()then return false end
+    local ts=tonumber(live.items_updated)or 0
+    if ts<=0 or now()-ts>90 then return false end
+    local blocked=0
+    for _,e in ipairs(s.routes)do
+        local side,shop=required_leg(e)
+        local owner=side=='sell'and e.seller_owner or e.buyer_owner
+        if side and tostring(shop)==tostring(live.num)
+            and owner~='?' and not text_eq(owner,live.owner)
+            and not e.unavailable_reason then
+            e.unavailable_reason='owner_changed';e.unavailable_source='game'
+            e.unavailable_at=now();e.unavailable_side=side;e.skipped=true;blocked=blocked+1
+        end
+    end
+    if blocked>0 then changed()end
+    return blocked>0
+end
+local previous_review=A.review_market
+function A.review_market(...)
+    local t=now()
+    if t-(A._last_availability_check or 0)>=2 then
+        A._last_availability_check=t
+        A.observe_live_shop()
+    end
+    return previous_review(...)
+end
+return true
+
+end
+__mod_69c_arbitrage_status()
 
 local function __mod_99_main()
 -- Main entry: catalog, price base, market, UI, screens, live hooks, craglog, overlay.
