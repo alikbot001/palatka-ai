@@ -1,10 +1,10 @@
-PALATKA_UPDATE_VERSION = '2.6.3-floating-webui'
+PALATKA_UPDATE_VERSION = '2.6.4-legible-webui'
 
 return function(DSP)
     DSP.webui = DSP.webui or {}
     local W = DSP.webui
 
-    W.version = '1.3-floating'
+    W.version = '1.4-legible'
     W.bid = 95253
     W.dir = DSP.dir .. '/webui'
     W.html_path = W.dir .. '/index.html'
@@ -17,6 +17,8 @@ return function(DSP)
     W.hooks_installed = false
     W.browser_visible = false
     W.last_rect = {x=-99999,y=-99999,w=0,h=0}
+    W.geometry_error = nil
+    W.registered_rescue_commands = W.registered_rescue_commands or {}
     W.last_save_clock = 0
     W.window_dirty = false
 
@@ -256,11 +258,10 @@ return function(DSP)
     end
 
     local function hide_browser()
-        if W.web and W.created and W.browser_visible then
-            pcall(function()
-                W.web.setClickable(W.bid, false)
-                W.web.setVisible(W.bid, false)
-            end)
+        -- Hide even when a previous callback lost browser_visible state.
+        if W.web and W.created then
+            pcall(function() W.web.setClickable(W.bid, false) end)
+            pcall(function() W.web.setVisible(W.bid, false) end)
         end
         W.browser_visible = false
     end
@@ -329,34 +330,53 @@ return function(DSP)
         W.created = true
         W.loaded = false
         W.browser_visible = false
-        pcall(function()
+        -- Never reuse coordinates from a WebView that Android has recreated.
+        W.last_rect = {x=-99999,y=-99999,w=0,h=0}
+        local hidden, ret = pcall(function()
             W.web.setClickable(W.bid, false)
-            W.web.setVisible(W.bid, false)
-            W.web.setPos(W.bid, -99999, -99999)
-            W.web.setSize(W.bid, 1, 1)
+            return W.web.setVisible(W.bid, false)
         end)
+        if not hidden or ret == false then
+            W.geometry_error = 'Cannot hide WebView after creation'
+            W.created = false
+            return false, W.geometry_error
+        end
         return true
     end
 
     local function browser_to_rect(x, y, w, h)
-        if not (W.web and W.created) then return end
+        if not (W.web and W.created and W.host_open and W.host_open[0]) then return false end
         local r = W.last_rect
+        local positioned, sized = true, true
         if r.x ~= x or r.y ~= y then
-            pcall(function() W.web.setPos(W.bid, x, y) end)
+            local ok, result = pcall(W.web.setPos, W.bid, math.floor(x + .5), math.floor(y + .5))
+            positioned = ok and result ~= false
         end
         if r.w ~= w or r.h ~= h then
-            pcall(function() W.web.setSize(W.bid, w, h) end)
+            local ok, result = pcall(W.web.setSize, W.bid, math.max(1, math.floor(w + .5)), math.max(1, math.floor(h + .5)))
+            sized = ok and result ~= false
+        end
+        if not (positioned and sized) then
+            W.geometry_error = 'Cannot place WebView inside its host'
+            hide_browser()
+            W.last_rect = {x=-99999,y=-99999,w=0,h=0}
+            return false
         end
         W.last_rect = {x=x,y=y,w=w,h=h}
+        W.geometry_error = nil
         if W.loaded and not W.browser_visible then
-            pcall(function()
-                W.web.setClickable(W.bid, true)
-                W.web.setVisible(W.bid, true)
-            end)
+            local click_ok, click_result = pcall(W.web.setClickable, W.bid, true)
+            local show_ok, show_result = pcall(W.web.setVisible, W.bid, true)
+            if not (click_ok and click_result ~= false and show_ok and show_result ~= false) then
+                W.geometry_error = 'Cannot display WebView safely'
+                hide_browser()
+                return false
+            end
             W.browser_visible = true
         elseif not W.loaded then
             hide_browser()
         end
+        return true
     end
 
     function W.hide()
@@ -513,7 +533,10 @@ return function(DSP)
 
             if W.created then browser_to_rect(px, py, pw, ph) end
 
-            if not W.created then
+            if W.geometry_error then
+                imgui.SetCursorPos(imgui.ImVec2(cp.x + 10, cp.y + 10))
+                imgui.TextDisabled(u('WebUI недоступен. Нажми «Старый UI» или /crlegacy.'))
+            elseif not W.created then
                 imgui.SetCursorPos(imgui.ImVec2(cp.x + 10, cp.y + 10))
                 imgui.TextDisabled(u('Подготовка WebUI...'))
             elseif not W.loaded then
@@ -573,11 +596,57 @@ return function(DSP)
         return true
     end
 
+    local function notify_rescue(msg)
+        if sampAddChatMessage then pcall(sampAddChatMessage, '[Palatka] ' .. msg, 0xFFD166)
+        elseif DSP.notify then pcall(DSP.notify, msg) end
+    end
+
+    -- These commands remain usable without touching the embedded WebView.
+    local rescue = {
+        crhide = function()
+            W.hide()
+            notify_rescue('WebUI hidden; /crweb to reopen')
+        end,
+        crweb = function() W.toggle() end,
+        crlegacy = function()
+            W.open_legacy(DSP.settings and DSP.settings.screen or 'home')
+            notify_rescue('Legacy UI opened')
+        end,
+        crresetui = function()
+            W.hide()
+            local cfg = host_config()
+            cfg.x, cfg.y, cfg.w, cfg.h = nil, nil, nil, nil
+            W.host_initialized = false
+            if DSP.save_settings then pcall(DSP.save_settings) end
+            notify_rescue('WebUI position reset')
+        end,
+        crversion = function()
+            notify_rescue(tostring(DSP.version) .. ' / HTML ' .. tostring(W.version))
+        end
+    }
+
+    local function install_rescue_commands()
+        if type(sampRegisterChatCommand) ~= 'function' then return false end
+        for name, callback in pairs(rescue) do
+            if not W.registered_rescue_commands[name] then
+                local ok = pcall(sampRegisterChatCommand, name, function()
+                    local success, err = pcall(callback)
+                    if not success then notify_rescue(tostring(err)) end
+                end)
+                if ok then W.registered_rescue_commands[name] = true end
+            end
+        end
+        return true
+    end
+
+    hide_browser()
     if lua_thread and lua_thread.create and wait then
         lua_thread.create(function()
             for _ = 1, 40 do
                 wait(250)
-                if install_ui_hooks() then break end
+                local hooks_ready = install_ui_hooks()
+                local commands_ready = install_rescue_commands()
+                if hooks_ready and commands_ready then break end
             end
             install_bridge()
             ensure_html(function(ok, e)
@@ -587,9 +656,10 @@ return function(DSP)
     else
         install_bridge()
         install_ui_hooks()
+        install_rescue_commands()
     end
 
-    DSP.version = '2.6.3-floating-webui'
-    if DSP.flog then DSP.flog('WEBUI overlay v2.6.3 loaded; floating host mode') end
+    DSP.version = '2.6.4-legible-webui'
+    if DSP.flog then DSP.flog('WEBUI overlay v2.6.4 loaded; legible mobile UI and rescue commands') end
     return true
 end
