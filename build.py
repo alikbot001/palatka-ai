@@ -17,6 +17,7 @@ OUT = ROOT / "palatka_ai.lua"
 MODULES = [
     "00_core.lua",
     "00a_settings_safety.lua",
+    "00b_settings_persistence_v294.lua",
     "05_items.lua",
     "08_icons.lua",
     "10_market.lua",
@@ -60,6 +61,7 @@ MODULES = [
     "49_promo.lua",
     "49a_promo_universal.lua",
     "49b_promo_mh_options.lua",
+    "49c_promo_mh_scheduler_v294.lua",
     "50_overlay.lua",
     "54_payday_parse.lua",
     "55_craglog.lua",
@@ -86,6 +88,7 @@ MODULES = [
     "66_ui22_journal.lua",
     "66a_trade_log_tab_mh.lua",
     "66c_mh_trade_journal.lua",
+    "66d_mh_journal_screen_v294.lua",
     "67_ui22_shop_scan.lua",
     "68_ui22_flip_promo.lua",
     "68b_promo_universal_ui.lua",
@@ -97,10 +100,10 @@ MODULES = [
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v2.9.3 mobile release, built from src/*.lua
+HEADER = """-- Palatka AI v2.9.4 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.3')
+script_version('2.9.4')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
