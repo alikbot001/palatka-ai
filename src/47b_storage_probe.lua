@@ -146,3 +146,30 @@ function P.save(index)
     S.sort_cache=setmetatable({},{__mode='k'})
     return true,snap
 end
+
+-- Explicit local diagnostics export. Metadata only: no raw JSON, item names,
+-- item IDs, account identifiers, chat, tokens or individual item quantities.
+function P.export_report()
+    if P.state().armed then return false,'stop capture before export' end
+    if type(encodeJson)~='function' or type(DSP.dir)~='string' then
+        return false,'JSON export unavailable'
+    end
+    local candidates={}
+    for _,e in ipairs(P.order)do
+        candidates[#candidates+1]={type=e.type,sub=e.sub,slots_observed=e.count,
+            declared_slots=e.capacity,packets=e.packet_count}
+    end
+    local report={schema=1,source='Palatka AI read-only probe',kind_label=P.kind,
+        duration_seconds=math.max(0,(P.until_ts or 0)-(P.started or 0)),
+        packets=P.observed,ignored_trunk=P.ignored_trunk,
+        ignored_stall=P.ignored_stall,candidates=candidates}
+    local ok,body=pcall(encodeJson,report)
+    if not ok or type(body)~='string' then return false,'JSON encoding failed' end
+    local path=DSP.dir..'/storage_probe_report.json'
+    local file,err=io.open(path,'wb')
+    if not file then return false,tostring(err or 'cannot open report') end
+    local wrote,write_err=file:write(body)
+    file:close()
+    if not wrote then return false,tostring(write_err or 'write failed') end
+    return true,path
+end
