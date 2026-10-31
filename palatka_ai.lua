@@ -1,7 +1,7 @@
--- Palatka AI v2.9.0 mobile release, built from src/*.lua
+-- Palatka AI v2.9.1 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.0')
+script_version('2.9.1')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1752097
+DSP.item_icon_blob_offset = 1761991
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.9.0'
+DSP.version = '2.9.1'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -39642,6 +39642,98 @@ return true
 end
 __mod_49a_promo_universal()
 
+local function __mod_49b_promo_mh_options()
+-- Market Helper style template controls over Palatka's safe per-command queue.
+-- Existing templates remain untouched until the user saves new options.
+local P=DSP.promo
+if P._mh_options_installed then return true end
+P._mh_options_installed=true
+local function int(v,min,max)
+    v=tonumber(v)
+    if not v or v~=v then return nil end
+    return math.max(min,math.min(max,math.floor(v)))
+end
+function P.save_template_options(index,opts)
+    local list=P.settings().templates
+    local t=list[index]
+    if not t then return false,'Шаблон не найден'end
+    opts=opts or{}
+    local previous={min=t.interval_min,max=t.interval_max,
+        limit=t.auto_limit,random=t.random_line}
+    local low=int(opts.interval_min,0,3600)or 0
+    local high=int(opts.interval_max,0,3600)or 0
+    if low>0 and low<60 then low=60 end
+    if high>0 and high<60 then high=60 end
+    if high>0 and high<low then high=low end
+    t.interval_min=low;t.interval_max=high
+    t.auto_limit=int(opts.auto_limit,0,1000)or 0
+    t.random_line=opts.random_line==true
+    local ok=not DSP.save_settings or DSP.save_settings()~=false
+    if not ok then
+        t.interval_min=previous.min;t.interval_max=previous.max
+        t.auto_limit=previous.limit;t.random_line=previous.random
+        return false,'Не удалось сохранить настройки'
+    end
+    return true
+end
+local old_steps=P.steps
+function P.steps()
+    local all=old_steps()
+    local result={}
+    local random_by_template={}
+    for _,step in ipairs(all)do
+        local t=P.settings().templates[step.index]
+        if not (t and t.random_line)then
+            result[#result+1]=step
+        elseif not random_by_template[step.index]then
+            local options={}
+            for _,candidate in ipairs(all)do
+                if candidate.index==step.index then options[#options+1]=candidate end
+            end
+            if #options>0 then
+                -- Pick once per cycle, not independently at each rendering/tick call.
+                local choose=t._random_index
+                if not choose or choose>#options then
+                    choose=math.random(1,#options);t._random_index=choose
+                end
+                result[#result+1]=options[choose]
+            end
+            random_by_template[step.index]=true
+        end
+    end
+    return result
+end
+local old_tick=P.tick
+function P.tick(at,send,connected)
+    local steps=P.steps()
+    local i=P.cursor or 1
+    local step=#steps>0 and steps[((i-1)%#steps)+1]or nil
+    local before=P.session_count or 0
+    local ok=old_tick(at,send,connected)
+    if not ok or (P.session_count or 0)<=before or not step then return ok end
+    local t=P.settings().templates[step.index]
+    if not t then return ok end
+    if t.random_line then t._random_index=nil end
+    t.auto_count=(t.auto_count or 0)+1
+    local lo=int(t.interval_min,0,3600)or 0
+    local hi=int(t.interval_max,0,3600)or 0
+    if lo>0 then
+        hi=math.max(lo,hi)
+        P.next_at=(at or os.time())+math.random(math.max(60,lo),math.max(60,hi))
+    end
+    local limit=int(t.auto_limit,0,1000)or 0
+    if limit>0 and t.auto_count>=limit then
+        t.auto=false;t.auto_count=0
+        if DSP.save_settings then DSP.save_settings()end
+        P.last_error='Шаблон «'..tostring(t.name or'?')..'»: лимит выполнен'
+    end
+    return ok
+end
+return true
+
+end
+__mod_49b_promo_mh_options()
+
 local function __mod_50_overlay()
 -- 50_overlay.lua
 -- v1.2 overlay windows: trade eval + shop scan + crlog mini-window.
@@ -44192,6 +44284,170 @@ end
 end
 __mod_66_ui22_journal()
 
+local function __mod_66c_mh_trade_journal()
+-- Market Helper-inspired trade log: concise receipts and totals, no loot/stat dashboard.
+-- All events originate from Palatka's verified journal; no invented transactions.
+local C,V=DSP.craglog,DSP.ui22
+if C._trade291_installed then return true end
+C._trade291_installed=true
+local function u(s)return DSP.utf8(tostring(s or''))end
+local function b(s,id,w,active)return V.button(s,'trade291_'..id,w,active,false,38)end
+local function money(n)return DSP.money(math.floor(tonumber(n)or 0))end
+local function kind(e)
+    if e.type=='market' then return e.direction=='sell' and 'sell' or e.direction=='buy' and 'buy'end
+    if e.type=='trade' then
+        local get,give=tonumber(e.money_get)or 0,tonumber(e.money_give)or 0
+        if get>0 and give==0 then return 'sell' end
+        if give>0 and get==0 then return 'buy' end
+    end
+end
+local function value(e,k)
+    if e.type=='market' then return tonumber(e.amount)or 0 end
+    return tonumber(k=='sell' and e.money_get or e.money_give)or 0
+end
+local function description(e,k)
+    if e.type=='market' then return tostring(e.item_name or e.item or'?') end
+    local items=k=='sell'and e.items_give or e.items_get
+    if type(items)=='table'and #items>0 then
+        local parts={}
+        for i=1,math.min(2,#items)do
+            local it=items[i];parts[#parts+1]=tostring(it.name or'?')..' x'..tostring(it.qty or 1)
+        end
+        return table.concat(parts,', ')
+    end
+    return tostring(e.partner or 'Торговая операция')
+end
+function C.trade_rows(period)
+    local list={}
+    local today=os.date('%d.%m.%Y')
+    for _,e in ipairs(C.ring_recent(C.ring_count))do
+        local k=kind(e)
+        if k and (not C.event_visible or C.event_visible(e)) then
+            local when=tonumber(e.ts)or 0
+            if period~='today' or os.date('%d.%m.%Y',when)==today then
+                list[#list+1]={kind=k,ts=when,name=description(e,k),amount=value(e,k),
+                    qty=tonumber(e.qty)or 1,source=e.source or'game'}
+            end
+        end
+    end
+    return list
+end
+function C.trade_totals(rows)
+    local summary={sells=0,buys=0,sell_count=0,buy_count=0}
+    for _,e in ipairs(rows)do
+        if e.kind=='sell'then
+            summary.sells=summary.sells+e.amount;summary.sell_count=summary.sell_count+1
+        else
+            summary.buys=summary.buys+e.amount;summary.buy_count=summary.buy_count+1
+        end
+    end
+    return summary
+end
+local function stats(t)
+    V.green('Продано: '..money(t.sells)..' ('..t.sell_count..')')
+    V.muted('Куплено: '..money(t.buys)..' ('..t.buy_count..')')
+end
+local function show_row(row,compact)
+    local tag=row.kind=='sell'and '[+] 'or '[-] '
+    local val=(row.kind=='sell'and '+' or '-')..money(row.amount)
+    local stamp=os.date(compact and'%H:%M' or'%d.%m %H:%M',row.ts)
+    local line=tag..stamp..'  '..row.name..'  '..val
+    if compact then line=V.fit(line,math.max(100,imgui.GetContentRegionAvail().x-9))end
+    imgui.TextColored(DSP.theme.col(row.kind=='sell'and'good'or'accent',1),u(line))
+end
+function V.journal()
+    V.heading('Журнал сделок',function()
+        if b('Мини-окно','mini',160)then C.set_minimized(false);DSP.settings.craglog.open=true;DSP.save_settings()end
+    end,178)
+    V.muted('Подтверждённые продажи и покупки. Без наград и лишней статистики.')
+    V.journal_trade_period=V.journal_trade_period or'today'
+    if b('Сегодня','today',136,V.journal_trade_period=='today')then V.journal_trade_period='today'end
+    V.inline(6)
+    if b('Всё время','all',145,V.journal_trade_period=='all')then V.journal_trade_period='all'end
+    local rows=C.trade_rows(V.journal_trade_period)
+    local totals=C.trade_totals(rows)
+    stats(totals)
+    local reverse={}
+    for i=#rows,1,-1 do reverse[#reverse+1]=rows[i]end
+    V.list_rows('simple_trade_'..V.journal_trade_period,reverse,62,function(e,i)
+        V.row('trade_'..i,62,function(w,x,y)
+            V.at(x,y)
+            if e.kind=='sell'then V.green('ПРОДАЖА  +'..money(e.amount))
+            else V.red('ПОКУПКА  -'..money(e.amount))end
+            V.at(x,y+27)
+            V.muted(V.fit(os.date('%H:%M',e.ts)..'  '..e.name,w-14))
+        end)
+    end,{count=#reverse})
+end
+local function config()
+    DSP.settings.craglog=DSP.settings.craglog or{}
+    return DSP.settings.craglog
+end
+-- Existing timestamps and ring persist. Only the mobile presentation changes.
+local previous_geometry=C.geometry
+function C.geometry(sw,sh)
+    local s=config()
+    if not s.trade_compact_initialized then
+        s.trade_compact_initialized=true
+        s.w=math.min(math.max(360,sw*.37),math.max(360,sw-16))
+        s.h=math.min(305,math.max(280,sh-16))
+    end
+    return previous_geometry(sw,sh)
+end
+function C.draw()
+    local io=imgui.GetIO();local s=config();local g=C.geometry(io.DisplaySize.x,io.DisplaySize.y)
+    C.active_geometry=g
+    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
+    if not C._trade_size_set then imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always);C._trade_size_set=true end
+    imgui.SetNextWindowBgAlpha(.78)
+    local colors=DSP.theme.push_window()
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,10)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(8,7))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(5,5))
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse
+    if imgui.Begin('##palatka_trade_journal',nil,flags)then
+        if V.apply_font then V.apply_font()end
+        if b('Сделки · переместить','move',math.max(95,g.w-143))then end
+        if not s.pinned and imgui.IsItemActive()and io.MouseDelta then
+            C.drag(io.MouseDelta.x,io.MouseDelta.y)
+        end
+        if not imgui.IsMouseDown(0)then C.end_drag()end
+        imgui.SameLine(0,5)
+        if b(s.pinned and'P' or'pin','pin',46,s.pinned)then C.set_pinned(not s.pinned)end
+        imgui.SameLine(0,5)
+        if b('X','close',45)then s.open=false;DSP.save_settings()end
+        local filter=s.trade_period or'today'
+        local rows=C.trade_rows(filter)
+        local total=C.trade_totals(rows)
+        if b('Сегодня','today',116,filter=='today')then s.trade_period='today';DSP.save_settings()end
+        imgui.SameLine(0,5)
+        if b('Все','all',86,filter=='all')then s.trade_period='all';DSP.save_settings()end
+        imgui.Separator()
+        if imgui.BeginChild('##trade291_scroll',imgui.ImVec2(0,-60),false)then
+            if #rows==0 then V.muted('Подтверждённых сделок пока нет.')end
+            local max=math.min(#rows,60)
+            for i=#rows,#rows-max+1,-1 do
+                local e=rows[i]
+                if e then show_row(e,true)end
+            end
+        end
+        imgui.EndChild()
+        imgui.Separator()
+        V.green('Продано '..money(total.sells)..' · '..total.sell_count)
+        V.muted('Куплено '..money(total.buys)..' · '..total.buy_count)
+        C.remember_size(imgui.GetWindowSize().x,imgui.GetWindowSize().y)
+    end
+    imgui.End()
+    if C.end_resize then C.end_resize()end
+    imgui.PopStyleVar(3)
+    if colors and colors>0 then imgui.PopStyleColor(colors)end
+end
+return true
+
+end
+__mod_66c_mh_trade_journal()
+
 local function __mod_66a_trade_log_tab_mh()
 -- Trade-first journal tab, adapted from Market Helper log list.
 -- Original reward/payday detail UI remains reachable if needed.
@@ -44946,6 +45202,8 @@ local function __mod_68b_promo_universal_ui()
 -- Market Helper pattern: template title and editable chat commands in one panel.
 local ffi=require('ffi')
 local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
+if V._promo291_installed then return true end
+V._promo291_installed=true
 local function button(label,id,w,on)return V.button(label,'mhpromo_'..id,w,on)end
 local function txt(s)return DSP.utf8(tostring(s or''))end
 local function buff(str,n)
@@ -44963,7 +45221,9 @@ local function open_editor(index)
         buffers[i]=buff(r.text,512)
     end
     V.mhpromo_edit={index=index,name=buff(t and t.name or'Новый шаблон',96),
-        rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false}
+        rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false,
+        interval_min={value=t and t.interval_min or 0},interval_max={value=t and t.interval_max or 0},
+        auto_limit={value=t and t.auto_limit or 0},random_line=t and t.random_line==true or false}
 end
 local function editor(e)
     V.heading('Пиар / Редактор',function()
@@ -44973,8 +45233,9 @@ local function editor(e)
     imgui.SetNextItemWidth(-1)
     imgui.InputText('##mhpromo_name',e.name,96)
     V.muted('Каждая строка — отдельная игровая команда; отправляются по очереди.')
+    V.muted('Как в Market Helper: название, строки и настройки одного шаблона.')
     local rm=nil
-    if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,300),true)then
+    if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,math.max(135,math.min(290,imgui.GetContentRegionAvail().y-225))),true)then
         for i,row in ipairs(e.rows)do
             imgui.PushID(i)
             V.muted('Строка '..i)
@@ -44991,6 +45252,16 @@ local function editor(e)
             end
             V.inline(4)
             if button('Удалить','rm_'..i,94)then rm=i end
+            V.inline(4)
+            if button('^','up_'..i,42) and i>1 then
+                e.rows[i],e.rows[i-1]=e.rows[i-1],e.rows[i]
+                e.buffers[i],e.buffers[i-1]=e.buffers[i-1],e.buffers[i]
+            end
+            V.inline(4)
+            if button('v','down_'..i,42) and i<#e.rows then
+                e.rows[i],e.rows[i+1]=e.rows[i+1],e.rows[i]
+                e.buffers[i],e.buffers[i+1]=e.buffers[i+1],e.buffers[i]
+            end
             imgui.Separator()
             imgui.PopID()
         end
@@ -45015,18 +45286,35 @@ local function editor(e)
         end
     end
     V.muted('Макрос {shop} вставляет кликабельную ссылку на свою лавку.')
+    if button(e.random_line and'Случайная строка: ВКЛ' or'Случайная строка: ВЫКЛ',
+        'random',235,e.random_line)then e.random_line=not e.random_line end
+    V.muted('Интервал повтора: 0 = индивидуальный интервал каждой строки.')
+    V.muted('Минимум повтора, сек:')
+    M.compact_number(e.interval_min,'value','mhpromo_imin',160,0)
+    V.inline(6)
+    V.muted('Максимум, сек:')
+    M.compact_number(e.interval_max,'value','mhpromo_imax',160,0)
+    V.muted('Лимит отправок шаблона: 0 = без лимита')
+    M.compact_number(e.auto_limit,'value','mhpromo_limit',170,0)
     if e.error then V.red(e.error)end
     if button('СОХРАНИТЬ ШАБЛОН','save',250,true)then
         local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
         local ok,reason=P.save_template(e.index,name,e.rows,e.enabled)
-        if ok then V.mhpromo_edit=nil else e.error=tostring(reason)end
+        if ok then
+            local list=P.settings().templates
+            local idx=e.index or #list
+            local saved,err=P.save_template_options(idx,{
+                interval_min=e.interval_min.value,interval_max=e.interval_max.value,
+                auto_limit=e.auto_limit.value,random_line=e.random_line})
+            if saved then V.mhpromo_edit=nil else e.error=tostring(err)end
+        else e.error=tostring(reason)end
     end
     V.inline(4)
     if button('Отмена','cancel',120)then V.mhpromo_edit=nil end
 end
 function V.promo_screen()
     if V.mhpromo_edit then
-        return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end)
+        return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end,{footer=true})
     end
     local settings=P.settings()
     V.heading('Автопиар · Palatka',function()
@@ -45537,231 +45825,184 @@ end
 __mod_69a_arbitrage_agent()
 
 local function __mod_69b_arbitrage_agent_ui()
--- Compact floating assistant for an entire arbitrage session (not one route).
--- Controls never send trades; all execution acknowledgement is explicit.
-local A=DSP.arb_agent
-local M=DSP.market
-local U=DSP.ui
-local V=DSP.ui22
-local function cp(v)return DSP.utf8(tostring(v or''))end
-local function btn(label,id,w,h)
-    return imgui.Button(cp(label)..'##arb_agent_'..id,imgui.ImVec2(w or -1,h or 34))
-end
-local function text(s)imgui.Text(cp(s))end
-local function muted(s)imgui.TextDisabled(cp(s))end
-local function good(s)imgui.TextColored(DSP.theme.col('good',1),cp(s))end
-local function bad(s)imgui.TextColored(DSP.theme.col('bad',1),cp(s))end
-local function fmt(n)return DSP.money(tonumber(n)or 0)end
-local function notify(msg)
-    A.ui_message=tostring(msg or'')
-    if DSP.flog then DSP.flog('ARB AGENT: '..A.ui_message)end
-end
+-- Palatka AI arbitration companion: native Carbon controls, compact game-safe panel.
+-- All trades remain manually acknowledged; no packet, teleport or server automation.
+local A,M,V=DSP.arb_agent,DSP.market,DSP.ui22
+local function u(s)return DSP.utf8(tostring(s or ''))end
+local function label(s)imgui.Text(u(s))end
+local function quiet(s)imgui.TextDisabled(u(s))end
+local function green(s)imgui.TextColored(DSP.theme.col('good',1),u(s))end
+local function red(s)imgui.TextColored(DSP.theme.col('bad',1),u(s))end
+local function b(name,id,w,active) return V.button(name,'agent291_'..id,w,active,false,38)end
+local function money(v)return DSP.money(tonumber(v)or 0)end
 local function selected(s)
-    local i=math.min(math.max(1,tonumber(s.focus)or 1),math.max(1,#s.routes))
-    return s.routes[i],i
+    local index=math.max(1,math.min(tonumber(s.focus)or 1,#s.routes))
+    return s.routes[index],index
 end
-local function flag(e)
-    if e.unavailable_reason=='shop_missing' then return 'НЕТ ЛАВКИ' end
-    if e.unavailable_reason=='item_missing' then return 'НЕТ ПРЕДМЕТА' end
-    if e.unavailable_reason=='owner_changed' then return 'СМЕНА ВЛАДЕЛЬЦА' end
-    if e.skipped then return 'ПРОПУЩЕНО' end
-    if e.sold==e.qty then return 'ЗАВЕРШЕНО' end
-    if e.bought==0 then return 'КУПИТЬ' end
-    if e.bought<e.qty then return 'ДОКУПИТЬ' end
-    return 'СДАТЬ'
+local function status(e)
+    if e.unavailable_reason=='shop_missing' then return 'Нет лавки' end
+    if e.unavailable_reason=='item_missing' then return 'Нет предмета' end
+    if e.unavailable_reason=='owner_changed' then return 'Смена владельца' end
+    if e.skipped then return 'Пропущено' end
+    if e.sold>=e.qty then return 'Завершено' end
+    if e.bought<e.qty then return 'Покупка' end
+    return 'Продажа'
 end
-local function geometry(sw,sh)
-    local p=DSP.settings.arb_agent_window or{}
-    local maxw=math.max(220,sw-16)
-    local maxh=math.max(180,sh-16)
-    local w=DSP.clamp(tonumber(p.w)or math.min(360,maxw),math.min(280,maxw),maxw)
-    local h=DSP.clamp(tonumber(p.h)or math.min(440,maxh),math.min(280,maxh),maxh)
-    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w-10),0,math.max(0,sw-w)),
-        y=DSP.clamp(tonumber(p.y)or math.max(8,sh*.16),0,math.max(0,sh-h))}
-end
-local function save_geometry(g,dx,dy,dw,dh,io)
+local function rect(io)
+    DSP.settings.arb_agent_window=DSP.settings.arb_agent_window or{}
+    local p=DSP.settings.arb_agent_window
     local sw,sh=io.DisplaySize.x,io.DisplaySize.y
-    local x=DSP.clamp(g.x+(dx or 0),0,math.max(0,sw-g.w))
-    local y=DSP.clamp(g.y+(dy or 0),0,math.max(0,sh-g.h))
-    local w=DSP.clamp(g.w+(dw or 0),math.min(280,sw-16),sw-x)
-    local h=DSP.clamp(g.h+(dh or 0),math.min(280,sh-16),sh-y)
+    local w=DSP.clamp(tonumber(p.w)or 440,math.min(305,sw-16),math.max(305,sw-16))
+    local h=DSP.clamp(tonumber(p.h)or 390,math.min(250,sh-16),math.max(250,sh-16))
+    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w-12),0,math.max(0,sw-w)),
+        y=DSP.clamp(tonumber(p.y)or 110,0,math.max(0,sh-h))}
+end
+local function drag(g,io,resize)
+    local d=io.MouseDelta
+    if not d or (d.x==0 and d.y==0) then return end
+    local w=resize and DSP.clamp(g.w+d.x,math.min(305,io.DisplaySize.x-16),io.DisplaySize.x-g.x)or g.w
+    local h=resize and DSP.clamp(g.h+d.y,math.min(250,io.DisplaySize.y-16),io.DisplaySize.y-g.y)or g.h
+    local x=resize and g.x or DSP.clamp(g.x+d.x,0,io.DisplaySize.x-w)
+    local y=resize and g.y or DSP.clamp(g.y+d.y,0,io.DisplaySize.y-h)
     DSP.settings.arb_agent_window={x=x,y=y,w=w,h=h}
-    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
+    A._geometry_dirty=true
 end
-local function header(s,g,io)
-    local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
-    if btn('АРБИТРАЖ / MOVE','drag',math.max(65,g.w-119),32)then end
-    if imgui.IsItemActive()and io.MouseDelta then
-        local d=io.MouseDelta
-        if d.x~=0 or d.y~=0 then save_geometry(g,d.x,d.y,0,0,io)end
-    end
-    imgui.SameLine(0,4)
-    if btn(A.queue_expanded and '-' or '+','queue_toggle',33,32)then
-        A.queue_expanded=not A.queue_expanded
-    end
-    imgui.SameLine(0,4)
-    if btn('X','close',34,32)then A.show(false)end
-end
-local function summary(s)
-    local st=A.stats()
-    good('Сделок: '..st.done..' / '..st.routes..'  |  В работе: '..st.pending)
-    text('Куплено: '..st.bought..'  |  Сдано: '..st.sold)
-    good('Прибыль ~ '..fmt(st.profit_estimate))
-    muted('Расчёт по ценам плана, не подтверждённая касса')
-    local updated=M.state and M.state.updated or 0
-    muted('API: '..(M.freshness and M.freshness()or'нет данных')..' | обзор каждые 60 с')
-end
-local function queue(s)
+local function notice(msg)A.ui_message=msg end
+local function route_queue(s)
     local total=#s.routes
-    if total==0 then muted('Маршрутов пока нет');return end
-    A.queue_page=math.max(1,math.min(tonumber(A.queue_page)or 1,math.ceil(total/5)))
-    local pages=math.ceil(total/5)
-    muted('Все маршруты, включая завершённые: '..total)
-    local first=(A.queue_page-1)*5+1
-    for i=first,math.min(total,first+4)do
+    if total==0 then return end
+    local pages=math.max(1,math.ceil(total/4))
+    A.queue_page=DSP.clamp(tonumber(A.queue_page)or 1,1,pages)
+    quiet('Маршруты: '..total..'  |  Страница '..A.queue_page..'/'..pages)
+    local from=(A.queue_page-1)*4+1
+    for i=from,math.min(total,from+3)do
         local e=s.routes[i]
-        local label=(i==s.focus and '* 'or'')..tostring(i)..'. '..e.name..
-            ' | '..flag(e)..' '..e.sold..'/'..e.qty
-        if btn(label,'route_'..i,-1,30)then A.focus(i);A.qty_key=nil end
+        if b(V.fit(i..'. '..e.name..' · '..status(e),math.max(100,imgui.GetContentRegionAvail().x-20)),
+            'route_'..i,-1,s.focus==i)then
+            A.focus(i);A.qty_key=nil
+        end
     end
     if pages>1 then
-        if btn('<','queue_prev',52,28)then A.queue_page=math.max(1,A.queue_page-1)end
-        imgui.SameLine(0,5)
-        muted('Страница '..A.queue_page..'/'..pages)
-        imgui.SameLine(0,5)
-        if btn('>','queue_next',52,28)then A.queue_page=math.min(pages,A.queue_page+1)end
+        if b('Ранее','pageprev',110)then A.queue_page=math.max(1,A.queue_page-1)end
+        imgui.SameLine(0,8)
+        if b('Далее','pagenext',110)then A.queue_page=math.min(pages,A.queue_page+1)end
     end
 end
--- Normal ImGui input is used intentionally: unavailable native exotic widgets
--- must not make the floating assistant impossible to close.
+local function route_info(e,index,total)
+    if not e then quiet('Новых маршрутов пока нет');return end
+    quiet('Сделка '..index..' из '..total..' · '..status(e))
+    label(V.fit(e.name,math.max(120,imgui.GetContentRegionAvail().x-12)))
+    quiet('План '..e.qty..' шт.  |  Ожидаемая прибыль ~ '..money(e.proposed_profit))
+    quiet('Куплено '..e.bought..' · Продано '..e.sold)
+    if e.skipped then
+        if e.bought>e.sold then red('Товаров на руках: '..(e.bought-e.sold)..' шт.')end
+        if b('Вернуть маршрут','restore',-1)then
+            if e.unavailable_reason then A.restore_unavailable(index)else A.skip(index,false)end
+        end
+        return
+    end
+    if e.sold>=e.qty then green('Сделка завершена');return end
+    local buying=e.bought<e.qty
+    local side=buying and 'buy' or 'sell'
+    local shop=buying and e.seller_shop or e.buyer_shop
+    local owner=buying and e.seller_owner or e.buyer_owner
+    local price=buying and e.buy_price or e.sell_price
+    local remaining=buying and(e.qty-e.bought)or(e.bought-e.sold)
+    if remaining<=0 then return end
+    green(buying and 'Купить' or 'Продать')
+    label('Лавка #'..shop..' · '..tostring(owner or'?'))
+    quiet('Осталось '..remaining..' шт.  |  '..money(price)..' / шт.')
+    if b('Метка на лавку #'..shop,'mark',-1)then
+        if not M.mark_shop(shop)then notice('Метка недоступна')end
+    end
+    if b('Нет лавки','missing_shop',145)then
+        local ok,err=A.mark_unavailable(index,'shop')
+        notice(ok and 'Лавка исключена из планов' or tostring(err))
+    end
+    imgui.SameLine(0,6)
+    if b('Нет предмета','missing_item',160)then
+        local ok,err=A.mark_unavailable(index,'item')
+        notice(ok and 'Предложение исключено' or tostring(err))
+    end
+    local key=e.id..':'..side
+    if A.qty_key~=key then A.qty_key=key;A.qty_field=imgui.new.int(remaining)end
+    quiet('Подтверждение количества:')
+    imgui.SetNextItemWidth(math.min(160,imgui.GetContentRegionAvail().x))
+    imgui.InputInt('##agent291_qty',A.qty_field,1,10)
+    if b(buying and 'Подтвердить покупку' or 'Подтвердить продажу','confirm',-1,true)then
+        local ok,err=A.confirm(index,side,A.qty_field[0])
+        if ok then A.qty_key=nil;notice('Количество записано')else notice(tostring(err))end
+    end
+    local hint=A.hint
+    if hint and hint.route_id==e.id and hint.side==side then
+        quiet('Обнаружен похожий чек: '..hint.qty..' шт.')
+        if b('Принять данные чека','receipt',-1)then
+            local ok,err=A.confirm(index,side,hint.qty)
+            if ok then A.qty_key=nil;notice('Чек подтверждён')else notice(tostring(err))end
+        end
+    end
+end
 function A.draw()
     local s=A.active()
     if not s then A.show(false);return end
     if A.review_market then A.review_market()end
     local io=imgui.GetIO()
-    local g=geometry(io.DisplaySize.x,io.DisplaySize.y)
+    local g=rect(io)
     imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
     imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
-    local colors=DSP.theme.push_window()
-    imgui.SetNextWindowBgAlpha(.90)
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,6))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(5,5))
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,6)
-    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+
-        imgui.WindowFlags.NoResize+imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar
+    imgui.SetNextWindowBgAlpha(.94)
+    local color_count=DSP.theme.push_window()
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(9,8))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(6,6))
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,9)
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoMove+
+        imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse
     if imgui.Begin('##palatka_arbitrage_agent',nil,flags)then
-        if imgui.SetWindowFontScale then
-            imgui.SetWindowFontScale(1)
-            local fs=imgui.GetFontSize()
-            imgui.SetWindowFontScale(math.min(1.15,15/math.max(1,fs)))
-        end
-        header(s,g,io)
+        if V.apply_font then V.apply_font()end
+        if b('Арбитраж · переместить','handle',math.max(100,g.w-112))then end
+        if imgui.IsItemActive() and io.MouseDelta then drag(g,io,false)end
+        imgui.SameLine(0,5)
+        if b(A.queue_expanded and '-' or '+','queue',40)then A.queue_expanded=not A.queue_expanded end
+        imgui.SameLine(0,5)
+        if b('X','close',43)then A.show(false)end
+        local st=A.stats()
+        quiet('Завершено '..st.done..'/'..st.routes..' · В работе '..st.pending)
+        green('Ожидаемый результат ~ '..money(st.profit_estimate))
         imgui.Separator()
-        if imgui.BeginChild('##arb_agent_scroll',imgui.ImVec2(0,-40),false)then
-            summary(s)
-            imgui.Separator()
-            if A.queue_expanded then
-                queue(s)
-                if not A.end_confirm then
-                    if btn('Завершить сессию','end_session',-1,28)then A.end_confirm=true end
-                else
-                    bad('Завершить текущую сессию? История останется.')
-                    if btn('Да, завершить','end_yes',-1,30)then
-                        A.stop();A.end_confirm=false
-                    end
-                    if btn('Отмена','end_cancel',-1,28)then A.end_confirm=false end
-                end
-                imgui.Separator()
-            end
-            local e,index=selected(s)
-            if e then
-                text('МАРШРУТ '..index..' / '..#s.routes..' | '..flag(e))
-                text(V.fit(e.name,math.max(100,imgui.GetContentRegionAvail().x-8)))
-                muted('План: '..e.qty..' шт. | ожидание ~ '..fmt(e.proposed_profit))
-                muted('Куплено '..e.bought..' / '..e.qty..' | Продано '..e.sold..' / '..e.qty)
-                -- Confirming each step updates the local offer ledger, never cash history.
-                if e.skipped then
-                    if e.unavailable_reason then
-                        bad('Исключено: '..flag(e)..' ('..tostring(e.unavailable_source or 'ручная')..')')
-                        if e.bought>e.sold then bad('Остались купленные товары: '..(e.bought-e.sold)..' шт.') end
-                    end
-                    if btn('Вернуть маршрут','restore',-1)then
-                        if e.unavailable_reason then A.restore_unavailable(index)
-                        else A.skip(index,false)end
-                    end
-                else
-                    local side=e.bought<e.qty and'buy'or'sell'
-                    local remaining=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
-                    if remaining>0 then
-                        local shop=side=='buy'and e.seller_shop or e.buyer_shop
-                        local owner=side=='buy'and e.seller_owner or e.buyer_owner
-                        local unit=side=='buy'and e.buy_price or e.sell_price
-                        text(side=='buy'and'КУПИТЬ' or'СДАТЬ')
-                        text('Лавка #'..shop..' | '..owner)
-                        text('x'..remaining..' | '..fmt(unit)..'/шт.')
-                        if btn('Найти лавку #'..shop,'target',-1)then
-                            if not M.mark_shop(shop)then notify('Метка недоступна')end
-                        end
-                        if btn('Нет лавки','missing_shop',-1,32)then
-                            local ok,why=A.mark_unavailable(index,'shop')
-                            if ok then A.qty_key=nil;notify('Лавка #'..shop..' исключена из планов')
-                            else notify(tostring(why))end
-                        end
-                        if btn('Нет предмета / нет скупки','missing_item',-1,32)then
-                            local ok,why=A.mark_unavailable(index,'item')
-                            if ok then A.qty_key=nil;notify('Предложение исключено до новой проверки')
-                            else notify(tostring(why))end
-                        end
-                        local input_key=e.id..':'..side
-                        if A.qty_key~=input_key then A.qty_key=input_key;A.qty_field=imgui.new.int(remaining)end
-                        muted('Подтвердить количество:')
-                        imgui.SetNextItemWidth(math.min(160,imgui.GetContentRegionAvail().x))
-                        imgui.InputInt('##arb_agent_qty',A.qty_field,1,10)
-                        if btn(side=='buy'and'КУПЛЕНО' or'ПРОДАНО','confirm',-1,39)then
-                            local ok,why=A.confirm(index,side,A.qty_field[0])
-                            if ok then A.qty_key=nil;notify('Подтверждено: '..e.name)
-                            else notify(tostring(why))end
-                        end
-                        local hint=A.hint
-                        if hint and hint.route_id==e.id and hint.side==side then
-                            muted('Похожий чек: '..hint.qty..' шт. (не автозачёт)')
-                            if btn('Подтвердить чек','accept_receipt',-1)then
-                                local ok,why=A.confirm(index,side,hint.qty)
-                                if ok then A.qty_key=nil;notify('Чек подтверждён')
-                                else notify(tostring(why))end
-                            end
-                        end
-                    else good('Маршрут выполнен')end
-                end
+        if A.queue_expanded then
+            route_queue(s)
+            if not A.end_confirm then
+                if b('Закончить сессию','end',-1)then A.end_confirm=true end
             else
-                muted('Маршруты появятся после сканирования рынка')
+                red('Завершить сессию?')
+                if b('Завершить','endyes',140)then A.stop();A.end_confirm=false end
+                imgui.SameLine(0,5)
+                if b('Отмена','endno',130)then A.end_confirm=false end
             end
+            imgui.Separator()
+        end
+        if imgui.BeginChild('##agent291_content',imgui.ImVec2(0,-80),false)then
+            local e,i=selected(s)
+            route_info(e,i,#s.routes)
         end
         imgui.EndChild()
-        if A.save_error then bad('Запись не сохранена: '..tostring(A.save_error))end
-        if A.ui_message then muted(V.fit(A.ui_message,math.max(80,g.w-32)))end
-        if btn('<','previous',47,30)then A.next(-1);A.qty_key=nil end
-        imgui.SameLine(0,5)
-        if btn('>','next',47,30)then A.next(1);A.qty_key=nil end
-        imgui.SameLine(0,5)
-        local e,i=selected(s)
-        if e and btn('Пропустить','skip',100,30)then A.skip(i,true);A.next(1);A.qty_key=nil end
-        imgui.SameLine(0,5)
-        if btn('Меню','main',65,30)then
-            if U and U.set_open then U.set_open(true)end
-            if V and V.set_screen then V.set_screen('arbitrage')end
-        end
-        -- Bottom-right corner belongs to resize, not to gameplay.
-        imgui.SetCursorPos(imgui.ImVec2(g.w-44,g.h-34))
-        btn('//','size',30,27)
-        if imgui.IsItemActive()and io.MouseDelta then
-            local d=io.MouseDelta
-            if d.x~=0 or d.y~=0 then save_geometry(g,0,0,d.x,d.y,io)end
-        end
+        if A.ui_message then quiet(V.fit(A.ui_message,math.max(120,g.w-35)))end
+        if A.save_error then red('Не сохранено: '..tostring(A.save_error))end
+        if b('< Предыдущая','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
+        imgui.SameLine(0,6)
+        if b('Следующая >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
+        -- Native ImGui drag-resize grip, visually aligned to Palatka corners.
+        imgui.SetCursorPos(imgui.ImVec2(g.w-39,g.h-36))
+        if b('//','resize',29)then end
+        if imgui.IsItemActive()and io.MouseDelta then drag(g,io,true)end
     end
     imgui.End()
     imgui.PopStyleVar(3)
-    if colors and colors>0 then imgui.PopStyleColor(colors)end
+    if color_count and color_count>0 then imgui.PopStyleColor(color_count)end
+    if A._geometry_dirty and not imgui.IsMouseDown(0)then
+        A._geometry_dirty=false
+        if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()end
+    end
 end
 return true
 
