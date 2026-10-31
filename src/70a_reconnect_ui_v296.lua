@@ -98,7 +98,8 @@ local function diag()
     if R.state=='scheduled'then
         V.muted('Следующая попытка через '..math.max(0,(R.next_at or 0)-os.time())..' с')
     end
-    V.muted('API подключения: '..(type(sampConnectToServer)=='function'and'обнаружен' or'недоступен'))
+    V.muted('Клиентский /reconnect: '..((type(sampProcessChatInput)=='function'
+        or type(sampSendChat)=='function')and'доступен' or'не определён'))
     V.muted('SA-MP-диалоги: '..tostring(#(R.options or{}))..' пунктов')
     if R.dialog_id then V.muted('ID последнего меню спавна: '..tostring(R.dialog_id))end
     V.muted('Команды: /prc (вручную), /prc status, /prc stop')
