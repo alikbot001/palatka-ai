@@ -1,66 +1,84 @@
--- Opt-in storage packet diagnostics inside the existing native mimgui screen.
--- No WebView or duplicated game event subscriptions.
+-- Contextual controls inside Storage > Scan (native mimgui).
+-- The selector lives in 60b_carbon_storage.lua; never capture another kind silently.
 local V = DSP.ui21
 local P = DSP.storage_probe
+local labels={inventory='ИНВЕНТАРЬ',cabinet='ШКАФ',warehouse='СКЛАД'}
 local function button(label,id,width,active)
     return V.button(label,'probe_'..id,width,active)
 end
-function V.storage_probe_panel(width)
-    if not P then return end
+function V.storage_probe_panel(width,kind)
     width=math.max(190,tonumber(width) or 300)
-    local w=math.min(width,290)
+    local w=math.min(width,315)
+    if not P then V.red('Модуль сканирования не установлен.');return end
+    kind=labels[kind] and kind or 'inventory'
     local state=P.state()
-    imgui.Separator()
-    V.text('ПОИСК ИНВЕНТАРЯ И КОНТЕЙНЕРОВ')
-    V.muted(V.fit('Режим наблюдения: только входящие пакеты. Никаких кликов и перемещений.',width))
-    V.muted('Выбери тип, запусти сбор, закрой окно Palatka и открой контейнер в игре.')
-    if not state.armed then
-        if button('Наблюдать: личный инвентарь','arm_inventory',w) then P.arm('inventory',40);V.probe_selected=1 end
-        if button('Наблюдать: шкаф','arm_cabinet',w) then P.arm('cabinet',40);V.probe_selected=1 end
-        if button('Наблюдать: склад','arm_warehouse',w) then P.arm('warehouse',40);V.probe_selected=1 end
-    else
-        V.green('Сбор включён: '..math.max(0,state.until_ts-os.time())..' сек. Осталось')
-        if button('Закончить сбор и проверить','stop',w) then P.stop() end
+    V.text(labels[kind]..' · режим наблюдения')
+    if state.armed and state.kind~=kind then
+        V.red('Сначала заверши скан другого контейнера.')
+        if button('Остановить предыдущий скан','stop_other',w)then P.stop()end
+        return
     end
-    V.muted('Кандидатов: '..#state.order..' · пакетов: '..state.observed..' · багажник исключён: '..state.ignored_trunk..' · лавка исключена: '..(state.ignored_stall or 0))
+    if state.kind~=kind and not state.armed then
+        -- A previous capture must never be presented as the current container.
+        V.muted('Это отдельный скан. Нажми «Начать», затем открой выбранный контейнер.')
+        if button('Начать скан: '..labels[kind],'arm_'..kind,w,true)then
+            P.arm(kind,40);V.probe_selected=1;V.probe_error=nil;V.probe_report_path=nil
+        end
+        return
+    end
+    if state.armed then
+        V.green('Активен · осталось '..math.max(0,state.until_ts-os.time())..' сек.')
+        V.muted('Закрой Palatka AI и открой '..(kind=='inventory' and 'личный инвентарь' or kind=='cabinet' and 'шкаф' or 'склад')..' в игре.')
+        if button('Завершить и показать найденное','stop',w,true)then P.stop()end
+    else
+        V.muted('Скан завершён. Данные ниже предварительные.')
+        if button('Повторить скан','arm_'..kind,w)then
+            P.arm(kind,40);V.probe_selected=1;V.probe_error=nil;V.probe_report_path=nil
+            return
+        end
+    end
+    V.muted('Пакеты: '..tostring(state.observed or 0)..' · кандидаты: '..#state.order)
+    V.muted('Пропущено: багажник '..tostring(state.ignored_trunk or 0)..
+        ', лавка '..tostring(state.ignored_stall or 0))
     if not state.armed and state.status=='review' then
-        if button('Создать безопасный отчёт','export',w) then
+        if button('Сохранить технический отчёт','export',w)then
             local ok,path=P.export_report()
             if ok then V.probe_report_path=path;V.probe_error=nil
-            else V.probe_error=tostring(path) end
+            else V.probe_error=tostring(path)end
         end
-        if V.probe_report_path then
-            V.muted(V.fit('Отчёт: '..V.probe_report_path,width))
-        end
+        if V.probe_report_path then V.muted(V.fit(V.probe_report_path,width))end
     end
     if #state.order==0 then
-        V.muted('Нет подходящих данных. Нативный экран мог использовать другой формат.')
+        if not state.armed then
+            V.red('Подходящих пакетов нет. Инвентарь мог прийти другим форматом.')
+        end
+        if V.probe_error then V.red(V.fit(V.probe_error,width))end
         return
     end
     V.probe_selected=math.max(1,math.min(#state.order,V.probe_selected or 1))
     local selected=V.probe_selected
-    if button('Кандидат '..selected..' / '..#state.order..' (следующий)','next',w)then
+    if button('Кандидат '..selected..' / '..#state.order..' →','next',w)then
         selected=selected%#state.order+1;V.probe_selected=selected
     end
-    local info=P.preview(selected)
-    if not info then return end
+    local info,err=P.preview(selected)
+    if not info then V.red(tostring(err));return end
     local e=info.entry
-    V.text('Пакет: тип '..e.type..', канал '..e.sub..' · слотов замечено: '..e.count)
-    V.muted('Предметов: '..info.occupied..' · количество известно: '..info.known)
-    V.muted('Неизвестных количеств: '..info.unknown_qty..' · полнота НЕ подтверждена')
+    V.text('type='..e.type..', sub='..e.sub..' · слотов получено '..e.count)
+    V.muted('Найдено предметных слотов: '..info.occupied)
+    V.muted('Подтверждено единиц: '..info.known..' · без числа: '..info.unknown_qty)
     for i=1,math.min(4,#info.rows)do
         local it=info.rows[i]
         V.muted(V.fit(it.name..' · '..(it.qty and tostring(it.qty)..' шт.' or 'количество неизвестно'),width))
     end
-    if #info.rows>4 then V.muted('Другие предметы будут в сохранённом наблюдении.') end
+    if #info.rows>4 then V.muted('Остальные предметы появятся в списке снимка.')end
     if not state.armed then
-        if button('Сохранить непроверенное наблюдение','save',w)then
-            local ok,err=P.save(selected)
+        if button('Сохранить как непроверенный снимок','save',w,true)then
+            local ok,saved=P.save(selected)
             if ok then
                 V.probe_error=nil;V.storage_tab='snapshots';V.storage_selected=1
-            else V.probe_error=tostring(err)end
+            else V.probe_error=tostring(saved)end
         end
     end
-    V.red(V.fit('Важно: тип контейнера указан вручную. Полный состав и ID владельца не подтверждены.',width))
+    V.red(V.fit('Это не полный скан: тип контейнера выбран вручную, ID владельца неизвестен.',width))
     if V.probe_error then V.red(V.fit(V.probe_error,width))end
 end
