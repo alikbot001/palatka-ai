@@ -472,10 +472,6 @@ function U.draw()
             imgui.Separator()
             if V.button('Îêíà','carbon_windows',100,false,true,38)then V.nav=not V.nav end
             V.inline()
-            if V.button('MCR','switch_to_mcr',76,false,false,38)then
-                DSP.settings.ui_style='mcr';M.defer_save()
-            end
-            V.inline()
             local remain=imgui.GetContentRegionAvail().x
             V.muted(V.fit('Palatka AI · '..tostring(DSP.market.state.status or 'offline')..' · áåç àâòîìàòè÷åñêèõ ñäåëîê',math.max(40,remain-6)))
         end
