@@ -26,7 +26,7 @@ write(path,encodeJson(initial))
 local ui_path=path..'.ui_state'
 local ui_initial={version=1,name='UI ORIGINAL',auto_shop_scan=false,future_setting='window'}
 write(ui_path,encodeJson(ui_initial))
-DSP={settings_path=path,ui_state_path=ui_path,settings=initial,
+DSP={version='v283',settings_path=path,ui_state_path=ui_path,settings=initial,
  theme={current='carbon_trade',opacity=0.83},
  save_settings=function()error('old writer used')end,flog=function()end}
 dofile('src/00a_settings_safety.lua')
