@@ -5,6 +5,10 @@ local function t(s)return DSP.utf8(tostring(s or''))end
 local function prefs()
     DSP.settings.craglog=DSP.settings.craglog or{}
     local s=DSP.settings.craglog
+    if not s.mh_log_style_v1 then
+        s.w,s.h=445,210
+        s.mh_log_style_v1=true
+    end
     s.mh_log_lines=math.max(3,math.min(16,math.floor(tonumber(s.mh_log_lines)or 8)))
     s.mh_log_alpha=math.max(.12,math.min(.95,tonumber(s.mh_log_alpha)or .58))
     return s
@@ -71,7 +75,7 @@ function C.draw()
         end
         if not imgui.IsMouseDown(0)then C.end_drag()end
         imgui.SameLine(0,4)
-        if imgui.Button(s.minimized and'+'or'-'..'##trade_feed_fold',imgui.ImVec2(24,26))then
+        if imgui.Button((s.minimized and'+'or'-')..'##trade_feed_fold',imgui.ImVec2(24,26))then
             C.set_minimized(not s.minimized)
         end
         imgui.SameLine(0,3)
