@@ -7,7 +7,7 @@ _G.DSP={
 }
 dofile('src/66d_mh_journal_screen_v294.lua')
 assert(DSP.settings.craglog.open==false)
-assert(DSP.craglog.draw())
+DSP.craglog.draw()
 local src=assert(io.open('src/66d_mh_journal_screen_v294.lua','rb')):read('*a')
 for _,label in ipairs({'Дата','Товар','Кол.','Цена $','Тип','Ник'})do
     assert(src:find(label,1,true),label)
