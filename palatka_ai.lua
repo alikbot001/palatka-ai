@@ -1,7 +1,7 @@
--- Palatka AI v2.9.4 mobile release, built from src/*.lua
+-- Palatka AI v2.9.5 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.4')
+script_version('2.9.5')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1803606
+DSP.item_icon_blob_offset = 1815822
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.9.3'
+DSP.version = '2.9.5'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -38937,6 +38937,55 @@ end
 end
 __mod_47c_storage_search()
 
+local function __mod_47d_storage_render_cache_v295()
+-- v2.9.5: avoid re-evaluating every stored trunk on every ImGui frame.
+-- No data is discarded; a short expiry and market/snapshot changes invalidate.
+local S=DSP.storage
+if not S or S._render_cache_v295 then return true end
+S._render_cache_v295=true
+local base_evaluate=S.evaluate
+local base_search=S.search_library
+local values=setmetatable({},{__mode='k'})
+local searches={}
+local last_bucket=-1
+local function generation()
+    local state=DSP.market and DSP.market.state or{}
+    local clock=os.time()
+    local bucket=math.floor(clock/2)
+    if last_bucket~=bucket then
+        values=setmetatable({},{__mode='k'})
+        searches={}
+        last_bucket=bucket
+    end
+    return tostring(bucket)..':'..tostring(state.sid or 0)..':'..
+        tostring(state.version or 0)..':'..tostring(S.snapshots)
+end
+function S.evaluate(snapshot,lookup)
+    if lookup~=nil or type(snapshot)~='table' then return base_evaluate(snapshot,lookup)end
+    local key=generation()..':'..tostring(snapshot.rows)..':'..
+        tostring(snapshot.manual_prices)..':'..tostring(#(snapshot.rows or{}))
+    local c=values[snapshot]
+    if c and c.key==key then return c.result end
+    local result=base_evaluate(snapshot)
+    values[snapshot]={key=key,result=result}
+    return result
+end
+if type(base_search)=='function' then
+    function S.search_library(query,lookup)
+        if lookup~=nil then return base_search(query,lookup)end
+        local key=generation()..':'..tostring(query or'')
+        local item=searches[key]
+        if item then return item end
+        local result=base_search(query)
+        searches[key]=result
+        return result
+    end
+end
+return true
+
+end
+__mod_47d_storage_render_cache_v295()
+
 local function __mod_48_flip_intel()
 -- v2.2.4: independent resale workstation. All values are estimates from market
 -- offers, never evidence of completed transactions or reserved stock.
@@ -40984,18 +41033,36 @@ end
 function C.install()
     if C.installed then return end
     C.installed=true;local restored={}
-    local f=io.open(DSP.events_log_path,'r')
-    if f then local history={}
+    local f=io.open(DSP.events_log_path,'rb')
+    if f then
+        -- A long-running account can have years of JSONL data. The mini-ring
+        -- only needs its last 300 events; do not parse the entire file at login.
+        -- Seek from the end and discard the initial partial line.
+        local max_tail_bytes=2*1024*1024
+        local length=type(f.seek)=='function' and f:seek('end') or nil
+        if length then
+            local start=math.max(0,length-max_tail_bytes)
+            f:seek('set',start)
+            if start>0 then f:read('*l') end
+        end
+        local history,head,count={},1,0
         for line in f:lines() do
             if line~='' then
                 local ok,row=pcall(decodeJson,line)
                 if ok and type(row)=='table' and row.type and row.type~='journal_deleted' then
-                    history[#history+1]=row
-                    if #history>C.ring_cap then table.remove(history,1) end
+                    history[head]=row
+                    head=head%C.ring_cap+1
+                    count=math.min(count+1,C.ring_cap)
                 end
             end
         end
         f:close()
+        local ordered={}
+        for i=0,count-1 do
+            local index=(head-count+i-1)%C.ring_cap+1
+            ordered[#ordered+1]=history[index]
+        end
+        history=ordered
         local markers={}
         for _,e in ipairs(history) do
             if e.type=='payday_detail' then
@@ -41841,6 +41908,35 @@ return true
 
 end
 __mod_59b_drop_sales_stats()
+
+local function __mod_65b_stats_render_cache_v295()
+-- v2.9.5: skip full inventory signature/loot reconciliation on every stats frame.
+local C=DSP.craglog
+if not C or C._stats_render_cache_v295 then return true end
+C._stats_render_cache_v295=true
+local original=C.drop_sales_stats
+if type(original)~='function' then return true end
+local cache={}
+function C.drop_sales_stats(period,query)
+    local a=DSP.auto or{}
+    local inv=a.inv or{}
+    local key=table.concat({
+        tostring(period or'day'),tostring(query or''),
+        tostring(C.history_revision or 0),tostring(C.visibility_revision or 0),
+        tostring(DSP.logs and DSP.logs.revision or 0),
+        tostring(DSP.rewards and DSP.rewards.sequence or 0),
+        tostring(inv),tostring(#inv),tostring(a.inv_status or''),
+        tostring(a.scanning),tostring(math.floor(os.time()/2))
+    },'|')
+    if cache.key==key then return cache.result end
+    local result=original(period,query)
+    cache={key=key,result=result}
+    return result
+end
+return true
+
+end
+__mod_65b_stats_render_cache_v295()
 
 local function __mod_60_ui21_shell()
 -- Mobile workspace v2.2. Lists own their scrolling; headers never scroll.
@@ -45420,6 +45516,211 @@ return true
 
 end
 __mod_66d_mh_journal_screen_v294()
+
+local function __mod_66e_mh_journal_fast_v295()
+-- v2.9.5: cached Market Helper journal; never rebuild/filter/sort full history every render frame.
+-- Layout and filtering follow the user-provided Market_Helper(1).lua trade log.
+local C,V=DSP.craglog,DSP.ui22
+if C._mh_journal_screen_v295 then return true end
+C._mh_journal_screen_v295=true
+C._mh_journal_screen_v294=true
+local function u(s)return DSP.utf8(tostring(s or''))end
+local function text(s)imgui.Text(u(s))end
+local function faded(s)imgui.TextDisabled(u(s))end
+local function money(n)return DSP.money(math.floor(tonumber(n)or 0))end
+local function button(s,id,w,active)
+    return V.button(s,'mhjournal294_'..id,w,active,false,34)
+end
+local function state()
+    DSP.settings.journal_mh=DSP.settings.journal_mh or {period='day',side='all',page=1,date=''}
+    local s=DSP.settings.journal_mh
+    if not ({day=true,week=true,month=true,all=true,date=true})[s.period] then s.period='day' end
+    if not ({all=true,sell=true,buy=true})[s.side] then s.side='all' end
+    s.page=math.max(1,math.floor(tonumber(s.page)or 1))
+    return s
+end
+local function persist()
+    if DSP.mobile and DSP.mobile.defer_save then DSP.mobile.defer_save()
+    elseif DSP.save_settings then DSP.save_settings()end
+end
+local function select_period(s,period)
+    if s.period~=period then s.period=period;s.page=1;persist()end
+end
+local function matching_date(ts,period,spec,now)
+    if period=='all' then return true end
+    if period=='date' then return os.date('%Y-%m-%d',ts)==spec end
+    if period=='day' then return os.date('%Y-%m-%d',ts)==os.date('%Y-%m-%d',now)end
+    local delta=period=='week' and 7*86400 or 30*86400
+    return ts>=now-delta and ts<=now
+end
+local function available_dates(rows)
+    local seen,dates={},{}
+    for _,r in ipairs(rows)do
+        if (r.ts or 0)>0 then
+            local day=os.date('%Y-%m-%d',r.ts)
+            if not seen[day] then dates[#dates+1]=day;seen[day]=true end
+        end
+    end
+    table.sort(dates,function(a,b)return a>b end)
+    return dates
+end
+-- Events are append-only; trade/history revisions invalidate immediately.
+-- The ten-second bucket also detects external file imports without blocking every frame.
+local view_cache={}
+local function view_for(query,s)
+    local clock=os.time()
+    local signature=table.concat({
+        tostring(query or ''),s.period,s.date or '',s.side,
+        tostring(C.history_revision or 0),tostring(C.visibility_revision or 0),
+        tostring(DSP.logs and DSP.logs.revision or 0),
+        tostring(DSP.rewards and DSP.rewards.sequence or 0),
+        tostring(math.floor(clock/10)),
+    },'|')
+    if view_cache.signature==signature then
+        return view_cache.all,view_cache.filtered,view_cache.total,view_cache.dates
+    end
+    local all=C.trade_rows('all',query or'',s.side)
+    local filtered={}
+    for _,r in ipairs(all)do
+        if matching_date(tonumber(r.ts)or 0,s.period,s.date,clock)then
+            filtered[#filtered+1]=r
+        end
+    end
+    table.sort(filtered,function(a,b)return (a.ts or 0)>(b.ts or 0)end)
+    local total=C.trade_totals(filtered)
+    local dates=available_dates(all)
+    view_cache={signature=signature,all=all,filtered=filtered,total=total,dates=dates}
+    return all,filtered,total,dates
+end
+local function cell(s,width,tip)
+    local str=tostring(s or'')
+    local shown=V.fit and V.fit(str,math.max(25,width-7)) or str
+    text(shown)
+    if tip and shown~=str and imgui.IsItemHovered and imgui.IsItemHovered() then
+        imgui.SetTooltip(u(str))
+    end
+    imgui.NextColumn()
+end
+local function columns(w)
+    -- The same six columns as the Market Helper "Сделки" table.
+    local ratios={.155,.265,.075,.155,.14,.21}
+    local sizes={}
+    for i,r in ipairs(ratios)do sizes[i]=math.max(43,math.floor(w*r))end
+    imgui.Columns(6,'##mhjournal294_columns',false)
+    for i=1,6 do imgui.SetColumnWidth(i-1,sizes[i])end
+    faded('Дата');imgui.NextColumn()
+    faded('Товар');imgui.NextColumn()
+    faded('Кол.');imgui.NextColumn()
+    faded('Цена $');imgui.NextColumn()
+    faded('Тип');imgui.NextColumn()
+    faded('Ник');imgui.NextColumn()
+    imgui.Separator()
+    return sizes
+end
+local function row(e,sizes)
+    local stamp=(e.ts and e.ts>0)and os.date('%d.%m %H:%M',e.ts)or'—'
+    cell(stamp,sizes[1],true)
+    cell(e.name or'?',sizes[2],true)
+    cell(tostring(e.qty or 1)..(e.qty_exact==false and'~'or''),sizes[3])
+    local price=tonumber(e.amount)or 0
+    -- Palatka receipts already store the actual FULL transaction amount.
+    -- Do not accidentally multiply by quantity a second time.
+    cell('$'..money(price):gsub('^%$', ''),sizes[4],true)
+    if e.kind=='sell' then
+        imgui.TextColored(DSP.theme.col('good',1),u('Продажа'))
+    else
+        imgui.TextColored(DSP.theme.col('accent',1),u('Покупка'))
+    end
+    imgui.NextColumn()
+    cell(e.partner and e.partner~='' and e.partner or'—',sizes[6],true)
+end
+local function page_nav(s,count)
+    local count_pages=math.max(1,math.ceil(count/60))
+    s.page=math.max(1,math.min(count_pages,s.page))
+    local width=math.max(39,math.min(55,imgui.GetContentRegionAvail().x/7))
+    if button('<<','first',width)then s.page=1;persist()end
+    imgui.SameLine(0,4)
+    if button('<','back',width)then s.page=math.max(1,s.page-1);persist()end
+    imgui.SameLine(0,8)
+    faded('Стр. '..s.page..'/'..count_pages..' ('..count..')')
+    imgui.SameLine(0,8)
+    if button('>','next',width)then s.page=math.min(count_pages,s.page+1);persist()end
+    imgui.SameLine(0,4)
+    if button('>>','last',width)then s.page=count_pages;persist()end
+end
+
+-- The original floating button/pin/minimize window is deliberately removed.
+-- Data collection by C.log_trade/C.log_market continues unchanged.
+function C.draw() end
+if DSP.settings.craglog then DSP.settings.craglog.open=false end
+
+function V.journal()
+    local s=state()
+    V.heading('Журнал сделок')
+    local avail=imgui.GetContentRegionAvail().x
+    local labels={{'all','Все'},{'day','Сегодня'},{'week','Неделя'},
+                  {'month','Месяц'},{'date','Дата'}}
+    local width=math.max(54,(avail-24)/5)
+    for i,p in ipairs(labels)do
+        if button(p[2],'period_'..p[1],width,s.period==p[1])then
+            select_period(s,p[1])
+            if p[1]=='date' then imgui.OpenPopup('##mhjournal294_dates')end
+        end
+        if i<#labels then imgui.SameLine(0,6)end
+    end
+    local query,edited=V.search('mhjournal294_search','Поиск товара / ника',-1)
+    if edited then s.page=1 end
+    local side_width=math.max(73,(imgui.GetContentRegionAvail().x-12)/3)
+    for i,p in ipairs({{'all','Все сделки'},{'sell','Продажи'},{'buy','Покупки'}})do
+        if button(p[2],'side_'..p[1],side_width,s.side==p[1])then
+            s.side=p[1];s.page=1;persist()
+        end
+        if i<3 then imgui.SameLine(0,6)end
+    end
+    -- A single cached view is shared by the filter bar, date picker, totals and table.
+    local all,filtered,total,dates=view_for(query,s)
+    if imgui.BeginPopup('##mhjournal294_dates')then
+        faded('Выбери дату')
+        for _,date in ipairs(dates)do
+            local display=date:sub(9,10)..'.'..date:sub(6,7)..'.'..date:sub(1,4)
+            if imgui.Selectable(display..'##'..date,s.date==date)then
+                s.date=date;s.period='date';s.page=1;persist();imgui.CloseCurrentPopup()
+            end
+        end
+        imgui.EndPopup()
+    end
+    if s.period=='date' then
+        if s.date=='' then faded('Дата не выбрана')
+        else faded('Дата: '..s.date:sub(9,10)..'.'..s.date:sub(6,7)..'.'..s.date:sub(1,4))end
+    end
+
+    imgui.Separator()
+    imgui.TextColored(DSP.theme.col('good',1),u('Продажи: '..total.sell_qty..' шт. · '..money(total.sells)))
+    imgui.SameLine(0,18)
+    imgui.TextColored(DSP.theme.col('accent',1),u('Покупки: '..total.buy_qty..' шт. · '..money(total.buys)))
+    if total.approx then faded('~ В некоторых старых записях количество приблизительное')end
+    local start=(s.page-1)*60+1
+    local finish=math.min(start+59,#filtered)
+    local height=math.max(95,imgui.GetContentRegionAvail().y-54)
+    if imgui.BeginChild('##mhjournal294_table',imgui.ImVec2(-1,height),true)then
+        local sizes=columns(math.max(610,imgui.GetWindowContentRegionWidth()))
+        if #filtered==0 then faded('История сделок пуста.')end
+        for i=start,finish do
+            local e=filtered[i]
+            if e then row(e,sizes)end
+        end
+        imgui.Columns(1)
+        if DSP.mobile and DSP.mobile.touch_scroll then
+            DSP.mobile.touch_scroll(imgui.GetIO(),'mhjournal294')
+        end
+    end
+    imgui.EndChild()
+    page_nav(s,#filtered)
+end
+return true
+
+end
+__mod_66e_mh_journal_fast_v295()
 
 local function __mod_67_ui22_shop_scan()
 -- Observed stalls are separate from API snapshots and never rewrite preset prices implicitly.
