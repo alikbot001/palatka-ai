@@ -3,7 +3,7 @@
   "version": "2.6.4-legible-webui",
   "mode": "overlay",
   "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua",
-  "size": 26519,
+  "size": 27103,
   "published_at": "2026-10-31",
   "changelog": [
     "Исправлены подписи и увеличены области нажатия для мобильного WebUI.",
