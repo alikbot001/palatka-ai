@@ -1,0 +1,28 @@
+name: Palatka MCR Classic preview build
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/test_mcr_classic_shell.lua'
+      - 'build.py'
+      - '.github/workflows/mcr-classic-preview.yml'
+  workflow_dispatch:
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Verify original shell fallback
+        run: luajit tests/test_mcr_classic_shell.lua
+      - name: Build standalone CP1251 Lua candidate
+        run: python3 build.py
+      - name: Upload Android test candidate (not a production release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-mcr-classic-preview
+          path: palatka_ai.lua
+          if-no-files-found: error
+          retention-days: 7
