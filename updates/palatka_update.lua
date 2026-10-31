@@ -1,10 +1,10 @@
-PALATKA_UPDATE_VERSION = '2.6.2-webui-loader-fix'
+PALATKA_UPDATE_VERSION = '2.6.3-floating-webui'
 
 return function(DSP)
     DSP.webui = DSP.webui or {}
     local W = DSP.webui
 
-    W.version = '1.2-loader-fix'
+    W.version = '1.3-floating'
     W.bid = 95253
     W.dir = DSP.dir .. '/webui'
     W.html_path = W.dir .. '/index.html'
@@ -15,12 +15,24 @@ return function(DSP)
     W.loaded = false
     W.bridge_installed = false
     W.hooks_installed = false
+    W.browser_visible = false
+    W.last_rect = {x=-99999,y=-99999,w=0,h=0}
+    W.last_save_clock = 0
+    W.window_dirty = false
 
-    local legacy_toggle = DSP.ui and DSP.ui.toggle
-    local legacy_set_open = DSP.ui and DSP.ui.set_open
     local ok_web, web = pcall(require, 'webviews')
     W.web = ok_web and web or nil
     local ok_b64, basexx = pcall(require, 'basexx')
+    local ok_imgui, imgui = pcall(require, 'mimgui')
+    if not ok_imgui then imgui = _G.imgui end
+    W.imgui = imgui
+
+    if imgui and imgui.new and not W.host_open then
+        W.host_open = imgui.new.bool(false)
+    end
+
+    local legacy_toggle = DSP.ui and DSP.ui.toggle
+    local legacy_set_open = DSP.ui and DSP.ui.set_open
 
     local function read_file(path)
         local f = io.open(path, 'rb')
@@ -169,8 +181,7 @@ return function(DSP)
         local ok2, b64 = pcall(basexx.to_base64, j)
         if not ok2 or not b64 then return false end
         local js = "window.Palatka&&window.Palatka.receiveStateB64('" .. b64 .. "');"
-        local ok3 = pcall(function() W.web.executeJS(W.bid, js) end)
-        return ok3
+        return pcall(function() W.web.executeJS(W.bid, js) end)
     end
 
     function W.schedule_push(ms)
@@ -194,6 +205,64 @@ return function(DSP)
             if ok and io and io.DisplaySize then return io.DisplaySize.x, io.DisplaySize.y end
         end
         return 1280, 720
+    end
+
+    local function host_config()
+        DSP.settings = DSP.settings or {}
+        DSP.settings.ui_windows = type(DSP.settings.ui_windows) == 'table' and DSP.settings.ui_windows or {}
+        local cfg = DSP.settings.ui_windows.webui_host
+        if type(cfg) ~= 'table' then
+            cfg = {}
+            DSP.settings.ui_windows.webui_host = cfg
+        end
+        return cfg
+    end
+
+    local function clamp_host(cfg, sw, sh)
+        local minw = math.min(520, math.max(260, sw - 24))
+        local minh = math.min(360, math.max(220, sh - 24))
+        local defw = math.min(sw - 36, math.max(minw, sw * 0.72))
+        local defh = math.min(sh - 42, math.max(minh, sh * 0.76))
+        local w = tonumber(cfg.w) or defw
+        local h = tonumber(cfg.h) or defh
+        w = math.max(minw, math.min(w, sw - 20))
+        h = math.max(minh, math.min(h, sh - 20))
+        local x = tonumber(cfg.x)
+        local y = tonumber(cfg.y)
+        if x == nil then x = (sw - w) * 0.5 end
+        if y == nil then y = (sh - h) * 0.5 end
+        x = math.max(4, math.min(x, sw - w - 4))
+        y = math.max(4, math.min(y, sh - h - 4))
+        return {x=x,y=y,w=w,h=h}
+    end
+
+    local function save_host_rect(x, y, w, h, force)
+        local cfg = host_config()
+        local changed = math.abs((tonumber(cfg.x) or -1) - x) > 0.5
+            or math.abs((tonumber(cfg.y) or -1) - y) > 0.5
+            or math.abs((tonumber(cfg.w) or -1) - w) > 0.5
+            or math.abs((tonumber(cfg.h) or -1) - h) > 0.5
+        if not changed then return end
+        cfg.x, cfg.y, cfg.w, cfg.h = x, y, w, h
+        W.window_dirty = true
+        local now = os.clock()
+        if force or (now - (W.last_save_clock or 0)) > 1.25 then
+            W.last_save_clock = now
+            if DSP.save_settings then
+                local ok = pcall(DSP.save_settings)
+                if ok then W.window_dirty = false end
+            end
+        end
+    end
+
+    local function hide_browser()
+        if W.web and W.created and W.browser_visible then
+            pcall(function()
+                W.web.setClickable(W.bid, false)
+                W.web.setVisible(W.bid, false)
+            end)
+        end
+        W.browser_visible = false
     end
 
     local function ensure_html(done)
@@ -233,7 +302,7 @@ return function(DSP)
                 elseif data.type == 'WV_DIE' then
                     W.loaded = false
                     W.created = false
-                    W.visible = false
+                    W.browser_visible = false
                 elseif data.type == 'WV_ANSWER' then
                     local raw = tostring(data.msg or '')
                     local prefix = 'PALATKA_BRIDGE:'
@@ -259,62 +328,86 @@ return function(DSP)
         if not ok then return false, tostring(e) end
         W.created = true
         W.loaded = false
-        local sw, sh = screen_size()
+        W.browser_visible = false
         pcall(function()
-            W.web.setPos(W.bid, 0, 0)
-            W.web.setSize(W.bid, sw, sh)
+            W.web.setClickable(W.bid, false)
+            W.web.setVisible(W.bid, false)
+            W.web.setPos(W.bid, -99999, -99999)
+            W.web.setSize(W.bid, 1, 1)
         end)
         return true
     end
 
-    function W.hide()
-        if W.web and W.created then
-            pcall(function()
-                W.web.setClickable(W.bid, false)
-                W.web.setVisible(W.bid, false)
-            end)
+    local function browser_to_rect(x, y, w, h)
+        if not (W.web and W.created) then return end
+        local r = W.last_rect
+        if r.x ~= x or r.y ~= y then
+            pcall(function() W.web.setPos(W.bid, x, y) end)
         end
+        if r.w ~= w or r.h ~= h then
+            pcall(function() W.web.setSize(W.bid, w, h) end)
+        end
+        W.last_rect = {x=x,y=y,w=w,h=h}
+        if W.loaded and not W.browser_visible then
+            pcall(function()
+                W.web.setClickable(W.bid, true)
+                W.web.setVisible(W.bid, true)
+            end)
+            W.browser_visible = true
+        elseif not W.loaded then
+            hide_browser()
+        end
+    end
+
+    function W.hide()
+        hide_browser()
         W.visible = false
+        if W.host_open then W.host_open[0] = false end
         if DSP.ui then DSP.ui.btn_visible = true end
+        if W.window_dirty and DSP.save_settings then
+            pcall(DSP.save_settings)
+            W.window_dirty = false
+        end
     end
 
     function W.show()
+        if not (imgui and W.host_open) then
+            if legacy_toggle then return legacy_toggle() end
+            return false
+        end
         if not W.web then
             if DSP.notify then pcall(DSP.notify, 'WebUI: webviews not found; legacy UI opened') end
             if legacy_toggle then return legacy_toggle() end
             return false
         end
+
         if legacy_set_open then pcall(legacy_set_open, false) end
         if DSP.ui then DSP.ui.btn_visible = false end
+
+        W.host_open[0] = true
+        W.visible = true
+
         ensure_html(function(ok, e)
             if not ok then
-                if DSP.ui then DSP.ui.btn_visible = true end
                 if DSP.notify then pcall(DSP.notify, 'WebUI download failed: ' .. tostring(e)) end
+                W.hide()
                 if legacy_toggle then legacy_toggle() end
                 return
             end
             local c, ce = create_browser()
             if not c then
-                if DSP.ui then DSP.ui.btn_visible = true end
                 if DSP.notify then pcall(DSP.notify, 'WebUI create failed: ' .. tostring(ce)) end
+                W.hide()
                 if legacy_toggle then legacy_toggle() end
                 return
             end
-            local sw, sh = screen_size()
-            pcall(function()
-                W.web.setPos(W.bid, 0, 0)
-                W.web.setSize(W.bid, sw, sh)
-                W.web.setClickable(W.bid, true)
-                W.web.setVisible(W.bid, true)
-            end)
-            W.visible = true
             W.schedule_push(120)
         end)
         return true
     end
 
     function W.toggle()
-        if W.visible then W.hide() else W.show() end
+        if W.host_open and W.host_open[0] then W.hide() else W.show() end
     end
 
     function W.open_legacy(screen)
@@ -370,28 +463,123 @@ return function(DSP)
         end
     end
 
+    local function draw_host()
+        if not (imgui and W.host_open and W.host_open[0]) then return end
+
+        local sw, sh = screen_size()
+        local cfg = clamp_host(host_config(), sw, sh)
+
+        if not W.host_initialized then
+            imgui.SetNextWindowPos(imgui.ImVec2(cfg.x, cfg.y), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(cfg.w, cfg.h), imgui.Cond.Always)
+            W.host_initialized = true
+        end
+
+        if imgui.SetNextWindowSizeConstraints then
+            local minw = math.min(520, math.max(260, sw - 24))
+            local minh = math.min(360, math.max(220, sh - 24))
+            imgui.SetNextWindowSizeConstraints(
+                imgui.ImVec2(minw, minh),
+                imgui.ImVec2(math.max(minw, sw - 10), math.max(minh, sh - 10))
+            )
+        end
+
+        local flags = (imgui.WindowFlags.NoCollapse or 0)
+        local title = u('Palatka AI  •  WebUI')
+        local began = imgui.Begin(title .. '##palatka_web_host', W.host_open, flags)
+        if began then
+            if imgui.SetWindowFontScale then pcall(imgui.SetWindowFontScale, 1.0) end
+
+            imgui.TextDisabled(u('Web dashboard'))
+            imgui.SameLine()
+            if imgui.SmallButton(u('Обновить##web_reload')) then
+                W.loaded = false
+                hide_browser()
+                if W.web and W.created then
+                    pcall(function() W.web.changeUrl(W.bid, 'file://' .. W.html_path .. '?v=' .. W.version .. '&t=' .. tostring(os.time())) end)
+                end
+            end
+            imgui.SameLine()
+            if imgui.SmallButton(u('Старый UI##web_legacy')) then
+                W.open_legacy(DSP.settings and DSP.settings.screen or 'home')
+            end
+            imgui.Separator()
+
+            local cp = imgui.GetCursorPos()
+            local sp = imgui.GetCursorScreenPos()
+            local av = imgui.GetContentRegionAvail()
+            local px, py = sp.x, sp.y
+            local pw, ph = math.max(1, av.x), math.max(1, av.y)
+
+            if W.created then browser_to_rect(px, py, pw, ph) end
+
+            if not W.created then
+                imgui.SetCursorPos(imgui.ImVec2(cp.x + 10, cp.y + 10))
+                imgui.TextDisabled(u('Подготовка WebUI...'))
+            elseif not W.loaded then
+                imgui.SetCursorPos(imgui.ImVec2(cp.x + 10, cp.y + 10))
+                imgui.TextDisabled(u('Загрузка WebUI...'))
+            end
+
+            imgui.SetCursorPos(cp)
+            imgui.Dummy(imgui.ImVec2(pw, ph))
+
+            if imgui.GetWindowPos and imgui.GetWindowSize then
+                local p = imgui.GetWindowPos()
+                local s = imgui.GetWindowSize()
+                if p and s then save_host_rect(p.x, p.y, s.x, s.y, false) end
+            end
+        end
+        imgui.End()
+
+        if not W.host_open[0] then
+            hide_browser()
+            W.visible = false
+            if DSP.ui then DSP.ui.btn_visible = true end
+            if W.window_dirty and DSP.save_settings then
+                pcall(DSP.save_settings)
+                W.window_dirty = false
+            end
+        end
+    end
+
+    if imgui and imgui.OnFrame and W.host_open and not W.host_frame_registered then
+        W.host_frame_registered = true
+        imgui.OnFrame(
+            function()
+                return W.host_open and W.host_open[0]
+            end,
+            draw_host
+        )
+    end
+
     local function install_ui_hooks()
-        if W.hooks_installed then return end
-        if not (DSP.ui and DSP.ui.toggle and DSP.ui.set_open) then return end
+        if W.hooks_installed then return true end
+        if not (DSP.ui and DSP.ui.toggle and DSP.ui.set_open) then return false end
 
         legacy_toggle = DSP.ui.toggle
         legacy_set_open = DSP.ui.set_open
 
-        DSP.ui.toggle = function()
-            return W.toggle()
-        end
-        DSP.ui.set_open = function(v)
+        W.toggle_proxy = function() return W.toggle() end
+        W.set_open_proxy = function(v)
             if v then return W.show() else return W.hide() end
         end
+
+        DSP.ui.toggle = W.toggle_proxy
+        DSP.ui.set_open = W.set_open_proxy
         W.hooks_installed = true
-        if DSP.flog then DSP.flog('WEBUI hooks installed after ui.install') end
+
+        if DSP.flog then DSP.flog('WEBUI floating host hooks installed after ui.install') end
+        return true
     end
 
     if lua_thread and lua_thread.create and wait then
         lua_thread.create(function()
-            wait(1800)
+            for _ = 1, 40 do
+                wait(250)
+                if install_ui_hooks() then break end
+            end
             install_bridge()
-            install_ui_hooks()
             ensure_html(function(ok, e)
                 if DSP.flog then DSP.flog('WEBUI html refresh: ' .. tostring(ok) .. ' ' .. tostring(e or '')) end
             end)
@@ -401,7 +589,7 @@ return function(DSP)
         install_ui_hooks()
     end
 
-    DSP.version = '2.6.2-webui-loader-fix'
-    if DSP.flog then DSP.flog('WEBUI overlay v2.6.2 loaded; waiting for post-install hook') end
+    DSP.version = '2.6.3-floating-webui'
+    if DSP.flog then DSP.flog('WEBUI overlay v2.6.3 loaded; floating host mode') end
     return true
 end
