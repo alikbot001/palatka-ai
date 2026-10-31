@@ -78,9 +78,13 @@ jobs:
         run: luajit tests/test_mh_trade_journal.lua
       - name: Check every new module compiles
         run: |
-          for lua in src/49b_promo_mh_options.lua src/66c_mh_trade_journal.lua src/68b_promo_universal_ui.lua src/69b_arbitrage_agent_ui.lua; do
+          for lua in src/49b_promo_mh_options.lua src/59b_drop_sales_stats.lua src/60aa_touch_scroll.lua src/65a_stats_v293.lua src/66c_mh_trade_journal.lua src/68b_promo_universal_ui.lua src/69b_arbitrage_agent_ui.lua; do
             luajit -b "$lua" /dev/null
           done
+      - name: Test drop/sale/inventory statistics
+        run: luajit tests/test_drop_sales_stats.lua
+      - name: Test touch-first UI without fixed scroll arrows
+        run: luajit tests/test_v22_ui.lua
       - name: Verify active UI module order and runtime bindings
         run: |
           luajit tests/test_active_ui_runtime.lua
