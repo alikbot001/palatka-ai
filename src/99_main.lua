@@ -37,6 +37,7 @@ safe('live.install',  function() DSP.live.install() end)
 safe('shop_identity.install', function() if DSP.shop_identity and DSP.shop_identity.install then DSP.shop_identity.install() end end)
 safe('trade_probe.install', function() DSP.trade_probe.install() end)
 safe('local_arb.install', function() if DSP.local_arb then DSP.local_arb.install() end end)
+safe('arb_agent.install',function() if DSP.arb_agent and DSP.arb_agent.install then DSP.arb_agent.install()end end)
 safe('storage.textdraw', function() if DSP.storage and DSP.storage.install_textdraw then DSP.storage.install_textdraw() end end)
 safe('promo.install', function() DSP.promo.install() end)
 safe('shop_marker.install', function() DSP.shop_marker.install() end)
@@ -55,7 +56,7 @@ local function broadcast_version()
         pcall(DSP.flog, '--- BROADCAST ' .. msg .. ' ---')
     end
     if sampAddChatMessage then
-        pcall(sampAddChatMessage, '{FFAA00}[palatka ai] {FFFFFF}v' .. tostring(DSP.version) .. ' {00FF00}активирован{FFFFFF}. Открыть: {FFAA00}/crr', 0xFFAA00)
+        pcall(sampAddChatMessage, '{FFAA00}[palatka ai] {FFFFFF}v' .. tostring(DSP.version) .. ' {00FF00}Г ГЄГІГЁГўГЁГ°Г®ГўГ Г­{FFFFFF}. ГЋГІГЄГ°Г»ГІГј: {FFAA00}/crr', 0xFFAA00)
     end
 end
 safe('broadcast_version', broadcast_version)

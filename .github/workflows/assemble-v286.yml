@@ -1,0 +1,52 @@
+name: Assemble Palatka v2.8.6 main-ready OTA
+on:
+  push:
+    branches:
+      - feature/mcr-classic-trade-journal
+    paths:
+      - 'tools/build_ota_v286.py'
+      - '.github/workflows/assemble-v286.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Run relevant behavior tests
+        run: |
+          luajit tests/test_arbitrage_session.lua
+          luajit tests/test_mcr_classic_shell.lua
+          luajit tests/test_v285_market_accuracy.lua
+          luajit tests/test_v285_lombard.lua
+      - name: Produce combined v2.8.6 OTA plus version.json
+        run: python3 tools/build_ota_v286.py
+      - name: Verify OTA Lua syntax and manifest byte length
+        run: |
+          luajit -b updates/palatka_update.lua /dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          data=json.loads(Path('version.json').read_text())
+          assert data['version']=='2.8.6' and data['mode']=='overlay'
+          assert data['size']==Path('updates/palatka_update.lua').stat().st_size
+          assert b"PALATKA_UPDATE_VERSION = '2.8.6'" in Path('updates/palatka_update.lua').read_bytes()
+          print('OTA manifest and bytes match')
+          PY
+      - name: Build standalone script
+        run: python3 build.py
+      - name: Commit and publish all release files in the existing branch
+        run: |
+          git config user.name "palatka-release-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/palatka_update_v285.lua updates/palatka_update.lua version.json palatka_ai.lua
+          if ! git diff --cached --quiet; then
+            git commit -m "release: single v2.8.6 OTA and standalone with MCR Classic and Arbitrage Agent"
+            git push origin HEAD:feature/mcr-classic-trade-journal
+          fi

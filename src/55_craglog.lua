@@ -43,11 +43,11 @@ end
 local function append(path,line)
     DSP.mkdir_p(DSP.dir..'/logs')
     local f,err=io.open(path,'a')
-    if not f then C.last_error=err; DSP.add_log('Журнал: '..tostring(err),'error'); return false,err end
+    if not f then C.last_error=err; DSP.add_log('Г†ГіГ°Г­Г Г«: '..tostring(err),'error'); return false,err end
     local wrote,write_err=f:write(line..'\n')
     local closed,close_err=f:close()
     if not wrote or not closed then
-        C.last_error=write_err or close_err; DSP.add_log('Журнал: '..tostring(C.last_error),'error')
+        C.last_error=write_err or close_err; DSP.add_log('Г†ГіГ°Г­Г Г«: '..tostring(C.last_error),'error')
         return false,C.last_error
     end
     C.last_error=nil
@@ -55,22 +55,22 @@ local function append(path,line)
 end
 function C.describe(e)
     if e.kind=='item' or e.type=='crate' then
-        local value=(e.price_known and not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e))) and DSP.money(e.estimated_value or 0) or 'нет цены'
+        local value=(e.price_known and not (DSP.rewards and DSP.rewards.is_temporary and DSP.rewards.is_temporary(e))) and DSP.money(e.estimated_value or 0) or 'Г­ГҐГІ Г¶ГҐГ­Г»'
         local name=tostring(e.item_name or e.item or '?')
         if (tonumber(e.ench) or 0)>0 and not name:find('%(%+%d+%)$') then name=name..' (+'..e.ench..')' end
-        return name..' x'..tostring(e.qty or e.count or 1)..' | Оценка: '..value
-    elseif e.kind=='cash' then return 'Деньги: +'..DSP.money(e.cash or 0)
-    elseif e.kind=='opening' then return 'Открытие: '..tostring(e.source or '?')
-    elseif e.kind=='unknown' then return 'Награда: неизвестный тип | '..tostring(e.raw or '')
-    elseif e.type=='payday' then return 'PayDay | '..(e.amount and ('Распознано: '..DSP.money(e.amount)) or 'Начисления не распознаны')
-    elseif e.type=='income' then return tostring(e.label or 'Доход')..': +'..DSP.money(e.amount or 0)
+        return name..' x'..tostring(e.qty or e.count or 1)..' | ГЋГ¶ГҐГ­ГЄГ : '..value
+    elseif e.kind=='cash' then return 'Г„ГҐГ­ГјГЈГЁ: +'..DSP.money(e.cash or 0)
+    elseif e.kind=='opening' then return 'ГЋГІГЄГ°Г»ГІГЁГҐ: '..tostring(e.source or '?')
+    elseif e.kind=='unknown' then return 'ГЌГ ГЈГ°Г Г¤Г : Г­ГҐГЁГ§ГўГҐГ±ГІГ­Г»Г© ГІГЁГЇ | '..tostring(e.raw or '')
+    elseif e.type=='payday' then return 'PayDay | '..(e.amount and ('ГђГ Г±ГЇГ®Г§Г­Г Г­Г®: '..DSP.money(e.amount)) or 'ГЌГ Г·ГЁГ±Г«ГҐГ­ГЁГї Г­ГҐ Г°Г Г±ГЇГ®Г§Г­Г Г­Г»')
+    elseif e.type=='income' then return tostring(e.label or 'Г„Г®ГµГ®Г¤')..': +'..DSP.money(e.amount or 0)
     elseif e.type=='market' then
-        return (e.direction=='sell' and 'Продажа: ' or 'Покупка: ')..tostring(e.item_name or '?')..' | '..(e.direction=='sell' and 'Выручка: +' or 'Расход: -')..DSP.money(e.amount or 0) end
+        return (e.direction=='sell' and 'ГЏГ°Г®Г¤Г Г¦Г : ' or 'ГЏГ®ГЄГіГЇГЄГ : ')..tostring(e.item_name or '?')..' | '..(e.direction=='sell' and 'Г‚Г»Г°ГіГ·ГЄГ : +' or 'ГђГ Г±ГµГ®Г¤: -')..DSP.money(e.amount or 0) end
     local parts={}
-    for _,side in ipairs({{'items_give','Отдано'},{'items_get','Получено'}}) do
+    for _,side in ipairs({{'items_give','ГЋГІГ¤Г Г­Г®'},{'items_get','ГЏГ®Г«ГіГ·ГҐГ­Г®'}}) do
         for _,it in ipairs(e[side[1]] or {}) do parts[#parts+1]=side[2]..': '..tostring(it.name)..' x'..tostring(it.qty or 1) end
     end
-    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..(e.profit_estimated==false and 'Денежный итог: ' or 'Оценка обмена: ')..DSP.money(e.profit or 0)
+    return tostring(e.partner or '?')..' | '..(#parts>0 and table.concat(parts,'; ')..' | ' or '')..(e.profit_estimated==false and 'Г„ГҐГ­ГҐГ¦Г­Г»Г© ГЁГІГ®ГЈ: ' or 'ГЋГ¶ГҐГ­ГЄГ  Г®ГЎГ¬ГҐГ­Г : ')..DSP.money(e.profit or 0)
 end
 local function store_event(e)
     if not e.id and e.type~='payday_detail' and C.new_event_id then e.id=C.new_event_id(e.ts) end
@@ -82,7 +82,7 @@ local function store_event(e)
     return saved,err
 end
 function C.log_trade(e)
-    if type(e)~='table' then return false,'нет записи' end
+    if type(e)~='table' then return false,'Г­ГҐГІ Г§Г ГЇГЁГ±ГЁ' end
     C.ring_push(e); C.counters.trades=C.counters.trades+1
     C.counters.profit=C.counters.profit+(tonumber(e.profit) or 0)
     local key=category(e); if C.counters[key] then C.counters[key]=C.counters[key]+1 end
@@ -92,7 +92,7 @@ function C.log_trade(e)
     return stored,store_err
 end
 function C.log_crate(e)
-    if type(e)~='table' then return false,'нет записи' end
+    if type(e)~='table' then return false,'Г­ГҐГІ Г§Г ГЇГЁГ±ГЁ' end
     if e.id then
         for _,row in ipairs(C.ring_recent(C.ring_count)) do if row.id==e.id then return true end end
     end
@@ -106,9 +106,9 @@ end
 local function payday_part(text)
     if DSP.payday_part then return DSP.payday_part(text)end
     local lower=DSP.lower or string.lower;local s=lower(text or '')
-    local expense=s:find(lower('налог'),1,true) or s:find(lower('списано'),1,true) or s:find(lower('удержано'),1,true)
-    local income=s:find(lower('зарплат'),1,true) or s:find(lower('заработная плата'),1,true) or s:find(lower('премия'),1,true)
-        or s:find(lower('пенсия'),1,true) or s:find(lower('начислено'),1,true)
+    local expense=s:find(lower('Г­Г Г«Г®ГЈ'),1,true) or s:find(lower('Г±ГЇГЁГ±Г Г­Г®'),1,true) or s:find(lower('ГіГ¤ГҐГ°Г¦Г Г­Г®'),1,true)
+    local income=s:find(lower('Г§Г Г°ГЇГ«Г ГІ'),1,true) or s:find(lower('Г§Г Г°Г ГЎГ®ГІГ­Г Гї ГЇГ«Г ГІГ '),1,true) or s:find(lower('ГЇГ°ГҐГ¬ГЁГї'),1,true)
+        or s:find(lower('ГЇГҐГ­Г±ГЁГї'),1,true) or s:find(lower('Г­Г Г·ГЁГ±Г«ГҐГ­Г®'),1,true)
     if not expense and not income then return nil end
     local amount=s:match('%$%s*([%d%., ]+)') or s:match('([%d][%d%., ]*)%s*%$')
     amount=amount and tonumber((amount:gsub('[^%d]','')));if not amount then return nil end
@@ -142,15 +142,15 @@ function C.observe_payday(text)
 end
 function C.log_income(label,amount,raw)
     amount=math.floor(tonumber(amount) or 0)
-    if amount <= 0 then return false,'сумма должна быть положительной' end
-    local row={type='income',kind='income',ts=os.time(),amount=amount,label=label or 'Доход',raw=raw}
+    if amount <= 0 then return false,'Г±ГіГ¬Г¬Г  Г¤Г®Г«Г¦Г­Г  ГЎГ»ГІГј ГЇГ®Г«Г®Г¦ГЁГІГҐГ«ГјГ­Г®Г©' end
+    local row={type='income',kind='income',ts=os.time(),amount=amount,label=label or 'Г„Г®ГµГ®Г¤',raw=raw}
     C.ring_push(row)
     return store_event(row)
 end
 function C.log_market(direction,item,amount,raw)
-    if direction~='sell' and direction~='buy' then return false,'сторона' end
+    if direction~='sell' and direction~='buy' then return false,'Г±ГІГ®Г°Г®Г­Г ' end
     amount=math.floor(tonumber(amount) or 0)
-    if amount<=0 then return false,'сумма' end
+    if amount<=0 then return false,'Г±ГіГ¬Г¬Г ' end
     local row={type='market',kind='market',ts=os.time(),direction=direction,
         item_name=item or '?',amount=amount,raw=raw}
     C.ring_push(row)
@@ -226,20 +226,24 @@ end
 function C.end_drag() if C.drag_dirty then persist(); C.drag_dirty=false end end
 function C.geometry(sw,sh)
     local s=settings()
-    local default_w=math.min(700,sw*.45)
-    local default_h=math.min(620,sh*.69)
-    local w=math.max(360,math.min(tonumber(s.w) or default_w,math.max(360,sw-16)))
-    local expanded=math.max(280,math.min(tonumber(s.h) or default_h,math.max(280,sh-16)))
-    local x=math.max(8,math.min(tonumber(s.x) or 24,math.max(8,sw-w-8)))
-    local y=math.max(8,math.min(tonumber(s.y) or 120,math.max(8,sh-expanded-8)))
-    return {x=x,y=y,w=w,h=s.minimized and 84 or expanded,touch=54,
+    -- Compact MCR-style log is the default; a drag always persists its anchor.
+    if s.compact==nil then s.compact=true end
+    if s.alpha==nil then s.alpha=.28 end
+    s.lines=math.max(2,math.min(8,math.floor(tonumber(s.lines)or 4)))
+    local wide=math.max(250,sw-16)
+    local w=math.max(250,math.min(tonumber(s.w)or math.min(440,sw*.48),wide))
+    local desired=s.compact and (49+25*s.lines) or (tonumber(s.h)or math.min(340,sh*.58))
+    local expanded=math.max(80,math.min(desired,math.max(80,sh-16)))
+    local x=math.max(8,math.min(tonumber(s.x)or 24,math.max(8,sw-w-8)))
+    local y=math.max(8,math.min(tonumber(s.y)or (sh-expanded-50),math.max(8,sh-expanded-8)))
+    return {x=x,y=y,w=w,h=s.minimized and 45 or expanded,touch=32,
         max_x=math.max(8,sw-w-8),max_y=math.max(8,sh-expanded-8)}
 end
 function C.remember_size(w,h)
     local s=settings(); if s.minimized then return false end
-    w=math.floor((tonumber(w) or 0)+0.5);h=math.floor((tonumber(h) or 0)+0.5)
-    if w<360 or h<280 then return false end
-    if math.abs((tonumber(s.w) or 0)-w)<1 and math.abs((tonumber(s.h) or 0)-h)<1 then return false end
+    w=math.floor((tonumber(w)or 0)+.5);h=math.floor((tonumber(h)or 0)+.5)
+    if w<250 or h<80 then return false end
+    if math.abs((tonumber(s.w)or 0)-w)<1 and math.abs((tonumber(s.h)or 0)-h)<1 then return false end
     s.w,s.h=w,h;C.size_dirty=true;return true
 end
 function C.end_resize()
