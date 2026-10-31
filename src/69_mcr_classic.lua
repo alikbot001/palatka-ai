@@ -213,16 +213,33 @@ function V.popups()
     if old_popups then old_popups()end
     V.popup('Позиция','mcr_edit',edit_popup,{w=470,h=310})
 end
+local function classic_geometry(sw,sh)
+    -- Independent from the Carbon shell: old full-screen geometry is not inherited.
+    local p=DSP.settings.mcr_window or {}
+    local maxw,maxh=math.max(200,sw-16),math.max(160,sh-16)
+    local w=DSP.clamp(tonumber(p.w)or math.min(780,sw*.92),math.min(320,maxw),maxw)
+    local h=DSP.clamp(tonumber(p.h)or math.min(455,sh*.82),math.min(230,maxh),maxh)
+    return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or(sw-w)*.5,0,math.max(0,sw-w)),
+        y=DSP.clamp(tonumber(p.y)or(sh-h)*.5,0,math.max(0,sh-h))}
+end
+local function resize_grip(g,io)
+    V.at(g.w-46,g.h-43)
+    button('//','resize_grip',31,false,29)
+    if imgui.IsItemActive()and io.MouseDelta then
+        local d=io.MouseDelta
+        if d.x~=0 or d.y~=0 then
+            local maxw,maxh=math.max(220,io.DisplaySize.x-g.x-8),math.max(170,io.DisplaySize.y-g.y-8)
+            local w=DSP.clamp(g.w+d.x,math.min(320,maxw),maxw)
+            local h=DSP.clamp(g.h+d.y,math.min(230,maxh),maxh)
+            DSP.settings.mcr_window={x=g.x,y=g.y,w=w,h=h};save()
+        end
+    end
+end
 local original_draw=U.draw
 function Classic.draw()
     if V and V.track_touch then V.track_touch(imgui.GetIO())end
     local io=imgui.GetIO();local sz=io.DisplaySize
-    local g=V.geometry(sz.x,sz.y)
-    -- MCR's compact default, but keep user-resized Palatka geometry unchanged.
-    if not DSP.settings.mobile_window then
-        g.w=math.min(g.w,850);g.h=math.min(g.h,470)
-        g.x=(sz.x-g.w)*.5;g.y=(sz.y-g.h)*.5
-    end
+    local g=classic_geometry(sz.x,sz.y)
     if not V.initialized then
         V.screen=(U.screen and U.screen~='palatka')and U.screen or'palatka'
         V.initialized=true
@@ -250,7 +267,7 @@ function Classic.draw()
         if imgui.IsItemActive() and io.MouseDelta then
             local d=io.MouseDelta
             if d.x~=0 or d.y~=0 then
-                DSP.settings.mobile_window={x=DSP.clamp(g.x+d.x,0,sz.x-g.w),
+                DSP.settings.mcr_window={x=DSP.clamp(g.x+d.x,0,sz.x-g.w),
                     y=DSP.clamp(g.y+d.y,0,sz.y-g.h),w=g.w,h=g.h};save()
             end
         end
@@ -288,7 +305,7 @@ function Classic.draw()
             local p=V.popup_pending;V.popup_pending=nil;imgui.OpenPopup(cp(p.title)..'##v22_'..p.id)
         end
         if V.popups then V.popups()end
-        V.resize_grip(g,io)
+        resize_grip(g,io)
     end
     imgui.End()
     imgui.PopStyleVar(3);imgui.PopStyleColor(3)
