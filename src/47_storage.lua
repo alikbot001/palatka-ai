@@ -570,7 +570,9 @@ function S.clear_live_snapshot()
     end
     S.snapshots=fresh
     if DSP.settings then DSP.settings.storage_snapshots=fresh end
-    local old_snapshot=T.snapshot
+    local old_state={snapshot=T.snapshot,occupied=T.occupied,total=T.total,received=T.received,
+        last_saved_at=T.last_saved_at,last_completed_request_at=T.last_completed_request_at,
+        status=T.status}
     T.snapshot=nil;T.occupied=nil;T.total=nil;T.received=0
     T.last_saved_at=nil;T.last_completed_request_at=nil
     if not T.requested_at then T.status=T.autoscan_enabled and 'idle' or 'disabled' end
@@ -579,7 +581,7 @@ function S.clear_live_snapshot()
         if not called or not ok then
             S.snapshots=prior
             if DSP.settings then DSP.settings.storage_snapshots=prior_saved end
-            T.snapshot=old_snapshot
+            for k,v in pairs(old_state)do T[k]=v end
             return false,tostring(err or ok or 'save error')
         end
     end
