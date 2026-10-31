@@ -3,6 +3,7 @@ local fixtures={
  first={type=4,capacity=12,items={}},
  second={type=4,capacity=12,items={}},
  trunk={type=8,items={{slot=0,item=100,amount=5}}},
+ stall={type=1,items={{slot=0,item=100,amount=5}}},
  invalid={type=9,items={{slot=2,item=3,amount=1},{slot=2,item=4,amount=2}}},
  unknown={type=4,items={{slot=4,item=3}}},
  other={type=2,items={{slot=0,item=7,amount=2}}},
@@ -19,6 +20,7 @@ local P=DSP.storage_probe
 assert(P.arm('cabinet',30))
 assert(not P.on_packet(0,'trunk'))
 assert(P.ignored_trunk==1)
+assert(not P.on_packet(2,'stall') and P.ignored_stall==1)
 assert(not P.on_packet(1,'first'))
 assert(not P.on_packet(0,'invalid'))
 assert(P.on_packet(0,'first'))
