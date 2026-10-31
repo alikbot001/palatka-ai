@@ -1,12 +1,17 @@
--- Smoke test for the native storage home: menu is always accessible.
+-- Smoke test for native storage navigation and the smart library home.
 package.loaded['ffi']={string=function(x)return tostring(x)end,copy=function()end}
 local pressed,last_kind,last_title,last_probe = '','','',''
-DSP={ui21={},mobile={},to_cp=function(x)return x end,utf8=function(x)return tostring(x or '') end,storage={snapshots={},
+DSP={ui21={},mobile={},to_cp=function(x)return x end,utf8=function(x)return tostring(x or '') end,
+ money=tostring,storage={snapshots={},
     textdraw_state=function()return 'idle' end,
     trunk_state=function()return {status='idle',received=0}end,
-    accept=function(kind,title,text)last_kind=kind;last_title=title;return true end}}
+    accept=function(kind,title,text)last_kind=kind;last_title=title;return true end,
+    library=function()return{}end,
+    begin_trunk_scan=function()return true end}}
 local V=DSP.ui21
+V.font_pixels=18
 function V.button(label,id,w,on,primary)return id==pressed end
+function V.text_button(label,id,w,on,h)return id==pressed end
 function V.heading(title,fn,w)if fn then fn()end end
 function V.text()end
 function V.muted()end
@@ -15,7 +20,14 @@ function V.green()end
 function V.fit(s)return s end
 function V.inline()end
 function V.reset_list()end
+function V.apply_font()end
+function V.at()end
+function V.row(id,h,draw)draw(360,0,0)end
 function V.list(key,draw,options)draw(380)end
+function V.list_rows(key,rows,height,draw,options)
+ for i,row in ipairs(rows)do draw(row,i,360)end
+ if options and options.footer then options.footer()end
+end
 function V.storage_probe_panel(w,kind)last_probe=kind end
 imgui={new={char=setmetatable({},{__index=function(_,n)return function()return '' end end})},
     Separator=function()end,
@@ -23,6 +35,7 @@ imgui={new={char=setmetatable({},{__index=function(_,n)return function()return '
     ImVec2=function(x,y)return {x=x,y=y}end,
     InputTextMultiline=function()end}
 dofile('src/60b_carbon_storage.lua')
+
 V.storage_screen()
 assert(V.storage_tab=='scan','must open scanner first')
 pressed='storage_choose_cabinet';V.storage_screen()
@@ -34,8 +47,7 @@ assert(V.storage_manual_kind=='inventory')
 pressed='storage_manual_accept';V.storage_screen()
 assert(last_kind=='inventory' and last_title:find('Инвентарь',1,true))
 assert(V.storage_tab=='snapshots')
-pressed='storage_scan_open';V.storage_screen()
-assert(V.storage_tab=='scan')
-pressed='storage_choose_trunk';V.storage_screen()
-assert(V.storage_scan_mode=='trunk')
-print('PASS storage navigation: scan default, four selectors, manual, return')
+pressed='storage_library_new_scan';V.storage_screen()
+assert(V.storage_tab=='scan' and V.storage_scan_mode=='trunk')
+
+print('PASS storage navigation: scan, four selectors, manual entry, smart library -> new scan')
