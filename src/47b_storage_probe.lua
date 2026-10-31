@@ -1,7 +1,7 @@
 -- Opt-in, read-only observer for unknown InventoryScreen containers.
 -- Does not send packets, click slots or assume undocumented type => kind mappings.
 local S = DSP.storage
-local P = {armed=false, status='idle', entries={}, order={}, observed=0, ignored_trunk=0}
+local P = {armed=false, status='idle', entries={}, order={}, observed=0, ignored_trunk=0, ignored_stall=0}
 DSP.storage_probe = P
 local MAX_SECONDS, MAX_SLOTS, MAX_SAMPLES, MAX_BYTES = 60, 180, 8, 100000
 local allowed = {inventory=true, cabinet=true, warehouse=true}
@@ -44,7 +44,7 @@ function P.arm(kind, seconds)
     local dur=integer(seconds or 40,MAX_SECONDS,5) or 40
     P.armed=true;P.status='armed';P.kind=kind;P.started=os.time()
     P.until_ts=P.started+dur;P.entries={};P.order={}
-    P.observed=0;P.ignored_trunk=0;P.last_error=nil
+    P.observed=0;P.ignored_trunk=0;P.ignored_stall=0;P.last_error=nil
     return true
 end
 function P.stop()
@@ -63,6 +63,8 @@ function P.on_packet(sub,raw)
     if not typ then return false end
     -- type 8 is the independently observed vehicle trunk, never a cupboard.
     if typ==8 then P.ignored_trunk=P.ignored_trunk+1;return false end
+    -- The existing trade handler identifies type 1/sub 2 as stall inventory.
+    if typ==1 and namespace==2 then P.ignored_stall=P.ignored_stall+1;return false end
     local key=tostring(typ)..'/'..tostring(namespace)
     local row=P.entries[key]
     if not row then
