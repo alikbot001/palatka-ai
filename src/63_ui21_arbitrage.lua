@@ -37,7 +37,8 @@ function V.arb_plan(g)
         f.max_qty or 0,f.safety_pct or 0,f.tax_bp or 'global',
         f.min_unit_profit or 0,f.max_buy_price or 0,f.min_stock or 0,f.shop_mode or 0,
         tostring(f.allow_partial~=false),tostring(f.include_unknown~=false),
-        V.arb_extra_enabled and(V.arb_extra and V.arb_extra.value or 0)or 0,DSP.market.missing_revision or 0},'|')
+        V.arb_extra_enabled and(V.arb_extra and V.arb_extra.value or 0)or 0,
+        DSP.market.missing_revision or 0,DSP.arb_agent and DSP.arb_agent.revision or 0},'|')
     if os.time()>=(V.arb_plan_expiry or 0)then V.cache.arb_plan=nil end
     return V.memo('arb_plan',sig,function()
         local now,until_ts=os.time(),math.huge
