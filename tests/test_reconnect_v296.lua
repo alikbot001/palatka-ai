@@ -12,9 +12,13 @@ _G.DSP={
     lower=string.lower,
 }
 sampGetCurrentServerAddress=function()return 'game.example.test',7777 end
+sampProcessChatInput=function(command)
+    assert(command=='/reconnect')
+    connects=connects+1
+    return true
+end
 sampConnectToServer=function(host,port)
     assert(host=='game.example.test' and port==7777)
-    connects=connects+1
     return true
 end
 sampIsLocalPlayerSpawned=function()return online end
