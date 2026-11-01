@@ -147,7 +147,7 @@ function A.draw()
         local st=A.stats()
         quiet('Завершено '..st.done..'/'..st.routes..' · В работе '..st.pending)
         green('Ожидаемый результат ~ '..money(st.profit_estimate))
-        quiet('Мини-агент Palatka / сборка '..tostring(DSP.version or '?'))
+        quiet('Мини-агент Palatka / сборка 2.9.3')
         imgui.Separator()
         if A.queue_expanded then
             route_queue(s)
@@ -169,7 +169,6 @@ function A.draw()
         imgui.EndChild()
         if A.ui_message then quiet(V.fit(A.ui_message,math.max(120,g.w-35)))end
         if A.save_error then red('Не сохранено: '..tostring(A.save_error))end
-        if A.ui_error then red('Ошибка интерфейса: см. standalone.log')end
         if b('< Предыдущая','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
         imgui.SameLine(0,6)
         if b('Следующая >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end

@@ -1,4 +1,4 @@
-name: Palatka 2.9.6 production build
+name: Palatka 2.9.11 stable rollback (2.9.5 code)
 on:
   pull_request:
     paths:
@@ -7,7 +7,6 @@ on:
       - 'updates/**'
       - 'version.json'
       - 'build.py'
-      - 'tools/build_ota_v296.py'
       - '.github/workflows/palatka-v287.yml'
   push:
     branches: [main]
@@ -17,13 +16,12 @@ on:
       - 'updates/**'
       - 'version.json'
       - 'build.py'
-      - 'tools/build_ota_v296.py'
       - '.github/workflows/palatka-v287.yml'
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
-  build:
+  stable-validation:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -33,147 +31,75 @@ jobs:
           fetch-depth: 0
       - name: Install LuaJIT
         run: sudo apt-get update -qq && sudo apt-get install -y luajit
-      - name: Build Palatka 2.9.6 OTA from source
-        run: python3 tools/build_ota_v296.py
-      - name: Compile new modules individually
+      - name: Verify restored 2.9.5 functional source
         run: |
-          for file in src/47d_storage_render_cache_v295.lua src/65b_stats_render_cache_v295.lua src/66e_mh_journal_fast_v295.lua src/49a_promo_universal.lua src/49c_promo_mh_scheduler_v294.lua src/66d_mh_journal_screen_v294.lua src/00b_settings_persistence_v294.lua src/68b_promo_universal_ui.lua src/69a_arbitrage_agent.lua src/69b_arbitrage_agent_ui.lua src/69c_arbitrage_status.lua; do
-            echo "Compiling $file"
-            luajit -b "$file" /dev/null
-          done
-      - name: Check arbitrage agent accounting
-        run: luajit tests/test_arbitrage_session.lua
-      - name: Check missing shop and item handling
-        run: luajit tests/test_arbitrage_status.lua
-      - name: Test universal promotion scheduler
-        run: luajit tests/test_promo_universal.lua
-      - name: Test named multi-row promo templates
-        run: luajit tests/test_promo_templates.lua
-      - name: Verify Cyrillic arbitration source strings
+          python3 - <<'PY'
+          import subprocess
+          for path in ('src/59b_drop_sales_stats.lua', 'src/49c_promo_mh_scheduler_v294.lua', 'src/66e_mh_journal_fast_v295.lua'):
+              live=subprocess.check_output(['git','show','HEAD:'+path])
+              baseline=subprocess.check_output(['git','show','778915d9291cbd2b50e683cf3d5433d3c88d900c:'+path])
+              assert live==baseline, f'Unexpected changes to stable {path}'
+          print('Functional 2.9.5 baseline preserved')
+          PY
+      - name: Test OTA syntax, manifest and stable installer
         run: |
+          luajit -b updates/palatka_update.lua /dev/null
           python3 - <<'PY'
           from pathlib import Path
-          targets = ['src/63_ui21_arbitrage.lua','src/63a_ui_local_arbitrage.lua',
-                     'src/38_arbitrage_v16.lua','src/62_ui21_shops.lua']
-          for p in targets:
-              raw = Path(p).read_text(encoding='utf-8')
-              assert any('\u0400' <= c <= '\u04FF' for c in raw), p
-              bad = [c for c in raw if 'À' <= c <= 'ÿ']
-              assert not bad, (p, bad[:12])
-              print(p, 'Cyrillic source verified')
-          PY
-      - name: Test minimalist Market Helper-style trade journal
-        run: luajit tests/test_mh_trade_feed.lua
-      - name: Verify template editor uses inline rows and no nested line popup
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          ui=Path('src/68b_promo_universal_ui.lua').read_text()
-          log=Path('src/57a_trade_feed_mh.lua').read_text()
-          assert "+ Добавить строку" in ui
-          assert "##mhpromo_rows" in ui
-          assert "InputTextWithHint('##line'" in ui
-          assert "unipromo_line" not in ui
-          assert "trade_feed_lines" in log
-          print('MH-inspired editor and log UI verified')
-          PY
-      - name: Test MH-style promo template options
-        run: luajit tests/test_promo_mh_options.lua
-      - name: Test 2.9.3 buy/sell journal data model
-        run: luajit tests/test_mh_trade_journal.lua
-      - name: Check every new module compiles
-        run: |
-          for lua in src/49b_promo_mh_options.lua src/59b_drop_sales_stats.lua src/60aa_touch_scroll.lua src/65a_stats_v293.lua src/66c_mh_trade_journal.lua src/68b_promo_universal_ui.lua src/69b_arbitrage_agent_ui.lua; do
-            luajit -b "$lua" /dev/null
-          done
-      - name: Test drop/sale/inventory statistics
-        run: luajit tests/test_drop_sales_stats.lua
-      - name: Test touch-first UI without fixed scroll arrows
-        run: luajit tests/test_touch_scroll_v293.lua
-      - name: Test persisted appearance across restart/OTA
-        run: luajit tests/test_settings_persistence_v294.lua
-      - name: Test complete promo batches and per-template timing
-        run: luajit tests/test_promo_scheduler_v294.lua
-      - name: Test Market Helper journal screen
-        run: luajit tests/test_mh_journal_screen_v294.lua
-      - name: Test bounded CPU work across 240 UI frames
-        run: luajit tests/test_perf_v295.lua
-      - name: Test safe reconnect and exact observed spawn
-        run: luajit tests/test_reconnect_v296.lua
-      - name: Verify active UI module order and runtime bindings
-        run: |
-          luajit tests/test_active_ui_runtime.lua
-          python3 - <<'PY'
-          from pathlib import Path
-          src=Path('build.py').read_text()
-          assert src.index('"66a_trade_log_tab_mh.lua"') < src.index('"66c_mh_trade_journal.lua"')
-          assert src.index('"68_ui22_flip_promo.lua"') < src.index('"68b_promo_universal_ui.lua"')
-          assert src.index('"69b_arbitrage_agent_ui.lua"') < src.index('"69d_runtime_diagnostic.lua"')
-          ota=Path('updates/palatka_update.lua').read_bytes()
-          assert b'local function _v293_runtime_diagnostic()' in ota
-          assert b'local function install_v293()' in ota
-          assert b'local function install_v294()' in ota
-          assert b'local function install_v295()' in ota
-          assert b'local function install_v296()' in ota
-          assert b'local function _v296_reconnect()' in ota
-          assert src.index('"70_reconnect_v296.lua"') < src.index('"70a_reconnect_ui_v296.lua"')
-          assert b'local function _v295_journal_render_cache()' in ota
-          assert src.index('"66d_mh_journal_screen_v294.lua"') < src.index('"66e_mh_journal_fast_v295.lua"')
-          assert src.index('"47c_storage_search.lua"') < src.index('"47d_storage_render_cache_v295.lua"')
-          assert b'local function _v294_mh_journal_screen()' in ota
-          assert src.index('"66c_mh_trade_journal.lua"') < src.index('"66d_mh_journal_screen_v294.lua"')
-          assert src.index('"49b_promo_mh_options.lua"') < src.index('"49c_promo_mh_scheduler_v294.lua"')
-          PY
-      - name: Verify OTA Lua syntax
-        run: luajit -b updates/palatka_update.lua /dev/null
-      - name: Verify OTA version and byte size
-        run: |
-          python3 - <<'PY'
           import json
-          from pathlib import Path
-          release=json.loads(Path('version.json').read_text())
+          manifest=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert release['version']=='2.9.6'
-          assert len(ota)==release['size'], (len(ota),release['size'])
-          assert b"PALATKA_UPDATE_VERSION = '2.9.6'" in ota
-          assert b'local function _v286_mcr_classic()' not in ota
-          assert b'local function _v291_arb_agent_native()' in ota
-          assert b'local function _v291_compact_journal()' in ota
-          assert b'local function _v291_promo_ui()' in ota
-          print('OTA version and size verified:',len(ota))
+          assert manifest['version']=='2.9.11'
+          assert manifest['size']==len(ota),(manifest['size'],len(ota))
+          assert manifest['mode']=='overlay'
+          assert b"PALATKA_UPDATE_VERSION = '2.9.11'" in ota
+          assert ota.count(b'return install_stable_2911()')==2
+          assert b'local function install_stable_2911()' in ota
+          assert b"local function install_v295()" in ota
+          assert b"function A.draw()" in ota
+          assert b"function V.promo_screen()" in ota
+          assert b"function V.journal()" in ota
+          print('OTA 2.9.11 compiled and validated')
           PY
-      - name: Build full standalone Palatka script
+      - name: Test stable modules and existing behavior
+        run: |
+          luajit -b src/59b_drop_sales_stats.lua /dev/null
+          luajit -b src/49c_promo_mh_scheduler_v294.lua /dev/null
+          luajit -b src/66e_mh_journal_fast_v295.lua /dev/null
+          luajit tests/test_arbitrage_session.lua
+          luajit tests/test_arbitrage_status.lua
+          luajit tests/test_promo_templates.lua
+          luajit tests/test_promo_scheduler_v294.lua
+          luajit tests/test_mh_journal_screen_v294.lua
+          luajit tests/test_perf_v295.lua
+          luajit tests/test_active_ui_runtime.lua
+      - name: Build stable standalone
         run: python3 build.py
-      - name: Verify original main UI and retained agent
+      - name: Verify standalone release version and retained UI
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          data=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.6' in data[:1000]
-          assert b'##palatka_arbitrage_agent' in data
-          assert 'Сделки'.encode('cp1251') in data
-          assert 'Добавить строку'.encode('cp1251') in data
-          assert b'MCR CLASSIC  /  PALATKA AI' not in data
-          assert 'Арбитраж'.encode('cp1251') in data
-          assert b'##palatka_mobile' in data
-          print('Main UI verified; arbitrage agent present; no MCR shell')
+          raw=Path('palatka_ai.lua').read_bytes()
+          assert b'Palatka AI v2.9.11' in raw[:1000]
+          assert b"script_version('2.9.11')" in raw[:1000]
+          assert b'##palatka_arbitrage_agent' in raw
+          assert b'##palatka_mobile' in raw
+          assert 'Добавить строку'.encode('cp1251') in raw
+          print('Stable standalone ready:',len(raw))
           PY
-      - name: Publish full palatka_ai.lua to main
+      - name: Publish standalone only after all checks pass
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add palatka_ai.lua updates/palatka_update.lua version.json
-          if git diff --cached --quiet; then
-            echo "Full script already up to date"
-          else
-            git commit -m "release: publish Palatka AI v2.9.6 artifacts"
+          git add palatka_ai.lua
+          if ! git diff --cached --quiet; then
+            git commit -m "release: stable 2.9.11 standalone from verified 2.9.5 source"
             git push origin HEAD:main
           fi
-      - name: Upload verified standalone artifact
+      - name: Upload stable verified Lua
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-v296-full-build
+          name: palatka-2.9.11-stable
           path: palatka_ai.lua
-          if-no-files-found: error
-          retention-days: 7
+          retention-days: 14

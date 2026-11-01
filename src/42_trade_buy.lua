@@ -20,7 +20,7 @@ local function find_list_index(text, name)
         local base=nm:match('^(.-)%s+%[%d+[^%]]*%]') or nm
         base=fold(base_name(base)):match('^%s*(.-)%s*$')
         if base==wanted then
-            if found~=nil then return nil,'Г­ГҐГ±ГЄГ®Г«ГјГЄГ® Г®Г¤ГЁГ­Г ГЄГ®ГўГ»Гµ Г±ГІГ°Г®ГЄ' end
+            if found~=nil then return nil,'несколько одинаковых строк' end
             found=idx
         end
         idx=idx+1
@@ -38,10 +38,10 @@ local function open_shop_menu()
 end
 
 local function buy_one(it, pi, total, dry_run)
-    DSP.auto.status = 'Г±ГЄГіГЇГЄГ : ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
+    DSP.auto.status = 'скупка: ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
     if not sampIsDialogActive() or (sampGetCurrentDialogId() ~= 3040 and sampGetCurrentDialogId()~=15072) then
         if not open_shop_menu() then
-            log('Г‘ГЄГіГЇГЄГ : Г¬ГҐГ­Гѕ Г­ГҐ Г®ГІГЄГ°Г»Г«Г®Г±Гј Г¤Г«Гї ' .. it.name, 'error')
+            log('Скупка: меню не открылось для ' .. it.name, 'error')
             return false
         end
     end
@@ -52,7 +52,7 @@ local function buy_one(it, pi, total, dry_run)
     -- v1.2 hotfix: also accept 15065-15067 (newer search/dialog IDs).
     local id = wait_dialog({ 25663, 15065, 15066, 15067 }, 3000)
     if not id then
-        log('Г‘ГЄГіГЇГЄГ : Г±ГІГ°Г®ГЄГ  ГЇГ®ГЁГ±ГЄГ  Г­ГҐ Г®ГІГЄГ°Г»Г«Г Г±Гј', 'error')
+        log('Скупка: строка поиска не открылась', 'error')
         return false
     end
     wait_text(id, 700)
@@ -62,22 +62,22 @@ local function buy_one(it, pi, total, dry_run)
     -- v1.2 hotfix: search results dialog may also be 15068 in newer versions.
     id = wait_dialog({ 25664, 15068 }, 3500)
     if not id then
-        log('Г‘ГЄГіГЇГЄГ : Г°ГҐГ§ГіГ«ГјГІГ ГІГ» Г­ГҐ Г®ГІГЄГ°Г»Г«ГЁГ±Гј: ' .. it.name, 'error')
+        log('Скупка: результаты не открылись: ' .. it.name, 'error')
         return false
     end
     local list_text = DSP.dialog_clean(wait_text(id, 500))
     local idx,index_err = find_list_index(list_text, it.name)
     if idx==nil then
-        log('Г‘ГЄГіГЇГЄГ : '..tostring(index_err or 'Г­ГҐ Г­Г Г©Г¤ГҐГ­Г®')..': ' .. it.name, 'error')
+        log('Скупка: '..tostring(index_err or 'не найдено')..': ' .. it.name, 'error')
         close_dialog()
         return false
     end
     runtime.transition('buy','select_result',tostring(it.name)..' row='..tostring(idx))
     sampSendDialogResponse(id, 1, idx, '')
-    -- v1.2 hotfix: ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ price dialog may also use 15070/15071 in newer Arizona Mobile.
+    -- v1.2 hotfix: выставление price dialog may also use 15070/15071 in newer Arizona Mobile.
     id = wait_dialog({ 26560, 26563, 15070, 15071 }, 3000)
     if not id then
-        log('Г‘ГЄГіГЇГЄГ : Г¤ГЁГ Г«Г®ГЈ Г¶ГҐГ­Г» Г­ГҐ Г®ГІГЄГ°Г»Г«Г±Гї: ' .. it.name, 'error')
+        log('Скупка: диалог цены не открылся: ' .. it.name, 'error')
         return false
     end
     if id == 26560 then
@@ -85,12 +85,12 @@ local function buy_one(it, pi, total, dry_run)
         -- v1.2 hotfix: also accept 15071 fallback.
         id = wait_dialog({ 26563, 15071 }, 2000)
     end
-    -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ dialog.
+    -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final выставление dialog.
     if id ~= 26563 and id ~= 15071 then return false end
     local validated_id,txt,dialog_title=wait_item({id},it.name,1700,'buy')
     local base = base_name(it.name)
     if not validated_id then
-        log('Г‘ГЄГіГЇГЄГ : Гў Г¤ГЁГ Г«Г®ГЈГҐ Г¤Г°ГіГЈГ®Г© ГІГ®ГўГ Г°: ' .. it.name, 'error')
+        log('Скупка: в диалоге другой товар: ' .. it.name, 'error')
         close_dialog()
         return false
     end
@@ -120,20 +120,20 @@ local function buy_one(it, pi, total, dry_run)
     DSP.flog('PRESET buy input: item='..tostring(it.name)..' dialog='..tostring(id)..
         ' mode='..(combined and 'qty_price' or 'price_only')..' resp_len='..tostring(#resp))
     if dry_run then
-        log('dry-run: ГЄГіГЇГЁГ« ГЎГ» ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price))
+        log('dry-run: купил бы ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price))
         close_dialog()
         return 'dry', tonumber(it.qty) or 1
     end
     -- v1.2 hotfix: use the active dialog id (may be 26563 or 15071 in newer
-    -- Arizona Mobile ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ dialogs). Fallback chain via sampGetCurrentDialogId.
+    -- Arizona Mobile выставление dialogs). Fallback chain via sampGetCurrentDialogId.
     local resp_id = id or (sampGetCurrentDialogId and sampGetCurrentDialogId()) or 26563
     sampSendDialogResponse(resp_id, 1, 0, resp)
-    log('Г‘ГЄГіГЇГЄГ : ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price), 'ok')
+    log('Скупка: ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price), 'ok')
     for _ = 1, 24 do
         if not sampIsDialogActive() then return 'bought', qty end
         trade_wait(30)
     end
-    log('Г‘ГЄГіГЇГЄГ : Г­ГҐГІ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГї Г§Г ГЄГ°Г»ГІГЁГї Г¤ГЁГ Г«Г®ГЈГ ', 'error')
+    log('Скупка: нет подтверждения закрытия диалога', 'error')
     return false
 end
 
@@ -154,14 +154,14 @@ function DSP.auto.start_buy()
             list[#list+1] = {name=it.name,price=tonumber(it.price),qty=tonumber(it.qty) or 1}
         end
     end
-    if #list == 0 then DSP.notify('Г‘ГЄГіГЇГЄГ : ГЇГ°ГҐГ±ГҐГІ ГЇГіГ±ГІ ГЁГ«ГЁ Г¶ГҐГ­Г» 0'); return end
+    if #list == 0 then DSP.notify('Скупка: пресет пуст или цены 0'); return end
     local dry_run = DSP.settings.dry_run
     DSP.auto.buy_running = true
-    DSP.auto.status = 'Г±ГЄГіГЇГЄГ ...'
+    DSP.auto.status = 'скупка...'
     DSP.flog('PRESET buy accepted: '..#list..' positions, dry_run='..tostring(dry_run))
-    log('Г‘ГЄГіГЇГЄГ : ' .. #list .. ' ГЇГ®Г§ГЁГ¶ГЁГ©' .. (dry_run and ' (dry-run)' or ''))
+    log('Скупка: ' .. #list .. ' позиций' .. (dry_run and ' (dry-run)' or ''))
     if dry_run then
-        DSP.notify('Г’Г…Г‘Г’: ГЁГЈГ°Г®ГўГ»ГҐ Г®ГЄГ­Г  Г­ГҐ Г®ГІГЄГ°Г»ГўГ ГѕГІГ±Гї. Г„Г«Гї Г¤ГҐГ©Г±ГІГўГЁГ© Г­ГіГ¦ГҐГ­ Г°ГҐГ¦ГЁГ¬ ГђГ…ГЂГ‹ГњГЌГЋ.')
+        DSP.notify('ТЕСТ: игровые окна не открываются. Для действий нужен режим РЕАЛЬНО.')
         -- No shop menu, network packets or dialog interactions in preview.
         runtime.spawn('buy',function()
             DSP.auto.progress.total=#list
@@ -179,9 +179,9 @@ function DSP.auto.start_buy()
     runtime.spawn('buy', function()
         DSP.auto.progress.total = #list
         if not open_shop_menu() then
-            log('Г‘ГЄГіГЇГЄГ : Г«Г ГўГЄГ  Г­ГҐ Г®ГІГЄГ°Г»Г«Г Г±Гј. ГЏГ®Г¤Г®Г©Г¤ГЁГІГҐ ГЄ Г«Г ГўГЄГҐ.', 'error')
+            log('Скупка: лавка не открылась. Подойдите к лавке.', 'error')
             DSP.auto.buy_running = false
-            DSP.auto.status = 'Г±ГЄГіГЇГЄГ : Г®ГёГЁГЎГЄГ '
+            DSP.auto.status = 'скупка: ошибка'
             return
         end
         local bought, dry = 0, 0
@@ -206,14 +206,12 @@ function DSP.auto.start_buy()
             DSP.auto.progress.done, DSP.auto.progress.dry = bought, dry
             close_dialog()
             if pi < #list and DSP.auto.buy_running then
-                local pause_ms=DSP.controls and DSP.controls.get and DSP.controls.get('buy_step_pause_ms') or 0
-                if pause_ms>0 then trade_wait(pause_ms)end
                 if not open_shop_menu() then break end
             end
         end
         DSP.auto.buy_running = false
-        DSP.auto.status = 'Г±ГЄГіГЇГЄГ : ' .. bought .. '/' .. #list .. (dry > 0 and (' (dry ' .. dry .. ')') or '')
-        log('Г‘ГЄГіГЇГЄГ  Г§Г ГўГҐГ°ГёГҐГ­Г : ' .. bought .. '/' .. #list, 'ok')
+        DSP.auto.status = 'скупка: ' .. bought .. '/' .. #list .. (dry > 0 and (' (dry ' .. dry .. ')') or '')
+        log('Скупка завершена: ' .. bought .. '/' .. #list, 'ok')
     end)
     return true
 end
@@ -222,9 +220,9 @@ function DSP.auto.stop_buy()
     if not DSP.auto.buy_running then return false end
     runtime.cancel()
     DSP.auto.buy_running = false
-    DSP.auto.status = 'Г±ГЄГіГЇГЄГ  Г®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г '
+    DSP.auto.status = 'скупка остановлена'
     close_dialog()
-    log('Г‘ГЄГіГЇГЄГ  Г®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г ')
+    log('Скупка остановлена')
 end
 
 

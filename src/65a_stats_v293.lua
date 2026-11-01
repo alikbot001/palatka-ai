@@ -24,9 +24,8 @@ local function statistics()
     else
         V.muted('Инвентарь ещё не сканирован: фактическое количество не подменяем расчётом.')
     end
-    V.muted('Расчётный остаток: '..tostring(s.journal_balance)..' шт. (известные награды минус учтённые продажи)')
-    if s.approx then V.muted('~ В части чеков неизвестно количество проданного: остаток может быть завышен.')end
-    V.muted('Разница со сканом не означает пропажу: возможны продажи без точного чека и другие операции.')
+    V.muted('Остаток по журналу: '..tostring(s.journal_balance)..' шт. (дроп за всё время - подтверждённые продажи)')
+    if s.approx then V.muted('~ Для части старых рыночных чеков количество не было сохранено точно.')end
     if DSP.auto and not DSP.auto.scanning and b('Обновить фактический инвентарь','scan_inventory',260,true)then
         local ok=DSP.auto.scan_inventory()
         if ok==false then V.stats293_error='Сканирование сейчас недоступно'else V.stats293_error=nil end
