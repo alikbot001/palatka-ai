@@ -26,6 +26,8 @@ jobs:
           luajit -v
       - name: Build CP1251 candidate and verify LuaJIT syntax
         run: python3 build.py
+      - name: Verify OTA upgrade payload can be compiled (no publish)
+        run: python3 tools/build_ota_297.py --check
       - name: Verify new 2.9.7 regression cases
         run: |
           luajit tests/test_v297_controls.lua
