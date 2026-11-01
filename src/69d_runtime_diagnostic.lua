@@ -1,6 +1,6 @@
 -- In-game verification for actively loaded UI modules, not just the version manifest.
 local V,C,A,P=DSP.ui22,DSP.craglog,DSP.arb_agent,DSP.promo
-DSP.active_ui_build='2.9.3'
+DSP.active_ui_build=tostring(DSP.version or 'unknown')
 DSP.active_ui_refs={
     agent=A and A.draw, journal=C and C.draw,
     journal_tab=V and V.journal, promo=V and V.promo_screen
