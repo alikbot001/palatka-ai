@@ -1,5 +1,5 @@
 -- Palatka AI 2.9.4 OTA: Market Helper UX, touch scroll, journal, statistics and arbitrage fixes.
-PALATKA_UPDATE_VERSION = '2.9.8'
+PALATKA_UPDATE_VERSION = '2.9.9'
 return function(DSP)
   -- v2.8.6: Independent, additive UI + multi-deal arbitration patch.
   local function install_v286()
@@ -12583,5 +12583,13 @@ return true
     DSP.version='2.9.8'
     return true
   end
-  return install_v298()
+  local function install_v299()
+    if not install_v298() then return false end
+    if DSP._v299_installed then DSP.version='2.9.9'; return true end
+    DSP._v299_installed=true
+    DSP.version='2.9.9'
+    if DSP.flog then DSP.flog('Palatka AI 2.9.9 Fast REC syntax hotfix ready') end
+    return true
+  end
+  return install_v299()
 end
