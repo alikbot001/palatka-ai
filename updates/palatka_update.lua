@@ -12420,7 +12420,7 @@ function R.fast(label,at)
     opts.spawn_enabled=true
     if not persist()then
         p.spawn_label=old_label;opts.spawn_enabled=prev_auto
-        return false,'Ќе удалось сохранить выбранную точку'end
+        return false,'Ќе удалось сохранить выбранную точку'
     end
     local ok,why=R.manual(at)
     if not ok then return false,why end
@@ -12575,7 +12575,10 @@ return true
         v298_fast_rec()
       end
     end)
-    if not ok then if DSP.flog then DSP.flog('Palatka 2.9.8 install failed: '..tostring(err))end;return false end
+    if not ok then
+      if DSP.flog then DSP.flog('Palatka 2.9.8 install failed: '..tostring(err))end
+      return false
+    end
     DSP._v298_installed=true
     DSP.version='2.9.8'
     return true
