@@ -88,6 +88,8 @@ jobs:
           luajit tests/test_v2913_chrome.lua
       - name: Build stable standalone
         run: python3 build.py
+      - name: Strict LuaJIT source / OTA / runtime version preflight
+        run: python3 check_syntax.py
       - name: Verify standalone release version and retained UI
         run: |
           python3 - <<'PY'
