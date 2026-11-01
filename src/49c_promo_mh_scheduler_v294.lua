@@ -218,6 +218,7 @@ end
 
 function P.tick(at,send,online)
     at=at or now()
+    if P.paused then return false end -- explicit resume only after an error
     if online==nil then online=connected()end
     if P._batch then
         if not online then return step_batch(at,send,false)end
