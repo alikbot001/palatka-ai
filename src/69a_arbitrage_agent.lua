@@ -265,22 +265,13 @@ function A.confirm(index,side,amount)
     local q=num(amount,1,limit)
     if not q then return false,'Количество превышает оставшийся лимит'end
     local at=os.time()
-    -- Stage the ledger change, then roll back *all* in-memory fields if JSON
-    -- cannot be persisted. Never acknowledge a trade that would vanish on relog.
-    local quote=side=='buy'and e.seller_quote or e.buyer_quote
-    local prior_consumed=A.data.consumed[quote]
-    local prior_consumed_copy=prior_consumed and {qty=prior_consumed.qty,at=prior_consumed.at} or nil
-    local old_bought,old_sold=e.bought,e.sold
-    local old_bought_at,old_sold_at=e.bought_at,e.sold_at
-    local old_last_action,old_hint=s.last_action,A.hint
-    local old_history={}
-    for i,v in ipairs(A.data.history)do old_history[i]=v end
     if side=='buy'then
         e.bought=e.bought+q;e.bought_at=at
+        consume(e.seller_quote,q,at)
     else
         e.sold=e.sold+q;e.sold_at=at
+        consume(e.buyer_quote,q,at)
     end
-    consume(quote,q,at)
     s.last_action=at
     A.data.history[#A.data.history+1]={
         session_started=s.started,route_id=e.id,side=side,qty=q,
@@ -288,17 +279,7 @@ function A.confirm(index,side,amount)
     }
     if #A.data.history>1000 then table.remove(A.data.history,1)end
     if A.hint and A.hint.route_id==e.id and A.hint.side==side then A.hint=nil end
-    local saved,why=changed()
-    if not saved then
-        e.bought,e.sold=old_bought,old_sold
-        e.bought_at,e.sold_at=old_bought_at,old_sold_at
-        s.last_action,A.hint=old_last_action,old_hint
-        A.data.consumed[quote]=prior_consumed_copy
-        A.data.history=old_history
-        A.revision=A.revision+1
-        if M.invalidate_arbitrage then M.invalidate_arbitrage()end
-        return false,'Не удалось сохранить сделку: '..tostring(why or 'disk error')
-    end
+    changed()
     if e.sold==e.qty then A.next(1)end
     return true,q
 end
@@ -387,13 +368,8 @@ function A.install()
         imgui.OnFrame(A.is_open,function()
             local ok,err=xpcall(A.draw,debug.traceback)
             if not ok then
-                A.ui_error=tostring(err)
-                if A._last_ui_error~=A.ui_error then
-                    A._last_ui_error=A.ui_error
-                    if DSP.flog then DSP.flog('ARB AGENT UI: '..A.ui_error)end
-                end
-                -- Keep the session and its window enabled; do not turn a
-                -- temporary render exception into the loss of the route UI.
+                if DSP.flog then DSP.flog('ARB AGENT UI: '..tostring(err))end
+                A.show(false)
             end
         end)
     end
