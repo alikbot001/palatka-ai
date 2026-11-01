@@ -1,4 +1,4 @@
-name: Palatka 2.9.12 stable rollback (2.9.5 code)
+name: Palatka 2.9.13 stable rollback (2.9.5 code)
 on:
   pull_request:
     paths:
@@ -49,18 +49,19 @@ jobs:
           import json
           manifest=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert manifest['version']=='2.9.12'
+          assert manifest['version']=='2.9.13'
           assert manifest['size']==len(ota),(manifest['size'],len(ota))
           assert manifest['mode']=='overlay'
-          assert b"PALATKA_UPDATE_VERSION = '2.9.12'" in ota
-          assert ota.count(b'return install_stock_2912()')==2
+          assert b"PALATKA_UPDATE_VERSION = '2.9.13'" in ota
+          assert ota.count(b'return install_chrome_2913()')==2
           assert b'local function install_stable_2911()' in ota
           assert b'local function install_stock_2912()' in ota
+          assert b'local function install_chrome_2913()' in ota
           assert b"local function install_v295()" in ota
           assert b"function A.draw()" in ota
           assert b"function V.promo_screen()" in ota
           assert b"function V.journal()" in ota
-          print('OTA 2.9.12 compiled and validated')
+          print('OTA 2.9.13 compiled and validated')
           PY
       - name: Test stable modules and existing behavior
         run: |
@@ -78,6 +79,10 @@ jobs:
         run: |
           luajit -b src/42a_sell_stock_guard.lua /dev/null
           luajit tests/test_v2912_partial_sell.lua
+      - name: Test draggable top bar and centered dialogs
+        run: |
+          luajit -b src/60g_window_chrome_v2913.lua /dev/null
+          luajit tests/test_v2913_chrome.lua
       - name: Build stable standalone
         run: python3 build.py
       - name: Verify standalone release version and retained UI
@@ -85,8 +90,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           raw=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.12' in raw[:1000]
-          assert b"script_version('2.9.12')" in raw[:1000]
+          assert b'Palatka AI v2.9.13' in raw[:1000]
+          assert b"script_version('2.9.13')" in raw[:1000]
           assert b'##palatka_arbitrage_agent' in raw
           assert b'##palatka_mobile' in raw
           assert 'Добавить строку'.encode('cp1251') in raw
@@ -99,12 +104,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add palatka_ai.lua
           if ! git diff --cached --quiet; then
-            git commit -m "release: stable 2.9.12 standalone from verified 2.9.5 source"
+            git commit -m "release: stable 2.9.13 standalone from verified 2.9.5 source"
             git push origin HEAD:main
           fi
       - name: Upload stable verified Lua
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-2.9.12-stable
+          name: palatka-2.9.13-stable
           path: palatka_ai.lua
           retention-days: 14

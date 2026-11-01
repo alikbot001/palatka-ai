@@ -76,6 +76,7 @@ MODULES = [
     "59b_drop_sales_stats.lua",
     "65b_stats_render_cache_v295.lua",
     "60_ui21_shell.lua",
+    "60g_window_chrome_v2913.lua",
     "60aa_touch_scroll.lua",
     "60a_carbon_home.lua",
     "60b_carbon_storage.lua",
@@ -104,10 +105,10 @@ MODULES = [
     "99_main.lua",
 ]
 
-HEADER = """-- Palatka AI v2.9.12 mobile release, built from src/*.lua
+HEADER = """-- Palatka AI v2.9.13 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.12')
+script_version('2.9.13')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
