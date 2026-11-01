@@ -87,7 +87,15 @@ local function editor(e)
             local more,why=P.save_template_options(index,{
                 interval_min=e.min[0],interval_max=e.max[0],
                 waiting=e.waiting[0],auto_limit=e.limit[0],random_line=e.random})
-            if more then V.promo298_edit=nil;V.promo298_error=nil
+            if more then
+                V.promo298_edit=nil;V.promo298_error=nil
+                if e.auto and not P.running then
+                    local yes,why=P.set_option('continuous',true)
+                    if yes then
+                        local begun,err=P.start()
+                        if not begun then V.promo298_error=tostring(err)end
+                    else V.promo298_error=tostring(why)end
+                end
             else e.error=tostring(why)end
         else e.error=tostring(index)end
     end
@@ -205,7 +213,7 @@ function P.expand(text)
     if type(text)=='string' and text:find('<lavka>',1,true)then
         local number,why=P.own_shop_number()
         if not number then return nil,tostring(why or'Номер лавки неизвестен')end
-        text=text:gsub('<lavka>',':lavka'..tostring(number)..':')
+        text=text:gsub('<lavka>',tostring(number))
     end
     return expand(text)
 end
