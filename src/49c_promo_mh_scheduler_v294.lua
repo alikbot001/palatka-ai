@@ -28,7 +28,7 @@ local function rows(t)
     local result={}
     for _,r in ipairs(t.rows or{})do
         if r.auto~=false and type(r.text)=='string' and r.text~='' and P.validate(r.text)then
-            result[#result+1]=r.text
+            result[#result+1]={text=r.text,interval=r.interval}
         end
     end
     return result
@@ -54,12 +54,13 @@ local function make_batch(index,t,manual,at)
     local commands=rows(t)
     if #commands==0 then return nil,'Нет разрешённых строк в шаблоне'end
     if t.random_line and #commands>1 then commands={commands[math.random(1,#commands)]}end
-    return {index=index,commands=commands,pos=1,manual=manual==true,
+    return {index=index,template=t,commands=commands,pos=1,manual=manual==true,
         due=at,waiting=clamp(t.waiting,.5,10,1.5)}
 end
 local function set_stopped(reason)
     local s=P.settings()
     P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
+    P.state='STOPPED';P.delivery_status='not_sent'
     P.pause_reason=reason or 'Выключен'
     s.enabled=false
     persist()
@@ -70,6 +71,7 @@ local function report_error(err)
     if DSP.flog then DSP.flog('PROMO: '..P.last_error)end
 end
 function P.start(at)
+    if P.running then return true end -- idempotent: never discard a live queue
     at=at or now()
     if not active()then return false,'Включи хотя бы один шаблон с командами'end
     local s=P.settings()
@@ -80,8 +82,8 @@ function P.start(at)
     s.enabled=true
     local ok,why=persist()
     if not ok then s.enabled=prior;return false,tostring(why or'Не удалось сохранить запуск')end
-    P.running=true;P.last_error=nil;P.pause_reason=nil;P._batch=nil
-    P.manual_busy=false;P.manual_template=nil
+    P.running=true;P.last_error=nil;P.pause_reason=nil
+    P.state='WAITING';P.delivery_status='not_sent'
     P.was_online=false
     P.next_at=at+clamp(s.start_delay,10,120,20)
     for _,t in ipairs(s.templates)do t._promo_due=nil end
@@ -94,11 +96,13 @@ function P.bootstrap(at)
     at=at or now()
     local s=P.settings()
     P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
+    P.state='STOPPED';P.delivery_status='not_sent'
     P.session_count=0;P.last_sent=0;P.was_online=false;P.last_error=nil
     P.next_at=0
     for _,t in ipairs(s.templates)do t._promo_due=nil end
     if s.resume_on_login and s.enabled and active() then
         P.running=true
+        P.state='WAITING'
         P.next_at=at+clamp(s.start_delay,10,120,20)
         P.pause_reason='Ожидание подключения'
     end
@@ -111,6 +115,7 @@ function P.send_template_once(index)
     local batch,why=make_batch(index,t,true,now())
     if not batch then return false,why end
     P._batch=batch
+    P.state='WAITING'
     P.manual_busy=true;P.manual_template=index
     P.last_error=nil;P.pause_reason=nil
     return true
@@ -118,6 +123,7 @@ end
 local function finish_batch(batch,at)
     local s=P.settings()
     local t=s.templates[batch.index]
+    if t~=batch.template then t=nil end
     if t then
         t.last_sent=at
         if not batch.manual then
@@ -132,6 +138,7 @@ local function finish_batch(batch,at)
         end
     end
     P._batch=nil;P.manual_busy=false;P.manual_template=nil
+    P.state=P.running and 'COOLDOWN' or 'COMPLETED'
     P.next_at=at+math.max(30,tonumber(P.MIN_INTERVAL)or 30)
     persist()
 end
@@ -139,16 +146,33 @@ local function step_batch(at,send,online)
     local batch=P._batch
     if not batch or at<batch.due then return false end
     if not online then
-        report_error('Нет соединения: отправка приостановлена')
+        P.was_online=false;P.state='PAUSED'
+        P.pause_reason='Нет соединения: отправка приостановлена'
+        if batch.manual then
+            P._batch=nil;P.manual_busy=false;P.manual_template=nil
+            P.last_error='Ручная отправка отменена: нет соединения'
+        end
+        return false
+    end
+    if P.settings().templates[batch.index]~=batch.template then
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
+        P.state=P.running and 'WAITING' or 'STOPPED'
+        P.pause_reason='Шаблон изменён: старая очередь отменена'
+        P.next_at=at+math.max(30,tonumber(P.MIN_INTERVAL)or 30)
+        return false
+    end
+    local minimum=math.max(30,tonumber(P.MIN_INTERVAL)or 30)
+    if P.last_sent>0 and at<P.last_sent+minimum then
+        batch.due=P.last_sent+minimum;P.next_at=batch.due
+        P.state='COOLDOWN'
         return false
     end
     if not P.settings().continuous and (P.session_count or 0)>=P.MAX_SESSION then
         set_stopped('Лимит сообщений за сессию')
         return false
     end
-    local raw=batch.commands[batch.pos]
-    local cmd,why=P.expand(raw)
+    local row=batch.commands[batch.pos]
+    local cmd,why=P.expand(row and row.text or '')
     if not cmd or #cmd>P.MAX_STEP_BYTES then
         report_error(why or'Команда превышает 200 байт')
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
@@ -166,14 +190,21 @@ local function step_batch(at,send,online)
     end
     P.last_sent=at
     P.last_command=cmd
+    P.delivery_status='client_sent_unconfirmed'
+    P.state='SENDING'
     P.session_count=(P.session_count or 0)+1
     batch.pos=batch.pos+1
     P.last_error=nil
     if batch.pos>#batch.commands then
         finish_batch(batch,at)
     else
-        batch.due=at+math.max(1,math.ceil(batch.waiting))
+        -- Row-specific delay is authoritative; the global waiting is a fallback.
+        -- Always respect a conservative server-safe cooldown between chat commands.
+        local per_row=tonumber(row and row.interval)
+        if not per_row or per_row~=per_row or per_row<=0 then per_row=batch.waiting end
+        batch.due=at+math.max(minimum,math.ceil(per_row))
         P.next_at=batch.due
+        P.state='COOLDOWN'
     end
     if not P.settings().continuous and P.session_count>=P.MAX_SESSION then
         set_stopped('Лимит сообщений за сессию')
@@ -184,11 +215,22 @@ end
 function P.tick(at,send,online)
     at=at or now()
     if online==nil then online=connected()end
-    if P._batch then return step_batch(at,send,online)end
+    if P._batch then
+        if not online then return step_batch(at,send,false)end
+        if not P.was_online and P._batch.manual~=true then
+            P.was_online=true
+            P._batch.due=math.max(P._batch.due,at+clamp(P.settings().start_delay,10,120,20))
+            P.pause_reason='Ожидание после переподключения'
+            P.state='PAUSED'
+            return false
+        end
+        return step_batch(at,send,true)
+    end
     if not P.running then return false end
     if not online then
         P.was_online=false
         P.pause_reason='Нет подключения: ожидание'
+        P.state='PAUSED'
         return false
     end
     local s=P.settings()
@@ -196,6 +238,7 @@ function P.tick(at,send,online)
         P.was_online=true
         P.next_at=math.max(P.next_at or 0,at+clamp(s.start_delay,10,120,20))
         P.pause_reason='Ожидание после входа'
+        P.state='WAITING'
         return false
     end
     if at<(P.next_at or 0)then return false end
@@ -217,6 +260,7 @@ function P.tick(at,send,online)
                 local batch,why=make_batch(index,t,false,at)
                 if not batch then report_error(why);return false end
                 P._batch=batch
+                P.state='WAITING'
                 P.pause_reason=nil
                 return step_batch(at,send,online)
             end
@@ -226,7 +270,8 @@ function P.tick(at,send,online)
     if not earliest then
         set_stopped('Нет включённых шаблонов')
     else
-        P.next_at=math.max(at+1,earliest)
+        P.next_at=math.max(at+1,earliest,(P.last_sent or 0)+math.max(30,tonumber(P.MIN_INTERVAL)or 30))
+        P.state='WAITING'
     end
     return false
 end
