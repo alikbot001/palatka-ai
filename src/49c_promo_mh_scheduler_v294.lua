@@ -144,7 +144,8 @@ local function finish_batch(batch,at)
 end
 local function step_batch(at,send,online)
     local batch=P._batch
-    if not batch or at<batch.due then return false end
+    if not batch then return false end
+    -- Connection loss must be observed even while the next row is cooling down.
     if not online then
         P.was_online=false;P.state='PAUSED'
         P.pause_reason='Нет соединения: отправка приостановлена'
@@ -154,6 +155,7 @@ local function step_batch(at,send,online)
         end
         return false
     end
+    if at<batch.due then return false end
     if P.settings().templates[batch.index]~=batch.template then
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         P.state=P.running and 'WAITING' or 'STOPPED'
