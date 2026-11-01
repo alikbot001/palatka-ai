@@ -38,7 +38,7 @@ UI_SHIELD = """    do
       if agent and type(agent.draw)=='function' then
         local old_draw=agent.draw
         agent.draw=function(...)
-          local ok,err=xpcall(old_draw,debug.traceback,...)
+          local ok,err=xpcall(function() return old_draw() end,debug.traceback)
           if not ok then
             agent.ui_error=tostring(err)
             if DSP.flog and agent._v297_last_draw_error~=agent.ui_error then
