@@ -90,7 +90,7 @@ local function editor(e)
                 interval_min=e.min[0],interval_max=e.max[0],
                 waiting=e.waiting[0],auto_limit=e.limit[0],random_line=e.random})
             if ok then
-                V.promo298_edit=nil;V.promo298_error=nil
+                V.promo298_edit=nil;V.promo298_error=nil;V.promo298_notice='Шаблон сохранён в настройках'
                 if e.auto and not P.running then
                     local yes,why=P.set_option('continuous',true)
                     if yes then
@@ -188,6 +188,7 @@ function V.promo_screen()
     if b('Настройки','promo_settings',130)then V.set_screen('settings')end
     V.muted('Состояние: '..(P.running and(P.pause_reason or'работает')or'выключен')..
         ' | отправлено: '..tostring(P.session_count or 0))
+    if V.promo298_notice then V.green(V.promo298_notice)end
     if V.promo298_error or P.last_error then V.red(tostring(V.promo298_error or P.last_error))end
     if #s.templates==0 then
         V.muted('Нет шаблонов. Нажми + Шаблон.')
