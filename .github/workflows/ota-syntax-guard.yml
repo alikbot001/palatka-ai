@@ -7,6 +7,9 @@ on:
       - 'version.json'
       - 'src/72_promo_market_style_v298.lua'
       - 'src/73_fast_reconnect_v298.lua'
+      - 'src/74_promo_save_v2910.lua'
+      - 'src/59b_drop_sales_stats.lua'
+      - 'src/65a_stats_v293.lua'
       - '.github/workflows/ota-syntax-guard.yml'
   workflow_dispatch:
 permissions:
@@ -25,6 +28,8 @@ jobs:
         run: |
           luajit -b src/72_promo_market_style_v298.lua /dev/null
           luajit -b src/73_fast_reconnect_v298.lua /dev/null
+          luajit -b src/74_promo_save_v2910.lua /dev/null
+          luajit -b src/59b_drop_sales_stats.lua /dev/null
           luajit -b updates/palatka_update.lua /dev/null
           python3 - <<'PY'
           from pathlib import Path
@@ -40,3 +45,5 @@ jobs:
         run: |
           luajit tests/test_v298_fast_rec.lua
           luajit tests/test_v298_promo.lua
+          luajit tests/test_v2910_promo_persistence.lua
+          luajit tests/test_v2910_sales_receipts.lua
