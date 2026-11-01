@@ -5,14 +5,6 @@ if P._mh_scheduler_v294 then return true end
 P._mh_scheduler_v294=true
 
 local function now()return os.time()end
-local function session_limit()
-    return DSP.controls and DSP.controls.get and DSP.controls.get('promo_session_limit')
-        or P.MAX_SESSION or 12
-end
-local function global_cooldown()
-    return DSP.controls and DSP.controls.get and DSP.controls.get('promo_global_cooldown_s')
-        or math.max(30,tonumber(P.MIN_INTERVAL)or 30)
-end
 local function connected()
     if type(sampSendChat)~='function' then return false end
     if sampIsSampAvailable and not sampIsSampAvailable()then return false end
@@ -81,7 +73,7 @@ function P.start(at)
     at=at or now()
     if not active()then return false,'Включи хотя бы один шаблон с командами'end
     local s=P.settings()
-    if not s.continuous and (P.session_count or 0)>=session_limit() then
+    if not s.continuous and (P.session_count or 0)>=P.MAX_SESSION then
         return false,'Лимит отправок сессии исчерпан'
     end
     local prior=s.enabled
@@ -140,7 +132,7 @@ local function finish_batch(batch,at)
         end
     end
     P._batch=nil;P.manual_busy=false;P.manual_template=nil
-    P.next_at=at+global_cooldown()
+    P.next_at=at+math.max(30,tonumber(P.MIN_INTERVAL)or 30)
     persist()
 end
 local function step_batch(at,send,online)
@@ -151,7 +143,7 @@ local function step_batch(at,send,online)
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         return false
     end
-    if not P.settings().continuous and (P.session_count or 0)>=session_limit() then
+    if not P.settings().continuous and (P.session_count or 0)>=P.MAX_SESSION then
         set_stopped('Лимит сообщений за сессию')
         return false
     end
@@ -183,7 +175,7 @@ local function step_batch(at,send,online)
         batch.due=at+math.max(1,math.ceil(batch.waiting))
         P.next_at=batch.due
     end
-    if not P.settings().continuous and P.session_count>=session_limit() then
+    if not P.settings().continuous and P.session_count>=P.MAX_SESSION then
         set_stopped('Лимит сообщений за сессию')
     end
     return true
@@ -207,7 +199,7 @@ function P.tick(at,send,online)
         return false
     end
     if at<(P.next_at or 0)then return false end
-    if not s.continuous and P.session_count>=session_limit() then
+    if not s.continuous and P.session_count>=P.MAX_SESSION then
         set_stopped('Лимит сообщений за сессию')
         return false
     end
@@ -220,7 +212,7 @@ function P.tick(at,send,online)
                 due=last>0 and last+interval(t)or at
                 t._promo_due=due
             end
-            if at>=due and at>=((P.last_sent or 0)+global_cooldown()) or
+            if at>=due and at>=((P.last_sent or 0)+math.max(30,P.MIN_INTERVAL or 30)) or
                (at>=due and (P.last_sent or 0)==0) then
                 local batch,why=make_batch(index,t,false,at)
                 if not batch then report_error(why);return false end
