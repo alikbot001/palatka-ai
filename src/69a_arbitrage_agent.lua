@@ -265,6 +265,13 @@ function A.confirm(index,side,amount)
     local q=num(amount,1,limit)
     if not q then return false,'Количество превышает оставшийся лимит'end
     local at=os.time()
+    local quote=side=='buy'and e.seller_quote or e.buyer_quote
+    local before_cons=consumed_entry(quote)
+    local old_cons=before_cons and {qty=before_cons.qty,at=before_cons.at} or nil
+    local old_bought,old_sold=e.bought,e.sold
+    local old_bought_at,old_sold_at=e.bought_at,e.sold_at
+    local old_last=s.last_action
+    local old_revision=A.revision
     if side=='buy'then
         e.bought=e.bought+q;e.bought_at=at
         consume(e.seller_quote,q,at)
@@ -277,16 +284,34 @@ function A.confirm(index,side,amount)
         session_started=s.started,route_id=e.id,side=side,qty=q,
         item=e.name,at=at,method='manual',price=side=='buy'and e.buy_price or e.sell_price
     }
-    if #A.data.history>1000 then table.remove(A.data.history,1)end
+    local trimmed
+    if #A.data.history>1000 then trimmed=table.remove(A.data.history,1)end
+    local ok,err=changed()
+    if not ok then
+        -- A failed atomic disk write must never claim a durable acquisition,
+        -- leak a phantom stock reservation, or discard prior transaction history.
+        e.bought=old_bought;e.sold=old_sold
+        e.bought_at=old_bought_at;e.sold_at=old_sold_at
+        s.last_action=old_last;A.data.consumed[quote]=old_cons
+        table.remove(A.data.history)
+        if trimmed then table.insert(A.data.history,1,trimmed)end
+        A.revision=old_revision
+        return false,'Не удалось сохранить сделку: '..tostring(err or 'I/O')
+    end
     if A.hint and A.hint.route_id==e.id and A.hint.side==side then A.hint=nil end
-    changed()
     if e.sold==e.qty then A.next(1)end
     return true,q
 end
 function A.skip(index,value)
     local e=A.get(index);if not e then return false end
+    local old=e.skipped
     e.skipped=value~=false
-    changed()
+    local revision=A.revision
+    local ok,err=changed()
+    if not ok then
+        e.skipped=old;A.revision=revision
+        return false,'Не удалось сохранить маршрут: '..tostring(err or 'I/O')
+    end
     return true
 end
 function A.remaining(row,side,offer,base,meta)
