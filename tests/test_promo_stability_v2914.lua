@@ -56,4 +56,15 @@ assert(P.send_template_once(1))
 local n=#sent
 P.stop()
 assert(not P.tick(os.time()+999,send,true) and #sent==n,'manual work survived STOP')
-print('PASS promo atomic schedule, safe copy, disconnect/reconnect, stop and edit cancellation')
+local failed=0
+local function reject()failed=failed+1;return false end
+assert(P.start(5000))
+assert(not P.tick(5000,reject,true))
+assert(not P.tick(5020,reject,true))
+assert(failed==1 and P.paused and P.state=='ERROR','client rejection not surfaced as ERROR')
+assert(not P.tick(9999,reject,true)and failed==1,'uncertain send was retried silently')
+assert(P.start(10000),'user should be able to explicitly resume')
+assert(not P.tick(10000,send,true))
+assert(P.tick(10020,send,true))
+P.stop()
+print('PASS promo atomic schedule, safe copy, reconnect, stop, edit and rejected-send recovery')
