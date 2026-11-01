@@ -78,17 +78,55 @@ function A.mark_unavailable(index,reason)
     if not e or not s then return false,'Маршрут не выбран'end
     local side,shop,quote=required_leg(e)
     if not side then return false,'Маршрут уже завершён'end
+    if reason=='shop' and not valid_shop(shop)then return false,'Номер лавки неизвестен'end
+    -- Record the old session status so a disk error cannot silently discard routes.
+    local before={}
+    for i,entry in ipairs(s.routes)do
+        before[i]={entry=entry,skipped=entry.skipped,reason=entry.unavailable_reason,
+            source=entry.unavailable_source,at=entry.unavailable_at,side=entry.unavailable_side}
+    end
+    local old_focus=s.focus
+    local missing_store=M.missing_shops
+    local missing_key=tostring(s.sid)..':'..tostring(shop)
+    local old_missing=missing_store and missing_store[missing_key]
+    local unavailable=ensure()
+    local old_unavailable=quote and unavailable[quote] or nil
     if reason=='shop' then
-        if not valid_shop(shop)then return false,'Номер лавки неизвестен'end
         if not M.mark_shop_missing(shop,30)then return false,'Не удалось отметить лавку'end
         block_related(shop,nil,'shop_missing','manual')
     else
-        ensure()[quote]={at=now(),reason='item_missing',sid=s.sid}
+        unavailable[quote]={at=now(),reason='item_missing',sid=s.sid}
         block_related(shop,quote,'item_missing','manual')
     end
-    s.focus=index
+    local saved,err=changed()
+    if not saved then
+        for _,p in ipairs(before)do
+            p.entry.skipped=p.skipped;p.entry.unavailable_reason=p.reason
+            p.entry.unavailable_source=p.source;p.entry.unavailable_at=p.at
+            p.entry.unavailable_side=p.side
+        end
+        s.focus=old_focus
+        if reason=='shop' and missing_store then missing_store[missing_key]=old_missing end
+        if reason=='item' then unavailable[quote]=old_unavailable end
+        A.revision=(A.revision or 0)+1
+        if M.invalidate_arbitrage then M.invalidate_arbitrage()end
+        return false,'Не удалось сохранить статус: '..tostring(err)
+    end
     A.show(true)
-    changed()
+    -- The rejected route remains selectable in the queue for manual recovery.
+    -- Continue with another usable leg, instead of closing the mini-agent.
+    for step=1,#s.routes do
+        local candidate=((index-1+step)%#s.routes)+1
+        local next_entry=s.routes[candidate]
+        if not next_entry.skipped and next_entry.sold<next_entry.qty then
+            s.focus=candidate
+            local ok_save,err_save=A.save()
+            if not ok_save and DSP.flog then
+                DSP.flog('ARB AGENT focus not persisted: '..tostring(err_save))
+            end
+            break
+        end
+    end
     return true
 end
 function A.restore_unavailable(index)
