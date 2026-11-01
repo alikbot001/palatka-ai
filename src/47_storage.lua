@@ -91,14 +91,27 @@ function S.accept(kind,title,text,ts,source)
     end
     snap.id=tostring(ts or os.time())..'_'..tostring(#S.snapshots+1)
     snap.server=DSP.market and DSP.market.state and DSP.market.state.sid or nil
-    table.insert(S.snapshots,1,snap)
-    while #S.snapshots>S.max_saved+1 do table.remove(S.snapshots)end
-    S.last_signature=signature;S.last_snapshot=snap;S.last_ts=ts or os.time();S.last_error=nil
-    if DSP.settings and DSP.save_settings then
-        DSP.settings.storage_snapshots=S.snapshots
-        local ok,err=DSP.save_settings()
-        if not ok then S.last_error='Не удалось сохранить снимок: '..tostring(err) end
+    -- Copy-on-write: a failed persistence attempt must not evict history or
+    -- mark the in-memory snapshot as durably saved.
+    local previous=S.snapshots
+    local updated={snap}
+    for _,entry in ipairs(previous)do
+        if #updated>=S.max_saved then break end
+        updated[#updated+1]=entry
     end
+    S.snapshots=updated
+    if DSP.settings and DSP.save_settings then
+        local saved_settings=DSP.settings.storage_snapshots
+        DSP.settings.storage_snapshots=updated
+        local called,ok,err=pcall(DSP.save_settings)
+        if not called or not ok then
+            S.snapshots=previous
+            DSP.settings.storage_snapshots=saved_settings
+            S.last_error='Не удалось сохранить снимок: '..tostring(err or ok)
+            return false,S.last_error
+        end
+    end
+    S.last_signature=signature;S.last_snapshot=snap;S.last_ts=ts or os.time();S.last_error=nil
     return true,snap
 end
 function S.on_dialog(id,style,title,text)

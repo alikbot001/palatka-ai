@@ -1,4 +1,4 @@
-name: Palatka 2.9.13 stable rollback (2.9.5 code)
+name: Palatka candidate validation (2.9.13 base)
 on:
   pull_request:
     paths:
@@ -31,17 +31,24 @@ jobs:
           fetch-depth: 0
       - name: Install LuaJIT
         run: sudo apt-get update -qq && sudo apt-get install -y luajit
-      - name: Verify restored 2.9.5 functional source
+      - name: Compile promotional source and run state-machine regressions
         run: |
-          python3 - <<'PY'
-          import subprocess
-          for path in ('src/59b_drop_sales_stats.lua', 'src/49c_promo_mh_scheduler_v294.lua', 'src/66e_mh_journal_fast_v295.lua'):
-              live=subprocess.check_output(['git','show','HEAD:'+path])
-              baseline=subprocess.check_output(['git','show','778915d9291cbd2b50e683cf3d5433d3c88d900c:'+path])
-              assert live==baseline, f'Unexpected changes to stable {path}'
-          print('Functional 2.9.5 baseline preserved')
-          PY
-      - name: Test OTA syntax, manifest and stable installer
+          luajit -b src/49a_promo_universal.lua /dev/null
+          luajit -b src/49b_promo_mh_options.lua /dev/null
+          luajit -b src/49c_promo_mh_scheduler_v294.lua /dev/null
+          luajit -b src/68b_promo_universal_ui.lua /dev/null
+          luajit tests/test_promo_scheduler_v294.lua
+          luajit tests/test_promo_stability_v2914.lua
+          luajit tests/test_promo_mh_options.lua
+          luajit -b src/69c_arbitrage_status.lua /dev/null
+          luajit tests/test_arbitrage_status.lua
+          luajit -b src/69a_arbitrage_agent.lua /dev/null
+          luajit tests/test_arbitrage_atomic_v2914.lua
+          luajit -b src/47_storage.lua /dev/null
+          luajit tests/test_storage_snapshot_atomic_v2914.lua
+          luajit -b src/42a_sell_stock_guard.lua /dev/null
+          luajit tests/test_sell_unknown_stock_v2914.lua
+      - name: Test existing stable OTA syntax and manifest
         run: |
           luajit -b updates/palatka_update.lua /dev/null
           python3 - <<'PY'
@@ -63,7 +70,7 @@ jobs:
           assert b"function V.journal()" in ota
           print('OTA 2.9.13 compiled and validated')
           PY
-      - name: Test stable modules and existing behavior
+      - name: Test modules and existing behavior
         run: |
           luajit -b src/59b_drop_sales_stats.lua /dev/null
           luajit -b src/49c_promo_mh_scheduler_v294.lua /dev/null
@@ -83,8 +90,10 @@ jobs:
         run: |
           luajit -b src/60g_window_chrome_v2913.lua /dev/null
           luajit tests/test_v2913_chrome.lua
-      - name: Build stable standalone
+      - name: Build candidate standalone
         run: python3 build.py
+      - name: Strict LuaJIT source / OTA / runtime version preflight
+        run: python3 check_syntax.py
       - name: Verify standalone release version and retained UI
         run: |
           python3 - <<'PY'
@@ -107,9 +116,9 @@ jobs:
             git commit -m "release: stable 2.9.13 standalone from verified 2.9.5 source"
             git push origin HEAD:main
           fi
-      - name: Upload stable verified Lua
+      - name: Upload desktop-validated candidate (Android unverified)
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-2.9.13-stable
+          name: palatka-2.9.13-ci-candidate
           path: palatka_ai.lua
           retention-days: 14

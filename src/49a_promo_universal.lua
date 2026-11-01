@@ -253,7 +253,7 @@ function P.update(index,name,text,interval)
     end
     return ok,err
 end
-function P.save_template(index,name,rows,enabled)
+function P.save_template(index,name,rows,enabled,options)
     local s=P.settings()
     if type(name)~='string' or #name<1 or #name>64 then
         return false,'Название шаблона: 1–64 байта'
@@ -279,13 +279,28 @@ function P.save_template(index,name,rows,enabled)
             auto=row.auto~=false}
     end
     local old=index and s.templates[index]or nil
+    options=options or {}
+    local low=options.interval_min~=nil and num(options.interval_min,0,3600) or (old and old.interval_min or 0)
+    local high=options.interval_max~=nil and num(options.interval_max,0,3600) or (old and old.interval_max or 0)
+    if low==nil or high==nil then return false,'Некорректный интервал повтора' end
+    low=low>0 and math.max(P.MIN_INTERVAL,low) or 0
+    high=high>0 and math.max(P.MIN_INTERVAL,high) or 0
+    if high>0 and high<low then high=low end
+    local waiting=options.waiting~=nil and tonumber(options.waiting) or (old and old.waiting or 1.5)
+    if not waiting or waiting~=waiting then return false,'Некорректная пауза' end
+    waiting=math.max(.5,math.min(10,waiting))
+    local limit=options.auto_limit~=nil and num(options.auto_limit,0,1000) or (old and old.auto_limit or 0)
+    if limit==nil then return false,'Некорректный лимит' end
+    local random_line=options.random_line~=nil and options.random_line==true or (options.random_line==nil and old and old.random_line==true or false)
     local t={name=name,text=table.concat((function()
         local lines={}
         for _,r in ipairs(normalized)do lines[#lines+1]=r.text end
         return lines
     end)(),'\n'),rows=normalized,
         interval=normalized[1].interval,auto=enabled~=false,
-        last_sent=old and old.last_sent or 0,line_index=old and old.line_index or 0}
+        last_sent=old and old.last_sent or 0,line_index=old and old.line_index or 0,
+        interval_min=low,interval_max=high,auto_limit=limit,random_line=random_line,
+        waiting=waiting,auto_count=old and old.auto_count or 0}
     if index then s.templates[index]=t else
         s.templates[#s.templates+1]=t;index=#s.templates
     end
@@ -338,6 +353,22 @@ function P.send_once(index,at,send,connected)
     t.last_sent=at;t.line_index=target.line
     t.rows[target.line].last_sent=at
     return true
+end
+
+-- Copy presets without copying runtime counters or enabling two duplicate
+-- auto-advertising streams. Rows and scheduling options remain independent.
+function P.copy_template(index)
+    local source=P.settings().templates[index]
+    if not source then return false,'Шаблон не найден' end
+    local copy={}
+    for i,row in ipairs(source.rows or{})do
+        copy[i]={text=row.text,interval=row.interval,auto=row.auto~=false}
+    end
+    return P.save_template(nil,tostring(source.name or'Шаблон'):sub(1,40)..' (копия)',
+        copy,false,{interval_min=source.interval_min or 0,
+        interval_max=source.interval_max or 0,
+        auto_limit=source.auto_limit or 0,
+        waiting=source.waiting or 1.5,random_line=source.random_line==true})
 end
 
 return true

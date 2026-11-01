@@ -1,78 +1,58 @@
-"""Quick Lua syntax check via lupa (Lua 5.x interpreter).
+#!/usr/bin/env python3
+"""Release preflight: strict LuaJIT compilation and cross-artifact version checks.
 
-Wraps each src/*.lua module in a function body and tries to load it.
-Skips Lua 5.4+ runtime-only errors that are NOT actual syntax errors
-(e.g. reassignment of for-loop variables -- legal in LuaJIT 5.1, the
-real target on MonetLoader/MoonLoader).
-
-The "OK" output means the file parses as a valid LuaJIT 5.1 chunk: balanced
-begin/end, valid tokens, valid operators. Real semantic correctness must be
-verified inside the actual game client (tests/*.lua).
+Lua 5.4, texlua and permissive mocks are NOT equivalent to LuaJIT 5.1.
+This command exits nonzero if LuaJIT is unavailable or ANY artifact fails.
+Android/MonetLoader runtime validation remains a separate release gate.
 """
 from pathlib import Path
+import json
+import re
+import shutil
+import subprocess
 import sys
 
-try:
-    import lupa
-    lua = lupa.LuaRuntime()
-except Exception as e:
-    print(f"lupa unavailable: {e}")
-    sys.exit(2)
-
 ROOT = Path(__file__).resolve().parent
-SRC = ROOT / "src"
+runtime = shutil.which("luajit")
+if not runtime:
+    sys.exit("FAIL: LuaJIT is required; no Lua syntax checks were run")
 
-# Lua 5.4+ runtime-only errors that are legal in LuaJIT 5.1 -- treat as OK.
-SKIP_PATTERNS = (
-    "attempt to assign to const variable",
-    "'goto' jumps into the scope",
-)
+paths = sorted((ROOT / "src").glob("*.lua"))
+paths.append(ROOT / "updates" / "palatka_update.lua")
+standalone = ROOT / "palatka_ai.lua"
+if standalone.exists():
+    paths.append(standalone)
+failed = []
+for path in paths:
+    result = subprocess.run(
+        [runtime, "-b", str(path), "/dev/null"],
+        cwd=ROOT, capture_output=True, text=True, timeout=45,
+    )
+    if result.returncode:
+        failed.append((str(path.relative_to(ROOT)), result.stderr.strip()))
+if failed:
+    for path, reason in failed:
+        print("FAIL", path, reason)
+    sys.exit(f"{len(failed)}/{len(paths)} LuaJIT compilation checks failed")
 
-def check(name: str, text: str) -> bool:
-    wrapped = f"local function __check()\n{text}\nend\nreturn __check\n"
-    try:
-        wrapped_bytes = wrapped.encode("utf-8")
-    except UnicodeEncodeError as e:
-        print(f"  ENCODE FAIL {name}: {e}")
-        return False
-    try:
-        lua.execute(wrapped_bytes)
-        return True
-    except lupa.LuaSyntaxError as e:
-        msg = str(e)
-        for pat in SKIP_PATTERNS:
-            if pat in msg:
-                return True  # LuaJIT 5.1 compatible
-        print(f"  ERR {name}: {msg}")
-        return False
-    except Exception as e:
-        msg = str(e)
-        for pat in SKIP_PATTERNS:
-            if pat in msg:
-                return True
-        print(f"  ERR {name}: {msg}")
-        return False
-
-ok_count = 0
-err_count = 0
-for path in sorted(SRC.glob("*.lua")):
-    text = path.read_text(encoding="utf-8")
-    if check(path.name, text):
-        ok_count += 1
-        print(f"  OK  {path.name}")
-
-# Also check the built monolith (cp1251 encoded bytes)
-built = ROOT / "palatka_ai.lua"
-if built.exists():
-    raw = built.read_bytes()
-    try:
-        # Try utf-8 decode for syntax check only (real file is cp1251)
-        text = raw.decode("cp1251")
-        if check(built.name, text):
-            ok_count += 1
-    except Exception as e:
-        print(f"  ERR {built.name}: {e}")
-        err_count += 1
-
-print(f"\nsyntax check: {ok_count} ok, {err_count} errors")
-sys.exit(0 if err_count == 0 else 1)
+manifest = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
+version = manifest.get("version")
+if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+    sys.exit("FAIL: invalid version.json version")
+ota = (ROOT / "updates" / "palatka_update.lua").read_bytes()
+if len(ota) != manifest.get("size"):
+    sys.exit("FAIL: OTA size differs from version.json")
+marker = ("PALATKA_UPDATE_VERSION = '" + version + "'").encode("ascii")
+if marker not in ota:
+    sys.exit("FAIL: OTA version differs from version.json")
+build = (ROOT / "build.py").read_text(encoding="utf-8")
+if ("script_version('" + version + "')") not in build:
+    sys.exit("FAIL: standalone builder version differs from manifest")
+core = (ROOT / "src" / "00_core.lua").read_text(encoding="utf-8")
+if ("DSP.version = '" + version + "'") not in core:
+    sys.exit("FAIL: runtime UI version differs from manifest")
+if standalone.exists():
+    header = standalone.read_bytes()[:2000]
+    if ("script_version('" + version + "')").encode("ascii") not in header:
+        sys.exit("FAIL: generated standalone version differs from manifest")
+print(f"PASS: {len(paths)} LuaJIT files, OTA bytes and version {version} consistent")

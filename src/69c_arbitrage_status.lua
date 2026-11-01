@@ -86,7 +86,10 @@ function A.mark_unavailable(index,reason)
         ensure()[quote]={at=now(),reason='item_missing',sid=s.sid}
         block_related(shop,quote,'item_missing','manual')
     end
+    -- Keep the unavailable route in history, but advance the on-screen guide
+    -- to the next actionable route. The user can still reopen the skipped one.
     s.focus=index
+    A.next(1)
     A.show(true)
     changed()
     return true
