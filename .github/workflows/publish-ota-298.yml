@@ -1,12 +1,5 @@
 name: Publish Palatka 2.9.8 in-game OTA
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'tools/build_ota_298.py'
-      - 'tests/test_v298_*'
-      - '.github/workflows/publish-ota-298.yml'
   workflow_dispatch:
 
 permissions:
