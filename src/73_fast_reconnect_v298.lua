@@ -86,7 +86,7 @@ function R.fast(label,at)
     opts.spawn_enabled=true
     if not persist()then
         p.spawn_label=old_label;opts.spawn_enabled=prev_auto
-        return false,'Не удалось сохранить выбранную точку'end
+        return false,'Не удалось сохранить выбранную точку'
     end
     local ok,why=R.manual(at)
     if not ok then return false,why end
