@@ -11,7 +11,7 @@ local function session_limit()
 end
 local function global_cooldown()
     return DSP.controls and DSP.controls.get and DSP.controls.get('promo_global_cooldown_s')
-        or global_cooldown()
+        or math.max(30,tonumber(P.MIN_INTERVAL)or 30)
 end
 local function connected()
     if type(sampSendChat)~='function' then return false end
