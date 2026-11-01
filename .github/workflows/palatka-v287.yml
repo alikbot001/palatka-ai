@@ -42,6 +42,8 @@ jobs:
           luajit tests/test_promo_mh_options.lua
           luajit -b src/47_storage.lua /dev/null
           luajit tests/test_storage_snapshot_atomic_v2914.lua
+          luajit -b src/42a_sell_stock_guard.lua /dev/null
+          luajit tests/test_sell_unknown_stock_v2914.lua
       - name: Test OTA syntax, manifest and stable installer
         run: |
           luajit -b updates/palatka_update.lua /dev/null
