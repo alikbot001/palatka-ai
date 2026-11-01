@@ -1,4 +1,4 @@
-name: Palatka 2.9.13 stable rollback (2.9.5 code)
+name: Palatka candidate validation (2.9.13 base)
 on:
   pull_request:
     paths:
@@ -31,16 +31,15 @@ jobs:
           fetch-depth: 0
       - name: Install LuaJIT
         run: sudo apt-get update -qq && sudo apt-get install -y luajit
-      - name: Verify restored 2.9.5 functional source
+      - name: Compile promotional source and run state-machine regressions
         run: |
-          python3 - <<'PY'
-          import subprocess
-          for path in ('src/59b_drop_sales_stats.lua', 'src/49c_promo_mh_scheduler_v294.lua', 'src/66e_mh_journal_fast_v295.lua'):
-              live=subprocess.check_output(['git','show','HEAD:'+path])
-              baseline=subprocess.check_output(['git','show','778915d9291cbd2b50e683cf3d5433d3c88d900c:'+path])
-              assert live==baseline, f'Unexpected changes to stable {path}'
-          print('Functional 2.9.5 baseline preserved')
-          PY
+          luajit -b src/49a_promo_universal.lua /dev/null
+          luajit -b src/49b_promo_mh_options.lua /dev/null
+          luajit -b src/49c_promo_mh_scheduler_v294.lua /dev/null
+          luajit -b src/68b_promo_universal_ui.lua /dev/null
+          luajit tests/test_promo_scheduler_v294.lua
+          luajit tests/test_promo_stability_v2914.lua
+          luajit tests/test_promo_mh_options.lua
       - name: Test OTA syntax, manifest and stable installer
         run: |
           luajit -b updates/palatka_update.lua /dev/null
