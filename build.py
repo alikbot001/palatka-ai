@@ -102,6 +102,7 @@ MODULES = [
     "69d_runtime_diagnostic.lua",
     "70_reconnect_v296.lua",
     "70a_reconnect_ui_v296.lua",
+    "71_control_center.lua",
     "99_main.lua",
 ]
 
