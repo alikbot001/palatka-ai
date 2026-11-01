@@ -3,7 +3,7 @@
   "version": "2.9.8",
   "mode": "overlay",
   "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua",
-  "size": 615633,
+  "size": 603131,
   "published_at": "2026-11-01",
   "changelog": [
     "Главный экран без лишнего блока управления интервалами.",
