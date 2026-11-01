@@ -312,7 +312,7 @@ local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'storage','Х�
  {'arbitrage','Арбитраж'},{'resale','Перепродажа'},{'promo','Автопиар'},
  {'scan','Скан лавки'},{'search','Поиск товара'},{'calculator','Калькулятор'},
  {'logs','Журнал'},{'stats','Статистика'},{'notes','Заметки'},
- {'market','Рынок'},{'lombard','Ломбард'},{'history','История'},{'control','Управление'},{'settings','Настройки'}}
+ {'market','Рынок'},{'lombard','Ломбард'},{'history','История'},{'settings','Настройки'}}
 function V.set_screen(id)
     if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
     if id=='storage' then
@@ -457,7 +457,6 @@ function U.draw()
                     elseif V.screen=='arbitrage'then V.arbitrage()
                     elseif V.screen=='resale'then V.flip_screen()
                     elseif V.screen=='promo'then V.promo_screen()
-                    elseif V.screen=='control'then V.control_screen()
                     elseif V.screen=='logs'then V.journal()
                     elseif V.screen=='calculator'then V.calculator()
                     elseif V.tools then V.tools(V.screen)
