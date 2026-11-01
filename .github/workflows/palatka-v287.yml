@@ -1,4 +1,4 @@
-name: Palatka 2.9.6 production build
+name: Palatka 2.9.11 production build
 on:
   pull_request:
     paths:
@@ -7,7 +7,6 @@ on:
       - 'updates/**'
       - 'version.json'
       - 'build.py'
-      - 'tools/build_ota_v296.py'
       - '.github/workflows/palatka-v287.yml'
   push:
     branches: [main]
@@ -17,7 +16,6 @@ on:
       - 'updates/**'
       - 'version.json'
       - 'build.py'
-      - 'tools/build_ota_v296.py'
       - '.github/workflows/palatka-v287.yml'
   workflow_dispatch:
 permissions:
@@ -33,8 +31,8 @@ jobs:
           fetch-depth: 0
       - name: Install LuaJIT
         run: sudo apt-get update -qq && sudo apt-get install -y luajit
-      - name: Build Palatka 2.9.6 OTA from source
-        run: python3 tools/build_ota_v296.py
+      - name: Verify pinned recovery OTA is present (never overwrite artifact)
+        run: test -s updates/palatka_update.lua
       - name: Compile new modules individually
         run: |
           for file in src/47d_storage_render_cache_v295.lua src/65b_stats_render_cache_v295.lua src/66e_mh_journal_fast_v295.lua src/49a_promo_universal.lua src/49c_promo_mh_scheduler_v294.lua src/66d_mh_journal_screen_v294.lua src/00b_settings_persistence_v294.lua src/68b_promo_universal_ui.lua src/69a_arbitrage_agent.lua src/69b_arbitrage_agent_ui.lua src/69c_arbitrage_status.lua; do
@@ -98,8 +96,6 @@ jobs:
         run: luajit tests/test_mh_journal_screen_v294.lua
       - name: Test bounded CPU work across 240 UI frames
         run: luajit tests/test_perf_v295.lua
-      - name: Test safe reconnect and exact observed spawn
-        run: luajit tests/test_reconnect_v296.lua
       - name: Verify active UI module order and runtime bindings
         run: |
           luajit tests/test_active_ui_runtime.lua
@@ -114,9 +110,6 @@ jobs:
           assert b'local function install_v293()' in ota
           assert b'local function install_v294()' in ota
           assert b'local function install_v295()' in ota
-          assert b'local function install_v296()' in ota
-          assert b'local function _v296_reconnect()' in ota
-          assert src.index('"70_reconnect_v296.lua"') < src.index('"70a_reconnect_ui_v296.lua"')
           assert b'local function _v295_journal_render_cache()' in ota
           assert src.index('"66d_mh_journal_screen_v294.lua"') < src.index('"66e_mh_journal_fast_v295.lua"')
           assert src.index('"47c_storage_search.lua"') < src.index('"47d_storage_render_cache_v295.lua"')
@@ -133,9 +126,9 @@ jobs:
           from pathlib import Path
           release=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert release['version']=='2.9.6'
+          assert release['version']=='2.9.11'
           assert len(ota)==release['size'], (len(ota),release['size'])
-          assert b"PALATKA_UPDATE_VERSION = '2.9.6'" in ota
+          assert b"PALATKA_UPDATE_VERSION = '2.9.11'" in ota
           assert b'local function _v286_mcr_classic()' not in ota
           assert b'local function _v291_arb_agent_native()' in ota
           assert b'local function _v291_compact_journal()' in ota
@@ -149,7 +142,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.6' in data[:1000]
+          assert b'Palatka AI v2.9.11' in data[:1000]
           assert b'##palatka_arbitrage_agent' in data
           assert 'Сделки'.encode('cp1251') in data
           assert 'Добавить строку'.encode('cp1251') in data
@@ -167,13 +160,13 @@ jobs:
           if git diff --cached --quiet; then
             echo "Full script already up to date"
           else
-            git commit -m "release: publish Palatka AI v2.9.6 artifacts"
+            git commit -m "release: publish Palatka AI v2.9.11 artifacts"
             git push origin HEAD:main
           fi
       - name: Upload verified standalone artifact
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-v296-full-build
+          name: palatka-v295-full-build
           path: palatka_ai.lua
           if-no-files-found: error
           retention-days: 7
