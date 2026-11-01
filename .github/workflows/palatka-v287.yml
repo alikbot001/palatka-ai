@@ -42,6 +42,8 @@ jobs:
           luajit tests/test_promo_mh_options.lua
           luajit -b src/69c_arbitrage_status.lua /dev/null
           luajit tests/test_arbitrage_status.lua
+          luajit -b src/69a_arbitrage_agent.lua /dev/null
+          luajit tests/test_arbitrage_atomic_v2914.lua
           luajit -b src/47_storage.lua /dev/null
           luajit tests/test_storage_snapshot_atomic_v2914.lua
           luajit -b src/42a_sell_stock_guard.lua /dev/null
