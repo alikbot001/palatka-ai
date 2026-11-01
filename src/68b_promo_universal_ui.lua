@@ -150,7 +150,7 @@ function V.promo_screen()
         (left and(' | следующая через '..left..'с')or''))
     if V.mhpromo_error or P.last_error then V.red(tostring(V.mhpromo_error or P.last_error))end
     V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
-    V.muted('Интерфейс Palatka MH / сборка '..tostring(DSP.version or '?'))
+    V.muted('Интерфейс Palatka MH / сборка 2.9.3')
     V.list_rows('mhpromo_templates',settings.templates,124,function(t,i)
         V.row('mhpromo_t_'..i,124,function(w,x,y)
             local lo=tonumber(t.interval_min)or 0
