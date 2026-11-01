@@ -103,7 +103,7 @@ local function editor(e)
     end
     if e.index and b('Удалить шаблон','editor_delete',210)then
         V.promo298_delete=e.index
-        V.open_popup('Удалить шаблон','pm298_delete')
+        V.open_popup('Удалить шаблон','pm2910_delete')
     end
     V.list('pm298_editor',function()
         V.text('Название')
@@ -218,7 +218,7 @@ end
 local old_popups=V.popups
 function V.popups()
     if old_popups then old_popups()end
-    V.popup('Удалить шаблон','pm298_delete',function()
+    V.popup('Удалить шаблон','pm2910_delete',function()
         V.text('Удалить этот шаблон и все его строки?')
         if b('Удалить','confirm_delete',160)then
             local ok=P.remove(V.promo298_delete)
@@ -226,7 +226,7 @@ function V.popups()
             else V.promo298_error='Ошибка сохранения удаления'end
         end
         V.inline(5,120)
-        V.cancel('pm298_delete')
+        V.cancel('pm2910_delete')
     end,{w=415,h=225})
 end
 local expand=P.expand
