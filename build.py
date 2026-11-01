@@ -105,13 +105,14 @@ MODULES = [
     "71_control_center.lua",
     "72_promo_market_style_v298.lua",
     "73_fast_reconnect_v298.lua",
+    "74_promo_save_v2910.lua",
     "99_main.lua",
 ]
 
 HEADER = """-- Palatka AI v2.9.7 stability candidate, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.8')
+script_version('2.9.10')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
