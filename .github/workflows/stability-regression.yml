@@ -28,13 +28,14 @@ jobs:
         run: python3 build.py
       - name: Verify OTA upgrade payload can be compiled (no publish)
         run: python3 tools/build_ota_297.py --check
-      - name: Verify new 2.9.7 regression cases
+      - name: Verify stable 2.9.5-derived trading and UI regressions
         run: |
-          luajit tests/test_v297_controls.lua
-          luajit tests/test_v297_agent_persistence.lua
-          luajit tests/test_v297_promo_scheduler.lua
-      - name: Historical regression suite (known baseline failures)
-        continue-on-error: true
+          luajit tests/test_arbitrage_session.lua
+          luajit tests/test_arbitrage_status.lua
+          luajit tests/test_promo_scheduler_v294.lua
+          luajit tests/test_mh_journal_screen_v294.lua
+          luajit tests/test_drop_sales_stats.lua
+      - name: Full historical regression suite (required for stable channel)
         run: python3 run_tests.py
       - name: Explain historical regressions
         if: always()
@@ -46,9 +47,10 @@ jobs:
           if path.exists():
               checks=json.loads(path.read_text(encoding='utf-8'))
               passed=sum(row.get('exit_code')==0 for row in checks)
-              print(f'Full historical suite: {passed}/{len(checks)} passed; these are not all green.')
+              print(f'Stable historical regression suite: {passed}/{len(checks)} passed.')
+              assert passed==len(checks), 'stable regression failures detected'
               with open(__import__('os').environ['GITHUB_STEP_SUMMARY'],'a') as out:
-                  out.write(f'Full historical suite: {passed}/{len(checks)} passed. Historical failures remain; native Android NOT RUN.\n')
+                  out.write(f'Stable historical suite: {passed}/{len(checks)} passed. Native Android not tested.\n')
           PY
       - name: Upload test results
         if: always()
