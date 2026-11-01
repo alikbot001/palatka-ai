@@ -37,7 +37,7 @@ if failed:
 
 manifest = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
 version = manifest.get("version")
-if not isinstance(version, str) or not re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version):
+if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
     sys.exit("FAIL: invalid version.json version")
 ota = (ROOT / "updates" / "palatka_update.lua").read_bytes()
 if len(ota) != manifest.get("size"):
