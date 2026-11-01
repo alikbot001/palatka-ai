@@ -60,7 +60,7 @@ end
 local function set_stopped(reason)
     local s=P.settings()
     P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
-    P.state='STOPPED';P.delivery_status='not_sent'
+    P.state='STOPPED';P.delivery_status='not_sent';P.paused=false
     P.pause_reason=reason or 'Выключен'
     s.enabled=false
     persist()
@@ -68,10 +68,11 @@ end
 local function report_error(err)
     P.last_error=tostring(err or'Ошибка отправки')
     P.pause_reason=P.last_error
+    P.state='ERROR';P.paused=true;P.delivery_status='client_rejected_or_unknown'
     if DSP.flog then DSP.flog('PROMO: '..P.last_error)end
 end
 function P.start(at)
-    if P.running then return true end -- idempotent: never discard a live queue
+    if P.running and not P.paused then return true end -- double START is idempotent
     at=at or now()
     if not active()then return false,'Включи хотя бы один шаблон с командами'end
     local s=P.settings()
@@ -82,7 +83,8 @@ function P.start(at)
     s.enabled=true
     local ok,why=persist()
     if not ok then s.enabled=prior;return false,tostring(why or'Не удалось сохранить запуск')end
-    P.running=true;P.last_error=nil;P.pause_reason=nil
+    P.running=true;P.paused=false;P.last_error=nil;P.pause_reason=nil
+    P._batch=nil;P.manual_busy=false;P.manual_template=nil
     P.state='WAITING';P.delivery_status='not_sent'
     P.was_online=false
     P.next_at=at+clamp(s.start_delay,10,120,20)
@@ -96,7 +98,7 @@ function P.bootstrap(at)
     at=at or now()
     local s=P.settings()
     P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
-    P.state='STOPPED';P.delivery_status='not_sent'
+    P.state='STOPPED';P.delivery_status='not_sent';P.paused=false
     P.session_count=0;P.last_sent=0;P.was_online=false;P.last_error=nil
     P.next_at=0
     for _,t in ipairs(s.templates)do t._promo_due=nil end
@@ -228,7 +230,7 @@ function P.tick(at,send,online)
         end
         return step_batch(at,send,true)
     end
-    if not P.running then return false end
+    if not P.running or P.paused then return false end
     if not online then
         P.was_online=false
         P.pause_reason='Нет подключения: ожидание'
