@@ -82,12 +82,14 @@ local function editor(e)
     if b('Сохранить шаблон','save_editor',224,true)then
         local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
         for i,r in ipairs(e.rows)do r.text=DSP.to_cp(ffi.string(e.linebuf[i]))end
-        local ok,index=P.save_template(e.index,name,e.rows,e.auto)
-        if ok then
-            local more,why=P.save_template_options(index,{
+        local full=P.save_template_complete
+        if type(full)~='function'then
+            e.error='Модуль сохранения автопиара не загружен'
+        else
+            local ok,result=full(e.index,name,e.rows,e.auto,{
                 interval_min=e.min[0],interval_max=e.max[0],
                 waiting=e.waiting[0],auto_limit=e.limit[0],random_line=e.random})
-            if more then
+            if ok then
                 V.promo298_edit=nil;V.promo298_error=nil
                 if e.auto and not P.running then
                     local yes,why=P.set_option('continuous',true)
@@ -96,8 +98,8 @@ local function editor(e)
                         if not begun then V.promo298_error=tostring(err)end
                     else V.promo298_error=tostring(why)end
                 end
-            else e.error=tostring(why)end
-        else e.error=tostring(index)end
+            else e.error=tostring(result)end
+        end
     end
     if e.index and b('Удалить шаблон','editor_delete',210)then
         V.promo298_delete=e.index
