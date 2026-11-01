@@ -10,7 +10,7 @@ DSP={
     if key=='promo_session_limit'then return 2 end
   end},
   save_settings=function()return true end,
-  promo={MIN_INTERVAL=30,MAX_SESSION=12,session_count=0,
+  promo={MIN_INTERVAL=30,MAX_SESSION=12,MAX_STEP_BYTES=200,session_count=0,
     settings=function()return settings end,
     validate=function(cmd)return type(cmd)=='string'and cmd:sub(1,1)=='/'end,
     expand=function(cmd)return cmd end},
