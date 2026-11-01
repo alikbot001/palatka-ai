@@ -204,7 +204,7 @@ function DSP.auto.start_sell()
                         log('Ïðîäàæà: íåò ïîäòâåðæäåíèÿ äëÿ ' .. it.name, 'error')
                     end
                 end
-                trade_wait(DSP.controls and DSP.controls.get and DSP.controls.get('sell_step_pause_ms') or 260)
+                trade_wait(260)
             else
                 DSP.auto.progress.failed = DSP.auto.progress.failed + 1
                 log('Ïðîäàæà: íå îòêðûëñÿ äèàëîã äëÿ ' .. it.name .. ' (slot ' .. it.slot .. ')', 'error')
