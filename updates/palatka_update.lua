@@ -1,5 +1,5 @@
 -- Palatka AI 2.9.4 OTA: Market Helper UX, touch scroll, journal, statistics and arbitrage fixes.
-PALATKA_UPDATE_VERSION = '2.9.9'
+PALATKA_UPDATE_VERSION = '2.9.10'
 return function(DSP)
   -- v2.8.6: Independent, additive UI + multi-deal arbitration patch.
   local function install_v286()
@@ -12591,5 +12591,1484 @@ return true
     if DSP.flog then DSP.flog('Palatka AI 2.9.9 Fast REC syntax hotfix ready') end
     return true
   end
-  return install_v299()
+  local function install_v2910()
+    if not install_v299() then return false end
+    if DSP._v2910_installed then DSP.version='2.9.10';return true end
+    local ok,err=pcall(function()
+      local C=DSP.craglog
+      if C then C._drop_sales_v293=nil;C._stats_render_cache_v295=nil end
+      if DSP.ui22 then DSP.ui22._stats_v293=nil;DSP.ui22._promo_mobile_298=nil end
+      do
+        local function v2910_74_promo_save_v2910()
+-- Palatka AI 2.9.10: transactional promotion template save.
+-- Keep all user-defined timing fields in the SAME durable write as the lines.
+local P=DSP.promo
+if not P or P._atomic_promo_2910 then return true end
+P._atomic_promo_2910=true
+local function num(v,low,high,default)
+    v=tonumber(v)
+    if not v or v~=v then return default end
+    v=math.floor(v)
+    if v<low or v>high then return nil end
+    return v
+end
+local function trim(s)
+    return tostring(s or''):match('^%s*(.-)%s*$')
+end
+local function flush()
+    if type(DSP.save_settings)~='function'then return false,'Нет механизма сохранения'end
+    local ok,saved,err=pcall(DSP.save_settings)
+    if not ok then return false,tostring(saved)end
+    if saved==false or saved==nil then return false,tostring(err or'Ошибка записи настроек')end
+    -- In MonetLoader a successful return must correspond to actual saved bytes.
+    if type(DSP.settings_path)=='string' and type(decodeJson)=='function' then
+        local f=io.open(DSP.settings_path,'rb')
+        if not f then return false,'Файл настроек не найден после сохранения'end
+        local data=f:read('*a')or'';f:close()
+        local pass,saved_data=pcall(decodeJson,data)
+        if not pass or type(saved_data)~='table'
+            or type(saved_data.promo)~='table'
+            or type(saved_data.promo.templates)~='table' then
+            return false,'Не удалось проверить записанные шаблоны'
+        end
+        local source=DSP.settings.promo.templates
+        if #saved_data.promo.templates~=#source then
+            return false,'Количество сохранённых шаблонов не совпадает'
+        end
+        for i,t in ipairs(source)do
+            local disk=saved_data.promo.templates[i]
+            if type(disk)~='table' or disk.name~=t.name
+                or #(disk.rows or{})~=#(t.rows or{})
+                or tonumber(disk.interval_min)~=tonumber(t.interval_min)
+                or tonumber(disk.interval_max)~=tonumber(t.interval_max)
+                or tonumber(disk.waiting)~=tonumber(t.waiting) then
+                return false,'Проверка шаблона #'..i..' не пройдена'
+            end
+        end
+    end
+    return true
+end
+function P.save_template_complete(index,name,rows,enabled,options)
+    local s=P.settings()
+    if type(name)~='string' or #trim(name)<1 or #trim(name)>64 then
+        return false,'Название должно быть от 1 до 64 байт'
+    end
+    name=trim(name)
+    if type(rows)~='table' or #rows==0 or #rows>24 then
+        return false,'Допустимо 1–24 рекламные строки'
+    end
+    local max_templates=tonumber(P.MAX_TEMPLATES)or 32
+    if index~=nil then
+        index=tonumber(index)
+        if not index or index%1~=0 or not s.templates[index] then
+            return false,'Шаблон не найден'
+        end
+    elseif #s.templates>=max_templates then
+        return false,'Достигнут лимит шаблонов'
+    end
+    local previous=index and s.templates[index]or nil
+    options=options or{}
+    local low=num(options.interval_min,0,3600,previous and previous.interval_min or 0)
+    local high=num(options.interval_max,0,3600,previous and previous.interval_max or 0)
+    local limit=num(options.auto_limit,0,1000,previous and previous.auto_limit or 0)
+    local waiting=tonumber(options.waiting)
+    if low==nil or high==nil or limit==nil or not waiting
+        or waiting~=waiting or waiting<.5 or waiting>10 then
+        return false,'Неверные интервалы или лимит отправок'
+    end
+    if low>0 and low<(tonumber(P.MIN_INTERVAL)or 30)then
+        return false,'Интервал меньше разрешённого'
+    end
+    if high>0 and high<low then return false,'Максимум меньше минимума'end
+    local normalized,commands={},{}
+    for i,row in ipairs(rows)do
+        if type(row)~='table' then return false,'Ошибка строки '..i end
+        local command=trim(row.text)
+        local valid,why=P.validate(command)
+        if not valid then return false,'Строка '..i..': '..tostring(why)end
+        if #P.lines(command)~=1 then return false,'Только одна команда на строку'end
+        local interval=num(row.interval,30,3600,300)
+        if not interval then return false,'Неверный интервал строки '..i end
+        commands[#commands+1]=command
+        normalized[#normalized+1]={text=command,interval=interval,auto=row.auto~=false}
+    end
+    local record={}
+    if previous then for k,v in pairs(previous)do record[k]=v end end
+    record.name=name
+    record.text=table.concat(commands,'\n')
+    record.rows=normalized
+    record.interval=normalized[1].interval
+    record.auto=enabled==true
+    record.interval_min=low
+    record.interval_max=high
+    record.auto_limit=limit
+    record.random_line=options.random_line==true
+    record.waiting=waiting
+    record._promo_due=nil
+    local target=index or (#s.templates+1)
+    s.templates[target]=record
+    local ok,why=flush()
+    if not ok then
+        if previous then s.templates[target]=previous
+        else table.remove(s.templates,target)end
+        P.last_save_error=tostring(why)
+        if DSP.flog then DSP.flog('PROMO SAVE: '..P.last_save_error)end
+        return false,P.last_save_error
+    end
+    P.last_save_error=nil
+    P.last_saved_at=os.time()
+    return true,target
+end
+return true
+
+        end
+        v2910_74_promo_save_v2910()
+      end
+      do
+        local function v2910_59b_drop_sales_stats()
+-- v2.9.3: reward/drop statistics joined with verified sales and current inventory scan.
+local C=DSP.craglog
+if C._drop_sales_v293 then return true end
+C._drop_sales_v293=true
+
+local old_period_start=C.period_start
+function C.period_start(period,now)
+    now=now or os.time()
+    if period=='hour' then return now-3600 end
+    if period=='week' then return now-7*86400 end
+    if period=='month' then return now-30*86400 end
+    if period=='day' or period=='today' then
+        local d=os.date('*t',now);d.hour,d.min,d.sec=0,0,0;return os.time(d)
+    end
+    if period=='all' then return 0 end
+    return old_period_start and old_period_start(period,now) or 0
+end
+
+local function positive(v)
+    local n=tonumber(v)
+    if not n or n~=n or n<=0 then return 0 end
+    return math.floor(n)
+end
+local function split_ench(name,ench)
+    name=tostring(name or'?')
+    if ench~=nil then return name,tonumber(ench)or 0 end
+    local base,n=name:match('^(.-)%s*%(%+(%d+)%)%s*$')
+    return base or name,tonumber(n)or 0
+end
+local function add(map,name,ench,qty,exact)
+    qty=positive(qty);if qty<=0 then return end
+    name,ench=split_ench(name,ench)
+    local key=DSP.item_key(name,ench)
+    local row=map[key]
+    if not row then
+        row={key=key,name=name,ench=ench,qty=0,exact=true}
+        map[key]=row
+    end
+    row.qty=row.qty+qty
+    if exact==false then row.exact=false end
+end
+local function raw_qty(raw)
+    local s=tostring(raw or'')
+    -- Only an EXPLICIT item quantity can be treated as sold. The price and
+    -- the inventory delta are never a substitute for an acknowledged sale.
+    local q=s:match('[xXхХЧ]%s*(%d+)%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local item,q_from_item=normalize_receipt_item(e.item_name or e.item)
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then
+                    q=q_from_item or 0
+                    exact=q>0
+                    if q<=0 then
+                        -- Old receipts without a number tell us a sale happened,
+                        -- but not how many resources were sold. Treat one unit
+                        -- as a non-exact lower bound; never claim a loss.
+                        q=1;exact=false
+                    end
+                end
+                add(map,item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+)
+        or s:match('%(%s*(%d+)%s*шт%.?%s*%)%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+)
+        or s:match('%s(%d+)%s*шт%.?%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+)
+        or s:match('%s(%d+)%s*[xXхХЧ]%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+)
+    q=positive(q)
+    return q>0 and q or nil
+end
+local function normalize_receipt_item(value)
+    local item=tostring(value or'')
+    local count=raw_qty(item)
+    if count then
+        item=item:gsub('%s*[xXхХЧ]%s*%d+%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+,'')
+        item=item:gsub('%s*%(%s*%d+%s*шт%.?%s*%)%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+,'')
+        item=item:gsub('%s+%d+%s*шт%.?%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+,'')
+        item=item:gsub('%s+%d+%s*[xXхХЧ]%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+,'')
+    end
+    item=item:match('^%s*(.-)%s*
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+)
+    return item,count
+end
+local function sale_map(from)
+    local map={}
+    local rows=C.history and C.history('all','') or {}
+    for _,e in ipairs(rows) do
+        if (tonumber(e.ts)or 0)>=from then
+            if e.type=='market' and e.direction=='sell' then
+                local q=positive(e.qty or e.count)
+                local exact=q>0 and e.qty_exact~=false
+                if q<=0 then q=raw_qty(e.raw) or 1;exact=false end
+                add(map,e.item_name or e.item,e.ench,q,exact)
+            elseif e.type=='trade' and (tonumber(e.money_get)or 0)>0 and (tonumber(e.money_give)or 0)==0 then
+                for _,it in ipairs(e.items_give or{}) do add(map,it.name,it.ench,it.qty or 1,true) end
+            end
+        end
+    end
+    return map
+end
+local function inventory_map()
+    local map={}
+    local inv=DSP.auto and DSP.auto.inv or nil
+    if type(inv)~='table' then return map,false end
+    local has_snapshot=(DSP.auto.scanning==false and #inv>0) or (DSP.auto.inv_status and DSP.auto.inv_status~='')
+    for _,it in ipairs(inv) do
+        local name,ench=split_ench(it.name,nil)
+        add(map,name,ench,it.count or it.qty or 1,true)
+    end
+    return map,has_snapshot and #inv>0
+end
+local function loot_map(summary)
+    local map={}
+    for _,row in ipairs(summary and summary.items or{}) do map[row.key]=row end
+    return map
+end
+local cache,keys={},{}
+local function inventory_signature()
+    local parts={tostring(DSP.auto and DSP.auto.inv_status or'')}
+    for _,it in ipairs(DSP.auto and DSP.auto.inv or{}) do
+        parts[#parts+1]=tostring(it.name or'')..'='..tostring(it.count or it.qty or 0)
+    end
+    table.sort(parts)
+    return table.concat(parts,';')
+end
+function C.drop_sales_stats(period,query)
+    period=period or'day';query=query or''
+    local inv_rev=inventory_signature()
+    local sig=table.concat({period,query,C.history_revision or 0,C.visibility_revision or 0,
+        DSP.rewards and DSP.rewards.sequence or 0,DSP.logs and DSP.logs.revision or 0,inv_rev},'|')
+    if cache[sig] then return cache[sig] end
+    local from=C.period_start(period,os.time())
+    local selected=C.loot_summary(period,query)
+    local lifetime=C.loot_summary('all',query)
+    local selected_loot,lifetime_loot=loot_map(selected),loot_map(lifetime)
+    local sold=sale_map(from);local sold_all=sale_map(0)
+    local inv,inventory_ready=inventory_map()
+    local all_keys={}
+    for k in pairs(selected_loot) do all_keys[k]=true end
+    for k in pairs(lifetime_loot) do all_keys[k]=true end
+    for k in pairs(sold) do all_keys[k]=true end
+    for k in pairs(sold_all) do all_keys[k]=true end
+    local out={period=period,items={},dropped=0,sold=0,journal_balance=0,
+        inventory_total=0,inventory_ready=inventory_ready,approx=false}
+    for k in pairs(all_keys) do
+        local l=selected_loot[k];local la=lifetime_loot[k];local s=sold[k];local sa=sold_all[k];local iv=inv[k]
+        local name=(l and l.name)or(la and la.name)or(s and s.name)or(sa and sa.name)or(iv and iv.name)or'?'
+        local ench=(l and l.ench)or(la and la.ench)or(s and s.ench)or(sa and sa.ench)or(iv and iv.ench)or 0
+        local dropped=l and positive(l.qty)or 0
+        local sold_qty=s and positive(s.qty)or 0
+        local journal=math.max(0,(la and positive(la.qty)or 0)-(sa and positive(sa.qty)or 0))
+        local actual=iv and positive(iv.qty)or 0
+        local exact=(not s or s.exact~=false)and(not sa or sa.exact~=false)
+        out.items[#out.items+1]={key=k,name=name,ench=ench,dropped=dropped,sold=sold_qty,
+            sold_exact=exact,journal_balance=journal,inventory=actual,
+            estimated=l and(l.estimated or 0)or 0}
+        out.dropped=out.dropped+dropped;out.sold=out.sold+sold_qty
+        out.journal_balance=out.journal_balance+journal;out.inventory_total=out.inventory_total+actual
+        if not exact then out.approx=true end
+    end
+    table.sort(out.items,function(a,b)
+        if a.dropped~=b.dropped then return a.dropped>b.dropped end
+        if a.sold~=b.sold then return a.sold>b.sold end
+        if a.inventory~=b.inventory then return a.inventory>b.inventory end
+        return tostring(a.name)<tostring(b.name)
+    end)
+    cache[sig]=out;keys[#keys+1]=sig
+    if #keys>8 then cache[table.remove(keys,1)]=nil end
+    return out
+end
+return true
+
+        end
+        v2910_59b_drop_sales_stats()
+      end
+      do
+        local function v2910_65b_stats_render_cache_v295()
+-- v2.9.5: skip full inventory signature/loot reconciliation on every stats frame.
+local C=DSP.craglog
+if not C or C._stats_render_cache_v295 then return true end
+C._stats_render_cache_v295=true
+local original=C.drop_sales_stats
+if type(original)~='function' then return true end
+local cache={}
+function C.drop_sales_stats(period,query)
+    local a=DSP.auto or{}
+    local inv=a.inv or{}
+    local key=table.concat({
+        tostring(period or'day'),tostring(query or''),
+        tostring(C.history_revision or 0),tostring(C.visibility_revision or 0),
+        tostring(DSP.logs and DSP.logs.revision or 0),
+        tostring(DSP.rewards and DSP.rewards.sequence or 0),
+        tostring(inv),tostring(#inv),tostring(a.inv_status or''),
+        tostring(a.scanning),tostring(math.floor(os.time()/2))
+    },'|')
+    if cache.key==key then return cache.result end
+    local result=original(period,query)
+    cache={key=key,result=result}
+    return result
+end
+return true
+
+        end
+        v2910_65b_stats_render_cache_v295()
+      end
+      do
+        local function v2910_65a_stats_v293()
+-- v2.9.3 statistics screen override. Keeps the legacy settings module untouched.
+local V,M,C=DSP.ui22,DSP.mobile,DSP.craglog
+if V._stats_v293 then return true end
+V._stats_v293=true
+local old_tools=V.tools
+local function b(s,id,w,on)return V.button(s,'stats293_'..id,w,on,false,38)end
+local function statistics()
+    V.heading('Статистика ларцов / наград')
+    V.stats293_period=V.stats293_period or DSP.settings.stats_mode or'day'
+    local periods={{'hour','Час'},{'day','День'},{'week','Неделя'},{'month','Месяц'},{'all','Всё'}}
+    local pw=math.max(58,(imgui.GetContentRegionAvail().x-24)/5)
+    for i,p in ipairs(periods)do
+        if b(p[2],'period_'..p[1],pw,V.stats293_period==p[1])then
+            V.stats293_period=p[1];DSP.settings.stats_mode=p[1]
+            if M.defer_save then M.defer_save()end
+        end
+        if i<#periods then V.inline(6,pw)end
+    end
+    local query=V.search('stats293','Поиск ларца / награды',-1)
+    local s=C.drop_sales_stats(V.stats293_period,query)
+    V.green('Выпало: '..tostring(s.dropped)..' шт. · Продано: '..tostring(s.sold)..' шт.')
+    if s.inventory_ready then
+        V.text('Фактически в последнем скане инвентаря: '..tostring(s.inventory_total)..' шт.')
+    else
+        V.muted('Инвентарь ещё не сканирован: фактическое количество не подменяем расчётом.')
+    end
+    V.muted('Расчётный остаток: '..tostring(s.journal_balance)..' шт. (известные награды минус учтённые продажи)')
+    if s.approx then V.muted('~ В части чеков неизвестно количество проданного: остаток может быть завышен.')end
+    V.muted('Разница со сканом не означает пропажу: возможны продажи без точного чека и другие операции.')
+    if DSP.auto and not DSP.auto.scanning and b('Обновить фактический инвентарь','scan_inventory',260,true)then
+        local ok=DSP.auto.scan_inventory()
+        if ok==false then V.stats293_error='Сканирование сейчас недоступно'else V.stats293_error=nil end
+    elseif DSP.auto and DSP.auto.scanning then
+        V.muted('Сканирование инвентаря...')
+    end
+    if V.stats293_error then V.red(V.stats293_error)end
+    V.list_rows('stats293_'..V.stats293_period,s.items,86,function(r,i)
+        V.row('row_'..i,86,function(w,x,y)
+            local name=r.name..((tonumber(r.ench)or 0)>0 and(' (+'..r.ench..')')or'')
+            V.at(x,y+1);V.text(V.fit(name,w-12))
+            V.at(x,y+29);V.muted(V.fit('Выпало '..r.dropped..' · Продано '..r.sold..
+                (r.sold_exact and''or'~')..' · Остаток журнала '..r.journal_balance,w-12))
+            V.at(x,y+56)
+            if s.inventory_ready then
+                V.green(V.fit('Фактически сейчас: '..r.inventory..' шт. · оценка дропа ~ '..DSP.money(r.estimated or 0),w-12))
+            else
+                V.muted(V.fit('Факт: нужен скан инвентаря · оценка дропа ~ '..DSP.money(r.estimated or 0),w-12))
+            end
+        end)
+    end,{count=#s.items,footer=function()
+        V.muted('Факт берётся только из собственного скана инвентаря; журнал не выдаётся за инвентарь.')
+    end})
+end
+function V.tools(screen)
+    if screen=='stats' then return statistics() end
+    return old_tools(screen)
+end
+return true
+
+        end
+        v2910_65a_stats_v293()
+      end
+      do
+        local function v2910_72_promo_market_style_v298()
+-- Palatka AI v2.9.8: compact Market Helper-style promotion screen.
+-- Fresh implementation using Palatka models and native mobile mimgui.
+-- Existing templates and per-template options are preserved.
+local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
+if not (V and M and P) then return true end
+if V._promo_mobile_298 then return true end
+V._promo_mobile_298=true
+local ffi=require('ffi')
+local function b(label,id,width,active)
+    return V.button(label,'pm298_'..id,width,active,false,39)
+end
+local function str(v)return DSP.to_u8(tostring(v or''))end
+local function buffer(value,size)
+    local buf=imgui.new.char[size]()
+    local text=DSP.to_u8(tostring(value or''))
+    ffi.fill(buf,size)
+    ffi.copy(buf,text:sub(1,size-1))
+    return buf
+end
+local function save()
+    if DSP.save_settings then return DSP.save_settings()~=false end
+    return true
+end
+local function toggle_auto(i)
+    local t=P.settings().templates[i]
+    if not t then return end
+    local old=t.auto
+    t.auto=(t.auto==false)
+    t.auto_count=0;t._promo_due=nil
+    if not save()then t.auto=old;V.promo298_error='Ошибка сохранения';return end
+    if t.auto then
+        -- In MH an auto_limit=0 means unrestricted template cycles. Preserve
+        -- per-template limits and server pacing, not an unrelated 12-chat cap.
+        local opts=P.settings()
+        if not opts.continuous then
+            local ok,why=P.set_option('continuous',true)
+            if not ok then V.promo298_error=tostring(why);return end
+        end
+        if not P.running then
+            local ok,why=P.start()
+            if not ok then V.promo298_error=tostring(why)end
+        end
+    else
+        local any=false
+        for _,v in ipairs(P.settings().templates)do
+            if v.auto~=false then any=true;break end
+        end
+        if not any and P.running then P.stop()end
+    end
+end
+local function new_editor(index)
+    local t=index and P.settings().templates[index] or nil
+    local edit={index=index,name=buffer(t and t.name or'Новый шаблон',96),
+        rows={},linebuf={},waiting=imgui.new.float(tonumber(t and t.waiting)or 1.5),
+        min=imgui.new.int(tonumber(t and t.interval_min)or 300),
+        max=imgui.new.int(tonumber(t and t.interval_max)or 0),
+        limit=imgui.new.int(tonumber(t and t.auto_limit)or 0),
+        random=t and t.random_line==true or false,
+        auto=t and t.auto~=false or false}
+    if t then
+        for _,r in ipairs(t.rows or{})do
+            edit.rows[#edit.rows+1]={text=r.text or'',auto=r.auto~=false,interval=r.interval or 300}
+        end
+    else
+        edit.rows[1]={text='/s ',auto=true,interval=300}
+    end
+    for i,r in ipairs(edit.rows)do edit.linebuf[i]=buffer(r.text,512)end
+    V.promo298_edit=edit
+end
+local function modify_number(label,ptr,id,lo,hi,step)
+    V.muted(label..': '..tostring(ptr[0])..(id=='wait' and' с' or''))
+    if b('-','minus_'..id,66)then ptr[0]=math.max(lo,ptr[0]-step)end
+    V.inline(4,66)
+    if b('+','plus_'..id,66)then ptr[0]=math.min(hi,ptr[0]+step)end
+    ptr[0]=math.max(lo,math.min(hi,ptr[0]))
+end
+local function editor(e)
+    V.heading('Автопиар / Редактор',function()
+        if b('Назад','back',100)then V.promo298_edit=nil end
+    end,110)
+    if e.error then V.red(e.error)end
+    if b('Сохранить шаблон','save_editor',224,true)then
+        local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
+        for i,r in ipairs(e.rows)do r.text=DSP.to_cp(ffi.string(e.linebuf[i]))end
+        local full=P.save_template_complete
+        if type(full)~='function'then
+            e.error='Модуль сохранения автопиара не загружен'
+        else
+            local ok,result=full(e.index,name,e.rows,e.auto,{
+                interval_min=e.min[0],interval_max=e.max[0],
+                waiting=e.waiting[0],auto_limit=e.limit[0],random_line=e.random})
+            if ok then
+                V.promo298_edit=nil;V.promo298_error=nil;V.promo298_notice='Шаблон сохранён в настройках'
+                if e.auto and not P.running then
+                    local yes,why=P.set_option('continuous',true)
+                    if yes then
+                        local begun,err=P.start()
+                        if not begun then V.promo298_error=tostring(err)end
+                    else V.promo298_error=tostring(why)end
+                end
+            else e.error=tostring(result)end
+        end
+    end
+    if e.index and b('Удалить шаблон','editor_delete',210)then
+        V.promo298_delete=e.index
+        V.open_popup('Удалить шаблон','pm2910_delete')
+    end
+    V.list('pm298_editor',function()
+        V.text('Название')
+        imgui.SetNextItemWidth(-1)
+        imgui.InputText('##pm298_title',e.name,96)
+        V.muted('Каждая строка — отдельная команда. Не более 24 строк.')
+        local remove
+        for i,r in ipairs(e.rows)do
+            V.text('Строка '..i)
+            imgui.SetNextItemWidth(-1)
+            imgui.InputText('##pm298_line_'..i,e.linebuf[i],512)
+            if b(r.auto and'Строка ВКЛ' or'Строка ВЫКЛ','line_toggle_'..i,145,r.auto)then
+                r.auto=not r.auto
+            end
+            V.inline(5,92)
+            if b('Удалить','line_remove_'..i,92)then remove=i end
+            imgui.Separator()
+        end
+        if remove and #e.rows>1 then
+            table.remove(e.rows,remove);table.remove(e.linebuf,remove)
+        end
+        if b('+ Строка','line_add',165,true)then
+            if #e.rows<24 then
+                e.rows[#e.rows+1]={text='/s ',auto=true,interval=300}
+                e.linebuf[#e.linebuf+1]=buffer('/s ',512)
+            else e.error='Достигнут лимит строк'end
+        end
+        V.inline(5,162)
+        if b('<lavka>','insert_lavka',155)then
+            local i=#e.rows
+            if i>0 then
+                local prev=DSP.to_cp(ffi.string(e.linebuf[i]))
+                if #prev<460 then
+                    e.rows[i].text=prev..' <lavka>'
+                    e.linebuf[i]=buffer(e.rows[i].text,512)
+                end
+            end
+        end
+        V.muted('<lavka> — номер твоей лавки, если он обнаружен.')
+        V.text('Интервалы')
+        modify_number('Пауза между строками (0.5-10 c)',e.waiting,'wait',.5,10,.5)
+        modify_number('Минимальный интервал (сек)',e.min,'min',30,3600,30)
+        modify_number('Максимум (0 = без случайности)',e.max,'max',0,3600,30)
+        modify_number('Лимит циклов (0 = без лимита)',e.limit,'limit',0,1000,1)
+        if b(e.random and'Случайная строка: ДА' or'Случайная строка: НЕТ',
+                'random',235,e.random)then e.random=not e.random end
+        if b(e.auto and'Авто: включено' or'Авто: выключено',
+                'edited_auto',235,e.auto)then e.auto=not e.auto end
+        V.muted('Интервал выбирается отдельно для каждого шаблона.')
+    end,{footer=true})
+end
+local function countdown(t)
+    if t.auto==false then return 'Авто выключено'end
+    local low=tonumber(t.interval_min)or 0
+    if low<=0 then low=tonumber((t.rows or{})[1] and t.rows[1].interval)or 300 end
+    local high=tonumber(t.interval_max)or 0
+    local period=high>low and(low..'-'..high)or tostring(low)
+    local due=tonumber(t._promo_due)
+    if not due then
+        local last=tonumber(t.last_sent)or 0
+        due=last>0 and last+low or os.time()
+    end
+    return 'Интервал '..period..'с | осталось '..math.max(0,due-os.time())..'с'
+end
+function V.promo_screen()
+    if V.promo298_edit then return editor(V.promo298_edit)end
+    local s=P.settings()
+    V.heading('Автопиар',function()
+        if b('+ Шаблон','new',155,true)then new_editor(nil)end
+    end,160)
+    V.muted('Как в Market Helper: Пуск / Авто / Редактировать')
+    if P.running then
+        if b('Остановить всё','stop_all',173,true)then P.stop()end
+    else
+        if b('Запустить авто','start_all',173,true)then
+            if not s.continuous then P.set_option('continuous',true)end
+            local ok,why=P.start()
+            V.promo298_error=not ok and tostring(why)or nil
+        end
+    end
+    V.inline(5,130)
+    if b('Настройки','promo_settings',130)then V.set_screen('settings')end
+    V.muted('Состояние: '..(P.running and(P.pause_reason or'работает')or'выключен')..
+        ' | отправлено: '..tostring(P.session_count or 0))
+    if V.promo298_notice then V.green(V.promo298_notice)end
+    if V.promo298_error or P.last_error then V.red(tostring(V.promo298_error or P.last_error))end
+    if #s.templates==0 then
+        V.muted('Нет шаблонов. Нажми + Шаблон.')
+        return
+    end
+    V.list_rows('pm298_templates',s.templates,128,function(t,i)
+        V.row('pm298_t_'..i,128,function(w,x,y)
+            V.at(x,y)
+            V.text(V.fit(t.name or'Шаблон',math.max(105,w-18)))
+            V.at(x,y+28)
+            V.muted(V.fit(#(t.rows or{})..' строк | '..countdown(t),math.max(100,w-18)))
+            local bw=math.max(78,math.floor((w-24)/3))
+            V.at(x,y+64)
+            if b('Пуск','send_'..i,bw)then
+                local ok,why=P.send_template_once(i)
+                V.promo298_error=not ok and tostring(why)or nil
+            end
+            V.inline(5,bw)
+            if b(t.auto~=false and'Авто: ВКЛ' or'Авто: ВЫКЛ','auto_'..i,bw,t.auto~=false)then
+                toggle_auto(i)
+            end
+            V.inline(5,bw)
+            if b('Изменить','edit_'..i,bw)then new_editor(i)end
+        end)
+    end,{footer=true})
+end
+local old_popups=V.popups
+function V.popups()
+    if old_popups then old_popups()end
+    V.popup('Удалить шаблон','pm2910_delete',function()
+        V.text('Удалить этот шаблон и все его строки?')
+        if b('Удалить','confirm_delete',160)then
+            local ok=P.remove(V.promo298_delete)
+            if ok then V.promo298_edit=nil;imgui.CloseCurrentPopup()
+            else V.promo298_error='Ошибка сохранения удаления'end
+        end
+        V.inline(5,120)
+        V.cancel('pm2910_delete')
+    end,{w=415,h=225})
+end
+local expand=P.expand
+function P.expand(text)
+    if type(text)=='string' and text:find('<lavka>',1,true)then
+        local number,why=P.own_shop_number()
+        if not number then return nil,tostring(why or'Номер лавки неизвестен')end
+        text=text:gsub('<lavka>',tostring(number))
+    end
+    return expand(text)
+end
+-- The earlier 2.9.7 OTA put control shortcuts in home/trade. Hide those,
+-- without replacing the working home/trade renderers.
+if not V._pm298_button_wrap then
+    V._pm298_button_wrap=true
+    local original=V.button
+    V.button=function(label,id,...)
+        if type(id)=='string' and id:find('^v297_control_') then return false end
+        return original(label,id,...)
+    end
+end
+if not V._pm298_nav_wrap then
+    V._pm298_nav_wrap=true
+    local original=V.list_rows
+    V.list_rows=function(key,rows,...)
+        if key=='navigation' and type(rows)=='table' then
+            local filtered={}
+            for _,item in ipairs(rows)do
+                if type(item)~='table' or item[1]~='control' then
+                    filtered[#filtered+1]=item
+                end
+            end
+            return original(key,filtered,...)
+        end
+        return original(key,rows,...)
+    end
+end
+return true
+
+        end
+        v2910_72_promo_market_style_v298()
+      end
+    end)
+    if not ok then
+      if DSP.flog then DSP.flog('Palatka 2.9.10 OTA failed: '..tostring(err)) end
+      return false
+    end
+    DSP._v2910_installed=true
+    DSP.version='2.9.10'
+    if DSP.flog then DSP.flog('Palatka 2.9.10 promo persistence and sale accounting installed') end
+    return true
+  end
+  return install_v2910()
 end
