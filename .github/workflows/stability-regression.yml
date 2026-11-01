@@ -1,0 +1,44 @@
+name: Palatka stability regression
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'build.py'
+      - 'data/**'
+      - 'icons/**'
+      - '.github/workflows/stability-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y luajit
+          luajit -v
+      - name: Python and LuaJIT regression suite
+        run: python3 run_tests.py
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-test-results
+          path: docs/test-results.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload standalone candidate
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-ai-stability-candidate
+          path: palatka_ai.lua
+          compression-level: 0
+          retention-days: 7
