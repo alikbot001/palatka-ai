@@ -1,49 +1,56 @@
-name: Palatka OTA syntax guard
+name: Palatka stable OTA gate
 on:
+  pull_request:
+    paths:
+      - 'updates/palatka_update.lua'
+      - 'version.json'
+      - 'src/**'
+      - '.github/workflows/ota-syntax-guard.yml'
   push:
     branches: [main]
     paths:
       - 'updates/palatka_update.lua'
       - 'version.json'
-      - 'src/72_promo_market_style_v298.lua'
-      - 'src/73_fast_reconnect_v298.lua'
-      - 'src/74_promo_save_v2910.lua'
-      - 'src/59b_drop_sales_stats.lua'
-      - 'src/65a_stats_v293.lua'
+      - 'src/**'
       - '.github/workflows/ota-syntax-guard.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  lua-ota:
+  stable-ota:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Compile the exact OTA and stable stats source
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y luajit
-      - name: Compile and validate the exact OTA served to game
-        run: |
-          luajit -b src/72_promo_market_style_v298.lua /dev/null
-          luajit -b src/73_fast_reconnect_v298.lua /dev/null
-          luajit -b src/74_promo_save_v2910.lua /dev/null
-          luajit -b src/59b_drop_sales_stats.lua /dev/null
           luajit -b updates/palatka_update.lua /dev/null
+          luajit -b src/59b_drop_sales_stats.lua /dev/null
+          luajit -b src/68b_promo_universal_ui.lua /dev/null
+          luajit -b src/69b_arbitrage_agent_ui.lua /dev/null
+      - name: Reject mismatched or experimental OTA
+        run: |
           python3 - <<'PY'
           from pathlib import Path
           import json
-          data=json.loads(Path('version.json').read_text(encoding='utf-8'))
-          ota=Path('updates/palatka_update.lua').read_bytes()
-          assert len(ota)==data['size'],(len(ota),data['size'])
-          assert b"PALATKA_UPDATE_VERSION = '"+data['version'].encode("ascii")+b"'" in ota
-          assert data['mode']=='overlay'
-          print('OTA compiles; exact manifest bytes:',len(ota))
+          meta=json.loads(Path("version.json").read_text(encoding="utf-8"))
+          payload=Path("updates/palatka_update.lua").read_bytes()
+          assert meta["version"]=="2.9.11",meta["version"]
+          assert meta["mode"]=="overlay"
+          assert len(payload)==meta["size"],(len(payload),meta["size"])
+          assert b"PALATKA_UPDATE_VERSION = '2.9.11'" in payload[:300]
+          assert b"local function install_v295()" in payload
+          assert b"return install_v295()" in payload
+          assert b"local function install_v296()" not in payload
+          assert b"local function install_v2910()" not in payload
+          print("STABLE OTA: LuaJIT syntax verified, exact bytes",len(payload))
           PY
-      - name: Check Fast REC and promo regression tests
+      - name: Run stable promo, journal and arbitrage regressions
         run: |
-          luajit tests/test_v298_fast_rec.lua
-          luajit tests/test_v298_promo.lua
-          luajit tests/test_v2910_promo_persistence.lua
-          luajit tests/test_v2910_sales_receipts.lua
+          luajit tests/test_arbitrage_session.lua
+          luajit tests/test_promo_templates.lua
+          luajit tests/test_promo_scheduler_v294.lua
+          luajit tests/test_mh_journal_screen_v294.lua
+          luajit tests/test_drop_sales_stats.lua
