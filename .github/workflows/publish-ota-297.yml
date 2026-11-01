@@ -1,11 +1,5 @@
 name: Publish Palatka 2.9.7 in-game OTA
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'tools/build_ota_297.py'
-      - '.github/workflows/publish-ota-297.yml'
   workflow_dispatch:
 
 permissions:
