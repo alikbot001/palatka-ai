@@ -104,15 +104,11 @@ local function editor(e)
     if e.error then V.red(e.error)end
     if button('СОХРАНИТЬ ШАБЛОН','save',250,true)then
         local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
-        local ok,reason=P.save_template(e.index,name,e.rows,e.enabled)
-        if ok then
-            local list=P.settings().templates
-            local idx=e.index or #list
-            local saved,err=P.save_template_options(idx,{
-                interval_min=e.interval_min.value,interval_max=e.interval_max.value,
-                auto_limit=e.auto_limit.value,random_line=e.random_line,waiting=e.waiting[0]})
-            if saved then V.mhpromo_edit=nil else e.error=tostring(err)end
-        else e.error=tostring(reason)end
+        -- One atomic save: never persist rows while silently dropping their schedule.
+        local ok,reason=P.save_template(e.index,name,e.rows,e.enabled,{
+            interval_min=e.interval_min.value,interval_max=e.interval_max.value,
+            auto_limit=e.auto_limit.value,random_line=e.random_line,waiting=e.waiting[0]})
+        if ok then V.mhpromo_edit=nil else e.error=tostring(reason)end
     end
     V.inline(4)
     if button('Отмена','cancel',120)then V.mhpromo_edit=nil end
@@ -149,6 +145,16 @@ function V.promo_screen()
         ' | '..(P.running and(P.pause_reason or'работает')or'выключен')..
         (left and(' | следующая через '..left..'с')or''))
     if V.mhpromo_error or P.last_error then V.red(tostring(V.mhpromo_error or P.last_error))end
+    local batch=P._batch
+    V.muted('Состояние: '..tostring(P.state or (P.running and 'WAITING' or 'STOPPED'))..
+        ' | клиент: '..tostring(P.delivery_status or 'не отправлено')..' | сервер: не подтверждено')
+    if batch then
+        local t=settings.templates[batch.index]
+        local row=batch.commands and batch.commands[batch.pos]
+        V.muted('Активный шаблон: '..tostring(t and t.name or '?')..
+            ' | следующая: '..tostring(row and row.text or 'завершение'))
+    end
+    if P.last_command then V.muted('Последняя команда: '..V.fit(P.last_command,430))end
     V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
     V.muted('Интерфейс Palatka MH / сборка 2.9.3')
     V.list_rows('mhpromo_templates',settings.templates,124,function(t,i)
@@ -172,6 +178,11 @@ function V.promo_screen()
             end
             V.at(x+w-143,y+4)
             if button('Изменить','edit_'..i,140)then open_editor(i)end
+            V.at(x+w-143,y+40)
+            if button('Копировать','copy_'..i,140)then
+                local ok,why=P.copy_template(i)
+                V.mhpromo_error=ok and nil or tostring(why)
+            end
             V.at(x+w-143,y+78)
             if button('Удалить','del_'..i,140)then
                 V.mhpromo_del=i;V.open_popup('Удалить шаблон','mhpromo_delete')
