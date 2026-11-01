@@ -206,8 +206,6 @@ function DSP.auto.start_buy()
             DSP.auto.progress.done, DSP.auto.progress.dry = bought, dry
             close_dialog()
             if pi < #list and DSP.auto.buy_running then
-                local pause_ms=DSP.controls and DSP.controls.get and DSP.controls.get('buy_step_pause_ms') or 0
-                if pause_ms>0 then trade_wait(pause_ms)end
                 if not open_shop_menu() then break end
             end
         end
