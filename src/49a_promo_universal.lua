@@ -355,4 +355,20 @@ function P.send_once(index,at,send,connected)
     return true
 end
 
+-- Copy presets without copying runtime counters or enabling two duplicate
+-- auto-advertising streams. Rows and scheduling options remain independent.
+function P.copy_template(index)
+    local source=P.settings().templates[index]
+    if not source then return false,'Шаблон не найден' end
+    local copy={}
+    for i,row in ipairs(source.rows or{})do
+        copy[i]={text=row.text,interval=row.interval,auto=row.auto~=false}
+    end
+    return P.save_template(nil,tostring(source.name or'Шаблон'):sub(1,40)..' (копия)',
+        copy,false,{interval_min=source.interval_min or 0,
+        interval_max=source.interval_max or 0,
+        auto_limit=source.auto_limit or 0,
+        waiting=source.waiting or 1.5,random_line=source.random_line==true})
+end
+
 return true
