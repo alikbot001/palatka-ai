@@ -65,6 +65,9 @@ end
 local function with_stock(fn)
     local p=DSP.settings and DSP.settings.sell_preset
     local changes,summary=S.plan(type(p)=='table' and p.items or nil,A.inv)
+    -- An unverified, empty, corrupt or concurrently scanning inventory is NOT
+    -- permission to launch the original sell engine with unadjusted preset qty.
+    if not changes then return false,'inventory snapshot unavailable or invalid' end
     local old={}
     for i,c in ipairs(changes or {})do
         old[i]={row=c.row,qty=c.row.qty,enabled=c.row.enabled}
