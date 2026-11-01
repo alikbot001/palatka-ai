@@ -12163,6 +12163,10 @@ local function editor(e)
             else e.error=tostring(why)end
         else e.error=tostring(index)end
     end
+    if e.index and b('Удалить шаблон','editor_delete',210)then
+        V.promo298_delete=e.index
+        V.open_popup('Удалить шаблон','pm298_delete')
+    end
     V.list('pm298_editor',function()
         V.text('Название')
         imgui.SetNextItemWidth(-1)
@@ -12271,6 +12275,20 @@ function V.promo_screen()
             if b('Изменить','edit_'..i,bw)then new_editor(i)end
         end)
     end,{footer=true})
+end
+local old_popups=V.popups
+function V.popups()
+    if old_popups then old_popups()end
+    V.popup('Удалить шаблон','pm298_delete',function()
+        V.text('Удалить этот шаблон и все его строки?')
+        if b('Удалить','confirm_delete',160)then
+            local ok=P.remove(V.promo298_delete)
+            if ok then V.promo298_edit=nil;imgui.CloseCurrentPopup()
+            else V.promo298_error='Ошибка сохранения удаления'end
+        end
+        V.inline(5,120)
+        V.cancel('pm298_delete')
+    end,{w=415,h=225})
 end
 local expand=P.expand
 function P.expand(text)
