@@ -112,21 +112,9 @@ function A.mark_unavailable(index,reason)
         if M.invalidate_arbitrage then M.invalidate_arbitrage()end
         return false,'Не удалось сохранить статус: '..tostring(err)
     end
+    -- Keep the unavailable route on screen, with "Restore" and "Next"
+    -- controls. Moving focus without user input would hide the explanation.
     A.show(true)
-    -- The rejected route remains selectable in the queue for manual recovery.
-    -- Continue with another usable leg, instead of closing the mini-agent.
-    for step=1,#s.routes do
-        local candidate=((index-1+step)%#s.routes)+1
-        local next_entry=s.routes[candidate]
-        if not next_entry.skipped and next_entry.sold<next_entry.qty then
-            s.focus=candidate
-            local ok_save,err_save=A.save()
-            if not ok_save and DSP.flog then
-                DSP.flog('ARB AGENT focus not persisted: '..tostring(err_save))
-            end
-            break
-        end
-    end
     return true
 end
 function A.restore_unavailable(index)
