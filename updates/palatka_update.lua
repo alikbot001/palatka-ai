@@ -1,5 +1,5 @@
 -- Palatka AI 2.9.4 OTA: Market Helper UX, touch scroll, journal, statistics and arbitrage fixes.
-PALATKA_UPDATE_VERSION = '2.9.7'
+PALATKA_UPDATE_VERSION = '2.9.8'
 return function(DSP)
   -- v2.8.6: Independent, additive UI + multi-deal arbitration patch.
   local function install_v286()
@@ -805,7 +805,7 @@ function A.show(value)
 end
 function A.stop()
     local s=active()
-    if not s then return false,'ГЌГҐГІ Г ГЄГІГЁГўГ­Г®Г© Г±ГҐГ±Г±ГЁГЁ'end
+    if not s then return false,'ГѓВЌГѓВҐГѓВІ ГѓВ ГѓВЄГѓВІГѓВЁГѓВўГѓВ­ГѓВ®ГѓВ© ГѓВ±ГѓВҐГѓВ±ГѓВ±ГѓВЁГѓВЁ'end
     s.ended=os.time()
     A.show(false)
     return changed()
@@ -867,7 +867,7 @@ local function append_routes(routes,cap)
     return fresh
 end
 function A.start(routes)
-    if server()==0 then return false,'Г‘ГҐГ°ГўГҐГ° ГҐГ№Вё Г­ГҐ Г®ГЇГ°ГҐГ¤ГҐГ«ВёГ­'end
+    if server()==0 then return false,'ГѓВ‘ГѓВҐГѓВ°ГѓВўГѓВҐГѓВ° ГѓВҐГѓВ№Г‚Вё ГѓВ­ГѓВҐ ГѓВ®ГѓВЇГѓВ°ГѓВҐГѓВ¤ГѓВҐГѓВ«Г‚ВёГѓВ­'end
     local s=active()
     if not s then
         A.data.session={sid=server(),started=os.time(),routes={},focus=1,last_review=0,
@@ -876,24 +876,24 @@ function A.start(routes)
     local n=append_routes(routes,24)
     if n==0 and #A.data.session.routes==0 then
         A.data.session=nil
-        return false,'ГЌГ®ГўГ»Гµ ГЇГ°ГЁГЈГ®Г¤Г­Г»Гµ Г¬Г Г°ГёГ°ГіГІГ®Гў ГЇГ®ГЄГ  Г­ГҐГІ'
+        return false,'ГѓВЌГѓВ®ГѓВўГѓВ»ГѓВµ ГѓВЇГѓВ°ГѓВЁГѓВЈГѓВ®ГѓВ¤ГѓВ­ГѓВ»ГѓВµ ГѓВ¬ГѓВ ГѓВ°ГѓВёГѓВ°ГѓВіГѓВІГѓВ®ГѓВў ГѓВЇГѓВ®ГѓВЄГѓВ  ГѓВ­ГѓВҐГѓВІ'
     end
     A.show(true)
     return true,n
 end
 function A.add_plan(plan)
     local routes=plan and plan.routes
-    if type(routes)~='table'or#routes==0 then return false,'Г‚ ГЇГ«Г Г­ГҐ Г­ГҐГІ Г¬Г Г°ГёГ°ГіГІГ®Гў'end
+    if type(routes)~='table'or#routes==0 then return false,'ГѓВ‚ ГѓВЇГѓВ«ГѓВ ГѓВ­ГѓВҐ ГѓВ­ГѓВҐГѓВІ ГѓВ¬ГѓВ ГѓВ°ГѓВёГѓВ°ГѓВіГѓВІГѓВ®ГѓВў'end
     return A.start(routes)
 end
 function A.start_market()
     if M.state.status=='cache'or M.state.status=='error'then
-        return false,'ГЌГҐГІ Г±ГўГҐГ¦ГҐГЈГ® Г°Г»Г­ГЄГ ; ГЇГ°Г®ГўГҐГ°ГјГІГҐ API ГЁГ«ГЁ Г«Г®ГЄГ Г«ГјГ­Г»Г© Г±ГЄГ Г­'
+        return false,'ГѓВЌГѓВҐГѓВІ ГѓВ±ГѓВўГѓВҐГѓВ¦ГѓВҐГѓВЈГѓВ® ГѓВ°ГѓВ»ГѓВ­ГѓВЄГѓВ ; ГѓВЇГѓВ°ГѓВ®ГѓВўГѓВҐГѓВ°ГѓВјГѓВІГѓВҐ API ГѓВЁГѓВ«ГѓВЁ ГѓВ«ГѓВ®ГѓВЄГѓВ ГѓВ«ГѓВјГѓВ­ГѓВ»ГѓВ© ГѓВ±ГѓВЄГѓВ ГѓВ­'
     end
     local groups,status
     if M.arbitrage_grouped_ui then groups,status=M.arbitrage_grouped_ui()
     else groups=M.arbitrage_grouped();status='ready'end
-    if status~='ready'or not groups then return false,'ГђГ»Г­Г®ГЄ ГҐГ№Вё Г°Г Г±Г±Г·ГЁГІГ»ГўГ ГҐГІГ±Гї'end
+    if status~='ready'or not groups then return false,'ГѓВђГѓВ»ГѓВ­ГѓВ®ГѓВЄ ГѓВҐГѓВ№Г‚Вё ГѓВ°ГѓВ ГѓВ±ГѓВ±ГѓВ·ГѓВЁГѓВІГѓВ»ГѓВўГѓВ ГѓВҐГѓВІГѓВ±ГѓВї'end
     local routes={}
     for _,g in ipairs(groups)do for _,r in ipairs(g.routes or{})do routes[#routes+1]=r end end
     table.sort(routes,function(a,b)return(tonumber(a.net_profit)or 0)>(tonumber(b.net_profit)or 0)end)
@@ -903,7 +903,7 @@ end
 -- The local quote identity is separate from remote API identities.
 function A.add_local_route(r)
     if type(r)~='table' or not num(r.qty,1,1000000000)then
-        return false,'Г‘ГЄГ Г­ Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¤ГЁГ« ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г± Г®ГЎГҐГЁГµ Г±ГІГ®Г°Г®Г­'
+        return false,'ГѓВ‘ГѓВЄГѓВ ГѓВ­ ГѓВ­ГѓВҐ ГѓВЇГѓВ®ГѓВ¤ГѓВІГѓВўГѓВҐГѓВ°ГѓВ¤ГѓВЁГѓВ« ГѓВЄГѓВ®ГѓВ«ГѓВЁГѓВ·ГѓВҐГѓВ±ГѓВІГѓВўГѓВ® ГѓВ± ГѓВ®ГѓВЎГѓВҐГѓВЁГѓВµ ГѓВ±ГѓВІГѓВ®ГѓВ°ГѓВ®ГѓВ­'
     end
     local item_key=tostring(r.id or'?')..':'..tostring(r.ench or 0)
     local row={key=item_key,display=r.name,ench=r.ench or 0}
@@ -968,12 +968,12 @@ local function consume(quote,n,at)
 end
 function A.confirm(index,side,amount)
     local e,s=A.get(index)
-    if not e or not s then return false,'ГЌГҐГІ ГІГ ГЄГ®Г© Г±Г¤ГҐГ«ГЄГЁ'end
-    if e.skipped then return false,'Г‘Г¤ГҐГ«ГЄГ  ГЇГ°Г®ГЇГіГ№ГҐГ­Г 'end
-    if side~='buy'and side~='sell'then return false,'ГЌГҐГЁГ§ГўГҐГ±ГІГ­Г»Г© ГІГЁГЇ'end
+    if not e or not s then return false,'ГѓВЌГѓВҐГѓВІ ГѓВІГѓВ ГѓВЄГѓВ®ГѓВ© ГѓВ±ГѓВ¤ГѓВҐГѓВ«ГѓВЄГѓВЁ'end
+    if e.skipped then return false,'ГѓВ‘ГѓВ¤ГѓВҐГѓВ«ГѓВЄГѓВ  ГѓВЇГѓВ°ГѓВ®ГѓВЇГѓВіГѓВ№ГѓВҐГѓВ­ГѓВ 'end
+    if side~='buy'and side~='sell'then return false,'ГѓВЌГѓВҐГѓВЁГѓВ§ГѓВўГѓВҐГѓВ±ГѓВІГѓВ­ГѓВ»ГѓВ© ГѓВІГѓВЁГѓВЇ'end
     local limit=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
     local q=num(amount,1,limit)
-    if not q then return false,'ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ® ГЇГ°ГҐГўГ»ГёГ ГҐГІ Г®Г±ГІГ ГўГёГЁГ©Г±Гї Г«ГЁГ¬ГЁГІ'end
+    if not q then return false,'ГѓВЉГѓВ®ГѓВ«ГѓВЁГѓВ·ГѓВҐГѓВ±ГѓВІГѓВўГѓВ® ГѓВЇГѓВ°ГѓВҐГѓВўГѓВ»ГѓВёГѓВ ГѓВҐГѓВІ ГѓВ®ГѓВ±ГѓВІГѓВ ГѓВўГѓВёГѓВЁГѓВ©ГѓВ±ГѓВї ГѓВ«ГѓВЁГѓВ¬ГѓВЁГѓВІ'end
     local at=os.time()
     if side=='buy'then
         e.bought=e.bought+q;e.bought_at=at
@@ -1113,11 +1113,11 @@ local function selected(s)
     return s.routes[i],i
 end
 local function flag(e)
-    if e.skipped then return 'ГЏГђГЋГЏГ“Г™Г…ГЌГЋ' end
-    if e.sold==e.qty then return 'Г‡ГЂГ‚Г…ГђГГ…ГЌГЋ' end
-    if e.bought==0 then return 'ГЉГ“ГЏГ€Г’Гњ' end
-    if e.bought<e.qty then return 'Г„ГЋГЉГ“ГЏГ€Г’Гњ' end
-    return 'Г‘Г„ГЂГ’Гњ'
+    if e.skipped then return 'ГѓВЏГѓВђГѓВЋГѓВЏГѓВ“ГѓВ™ГѓВ…ГѓВЌГѓВЋ' end
+    if e.sold==e.qty then return 'ГѓВ‡ГѓВЂГѓВ‚ГѓВ…ГѓВђГѓВГѓВ…ГѓВЌГѓВЋ' end
+    if e.bought==0 then return 'ГѓВЉГѓВ“ГѓВЏГѓВ€ГѓВ’ГѓВњ' end
+    if e.bought<e.qty then return 'ГѓВ„ГѓВЋГѓВЉГѓВ“ГѓВЏГѓВ€ГѓВ’ГѓВњ' end
+    return 'ГѓВ‘ГѓВ„ГѓВЂГѓВ’ГѓВњ'
 end
 local function geometry(sw,sh)
     local p=DSP.settings.arb_agent_window or{}
@@ -1139,7 +1139,7 @@ local function save_geometry(g,dx,dy,dw,dh,io)
 end
 local function header(s,g,io)
     local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
-    if btn('ГЂГђГЃГ€Г’ГђГЂГ† / MOVE','drag',math.max(65,g.w-119),32)then end
+    if btn('ГѓВЂГѓВђГѓВЃГѓВ€ГѓВ’ГѓВђГѓВЂГѓВ† / MOVE','drag',math.max(65,g.w-119),32)then end
     if imgui.IsItemActive()and io.MouseDelta then
         local d=io.MouseDelta
         if d.x~=0 or d.y~=0 then save_geometry(g,d.x,d.y,0,0,io)end
@@ -1153,19 +1153,19 @@ local function header(s,g,io)
 end
 local function summary(s)
     local st=A.stats()
-    good('Г‘Г¤ГҐГ«Г®ГЄ: '..st.done..' / '..st.routes..'  |  Г‚ Г°Г ГЎГ®ГІГҐ: '..st.pending)
-    text('ГЉГіГЇГ«ГҐГ­Г®: '..st.bought..'  |  Г‘Г¤Г Г­Г®: '..st.sold)
-    good('ГЏГ°ГЁГЎГ»Г«Гј ~ '..fmt(st.profit_estimate))
-    muted('ГђГ Г±Г·ВёГІ ГЇГ® Г¶ГҐГ­Г Г¬ ГЇГ«Г Г­Г , Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­Г­Г Гї ГЄГ Г±Г±Г ')
+    good('ГѓВ‘ГѓВ¤ГѓВҐГѓВ«ГѓВ®ГѓВЄ: '..st.done..' / '..st.routes..'  |  ГѓВ‚ ГѓВ°ГѓВ ГѓВЎГѓВ®ГѓВІГѓВҐ: '..st.pending)
+    text('ГѓВЉГѓВіГѓВЇГѓВ«ГѓВҐГѓВ­ГѓВ®: '..st.bought..'  |  ГѓВ‘ГѓВ¤ГѓВ ГѓВ­ГѓВ®: '..st.sold)
+    good('ГѓВЏГѓВ°ГѓВЁГѓВЎГѓВ»ГѓВ«ГѓВј ~ '..fmt(st.profit_estimate))
+    muted('ГѓВђГѓВ ГѓВ±ГѓВ·Г‚ВёГѓВІ ГѓВЇГѓВ® ГѓВ¶ГѓВҐГѓВ­ГѓВ ГѓВ¬ ГѓВЇГѓВ«ГѓВ ГѓВ­ГѓВ , ГѓВ­ГѓВҐ ГѓВЇГѓВ®ГѓВ¤ГѓВІГѓВўГѓВҐГѓВ°ГѓВ¦ГѓВ¤Г‚ВёГѓВ­ГѓВ­ГѓВ ГѓВї ГѓВЄГѓВ ГѓВ±ГѓВ±ГѓВ ')
     local updated=M.state and M.state.updated or 0
-    muted('API: '..(M.freshness and M.freshness()or'Г­ГҐГІ Г¤Г Г­Г­Г»Гµ')..' | Г®ГЎГ§Г®Г° ГЄГ Г¦Г¤Г»ГҐ 60 Г±')
+    muted('API: '..(M.freshness and M.freshness()or'ГѓВ­ГѓВҐГѓВІ ГѓВ¤ГѓВ ГѓВ­ГѓВ­ГѓВ»ГѓВµ')..' | ГѓВ®ГѓВЎГѓВ§ГѓВ®ГѓВ° ГѓВЄГѓВ ГѓВ¦ГѓВ¤ГѓВ»ГѓВҐ 60 ГѓВ±')
 end
 local function queue(s)
     local total=#s.routes
-    if total==0 then muted('ГЊГ Г°ГёГ°ГіГІГ®Гў ГЇГ®ГЄГ  Г­ГҐГІ');return end
+    if total==0 then muted('ГѓВЊГѓВ ГѓВ°ГѓВёГѓВ°ГѓВіГѓВІГѓВ®ГѓВў ГѓВЇГѓВ®ГѓВЄГѓВ  ГѓВ­ГѓВҐГѓВІ');return end
     A.queue_page=math.max(1,math.min(tonumber(A.queue_page)or 1,math.ceil(total/5)))
     local pages=math.ceil(total/5)
-    muted('Г‚Г±ГҐ Г¬Г Г°ГёГ°ГіГІГ», ГўГЄГ«ГѕГ·Г Гї Г§Г ГўГҐГ°ГёВёГ­Г­Г»ГҐ: '..total)
+    muted('ГѓВ‚ГѓВ±ГѓВҐ ГѓВ¬ГѓВ ГѓВ°ГѓВёГѓВ°ГѓВіГѓВІГѓВ», ГѓВўГѓВЄГѓВ«ГѓВѕГѓВ·ГѓВ ГѓВї ГѓВ§ГѓВ ГѓВўГѓВҐГѓВ°ГѓВёГ‚ВёГѓВ­ГѓВ­ГѓВ»ГѓВҐ: '..total)
     local first=(A.queue_page-1)*5+1
     for i=first,math.min(total,first+4)do
         local e=s.routes[i]
@@ -1176,7 +1176,7 @@ local function queue(s)
     if pages>1 then
         if btn('<','queue_prev',52,28)then A.queue_page=math.max(1,A.queue_page-1)end
         imgui.SameLine(0,5)
-        muted('Г‘ГІГ°Г Г­ГЁГ¶Г  '..A.queue_page..'/'..pages)
+        muted('ГѓВ‘ГѓВІГѓВ°ГѓВ ГѓВ­ГѓВЁГѓВ¶ГѓВ  '..A.queue_page..'/'..pages)
         imgui.SameLine(0,5)
         if btn('>','queue_next',52,28)then A.queue_page=math.min(pages,A.queue_page+1)end
     end
@@ -1212,25 +1212,25 @@ function A.draw()
             if A.queue_expanded then
                 queue(s)
                 if not A.end_confirm then
-                    if btn('Г‡Г ГўГҐГ°ГёГЁГІГј Г±ГҐГ±Г±ГЁГѕ','end_session',-1,28)then A.end_confirm=true end
+                    if btn('ГѓВ‡ГѓВ ГѓВўГѓВҐГѓВ°ГѓВёГѓВЁГѓВІГѓВј ГѓВ±ГѓВҐГѓВ±ГѓВ±ГѓВЁГѓВѕ','end_session',-1,28)then A.end_confirm=true end
                 else
-                    bad('Г‡Г ГўГҐГ°ГёГЁГІГј ГІГҐГЄГіГ№ГіГѕ Г±ГҐГ±Г±ГЁГѕ? Г€Г±ГІГ®Г°ГЁГї Г®Г±ГІГ Г­ГҐГІГ±Гї.')
-                    if btn('Г„Г , Г§Г ГўГҐГ°ГёГЁГІГј','end_yes',-1,30)then
+                    bad('ГѓВ‡ГѓВ ГѓВўГѓВҐГѓВ°ГѓВёГѓВЁГѓВІГѓВј ГѓВІГѓВҐГѓВЄГѓВіГѓВ№ГѓВіГѓВѕ ГѓВ±ГѓВҐГѓВ±ГѓВ±ГѓВЁГѓВѕ? ГѓВ€ГѓВ±ГѓВІГѓВ®ГѓВ°ГѓВЁГѓВї ГѓВ®ГѓВ±ГѓВІГѓВ ГѓВ­ГѓВҐГѓВІГѓВ±ГѓВї.')
+                    if btn('ГѓВ„ГѓВ , ГѓВ§ГѓВ ГѓВўГѓВҐГѓВ°ГѓВёГѓВЁГѓВІГѓВј','end_yes',-1,30)then
                         A.stop();A.end_confirm=false
                     end
-                    if btn('ГЋГІГ¬ГҐГ­Г ','end_cancel',-1,28)then A.end_confirm=false end
+                    if btn('ГѓВЋГѓВІГѓВ¬ГѓВҐГѓВ­ГѓВ ','end_cancel',-1,28)then A.end_confirm=false end
                 end
                 imgui.Separator()
             end
             local e,index=selected(s)
             if e then
-                text('ГЊГЂГђГГђГ“Г’ '..index..' / '..#s.routes..' | '..flag(e))
+                text('ГѓВЊГѓВЂГѓВђГѓВГѓВђГѓВ“ГѓВ’ '..index..' / '..#s.routes..' | '..flag(e))
                 text(V.fit(e.name,math.max(100,imgui.GetContentRegionAvail().x-8)))
-                muted('ГЏГ«Г Г­: '..e.qty..' ГёГІ. | Г®Г¦ГЁГ¤Г Г­ГЁГҐ ~ '..fmt(e.proposed_profit))
-                muted('ГЉГіГЇГ«ГҐГ­Г® '..e.bought..' / '..e.qty..' | ГЏГ°Г®Г¤Г Г­Г® '..e.sold..' / '..e.qty)
+                muted('ГѓВЏГѓВ«ГѓВ ГѓВ­: '..e.qty..' ГѓВёГѓВІ. | ГѓВ®ГѓВ¦ГѓВЁГѓВ¤ГѓВ ГѓВ­ГѓВЁГѓВҐ ~ '..fmt(e.proposed_profit))
+                muted('ГѓВЉГѓВіГѓВЇГѓВ«ГѓВҐГѓВ­ГѓВ® '..e.bought..' / '..e.qty..' | ГѓВЏГѓВ°ГѓВ®ГѓВ¤ГѓВ ГѓВ­ГѓВ® '..e.sold..' / '..e.qty)
                 -- Confirming each step updates the local offer ledger, never cash history.
                 if e.skipped then
-                    if btn('Г‚ГҐГ°Г­ГіГІГј','restore',-1)then A.skip(index,false)end
+                    if btn('ГѓВ‚ГѓВҐГѓВ°ГѓВ­ГѓВіГѓВІГѓВј','restore',-1)then A.skip(index,false)end
                 else
                     local side=e.bought<e.qty and'buy'or'sell'
                     local remaining=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
@@ -1238,48 +1238,48 @@ function A.draw()
                         local shop=side=='buy'and e.seller_shop or e.buyer_shop
                         local owner=side=='buy'and e.seller_owner or e.buyer_owner
                         local unit=side=='buy'and e.buy_price or e.sell_price
-                        text(side=='buy'and'ГЉГ“ГЏГ€Г’Гњ' or'Г‘Г„ГЂГ’Гњ')
-                        text('Г‹Г ГўГЄГ  #'..shop..' | '..owner)
-                        text('x'..remaining..' | '..fmt(unit)..'/ГёГІ.')
-                        if btn('ГЌГ Г©ГІГЁ Г«Г ГўГЄГі #'..shop,'target',-1)then
-                            if not M.mark_shop(shop)then notify('ГЊГҐГІГЄГ  Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г ')end
+                        text(side=='buy'and'ГѓВЉГѓВ“ГѓВЏГѓВ€ГѓВ’ГѓВњ' or'ГѓВ‘ГѓВ„ГѓВЂГѓВ’ГѓВњ')
+                        text('ГѓВ‹ГѓВ ГѓВўГѓВЄГѓВ  #'..shop..' | '..owner)
+                        text('x'..remaining..' | '..fmt(unit)..'/ГѓВёГѓВІ.')
+                        if btn('ГѓВЌГѓВ ГѓВ©ГѓВІГѓВЁ ГѓВ«ГѓВ ГѓВўГѓВЄГѓВі #'..shop,'target',-1)then
+                            if not M.mark_shop(shop)then notify('ГѓВЊГѓВҐГѓВІГѓВЄГѓВ  ГѓВ­ГѓВҐГѓВ¤ГѓВ®ГѓВ±ГѓВІГѓВіГѓВЇГѓВ­ГѓВ ')end
                         end
                         local input_key=e.id..':'..side
                         if A.qty_key~=input_key then A.qty_key=input_key;A.qty_field=imgui.new.int(remaining)end
-                        muted('ГЏГ®Г¤ГІГўГҐГ°Г¤ГЁГІГј ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ®:')
+                        muted('ГѓВЏГѓВ®ГѓВ¤ГѓВІГѓВўГѓВҐГѓВ°ГѓВ¤ГѓВЁГѓВІГѓВј ГѓВЄГѓВ®ГѓВ«ГѓВЁГѓВ·ГѓВҐГѓВ±ГѓВІГѓВўГѓВ®:')
                         imgui.SetNextItemWidth(math.min(160,imgui.GetContentRegionAvail().x))
                         imgui.InputInt('##arb_agent_qty',A.qty_field,1,10)
-                        if btn(side=='buy'and'ГЉГ“ГЏГ‹Г…ГЌГЋ' or'ГЏГђГЋГ„ГЂГЌГЋ','confirm',-1,39)then
+                        if btn(side=='buy'and'ГѓВЉГѓВ“ГѓВЏГѓВ‹ГѓВ…ГѓВЌГѓВЋ' or'ГѓВЏГѓВђГѓВЋГѓВ„ГѓВЂГѓВЌГѓВЋ','confirm',-1,39)then
                             local ok,why=A.confirm(index,side,A.qty_field[0])
-                            if ok then A.qty_key=nil;notify('ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­Г®: '..e.name)
+                            if ok then A.qty_key=nil;notify('ГѓВЏГѓВ®ГѓВ¤ГѓВІГѓВўГѓВҐГѓВ°ГѓВ¦ГѓВ¤ГѓВҐГѓВ­ГѓВ®: '..e.name)
                             else notify(tostring(why))end
                         end
                         local hint=A.hint
                         if hint and hint.route_id==e.id and hint.side==side then
-                            muted('ГЏГ®ГµГ®Г¦ГЁГ© Г·ГҐГЄ: '..hint.qty..' ГёГІ. (Г­ГҐ Г ГўГІГ®Г§Г Г·ВёГІ)')
-                            if btn('ГЏГ®Г¤ГІГўГҐГ°Г¤ГЁГІГј Г·ГҐГЄ','accept_receipt',-1)then
+                            muted('ГѓВЏГѓВ®ГѓВµГѓВ®ГѓВ¦ГѓВЁГѓВ© ГѓВ·ГѓВҐГѓВЄ: '..hint.qty..' ГѓВёГѓВІ. (ГѓВ­ГѓВҐ ГѓВ ГѓВўГѓВІГѓВ®ГѓВ§ГѓВ ГѓВ·Г‚ВёГѓВІ)')
+                            if btn('ГѓВЏГѓВ®ГѓВ¤ГѓВІГѓВўГѓВҐГѓВ°ГѓВ¤ГѓВЁГѓВІГѓВј ГѓВ·ГѓВҐГѓВЄ','accept_receipt',-1)then
                                 local ok,why=A.confirm(index,side,hint.qty)
-                                if ok then A.qty_key=nil;notify('Г—ГҐГЄ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­')
+                                if ok then A.qty_key=nil;notify('ГѓВ—ГѓВҐГѓВЄ ГѓВЇГѓВ®ГѓВ¤ГѓВІГѓВўГѓВҐГѓВ°ГѓВ¦ГѓВ¤Г‚ВёГѓВ­')
                                 else notify(tostring(why))end
                             end
                         end
-                    else good('ГЊГ Г°ГёГ°ГіГІ ГўГ»ГЇГ®Г«Г­ГҐГ­')end
+                    else good('ГѓВЊГѓВ ГѓВ°ГѓВёГѓВ°ГѓВіГѓВІ ГѓВўГѓВ»ГѓВЇГѓВ®ГѓВ«ГѓВ­ГѓВҐГѓВ­')end
                 end
             else
-                muted('ГЊГ Г°ГёГ°ГіГІГ» ГЇГ®ГїГўГїГІГ±Гї ГЇГ®Г±Г«ГҐ Г±ГЄГ Г­ГЁГ°Г®ГўГ Г­ГЁГї Г°Г»Г­ГЄГ ')
+                muted('ГѓВЊГѓВ ГѓВ°ГѓВёГѓВ°ГѓВіГѓВІГѓВ» ГѓВЇГѓВ®ГѓВїГѓВўГѓВїГѓВІГѓВ±ГѓВї ГѓВЇГѓВ®ГѓВ±ГѓВ«ГѓВҐ ГѓВ±ГѓВЄГѓВ ГѓВ­ГѓВЁГѓВ°ГѓВ®ГѓВўГѓВ ГѓВ­ГѓВЁГѓВї ГѓВ°ГѓВ»ГѓВ­ГѓВЄГѓВ ')
             end
         end
         imgui.EndChild()
-        if A.save_error then bad('Г‡Г ГЇГЁГ±Гј Г­ГҐ Г±Г®ГµГ°Г Г­ГҐГ­Г : '..tostring(A.save_error))end
+        if A.save_error then bad('ГѓВ‡ГѓВ ГѓВЇГѓВЁГѓВ±ГѓВј ГѓВ­ГѓВҐ ГѓВ±ГѓВ®ГѓВµГѓВ°ГѓВ ГѓВ­ГѓВҐГѓВ­ГѓВ : '..tostring(A.save_error))end
         if A.ui_message then muted(V.fit(A.ui_message,math.max(80,g.w-32)))end
         if btn('<','previous',47,30)then A.next(-1);A.qty_key=nil end
         imgui.SameLine(0,5)
         if btn('>','next',47,30)then A.next(1);A.qty_key=nil end
         imgui.SameLine(0,5)
         local e,i=selected(s)
-        if e and btn('ГЏГ°Г®ГЇГіГ±ГІГЁГІГј','skip',100,30)then A.skip(i,true);A.next(1);A.qty_key=nil end
+        if e and btn('ГѓВЏГѓВ°ГѓВ®ГѓВЇГѓВіГѓВ±ГѓВІГѓВЁГѓВІГѓВј','skip',100,30)then A.skip(i,true);A.next(1);A.qty_key=nil end
         imgui.SameLine(0,5)
-        if btn('ГЊГҐГ­Гѕ','main',65,30)then
+        if btn('ГѓВЊГѓВҐГѓВ­ГѓВѕ','main',65,30)then
             if U and U.set_open then U.set_open(true)end
             if V and V.set_screen then V.set_screen('arbitrage')end
         end
@@ -3941,7 +3941,7 @@ end
 function P.save_template_options(index,opts)
     local list=P.settings().templates
     local t=list[index]
-    if not t then return false,'Шаблон не найден'end
+    if not t then return false,'ГГ ГЎГ«Г®Г­ Г­ГҐ Г­Г Г©Г¤ГҐГ­'end
     opts=opts or{}
     local previous={min=t.interval_min,max=t.interval_max,
         limit=t.auto_limit,random=t.random_line,waiting=t.waiting}
@@ -3958,7 +3958,7 @@ function P.save_template_options(index,opts)
     if not ok then
         t.interval_min=previous.min;t.interval_max=previous.max
         t.auto_limit=previous.limit;t.random_line=previous.random;t.waiting=previous.waiting
-        return false,'Не удалось сохранить настройки'
+        return false,'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј Г­Г Г±ГІГ°Г®Г©ГЄГЁ'
     end
     return true
 end
@@ -4005,7 +4005,7 @@ function P.tick(at,send,connected)
     if limit>0 and t.auto_count>=limit then
         t.auto=false;t.auto_count=0
         if DSP.save_settings then DSP.save_settings()end
-        P.last_error='Шаблон «'..tostring(t.name or'?')..'»: лимит выполнен'
+        P.last_error='ГГ ГЎГ«Г®Г­ В«'..tostring(t.name or'?')..'В»: Г«ГЁГ¬ГЁГІ ГўГ»ГЇГ®Г«Г­ГҐГ­'
     end
     return ok
 end
@@ -4016,25 +4016,25 @@ local function connected_now()
     return true
 end
 function P.send_template_once(index)
-    if P.manual_busy then return false,'Уже отправляется другой шаблон'end
+    if P.manual_busy then return false,'Г“Г¦ГҐ Г®ГІГЇГ°Г ГўГ«ГїГҐГІГ±Гї Г¤Г°ГіГЈГ®Г© ГёГ ГЎГ«Г®Г­'end
     local t=P.settings().templates[index]
-    if not t then return false,'Шаблон не найден'end
+    if not t then return false,'ГГ ГЎГ«Г®Г­ Г­ГҐ Г­Г Г©Г¤ГҐГ­'end
     local rows={}
     for _,row in ipairs(t.rows or{})do
         if row.auto~=false and type(row.text)=='string'and P.validate(row.text)then rows[#rows+1]=row end
     end
-    if #rows==0 then return false,'Нет включённых строк'end
-    if not connected_now()then return false,'Нет подключения к игре'end
-    if not(lua_thread and lua_thread.create and wait)then return false,'Игровой поток недоступен'end
+    if #rows==0 then return false,'ГЌГҐГІ ГўГЄГ«ГѕГ·ВёГ­Г­Г»Гµ Г±ГІГ°Г®ГЄ'end
+    if not connected_now()then return false,'ГЌГҐГІ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї ГЄ ГЁГЈГ°ГҐ'end
+    if not(lua_thread and lua_thread.create and wait)then return false,'Г€ГЈГ°Г®ГўГ®Г© ГЇГ®ГІГ®ГЄ Г­ГҐГ¤Г®Г±ГІГіГЇГҐГ­'end
     local pause=decimal(t.waiting,.5,10,1.5)
     P.manual_busy=true;P.manual_template=index;P.last_error=nil
     lua_thread.create(function()
         for i,row in ipairs(rows)do
-            if not connected_now()then P.last_error='Нет подключения к игре';break end
+            if not connected_now()then P.last_error='ГЌГҐГІ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї ГЄ ГЁГЈГ°ГҐ';break end
             local resolved,why=P.expand(row.text)
             if not resolved then P.last_error=tostring(why);break end
             local ok,result=pcall(sampSendChat,resolved)
-            if not ok or result==false then P.last_error='Отправка не удалась';break end
+            if not ok or result==false then P.last_error='ГЋГІГЇГ°Г ГўГЄГ  Г­ГҐ ГіГ¤Г Г«Г Г±Гј';break end
             local at=os.time()
             P.last_sent=at;P.session_count=(P.session_count or 0)+1
             t.last_sent=at;row.last_sent=at;P.last_command=resolved
@@ -4098,7 +4098,7 @@ end
 local function raw_qty(raw)
     local s=tostring(raw or'')
     local q=s:match('[xX]%s*(%d+)') or s:match('(%d+)%s*[xX]')
-        or s:match('(%d+)%s*шт')
+        or s:match('(%d+)%s*ГёГІ')
     q=positive(q)
     return q>0 and q or nil
 end
@@ -4268,9 +4268,9 @@ function V.list(key,draw,options)
         elseif o.scroll_buttons==true then
             imgui.Separator();V.scroll_buttons(key)
             if type(o.footer)=='function'then V.inline();o.footer()
-            elseif o.count then V.inline();V.muted(tostring(o.count)..' записей')end
+            elseif o.count then V.inline();V.muted(tostring(o.count)..' Г§Г ГЇГЁГ±ГҐГ©')end
         elseif type(o.footer)=='function'then imgui.Separator();o.footer()
-        elseif o.count then imgui.Separator();V.muted(tostring(o.count)..' записей')end
+        elseif o.count then imgui.Separator();V.muted(tostring(o.count)..' Г§Г ГЇГЁГ±ГҐГ©')end
     end
 end
 return true
@@ -4298,7 +4298,7 @@ local function best_plan(g)
     local p=DSP.market.plan_offers(g,nil,nil,{
         extra=V.arb_extra_enabled and V.arb_extra and V.arb_extra.value or 0})
     if p.qty<=0 then
-        V.arb_best_error='Нет выгодного маршрута при текущих фильтрах'
+        V.arb_best_error='ГЌГҐГІ ГўГ»ГЈГ®Г¤Г­Г®ГЈГ® Г¬Г Г°ГёГ°ГіГІГ  ГЇГ°ГЁ ГІГҐГЄГіГ№ГЁГµ ГґГЁГ«ГјГІГ°Г Гµ'
         return
     end
     V.arb_sellers={};V.arb_buyers={}
@@ -4339,31 +4339,31 @@ local function offer_row(o,i)
     local missing=DSP.market.is_shop_missing and DSP.market.is_shop_missing(o.shop,os.time(),o.ts)
     V.row('arb_offer_'..V.arb_tab..i,100,function(w,x,y)
         local right=math.max(155,w-170)
-        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or'?'),right-8))
+        V.at(x,y+1);V.text(V.fit('#'..tostring(o.shop)..' В· '..tostring(o.owner or'?'),right-8))
         local count=DSP.market.format_units(o.qty)
         local row=V.arb_detail_group and V.arb_detail_group.row
         local live_qty=DSP.market.live_offer_quantity(row,V.arb_tab,o)
-        local status=o.qty_source=='game' and 'проверено: игра' or
-            o.qty_source=='manual' and 'проверено вручную' or 'API, не подтверждено'
-        V.at(x,y+26);V.muted(V.fit(count..' шт. · '..status..
-            (live_qty and (' · Игра: '..DSP.market.format_units(live_qty)) or ''),right-8))
-        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.offer_freshness(o.ts),right-8))
+        local status=o.qty_source=='game' and 'ГЇГ°Г®ГўГҐГ°ГҐГ­Г®: ГЁГЈГ°Г ' or
+            o.qty_source=='manual' and 'ГЇГ°Г®ГўГҐГ°ГҐГ­Г® ГўГ°ГіГ·Г­ГіГѕ' or 'API, Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­Г®'
+        V.at(x,y+26);V.muted(V.fit(count..' ГёГІ. В· '..status..
+            (live_qty and (' В· Г€ГЈГ°Г : '..DSP.market.format_units(live_qty)) or ''),right-8))
+        V.at(x,y+52);V.text(V.fit(DSP.money(o.price)..'/ГёГІ. В· '..DSP.market.offer_freshness(o.ts),right-8))
         if missing then
-            V.at(x,y+76);V.red('Лавка недоступна: исключена из плана')
+            V.at(x,y+76);V.red('Г‹Г ГўГЄГ  Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г : ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г  ГЁГ§ ГЇГ«Г Г­Г ')
         elseif o.qty==1 and not o.verified_at then
-            V.at(x,y+76);V.muted(V.fit('Внимание: 1 может быть количеством слотов',right-8))
+            V.at(x,y+76);V.muted(V.fit('Г‚Г­ГЁГ¬Г Г­ГЁГҐ: 1 Г¬Г®Г¦ГҐГІ ГЎГ»ГІГј ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ®Г¬ Г±Г«Г®ГІГ®Гў',right-8))
         end
         V.at(x+right,y+1)
-        if not missing and b(checked and 'Снять выбор' or 'Выбрать','select_'..i,160,checked)then
+        if not missing and b(checked and 'Г‘Г­ГїГІГј ГўГ»ГЎГ®Г°' or 'Г‚Г»ГЎГ°Г ГІГј','select_'..i,160,checked)then
             selected[key]=not checked or nil;V.arb_revision=V.arb_revision+1
         end
         V.at(x+right,y+49)
-        if b('Уточнить','verify_'..V.arb_tab..i,80,false)then
+        if b('Г“ГІГ®Г·Г­ГЁГІГј','verify_'..V.arb_tab..i,80,false)then
             V.arb_verify={offer=o,side=V.arb_tab,source=live_qty and 'game' or 'manual'}
             V.arb_verify_value={qty=live_qty or tonumber(o.qty) or 0}
         end
         V.inline(4)
-        if b(missing and 'Вернуть' or 'Нет лавки','gone_'..V.arb_tab..i,82,missing)then
+        if b(missing and 'Г‚ГҐГ°Г­ГіГІГј' or 'ГЌГҐГІ Г«Г ГўГЄГЁ','gone_'..V.arb_tab..i,82,missing)then
             if missing then DSP.market.restore_shop(o.shop) else DSP.market.mark_shop_missing(o.shop,30)end
             V.arb_revision=V.arb_revision+1;V.arb_route=false;V.cache.arb_plan=nil;M.defer_save()
         end
@@ -4372,27 +4372,27 @@ end
 local function route_rows(p)
     return function(r,i)
         V.row('route_'..i,100,function(w,x,y)
-            V.text(V.fit('КУПИТЬ '..r.tradable_qty..' шт. у лавки #'..tostring(r.sell_offer.shop)..' · '..DSP.money(r.p_buy)..'/шт.',w))
-            V.at(x,y+26);V.text(V.fit('ПРОДАТЬ скупщику #'..tostring(r.buy_offer.shop)..' · '..DSP.money(r.p_sell)..'/шт.',w))
+            V.text(V.fit('ГЉГ“ГЏГ€Г’Гњ '..r.tradable_qty..' ГёГІ. Гі Г«Г ГўГЄГЁ #'..tostring(r.sell_offer.shop)..' В· '..DSP.money(r.p_buy)..'/ГёГІ.',w))
+            V.at(x,y+26);V.text(V.fit('ГЏГђГЋГ„ГЂГ’Гњ Г±ГЄГіГЇГ№ГЁГЄГі #'..tostring(r.buy_offer.shop)..' В· '..DSP.money(r.p_sell)..'/ГёГІ.',w))
             V.at(x,y+52)
-            if b('К продавцу','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
-            V.inline();if b('К скупщику','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
+            if b('ГЉ ГЇГ°Г®Г¤Г ГўГ¶Гі','route_sell_'..i,140)then DSP.market.mark_shop(r.sell_offer.shop)end
+            V.inline();if b('ГЉ Г±ГЄГіГЇГ№ГЁГЄГі','route_buy_'..i,144)then DSP.market.mark_shop(r.buy_offer.shop)end
             V.inline();V.green('~ +'..DSP.money(r.net_profit))
             if r.same_shop then
-                V.at(x,y+78);V.red('Одна лавка: возможность обратной сделки проверьте в игре')
+                V.at(x,y+78);V.red('ГЋГ¤Г­Г  Г«Г ГўГЄГ : ГўГ®Г§Г¬Г®Г¦Г­Г®Г±ГІГј Г®ГЎГ°Г ГІГ­Г®Г© Г±Г¤ГҐГ«ГЄГЁ ГЇГ°Г®ГўГҐГ°ГјГІГҐ Гў ГЁГЈГ°ГҐ')
             end
         end)
     end
 end
 local function finance(p,compact)
     -- Planned, not executed. Display each money component explicitly.
-    V.muted('Расчёт по заявкам API, не совершённая сделка')
-    V.text('Закупка: -'..DSP.money(p.cost or 0))
-    V.text('Продажа, до комиссии: +'..DSP.money(p.gross or 0))
-    V.muted('Комиссия (принятая): -'..DSP.money(p.fee or 0))
-    V.muted('Поступления после комиссии: '..DSP.money(p.revenue or 0))
-    if (p.extra or 0)>0 then V.muted('Доп. расходы: -'..DSP.money(p.extra))end
-    local result='ОЖИДАЕМАЯ ПРИБЫЛЬ: '..DSP.money(p.profit or 0)
+    V.muted('ГђГ Г±Г·ВёГІ ГЇГ® Г§Г ГїГўГЄГ Г¬ API, Г­ГҐ Г±Г®ГўГҐГ°ГёВёГ­Г­Г Гї Г±Г¤ГҐГ«ГЄГ ')
+    V.text('Г‡Г ГЄГіГЇГЄГ : -'..DSP.money(p.cost or 0))
+    V.text('ГЏГ°Г®Г¤Г Г¦Г , Г¤Г® ГЄГ®Г¬ГЁГ±Г±ГЁГЁ: +'..DSP.money(p.gross or 0))
+    V.muted('ГЉГ®Г¬ГЁГ±Г±ГЁГї (ГЇГ°ГЁГ­ГїГІГ Гї): -'..DSP.money(p.fee or 0))
+    V.muted('ГЏГ®Г±ГІГіГЇГ«ГҐГ­ГЁГї ГЇГ®Г±Г«ГҐ ГЄГ®Г¬ГЁГ±Г±ГЁГЁ: '..DSP.money(p.revenue or 0))
+    if (p.extra or 0)>0 then V.muted('Г„Г®ГЇ. Г°Г Г±ГµГ®Г¤Г»: -'..DSP.money(p.extra))end
+    local result='ГЋГ†Г€Г„ГЂГ…ГЊГЂГџ ГЏГђГ€ГЃГ›Г‹Гњ: '..DSP.money(p.profit or 0)
     if (p.profit or 0)>=0 then V.green(result)else V.red(result)end
 end
 
@@ -4401,24 +4401,24 @@ local function details(g)
     local compact=imgui.GetContentRegionAvail().y<400
     V.arb_extra=V.arb_extra or{value=0}
     local function extra_control()
-        if b(V.arb_extra_enabled and 'x Расходы' or '+ Расходы','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
+        if b(V.arb_extra_enabled and 'x ГђГ Г±ГµГ®Г¤Г»' or '+ ГђГ Г±ГµГ®Г¤Г»','extra',136,V.arb_extra_enabled)then V.arb_extra_enabled=not V.arb_extra_enabled end
         if V.arb_extra_enabled then V.inline();M.compact_number(V.arb_extra,'value','arb_extra',130,0)end
     end
     V.text(V.fit(g.name,imgui.GetContentRegionAvail().x-(compact and 290 or 0)))
     if compact then V.inline();extra_control()end
-    V.muted('Продают '..(g.row.sell.qty or g.supply)..' · Скупают '..(g.row.buy.qty or g.demand)..' · План '..p.qty..' шт.')
+    V.muted('ГЏГ°Г®Г¤Г ГѕГІ '..(g.row.sell.qty or g.supply)..' В· Г‘ГЄГіГЇГ ГѕГІ '..(g.row.buy.qty or g.demand)..' В· ГЏГ«Г Г­ '..p.qty..' ГёГІ.')
     local changed=V.arb_snapshot~=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
-    if not compact then V.muted(V.fit('Снимок '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
-        (changed and ' · есть новые данные, откройте заново'or ' · API, наличие проверьте в игре'),imgui.GetContentRegionAvail().x))end
+    if not compact then V.muted(V.fit('Г‘Г­ГЁГ¬Г®ГЄ '..os.date('%H:%M:%S',V.arb_snapshot_time or os.time())..
+        (changed and ' В· ГҐГ±ГІГј Г­Г®ГўГ»ГҐ Г¤Г Г­Г­Г»ГҐ, Г®ГІГЄГ°Г®Г©ГІГҐ Г§Г Г­Г®ГўГ®'or ' В· API, Г­Г Г«ГЁГ·ГЁГҐ ГЇГ°Г®ГўГҐГ°ГјГІГҐ Гў ГЁГЈГ°ГҐ'),imgui.GetContentRegionAvail().x))end
     finance(p,compact)
     local f=DSP.settings.arb_filters or {}
-    if not compact then V.muted('План условный: доступность не забронирована. Запас спроса: '
-        ..tostring(f.safety_pct or 0)..'%; обновите и проверьте скупку перед закупкой.')end
+    if not compact then V.muted('ГЏГ«Г Г­ ГіГ±Г«Г®ГўГ­Г»Г©: Г¤Г®Г±ГІГіГЇГ­Г®Г±ГІГј Г­ГҐ Г§Г ГЎГ°Г®Г­ГЁГ°Г®ГўГ Г­Г . Г‡Г ГЇГ Г± Г±ГЇГ°Г®Г±Г : '
+        ..tostring(f.safety_pct or 0)..'%; Г®ГЎГ­Г®ГўГЁГІГҐ ГЁ ГЇГ°Г®ГўГҐГ°ГјГІГҐ Г±ГЄГіГЇГЄГі ГЇГҐГ°ГҐГ¤ Г§Г ГЄГіГЇГЄГ®Г©.')end
     if V.arb_verify and V.arb_verify_value then
         local vr=V.arb_verify
-        V.muted(V.fit('Фактически проверено в игре: #'..tostring(vr.offer.shop)..' · '..tostring(vr.side=='buy' and 'скупает' or 'продаёт'),imgui.GetContentRegionAvail().x))
+        V.muted(V.fit('Г”Г ГЄГІГЁГ·ГҐГ±ГЄГЁ ГЇГ°Г®ГўГҐГ°ГҐГ­Г® Гў ГЁГЈГ°ГҐ: #'..tostring(vr.offer.shop)..' В· '..tostring(vr.side=='buy' and 'Г±ГЄГіГЇГ ГҐГІ' or 'ГЇГ°Г®Г¤Г ВёГІ'),imgui.GetContentRegionAvail().x))
         M.compact_number(V.arb_verify_value,'qty','arb_verify_qty',130,0)
-        V.inline();if b('Применить','verify_save',112)then
+        V.inline();if b('ГЏГ°ГЁГ¬ГҐГ­ГЁГІГј','verify_save',112)then
             local game_now=DSP.market.live_offer_quantity(g.row,vr.side,vr.offer)
             local source=vr.source=='game' and game_now==V.arb_verify_value.qty and 'game' or 'manual'
             local ok,err=DSP.market.confirm_offer_quantity(g.row,vr.side,vr.offer,V.arb_verify_value.qty,source)
@@ -4428,55 +4428,55 @@ local function details(g)
                 V.arb_snapshot=tostring(DSP.market.state.sid)..'/'..tostring(DSP.market.state.version)
             else V.arb_best_error=tostring(err)end
         end
-        V.inline();if b('Отмена','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
+        V.inline();if b('ГЋГІГ¬ГҐГ­Г ','verify_cancel',98)then V.arb_verify=nil;V.arb_verify_value=nil end
         if V.arb_best_error then V.red(V.fit(V.arb_best_error,imgui.GetContentRegionAvail().x))end
         return
     end
     if V.arb_route then
-        if b('< Предложения','back_offers',170)then V.arb_route=false end
+        if b('< ГЏГ°ГҐГ¤Г«Г®Г¦ГҐГ­ГЁГї','back_offers',170)then V.arb_route=false end
         V.inline()
-        if DSP.arb_agent and b('В МИНИ-АГЕНТ','route_to_agent',176,true)then
+        if DSP.arb_agent and b('Г‚ ГЊГ€ГЌГ€-ГЂГѓГ…ГЌГ’','route_to_agent',176,true)then
             local ok,why=DSP.arb_agent.add_plan(p)
             if ok then
                 DSP.arb_agent.show(true)
                 imgui.CloseCurrentPopup()
-            else DSP.notify('Агент: '..tostring(why))end
+            else DSP.notify('ГЂГЈГҐГ­ГІ: '..tostring(why))end
         end
         V.list_rows('arb_routes_'..g.key,p.routes,100,route_rows(p),{footer=function()
-            if p.profit>=0 then V.green(DSP.money(p.profit)..' чистой прибыли')
-            else V.red(DSP.money(p.profit)..' итогового убытка')end
+            if p.profit>=0 then V.green(DSP.money(p.profit)..' Г·ГЁГ±ГІГ®Г© ГЇГ°ГЁГЎГ»Г«ГЁ')
+            else V.red(DSP.money(p.profit)..' ГЁГІГ®ГЈГ®ГўГ®ГЈГ® ГіГЎГ»ГІГЄГ ')end
         end})
         return
     end
     local tw=imgui.GetContentRegionAvail().x
-    if b('Продают · купить '..#g.sellers,'sell',tw*.23,V.arb_tab=='sell')then V.arb_tab='sell'end
-    V.inline();if b('Скупают · продать '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
-    V.inline();if b('Лучший план >','best',tw*.27)then best_plan(g)end
-    V.inline();if b('Сброс','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
+    if b('ГЏГ°Г®Г¤Г ГѕГІ В· ГЄГіГЇГЁГІГј '..#g.sellers,'sell',tw*.23,V.arb_tab=='sell')then V.arb_tab='sell'end
+    V.inline();if b('Г‘ГЄГіГЇГ ГѕГІ В· ГЇГ°Г®Г¤Г ГІГј '..#g.buyers,'buy',tw*.23,V.arb_tab=='buy')then V.arb_tab='buy'end
+    V.inline();if b('Г‹ГіГ·ГёГЁГ© ГЇГ«Г Г­ >','best',tw*.27)then best_plan(g)end
+    V.inline();if b('Г‘ГЎГ°Г®Г±','none',-1)then V.arb_sellers={};V.arb_buyers={};V.arb_revision=V.arb_revision+1 end
     if not compact then extra_control()end
     if V.arb_best_error then V.red(V.arb_best_error)end
     local offers=V.arb_tab=='sell'and g.sellers or g.buyers
     V.list_rows('arb_'..g.key..'_'..V.arb_tab,offers,100,offer_row,{footer=function()
-        if b('Маршрут >','route',142,true)then V.arb_route=true end
-        V.inline();if b('Закрыть','close_details',116)then imgui.CloseCurrentPopup()end
+        if b('ГЊГ Г°ГёГ°ГіГІ >','route',142,true)then V.arb_route=true end
+        V.inline();if b('Г‡Г ГЄГ°Г»ГІГј','close_details',116)then imgui.CloseCurrentPopup()end
     end})
 end
 function V.arbitrage()
     local st=DSP.market.state
     local compact_h=imgui.GetContentRegionAvail().y<340
-    V.text('Арбитраж');V.inline();V.muted('Снимок: '..DSP.market.freshness())
+    V.text('ГЂГ°ГЎГЁГІГ°Г Г¦');V.inline();V.muted('Г‘Г­ГЁГ¬Г®ГЄ: '..DSP.market.freshness())
     if DSP.arb_agent then
         V.inline()
-        if b(DSP.arb_agent.active()and'МИНИ-АГЕНТ >'or'НАЧАТЬ СЕССИЮ','session_start',190,true)then
+        if b(DSP.arb_agent.active()and'ГЊГ€ГЌГ€-ГЂГѓГ…ГЌГ’ >'or'ГЌГЂГ—ГЂГ’Гњ Г‘Г…Г‘Г‘Г€Гћ','session_start',190,true)then
             local ok,why
             if DSP.arb_agent.active()then DSP.arb_agent.show(true);ok=true
             else ok,why=DSP.arb_agent.start_market()end
-            if not ok then DSP.notify('Агент арбитража: '..tostring(why))end
+            if not ok then DSP.notify('ГЂГЈГҐГ­ГІ Г Г°ГЎГЁГІГ°Г Г¦Г : '..tostring(why))end
         end
         local st_agent=DSP.arb_agent.stats()
-        if st_agent.routes>0 then V.muted('Сессия: '..st_agent.done..'/'..st_agent.routes..' маршрутов')end
+        if st_agent.routes>0 then V.muted('Г‘ГҐГ±Г±ГЁГї: '..st_agent.done..'/'..st_agent.routes..' Г¬Г Г°ГёГ°ГіГІГ®Гў')end
     end
-    V.inline();if b(st.status=='loading' and 'Загрузка...' or 'Обновить','refresh',120)then DSP.market.pull(st.sid)end
+    V.inline();if b(st.status=='loading' and 'Г‡Г ГЈГ°ГіГ§ГЄГ ...' or 'ГЋГЎГ­Г®ГўГЁГІГј','refresh',120)then DSP.market.pull(st.sid)end
     V.arb_source=V.arb_source or 'api'
     local source_api_w=compact_h and 88 or 116
     local source_local_w=compact_h and 132 or 175
@@ -4484,18 +4484,18 @@ function V.arbitrage()
         V.arb_source='api';V.reset_list('arb_main')
     end
     V.inline(5,source_local_w)
-    if b('МОИ СКАНЫ','source_local',source_local_w,V.arb_source=='local')then
+    if b('ГЊГЋГ€ Г‘ГЉГЂГЌГ›','source_local',source_local_w,V.arb_source=='local')then
         V.arb_source='local';V.reset_list('local_arb_items')
     end
     if compact_h and V.arb_source=='api' then
         V.inline(5,132)
-        if b(V.arb_sort=='az' and 'А-Я' or 'Прибыль','sort_compact',132,V.arb_sort~='az')then
+        if b(V.arb_sort=='az' and 'ГЂ-Гџ' or 'ГЏГ°ГЁГЎГ»Г«Гј','sort_compact',132,V.arb_sort~='az')then
             V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
             V.reset_list('arb_main')
         end
         V.inline(5,108)
-        if b('Фильтры','filters_compact',108,V.arb_filters)then
-            V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+        if b('Г”ГЁГ«ГјГІГ°Г»','filters_compact',108,V.arb_filters)then
+            V.arb_filters=true;V.open_popup('Г”ГЁГ«ГјГІГ°Г» Г Г°ГЎГЁГІГ°Г Г¦Г ','arb_filters')
         end
     end
     if V.arb_source=='local' then
@@ -4504,45 +4504,45 @@ function V.arbitrage()
     end
     if st.error then
         local delay=(tonumber(st.next_auto_retry) or 0)-os.time()
-        V.red(V.fit('API: '..tostring(st.error)..(delay>0 and (' · авто-повтор через '..delay..'с')or ''),
+        V.red(V.fit('API: '..tostring(st.error)..(delay>0 and (' В· Г ГўГІГ®-ГЇГ®ГўГІГ®Г° Г·ГҐГ°ГҐГ§ '..delay..'Г±')or ''),
             imgui.GetContentRegionAvail().x))
     end
     local af=DSP.settings.arb_filters or {}
     if not compact_h then
-        V.muted(V.fit('Фильтры: '..(tonumber(af.max_age)==0 and 'без ограничения времени' or
-            (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' мин'))..
-            ' · ROI от '..tostring(af.min_roi or 0)..'% · резерв '..tostring(af.safety_pct or 0)..
-            '% · комиссия '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
+        V.muted(V.fit('Г”ГЁГ«ГјГІГ°Г»: '..(tonumber(af.max_age)==0 and 'ГЎГҐГ§ Г®ГЈГ°Г Г­ГЁГ·ГҐГ­ГЁГї ГўГ°ГҐГ¬ГҐГ­ГЁ' or
+            (tostring(math.floor((tonumber(af.max_age)or 600)/60))..' Г¬ГЁГ­'))..
+            ' В· ROI Г®ГІ '..tostring(af.min_roi or 0)..'% В· Г°ГҐГ§ГҐГ°Гў '..tostring(af.safety_pct or 0)..
+            '% В· ГЄГ®Г¬ГЁГ±Г±ГЁГї '..tostring((tonumber(af.tax_bp) or DSP.settings.tax_bp or 200)/100)..'%',
             imgui.GetContentRegionAvail().x))
     end
-    local query,edited=V.search('arb','Поиск предмета',-1)
+    local query,edited=V.search('arb','ГЏГ®ГЁГ±ГЄ ГЇГ°ГҐГ¤Г¬ГҐГІГ ',-1)
     if edited then V.reset_list('arb_main')end
     if not compact_h then
-        if b(V.arb_sort=='az' and 'А-Я' or 'Прибыль: больше','sort',143,V.arb_sort=='az')then
+        if b(V.arb_sort=='az' and 'ГЂ-Гџ' or 'ГЏГ°ГЁГЎГ»Г«Гј: ГЎГ®Г«ГјГёГҐ','sort',143,V.arb_sort=='az')then
             V.arb_sort=V.arb_sort=='az' and 'profit' or 'az'
             V.reset_list('arb_main')
         end
         V.inline()
-        if b('Фильтры','filters',120,V.arb_filters)then
-            V.arb_filters=true;V.open_popup('Фильтры арбитража','arb_filters')
+        if b('Г”ГЁГ«ГјГІГ°Г»','filters',120,V.arb_filters)then
+            V.arb_filters=true;V.open_popup('Г”ГЁГ«ГјГІГ°Г» Г Г°ГЎГЁГІГ°Г Г¦Г ','arb_filters')
         end
     end
     -- Direct game observation does not require the external API to refresh.
     local live=DSP.market.live_shop_spreads and DSP.market.live_shop_spreads() or {}
     if #live>0 then
-        V.green('НАЙДЕНО В ОТКРЫТОЙ ЛАВКЕ: '..tostring(#live))
+        V.green('ГЌГЂГ‰Г„Г…ГЌГЋ Г‚ ГЋГ’ГЉГђГ›Г’ГЋГ‰ Г‹ГЂГ‚ГЉГ…: '..tostring(#live))
         V.list_rows('arb_live_shop',live,86,function(deal,i)
             V.row('arb_live_row_'..i,86,function(w,x,y)
-                V.at(x,y+2);V.text(V.fit(deal.name..' · лавка #'..tostring(deal.shop),w))
-                V.at(x,y+27);V.muted(V.fit('Купить '..DSP.money(deal.buy_price)..' / сдать '..DSP.money(deal.sell_price),w))
-                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/шт. после комиссии · '..
-                    (deal.verified_quantity and ('до '..tostring(deal.quantity)..' шт.') or 'количество неизвестно'),w))
+                V.at(x,y+2);V.text(V.fit(deal.name..' В· Г«Г ГўГЄГ  #'..tostring(deal.shop),w))
+                V.at(x,y+27);V.muted(V.fit('ГЉГіГЇГЁГІГј '..DSP.money(deal.buy_price)..' / Г±Г¤Г ГІГј '..DSP.money(deal.sell_price),w))
+                V.at(x,y+52);V.green(V.fit('~ +'..DSP.money(deal.profit_unit)..'/ГёГІ. ГЇГ®Г±Г«ГҐ ГЄГ®Г¬ГЁГ±Г±ГЁГЁ В· '..
+                    (deal.verified_quantity and ('Г¤Г® '..tostring(deal.quantity)..' ГёГІ.') or 'ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г­ГҐГЁГ§ГўГҐГ±ГІГ­Г®'),w))
             end)
         end,{height=math.min(180,math.max(90,imgui.GetContentRegionAvail().y*.30)),footer=false})
     end
     local groups,status
     if DSP.market.arbitrage_grouped_ui then groups,status=DSP.market.arbitrage_grouped_ui()else groups=DSP.market.arbitrage_grouped()end
-    if status=='loading'then V.muted('Расчёт рынка...')elseif status=='error'then V.red('Ошибка расчёта. См. журнал')end
+    if status=='loading'then V.muted('ГђГ Г±Г·ВёГІ Г°Г»Г­ГЄГ ...')elseif status=='error'then V.red('ГЋГёГЁГЎГЄГ  Г°Г Г±Г·ВёГІГ . Г‘Г¬. Г¦ГіГ°Г­Г Г«')end
     local sig=tostring(groups)..'|'..DSP.lower(query)..'|'..tostring(V.arb_sort)
     local filtered=V.memo('arb_rows',sig,function()
         local out={};local q=DSP.lower(query)
@@ -4556,19 +4556,19 @@ function V.arbitrage()
         end)
         return out
     end)
-    if st.status=='cache' then V.red(V.fit('Сеть недоступна: расчёт по сохранённому снимку, наличие не подтверждено',imgui.GetContentRegionAvail().x))end
+    if st.status=='cache' then V.red(V.fit('Г‘ГҐГІГј Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г : Г°Г Г±Г·ВёГІ ГЇГ® Г±Г®ГµГ°Г Г­ВёГ­Г­Г®Г¬Гі Г±Г­ГЁГ¬ГЄГі, Г­Г Г«ГЁГ·ГЁГҐ Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­Г®',imgui.GetContentRegionAvail().x))end
     if status~='loading' and #groups==0 and DSP.market.arbitrage_visibility then
         local d=DSP.market.arbitrage_visibility()
         if d.pairs>0 then
-            V.muted(V.fit('В API есть '..d.pairs..' ценовых разрывов (в одной лавке: '..d.same_shop..
-                '), но фильтр свежести/объёма/комиссии исключил маршруты.',imgui.GetContentRegionAvail().x))
+            V.muted(V.fit('Г‚ API ГҐГ±ГІГј '..d.pairs..' Г¶ГҐГ­Г®ГўГ»Гµ Г°Г Г§Г°Г»ГўГ®Гў (Гў Г®Г¤Г­Г®Г© Г«Г ГўГЄГҐ: '..d.same_shop..
+                '), Г­Г® ГґГЁГ«ГјГІГ° Г±ГўГҐГ¦ГҐГ±ГІГЁ/Г®ГЎГєВёГ¬Г /ГЄГ®Г¬ГЁГ±Г±ГЁГЁ ГЁГ±ГЄГ«ГѕГ·ГЁГ« Г¬Г Г°ГёГ°ГіГІГ».',imgui.GetContentRegionAvail().x))
         end
     end
     if #filtered==0 and status~='loading' then
         local age=tonumber((DSP.settings.arb_filters or{}).max_age)or 300
-        local reason=#groups>0 and 'По запросу ничего не найдено' or
-            (#(st.rows or{})==0 and 'Нет рынка: нажмите «Обновить»' or
-            ('Нет выгодных связок по фильтрам'..(age>0 and (' · старше '..math.floor(age/60)..'м исключены')or '')))
+        local reason=#groups>0 and 'ГЏГ® Г§Г ГЇГ°Г®Г±Гі Г­ГЁГ·ГҐГЈГ® Г­ГҐ Г­Г Г©Г¤ГҐГ­Г®' or
+            (#(st.rows or{})==0 and 'ГЌГҐГІ Г°Г»Г­ГЄГ : Г­Г Г¦Г¬ГЁГІГҐ В«ГЋГЎГ­Г®ГўГЁГІГјВ»' or
+            ('ГЌГҐГІ ГўГ»ГЈГ®Г¤Г­Г»Гµ Г±ГўГїГ§Г®ГЄ ГЇГ® ГґГЁГ«ГјГІГ°Г Г¬'..(age>0 and (' В· Г±ГІГ Г°ГёГҐ '..math.floor(age/60)..'Г¬ ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г»')or '')))
         V.muted(V.fit(reason,imgui.GetContentRegionAvail().x))
     end
     local list_options
@@ -4576,22 +4576,22 @@ function V.arbitrage()
         list_options={footer=false}
     else
         list_options={footer=function()
-            V.muted('Оценка по API, не гарантированная прибыль. Количество у скупщика может уменьшиться.')
+            V.muted('ГЋГ¶ГҐГ­ГЄГ  ГЇГ® API, Г­ГҐ ГЈГ Г°Г Г­ГІГЁГ°Г®ГўГ Г­Г­Г Гї ГЇГ°ГЁГЎГ»Г«Гј. ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ® Гі Г±ГЄГіГЇГ№ГЁГЄГ  Г¬Г®Г¦ГҐГІ ГіГ¬ГҐГ­ГјГёГЁГІГјГ±Гї.')
         end}
     end
     V.list_rows('arb_main',filtered,92,function(g,i)
         V.row('arb_group_'..i,92,function(w,x,y)
             M.thumbnail({name=g.name,id=g.row and g.row.id},34)
             V.at(x+44,y+2);V.text(V.fit(g.name,w-220))
-            V.at(x+44,y+29);V.muted(V.fit('Купить: '..DSP.market.format_units(g.supply)..
-                ' · Сдать: '..DSP.market.format_units(g.demand)..' шт. (API)',w-220))
-            V.at(x+44,y+54);V.muted(V.fit('План '..DSP.market.format_units(g.planned)..
-                ' шт. · Оценка прибыли '..DSP.money(g.profit),w-220))
+            V.at(x+44,y+29);V.muted(V.fit('ГЉГіГЇГЁГІГј: '..DSP.market.format_units(g.supply)..
+                ' В· Г‘Г¤Г ГІГј: '..DSP.market.format_units(g.demand)..' ГёГІ. (API)',w-220))
+            V.at(x+44,y+54);V.muted(V.fit('ГЏГ«Г Г­ '..DSP.market.format_units(g.planned)..
+                ' ГёГІ. В· ГЋГ¶ГҐГ­ГЄГ  ГЇГ°ГЁГЎГ»Г«ГЁ '..DSP.money(g.profit),w-220))
             V.at(x+w-164,y+15)
-            if b('Предложения >','group_'..i,160,false)then
+            if b('ГЏГ°ГҐГ¤Г«Г®Г¦ГҐГ­ГЁГї >','group_'..i,160,false)then
                 V.arb_item=g.key;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                 V.arb_server=st.sid;V.arb_detail_group=g;V.arb_snapshot_time=os.time()
-                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('Арбитраж','arb_details')
+                V.arb_route=false;V.arb_tab='sell';V.arb_best_error=nil;V.arb_verify=nil;choose_all(g);V.open_popup('ГЂГ°ГЎГЁГІГ°Г Г¦','arb_details')
             end
         end)
     end,list_options)
@@ -4599,7 +4599,7 @@ end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
-    if V.arb_filters then V.popup('Фильтры арбитража','arb_filters',function()
+    if V.arb_filters then V.popup('Г”ГЁГ«ГјГІГ°Г» Г Г°ГЎГЁГІГ°Г Г¦Г ','arb_filters',function()
         local f=DSP.settings.arb_filters or {};DSP.settings.arb_filters=f
         -- Fields are saved as numeric settings and never trigger requests per frame.
         -- 0 seconds means any age; percentage fields use explicit units.
@@ -4612,34 +4612,34 @@ function V.popups()
             end
         end
         V.list('arb_filter_controls',function(w)
-            number('Свежесть данных: максимум секунд (0 = без ограничения, 3600 = час)', 'max_age',0,2592000)
-            if b('10 мин','age10',110) then f.max_age=600;M.refresh_buffer(f,'max_age');changed=true end
-            V.inline();if b('1 час','age60',110)then f.max_age=3600;M.refresh_buffer(f,'max_age');changed=true end
-            V.inline();if b('Любой возраст','age_any',170)then f.max_age=0;M.refresh_buffer(f,'max_age');changed=true end
-            number('Комиссия в базисных пунктах: 100 = 1%, 250 = 2.5%', 'tax_bp',0,10000)
-            number('Резерв спроса (%) от 0 до 90: оставлять непроверенный объём', 'safety_pct',0,90)
-            number('Минимальная рентабельность ROI (%)', 'min_roi',0,100000)
-            number('Минимальная чистая прибыль на маршрут ($)', 'min_profit',0)
-            number('Минимальная прибыль с одной штуки ($)', 'min_unit_profit',0)
-            number('Максимальная цена закупки за штуку ($; 0 = без лимита)', 'max_buy_price',0)
-            number('Минимальный запас И спрос API (шт.; 0 = без лимита)', 'min_stock',0)
-            number('Бюджет на все маршруты ($; 0 = без лимита)', 'budget',0)
-            number('Максимум штук на маршрут (0 = без лимита)', 'max_qty',0)
-            V.muted('Лавки: любое сочетание / только одна и та же / только разные')
-            for i,opt in ipairs({{0,'Любые'},{1,'Одна'},{2,'Разные'}})do
+            number('Г‘ГўГҐГ¦ГҐГ±ГІГј Г¤Г Г­Г­Г»Гµ: Г¬Г ГЄГ±ГЁГ¬ГіГ¬ Г±ГҐГЄГіГ­Г¤ (0 = ГЎГҐГ§ Г®ГЈГ°Г Г­ГЁГ·ГҐГ­ГЁГї, 3600 = Г·Г Г±)', 'max_age',0,2592000)
+            if b('10 Г¬ГЁГ­','age10',110) then f.max_age=600;M.refresh_buffer(f,'max_age');changed=true end
+            V.inline();if b('1 Г·Г Г±','age60',110)then f.max_age=3600;M.refresh_buffer(f,'max_age');changed=true end
+            V.inline();if b('Г‹ГѕГЎГ®Г© ГўГ®Г§Г°Г Г±ГІ','age_any',170)then f.max_age=0;M.refresh_buffer(f,'max_age');changed=true end
+            number('ГЉГ®Г¬ГЁГ±Г±ГЁГї Гў ГЎГ Г§ГЁГ±Г­Г»Гµ ГЇГіГ­ГЄГІГ Гµ: 100 = 1%, 250 = 2.5%', 'tax_bp',0,10000)
+            number('ГђГҐГ§ГҐГ°Гў Г±ГЇГ°Г®Г±Г  (%) Г®ГІ 0 Г¤Г® 90: Г®Г±ГІГ ГўГ«ГїГІГј Г­ГҐГЇГ°Г®ГўГҐГ°ГҐГ­Г­Г»Г© Г®ГЎГєВёГ¬', 'safety_pct',0,90)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г Гї Г°ГҐГ­ГІГ ГЎГҐГ«ГјГ­Г®Г±ГІГј ROI (%)', 'min_roi',0,100000)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г Гї Г·ГЁГ±ГІГ Гї ГЇГ°ГЁГЎГ»Г«Гј Г­Г  Г¬Г Г°ГёГ°ГіГІ ($)', 'min_profit',0)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г Гї ГЇГ°ГЁГЎГ»Г«Гј Г± Г®Г¤Г­Г®Г© ГёГІГіГЄГЁ ($)', 'min_unit_profit',0)
+            number('ГЊГ ГЄГ±ГЁГ¬Г Г«ГјГ­Г Гї Г¶ГҐГ­Г  Г§Г ГЄГіГЇГЄГЁ Г§Г  ГёГІГіГЄГі ($; 0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'max_buy_price',0)
+            number('ГЊГЁГ­ГЁГ¬Г Г«ГјГ­Г»Г© Г§Г ГЇГ Г± Г€ Г±ГЇГ°Г®Г± API (ГёГІ.; 0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'min_stock',0)
+            number('ГЃГѕГ¤Г¦ГҐГІ Г­Г  ГўГ±ГҐ Г¬Г Г°ГёГ°ГіГІГ» ($; 0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'budget',0)
+            number('ГЊГ ГЄГ±ГЁГ¬ГіГ¬ ГёГІГіГЄ Г­Г  Г¬Г Г°ГёГ°ГіГІ (0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ )', 'max_qty',0)
+            V.muted('Г‹Г ГўГЄГЁ: Г«ГѕГЎГ®ГҐ Г±Г®Г·ГҐГІГ Г­ГЁГҐ / ГІГ®Г«ГјГЄГ® Г®Г¤Г­Г  ГЁ ГІГ  Г¦ГҐ / ГІГ®Г«ГјГЄГ® Г°Г Г§Г­Г»ГҐ')
+            for i,opt in ipairs({{0,'Г‹ГѕГЎГ»ГҐ'},{1,'ГЋГ¤Г­Г '},{2,'ГђГ Г§Г­Г»ГҐ'}})do
                 if i>1 then V.inline()end
                 if b(opt[2],'shop_mode_'..opt[1],110,f.shop_mode==opt[1])then f.shop_mode=opt[1];changed=true end
             end
-            V.muted('Порядок расчёта (при бюджете приоритет ROI)')
-            for i,opt in ipairs({{1,'Прибыль'},{2,'За штуку'},{3,'ROI'}})do
+            V.muted('ГЏГ®Г°ГїГ¤Г®ГЄ Г°Г Г±Г·ВёГІГ  (ГЇГ°ГЁ ГЎГѕГ¤Г¦ГҐГІГҐ ГЇГ°ГЁГ®Г°ГЁГІГҐГІ ROI)')
+            for i,opt in ipairs({{1,'ГЏГ°ГЁГЎГ»Г«Гј'},{2,'Г‡Г  ГёГІГіГЄГі'},{3,'ROI'}})do
                 if i>1 then V.inline()end
                 if b(opt[2],'sort_mode_'..opt[1],110,f.sort==opt[1])then f.sort=opt[1];changed=true end
             end
-            if b(f.allow_partial==false and '[ ] Частичные маршруты' or '[x] Частичные маршруты',
+            if b(f.allow_partial==false and '[ ] Г—Г Г±ГІГЁГ·Г­Г»ГҐ Г¬Г Г°ГёГ°ГіГІГ»' or '[x] Г—Г Г±ГІГЁГ·Г­Г»ГҐ Г¬Г Г°ГёГ°ГіГІГ»',
                 'allow_partial',290)then f.allow_partial=not(f.allow_partial~=false);changed=true end
-            if b(f.include_unknown==true and '[x] Без отметки времени' or '[ ] Без отметки времени',
+            if b(f.include_unknown==true and '[x] ГЃГҐГ§ Г®ГІГ¬ГҐГІГЄГЁ ГўГ°ГҐГ¬ГҐГ­ГЁ' or '[ ] ГЃГҐГ§ Г®ГІГ¬ГҐГІГЄГЁ ГўГ°ГҐГ¬ГҐГ­ГЁ',
                 'include_unknown',290)then f.include_unknown=not(f.include_unknown==true);changed=true end
-            if b('Сбросить фильтры','reset_filters',210)then
+            if b('Г‘ГЎГ°Г®Г±ГЁГІГј ГґГЁГ«ГјГІГ°Г»','reset_filters',210)then
                 local defaults={budget=0,min_profit=0,min_roi=0,sort=1,max_age=300,max_qty=0,
                     safety_pct=10,allow_partial=true,include_unknown=false,
                     tax_bp=DSP.settings.tax_bp or 200,min_unit_profit=0,max_buy_price=0,
@@ -4647,29 +4647,29 @@ function V.popups()
                 for k,v in pairs(defaults)do f[k]=v;M.refresh_buffer(f,k)end
                 changed=true
             end
-            V.muted('Возраст 0 означает показ даже старых офферов; это не гарантия наличия.')
+            V.muted('Г‚Г®Г§Г°Г Г±ГІ 0 Г®Г§Г­Г Г·Г ГҐГІ ГЇГ®ГЄГ Г§ Г¤Г Г¦ГҐ Г±ГІГ Г°Г»Гµ Г®ГґГґГҐГ°Г®Гў; ГЅГІГ® Г­ГҐ ГЈГ Г°Г Г­ГІГЁГї Г­Г Г«ГЁГ·ГЁГї.')
         end,{footer=true})
         if changed then
             DSP.market.invalidate_arbitrage();V.arb_revision=V.arb_revision+1
             V.reset_list('arb_main');M.defer_save()
         end
-        if b('Применить и закрыть','filters_done',220,true)then
+        if b('ГЏГ°ГЁГ¬ГҐГ­ГЁГІГј ГЁ Г§Г ГЄГ°Г»ГІГј','filters_done',220,true)then
             V.arb_filters=false;imgui.CloseCurrentPopup()
         end
     end,{w=690,h=570})end
-    V.popup('Арбитраж','arb_details',function()
+    V.popup('ГЂГ°ГЎГЁГІГ°Г Г¦','arb_details',function()
         local st=DSP.market.state
         if V.arb_server~=st.sid then
-            V.text('Выбран другой сервер');V.muted('Откройте предмет повторно для нового расчёта')
-            if b('Закрыть','stale_close',150)then imgui.CloseCurrentPopup()end
+            V.text('Г‚Г»ГЎГ°Г Г­ Г¤Г°ГіГЈГ®Г© Г±ГҐГ°ГўГҐГ°');V.muted('ГЋГІГЄГ°Г®Г©ГІГҐ ГЇГ°ГҐГ¤Г¬ГҐГІ ГЇГ®ГўГІГ®Г°Г­Г® Г¤Г«Гї Г­Г®ГўГ®ГЈГ® Г°Г Г±Г·ВёГІГ ')
+            if b('Г‡Г ГЄГ°Г»ГІГј','stale_close',150)then imgui.CloseCurrentPopup()end
             return
         end
         -- Never keep showing the old route after a market refresh: source
         -- offer tables are replaced, not updated in place.
         if V.arb_snapshot~=tostring(st.sid)..'/'..tostring(st.version)
             or st.status=='loading' then
-            V.red('Данные изменились или обновляются. Старый маршрут заблокирован.')
-            if b('Пересчитать','refresh_selected',164)then
+            V.red('Г„Г Г­Г­Г»ГҐ ГЁГ§Г¬ГҐГ­ГЁГ«ГЁГ±Гј ГЁГ«ГЁ Г®ГЎГ­Г®ГўГ«ГїГѕГІГ±Гї. Г‘ГІГ Г°Г»Г© Г¬Г Г°ГёГ°ГіГІ Г§Г ГЎГ«Г®ГЄГЁГ°Г®ГўГ Г­.')
+            if b('ГЏГҐГ°ГҐГ±Г·ГЁГІГ ГІГј','refresh_selected',164)then
                 local groups,status
                 if DSP.market.arbitrage_grouped_ui then
                     groups,status=DSP.market.arbitrage_grouped_ui()
@@ -4680,21 +4680,21 @@ function V.popups()
                         V.arb_detail_group=g;choose_all(g);V.arb_route=false
                         V.arb_verify=nil;V.arb_snapshot=tostring(st.sid)..'/'..tostring(st.version)
                         V.arb_snapshot_time=os.time()
-                    else V.arb_best_error='После обновления подходящий маршрут отсутствует'end
+                    else V.arb_best_error='ГЏГ®Г±Г«ГҐ Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї ГЇГ®Г¤ГµГ®Г¤ГїГ№ГЁГ© Г¬Г Г°ГёГ°ГіГІ Г®ГІГ±ГіГІГ±ГІГўГіГҐГІ'end
                 end
             end
-            V.inline();if b('Закрыть','stale_close_version',140)then imgui.CloseCurrentPopup()end
+            V.inline();if b('Г‡Г ГЄГ°Г»ГІГј','stale_close_version',140)then imgui.CloseCurrentPopup()end
             -- Keep the inspected snapshot browsable, but expose no old route,
             -- quantity confirmation or marker actions after a refresh.
             local snapshot=V.arb_detail_group
             if snapshot then
-                if b('Продают · снимок','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
-                V.inline();if b('Скупают · снимок','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
+                if b('ГЏГ°Г®Г¤Г ГѕГІ В· Г±Г­ГЁГ¬Г®ГЄ','sell',190,V.arb_tab=='sell')then V.arb_tab='sell'end
+                V.inline();if b('Г‘ГЄГіГЇГ ГѕГІ В· Г±Г­ГЁГ¬Г®ГЄ','buy',190,V.arb_tab=='buy')then V.arb_tab='buy'end
                 local offers=V.arb_tab=='sell'and snapshot.sellers or snapshot.buyers
                 V.list_rows('arb_stale_'..snapshot.key..'_'..V.arb_tab,offers,76,function(o,i)
                     V.row('stale_offer_'..i,76,function(w,x,y)
-                        V.text(V.fit('#'..tostring(o.shop)..' · '..tostring(o.owner or '?'),w))
-                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/шт. · '..DSP.market.format_units(o.qty)..' шт. · старый API-снимок',w))
+                        V.text(V.fit('#'..tostring(o.shop)..' В· '..tostring(o.owner or '?'),w))
+                        V.at(x,y+26);V.muted(V.fit(DSP.money(o.price)..'/ГёГІ. В· '..DSP.market.format_units(o.qty)..' ГёГІ. В· Г±ГІГ Г°Г»Г© API-Г±Г­ГЁГ¬Г®ГЄ',w))
                     end)
                 end)
             end
@@ -4702,8 +4702,8 @@ function V.popups()
         end
         local g=V.arb_detail_group
         if g then details(g)else
-            V.muted('Связка больше не проходит фильтры')
-            if b('Закрыть','empty_close',140)then imgui.CloseCurrentPopup()end
+            V.muted('Г‘ГўГїГ§ГЄГ  ГЎГ®Г«ГјГёГҐ Г­ГҐ ГЇГ°Г®ГµГ®Г¤ГЁГІ ГґГЁГ«ГјГІГ°Г»')
+            if b('Г‡Г ГЄГ°Г»ГІГј','empty_close',140)then imgui.CloseCurrentPopup()end
         end
     end,{w=850,h=560})
 end
@@ -4718,9 +4718,9 @@ V._stats_v293=true
 local old_tools=V.tools
 local function b(s,id,w,on)return V.button(s,'stats293_'..id,w,on,false,38)end
 local function statistics()
-    V.heading('Статистика ларцов / наград')
+    V.heading('Г‘ГІГ ГІГЁГ±ГІГЁГЄГ  Г«Г Г°Г¶Г®Гў / Г­Г ГЈГ°Г Г¤')
     V.stats293_period=V.stats293_period or DSP.settings.stats_mode or'day'
-    local periods={{'hour','Час'},{'day','День'},{'week','Неделя'},{'month','Месяц'},{'all','Всё'}}
+    local periods={{'hour','Г—Г Г±'},{'day','Г„ГҐГ­Гј'},{'week','ГЌГҐГ¤ГҐГ«Гї'},{'month','ГЊГҐГ±ГїГ¶'},{'all','Г‚Г±Вё'}}
     local pw=math.max(58,(imgui.GetContentRegionAvail().x-24)/5)
     for i,p in ipairs(periods)do
         if b(p[2],'period_'..p[1],pw,V.stats293_period==p[1])then
@@ -4729,38 +4729,38 @@ local function statistics()
         end
         if i<#periods then V.inline(6,pw)end
     end
-    local query=V.search('stats293','Поиск ларца / награды',-1)
+    local query=V.search('stats293','ГЏГ®ГЁГ±ГЄ Г«Г Г°Г¶Г  / Г­Г ГЈГ°Г Г¤Г»',-1)
     local s=C.drop_sales_stats(V.stats293_period,query)
-    V.green('Выпало: '..tostring(s.dropped)..' шт. · Продано: '..tostring(s.sold)..' шт.')
+    V.green('Г‚Г»ГЇГ Г«Г®: '..tostring(s.dropped)..' ГёГІ. В· ГЏГ°Г®Г¤Г Г­Г®: '..tostring(s.sold)..' ГёГІ.')
     if s.inventory_ready then
-        V.text('Фактически в последнем скане инвентаря: '..tostring(s.inventory_total)..' шт.')
+        V.text('Г”Г ГЄГІГЁГ·ГҐГ±ГЄГЁ Гў ГЇГ®Г±Г«ГҐГ¤Г­ГҐГ¬ Г±ГЄГ Г­ГҐ ГЁГ­ГўГҐГ­ГІГ Г°Гї: '..tostring(s.inventory_total)..' ГёГІ.')
     else
-        V.muted('Инвентарь ещё не сканирован: фактическое количество не подменяем расчётом.')
+        V.muted('Г€Г­ГўГҐГ­ГІГ Г°Гј ГҐГ№Вё Г­ГҐ Г±ГЄГ Г­ГЁГ°Г®ГўГ Г­: ГґГ ГЄГІГЁГ·ГҐГ±ГЄГ®ГҐ ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г­ГҐ ГЇГ®Г¤Г¬ГҐГ­ГїГҐГ¬ Г°Г Г±Г·ВёГІГ®Г¬.')
     end
-    V.muted('Остаток по журналу: '..tostring(s.journal_balance)..' шт. (дроп за всё время - подтверждённые продажи)')
-    if s.approx then V.muted('~ Для части старых рыночных чеков количество не было сохранено точно.')end
-    if DSP.auto and not DSP.auto.scanning and b('Обновить фактический инвентарь','scan_inventory',260,true)then
+    V.muted('ГЋГ±ГІГ ГІГ®ГЄ ГЇГ® Г¦ГіГ°Г­Г Г«Гі: '..tostring(s.journal_balance)..' ГёГІ. (Г¤Г°Г®ГЇ Г§Г  ГўГ±Вё ГўГ°ГҐГ¬Гї - ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­Г­Г»ГҐ ГЇГ°Г®Г¤Г Г¦ГЁ)')
+    if s.approx then V.muted('~ Г„Г«Гї Г·Г Г±ГІГЁ Г±ГІГ Г°Г»Гµ Г°Г»Г­Г®Г·Г­Г»Гµ Г·ГҐГЄГ®Гў ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г­ГҐ ГЎГ»Г«Г® Г±Г®ГµГ°Г Г­ГҐГ­Г® ГІГ®Г·Г­Г®.')end
+    if DSP.auto and not DSP.auto.scanning and b('ГЋГЎГ­Г®ГўГЁГІГј ГґГ ГЄГІГЁГ·ГҐГ±ГЄГЁГ© ГЁГ­ГўГҐГ­ГІГ Г°Гј','scan_inventory',260,true)then
         local ok=DSP.auto.scan_inventory()
-        if ok==false then V.stats293_error='Сканирование сейчас недоступно'else V.stats293_error=nil end
+        if ok==false then V.stats293_error='Г‘ГЄГ Г­ГЁГ°Г®ГўГ Г­ГЁГҐ Г±ГҐГ©Г·Г Г± Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г®'else V.stats293_error=nil end
     elseif DSP.auto and DSP.auto.scanning then
-        V.muted('Сканирование инвентаря...')
+        V.muted('Г‘ГЄГ Г­ГЁГ°Г®ГўГ Г­ГЁГҐ ГЁГ­ГўГҐГ­ГІГ Г°Гї...')
     end
     if V.stats293_error then V.red(V.stats293_error)end
     V.list_rows('stats293_'..V.stats293_period,s.items,86,function(r,i)
         V.row('row_'..i,86,function(w,x,y)
             local name=r.name..((tonumber(r.ench)or 0)>0 and(' (+'..r.ench..')')or'')
             V.at(x,y+1);V.text(V.fit(name,w-12))
-            V.at(x,y+29);V.muted(V.fit('Выпало '..r.dropped..' · Продано '..r.sold..
-                (r.sold_exact and''or'~')..' · Остаток журнала '..r.journal_balance,w-12))
+            V.at(x,y+29);V.muted(V.fit('Г‚Г»ГЇГ Г«Г® '..r.dropped..' В· ГЏГ°Г®Г¤Г Г­Г® '..r.sold..
+                (r.sold_exact and''or'~')..' В· ГЋГ±ГІГ ГІГ®ГЄ Г¦ГіГ°Г­Г Г«Г  '..r.journal_balance,w-12))
             V.at(x,y+56)
             if s.inventory_ready then
-                V.green(V.fit('Фактически сейчас: '..r.inventory..' шт. · оценка дропа ~ '..DSP.money(r.estimated or 0),w-12))
+                V.green(V.fit('Г”Г ГЄГІГЁГ·ГҐГ±ГЄГЁ Г±ГҐГ©Г·Г Г±: '..r.inventory..' ГёГІ. В· Г®Г¶ГҐГ­ГЄГ  Г¤Г°Г®ГЇГ  ~ '..DSP.money(r.estimated or 0),w-12))
             else
-                V.muted(V.fit('Факт: нужен скан инвентаря · оценка дропа ~ '..DSP.money(r.estimated or 0),w-12))
+                V.muted(V.fit('Г”Г ГЄГІ: Г­ГіГ¦ГҐГ­ Г±ГЄГ Г­ ГЁГ­ГўГҐГ­ГІГ Г°Гї В· Г®Г¶ГҐГ­ГЄГ  Г¤Г°Г®ГЇГ  ~ '..DSP.money(r.estimated or 0),w-12))
             end
         end)
     end,{count=#s.items,footer=function()
-        V.muted('Факт берётся только из собственного скана инвентаря; журнал не выдаётся за инвентарь.')
+        V.muted('Г”Г ГЄГІ ГЎГҐГ°ВёГІГ±Гї ГІГ®Г«ГјГЄГ® ГЁГ§ Г±Г®ГЎГ±ГІГўГҐГ­Г­Г®ГЈГ® Г±ГЄГ Г­Г  ГЁГ­ГўГҐГ­ГІГ Г°Гї; Г¦ГіГ°Г­Г Г« Г­ГҐ ГўГ»Г¤Г ВёГІГ±Гї Г§Г  ГЁГ­ГўГҐГ­ГІГ Г°Гј.')
     end})
 end
 function V.tools(screen)
@@ -4792,7 +4792,7 @@ local function items(e,k)return k=='sell'and(e.items_give or{})or(e.items_get or
 local function raw_qty(raw)
     local s=tostring(raw or'')
     return tonumber(s:match('[xX]%s*(%d+)')or s:match('(%d+)%s*[xX]')
-        or s:match('(%d+)%s*шт'))
+        or s:match('(%d+)%s*ГёГІ'))
 end
 local function quantity(e,k)
     local q=tonumber(e.qty or e.count)
@@ -4816,7 +4816,7 @@ local function description(e,k)
         if i>3 then parts[#parts+1]='...';break end
         parts[#parts+1]=tostring(it.name or'?')..' x'..tostring(it.qty or 1)
     end
-    return #parts>0 and table.concat(parts,', ')or tostring(e.partner or'Торговая операция')
+    return #parts>0 and table.concat(parts,', ')or tostring(e.partner or'Г’Г®Г°ГЈГ®ГўГ Гї Г®ГЇГҐГ°Г Г¶ГЁГї')
 end
 local function period_from(period,now)
     now=now or os.time()
@@ -4860,7 +4860,7 @@ function C.trade_totals(rows)
     return s
 end
 local function period_buttons(key,current)
-    local opts={{'hour','Час'},{'day','День'},{'week','Неделя'},{'month','Месяц'},{'all','Всё'}}
+    local opts={{'hour','Г—Г Г±'},{'day','Г„ГҐГ­Гј'},{'week','ГЌГҐГ¤ГҐГ«Гї'},{'month','ГЊГҐГ±ГїГ¶'},{'all','Г‚Г±Вё'}}
     local w=math.max(56,(imgui.GetContentRegionAvail().x-24)/5)
     for i,p in ipairs(opts)do
         if b(p[2],key..p[1],w,current==p[1])then current=p[1]end
@@ -4870,7 +4870,7 @@ local function period_buttons(key,current)
 end
 local function show_row(row,compact)
     local sign=row.kind=='sell'and'+'or'-'
-    local action=row.kind=='sell'and'ПРОДАЖА'or'ПОКУПКА'
+    local action=row.kind=='sell'and'ГЏГђГЋГ„ГЂГ†ГЂ'or'ГЏГЋГЉГ“ГЏГЉГЂ'
     local stamp=os.date(compact and'%H:%M'or'%d.%m %H:%M',row.ts)
     local text=action..' '..sign..money(row.amount)..' | '..stamp..' '..row.name..
         ' x'..tostring(row.qty or 1)..(row.qty_exact==false and'~'or'')
@@ -4878,31 +4878,31 @@ local function show_row(row,compact)
     imgui.TextColored(DSP.theme.col(row.kind=='sell'and'good'or'accent',1),u(text))
 end
 function V.journal()
-    V.heading('Журнал продаж / скупки',function()
-        if b('Мини-окно','mini',150)then C.set_minimized(false);DSP.settings.craglog.open=true;DSP.save_settings()end
+    V.heading('Г†ГіГ°Г­Г Г« ГЇГ°Г®Г¤Г Г¦ / Г±ГЄГіГЇГЄГЁ',function()
+        if b('ГЊГЁГ­ГЁ-Г®ГЄГ­Г®','mini',150)then C.set_minimized(false);DSP.settings.craglog.open=true;DSP.save_settings()end
     end,166)
-    V.muted('Только подтверждённые игрой сделки. Награды и PayDay вынесены в статистику.')
+    V.muted('Г’Г®Г«ГјГЄГ® ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­Г­Г»ГҐ ГЁГЈГ°Г®Г© Г±Г¤ГҐГ«ГЄГЁ. ГЌГ ГЈГ°Г Г¤Г» ГЁ PayDay ГўГ»Г­ГҐГ±ГҐГ­Г» Гў Г±ГІГ ГІГЁГ±ГІГЁГЄГі.')
     V.journal_trade_period=period_buttons('main_',V.journal_trade_period or'day')
     V.journal_trade_side=V.journal_trade_side or'all'
     local sw=math.max(82,(imgui.GetContentRegionAvail().x-12)/3)
-    for i,p in ipairs({{'all','Все'},{'sell','Продажи'},{'buy','Скупка'}})do
+    for i,p in ipairs({{'all','Г‚Г±ГҐ'},{'sell','ГЏГ°Г®Г¤Г Г¦ГЁ'},{'buy','Г‘ГЄГіГЇГЄГ '}})do
         if b(p[2],'side_'..p[1],sw,V.journal_trade_side==p[1])then V.journal_trade_side=p[1]end
         if i<3 then V.inline(6,sw)end
     end
-    local query=V.search('trade293','Поиск товара или ника',-1)
+    local query=V.search('trade293','ГЏГ®ГЁГ±ГЄ ГІГ®ГўГ Г°Г  ГЁГ«ГЁ Г­ГЁГЄГ ',-1)
     local rows=C.trade_rows(V.journal_trade_period,query,V.journal_trade_side)
     local total=C.trade_totals(rows)
-    V.green('Продажи: '..money(total.sells)..' · '..total.sell_qty..' шт. · '..total.sell_count..' сделок')
-    V.muted('Скупка: '..money(total.buys)..' · '..total.buy_qty..' шт. · '..total.buy_count..' сделок')
-    if total.approx then V.muted('~ В старых рыночных чеках количество иногда не сохранялось отдельно.')end
+    V.green('ГЏГ°Г®Г¤Г Г¦ГЁ: '..money(total.sells)..' В· '..total.sell_qty..' ГёГІ. В· '..total.sell_count..' Г±Г¤ГҐГ«Г®ГЄ')
+    V.muted('Г‘ГЄГіГЇГЄГ : '..money(total.buys)..' В· '..total.buy_qty..' ГёГІ. В· '..total.buy_count..' Г±Г¤ГҐГ«Г®ГЄ')
+    if total.approx then V.muted('~ Г‚ Г±ГІГ Г°Г»Гµ Г°Г»Г­Г®Г·Г­Г»Гµ Г·ГҐГЄГ Гµ ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® ГЁГ­Г®ГЈГ¤Г  Г­ГҐ Г±Г®ГµГ°Г Г­ГїГ«Г®Г±Гј Г®ГІГ¤ГҐГ«ГјГ­Г®.')end
     local reverse={};for i=#rows,1,-1 do reverse[#reverse+1]=rows[i]end
     V.list_rows('trade293_'..V.journal_trade_period..'_'..V.journal_trade_side,reverse,72,function(e,i)
         V.row('trade_'..i,72,function(w,x,y)
             V.at(x,y+1)
-            if e.kind=='sell'then V.green('ПРОДАЖА +'..money(e.amount))else V.text('ПОКУПКА -'..money(e.amount))end
-            V.at(x,y+29);V.muted(V.fit(os.date('%d.%m %H:%M',e.ts)..' · '..e.name..' · '..e.qty..' шт.',w-12))
+            if e.kind=='sell'then V.green('ГЏГђГЋГ„ГЂГ†ГЂ +'..money(e.amount))else V.text('ГЏГЋГЉГ“ГЏГЉГЂ -'..money(e.amount))end
+            V.at(x,y+29);V.muted(V.fit(os.date('%d.%m %H:%M',e.ts)..' В· '..e.name..' В· '..e.qty..' ГёГІ.',w-12))
         end)
-    end,{count=#reverse,footer=function()V.muted('Свайпните список вверх/вниз — стрелки прокрутки не нужны.')end})
+    end,{count=#reverse,footer=function()V.muted('Г‘ГўГ Г©ГЇГ­ГЁГІГҐ Г±ГЇГЁГ±Г®ГЄ ГўГўГҐГ°Гµ/ГўГ­ГЁГ§ В— Г±ГІГ°ГҐГ«ГЄГЁ ГЇГ°Г®ГЄГ°ГіГІГЄГЁ Г­ГҐ Г­ГіГ¦Г­Г».')end})
 end
 local function cfg()DSP.settings.craglog=DSP.settings.craglog or{};return DSP.settings.craglog end
 local previous_geometry=C.geometry
@@ -4922,7 +4922,7 @@ function C.draw()
     local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoMove+imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse+(s.pinned and imgui.WindowFlags.NoResize or 0)
     if imgui.Begin('##palatka_trade_journal',nil,flags)then
         if V.apply_font then V.apply_font()end
-        if b(s.pinned and'ЖУРНАЛ · ЗАКРЕПЛЁН'or'ЖУРНАЛ · ПЕРЕМЕСТИТЬ','move',math.max(120,g.w-170),s.pinned)then end
+        if b(s.pinned and'Г†Г“ГђГЌГЂГ‹ В· Г‡ГЂГЉГђГ…ГЏГ‹ВЁГЌ'or'Г†Г“ГђГЌГЂГ‹ В· ГЏГ…ГђГ…ГЊГ…Г‘Г’Г€Г’Гњ','move',math.max(120,g.w-170),s.pinned)then end
         if not s.pinned and imgui.IsItemActive()and io.MouseDelta then C.drag(io.MouseDelta.x,io.MouseDelta.y)end
         if not imgui.IsMouseDown(0)then C.end_drag()end
         imgui.SameLine(0,5);if b(s.pinned and'PIN'or'pin','pin',47,s.pinned)then C.set_pinned(not s.pinned)end
@@ -4931,20 +4931,20 @@ function C.draw()
         if not s.minimized then
             s.trade_period=s.trade_period or'day'
             local ww=math.max(55,(imgui.GetContentRegionAvail().x-12)/3)
-            for i,p in ipairs({{'day','День'},{'week','Неделя'},{'all','Всё'}})do
+            for i,p in ipairs({{'day','Г„ГҐГ­Гј'},{'week','ГЌГҐГ¤ГҐГ«Гї'},{'all','Г‚Г±Вё'}})do
                 if b(p[2],'float_'..p[1],ww,s.trade_period==p[1])then s.trade_period=p[1];DSP.save_settings()end
                 if i<3 then imgui.SameLine(0,6)end
             end
             local rows=C.trade_rows(s.trade_period,'','all');local total=C.trade_totals(rows)
             imgui.Separator()
             if imgui.BeginChild('##trade293_scroll',imgui.ImVec2(0,-55),false,imgui.WindowFlags.NoScrollbar)then
-                if #rows==0 then V.muted('Подтверждённых сделок пока нет.')end
+                if #rows==0 then V.muted('ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­Г­Г»Гµ Г±Г¤ГҐГ«Г®ГЄ ГЇГ®ГЄГ  Г­ГҐГІ.')end
                 for i=#rows,math.max(1,#rows-119),-1 do show_row(rows[i],true)end
                 if DSP.mobile and DSP.mobile.touch_scroll then DSP.mobile.touch_scroll(io,'trade_float')end
             end
             imgui.EndChild();imgui.Separator()
-            V.green('Продано '..money(total.sells)..' · '..total.sell_qty..' шт.')
-            V.muted('Куплено '..money(total.buys)..' · '..total.buy_qty..' шт.')
+            V.green('ГЏГ°Г®Г¤Г Г­Г® '..money(total.sells)..' В· '..total.sell_qty..' ГёГІ.')
+            V.muted('ГЉГіГЇГ«ГҐГ­Г® '..money(total.buys)..' В· '..total.buy_qty..' ГёГІ.')
             C.remember_size(imgui.GetWindowSize().x,imgui.GetWindowSize().y)
         end
     end
@@ -4978,39 +4978,39 @@ local function open_editor(index)
         rows[i]={text=r.text,interval=r.interval,auto=r.auto~=false}
         buffers[i]=buff(r.text,512)
     end
-    V.mhpromo_edit={index=index,name=buff(t and t.name or'Новый шаблон',96),
+    V.mhpromo_edit={index=index,name=buff(t and t.name or'ГЌГ®ГўГ»Г© ГёГ ГЎГ«Г®Г­',96),
         rows=rows,buffers=buffers,enabled=t==nil or t.auto~=false,
         waiting=imgui.new.float(t and tonumber(t.waiting) or 1.5),
         interval_min={value=t and t.interval_min or 0},interval_max={value=t and t.interval_max or 0},
         auto_limit={value=t and t.auto_limit or 0},random_line=t and t.random_line==true or false}
 end
 local function editor(e)
-    V.heading('Пиар / Редактор',function()
-        if button('Назад','back',120)then V.mhpromo_edit=nil end
+    V.heading('ГЏГЁГ Г° / ГђГҐГ¤Г ГЄГІГ®Г°',function()
+        if button('ГЌГ Г§Г Г¤','back',120)then V.mhpromo_edit=nil end
     end,142)
-    V.text('Название шаблона')
+    V.text('ГЌГ Г§ГўГ Г­ГЁГҐ ГёГ ГЎГ«Г®Г­Г ')
     imgui.SetNextItemWidth(-1)
     imgui.InputText('##mhpromo_name',e.name,96)
-    V.muted('Каждая строка — отдельная игровая команда; отправляются по очереди.')
-    V.muted('Как в Market Helper: название, строки и настройки одного шаблона.')
+    V.muted('ГЉГ Г¦Г¤Г Гї Г±ГІГ°Г®ГЄГ  В— Г®ГІГ¤ГҐГ«ГјГ­Г Гї ГЁГЈГ°Г®ГўГ Гї ГЄГ®Г¬Г Г­Г¤Г ; Г®ГІГЇГ°Г ГўГ«ГїГѕГІГ±Гї ГЇГ® Г®Г·ГҐГ°ГҐГ¤ГЁ.')
+    V.muted('ГЉГ ГЄ Гў Market Helper: Г­Г Г§ГўГ Г­ГЁГҐ, Г±ГІГ°Г®ГЄГЁ ГЁ Г­Г Г±ГІГ°Г®Г©ГЄГЁ Г®Г¤Г­Г®ГЈГ® ГёГ ГЎГ«Г®Г­Г .')
     local rm=nil
     if imgui.BeginChild('##mhpromo_rows',imgui.ImVec2(0,math.max(135,math.min(290,imgui.GetContentRegionAvail().y-225))),true)then
         for i,row in ipairs(e.rows)do
             imgui.PushID(i)
-            V.muted('Строка '..i)
+            V.muted('Г‘ГІГ°Г®ГЄГ  '..i)
             imgui.SetNextItemWidth(-1)
-            if imgui.InputTextWithHint('##line',txt('/vr Текст рекламы'),
+            if imgui.InputTextWithHint('##line',txt('/vr Г’ГҐГЄГ±ГІ Г°ГҐГЄГ«Г Г¬Г»'),
                 e.buffers[i],512)then
                 row.text=DSP.to_cp(ffi.string(e.buffers[i]))
             end
-            V.muted('Пауза после, секунд')
+            V.muted('ГЏГ ГіГ§Г  ГЇГ®Г±Г«ГҐ, Г±ГҐГЄГіГ­Г¤')
             M.compact_number(row,'interval','mhpromo_delay_'..i,145,60)
             V.inline(4)
-            if button(row.auto~=false and 'ВКЛ' or 'ВЫКЛ','on_'..i,68,row.auto~=false)then
+            if button(row.auto~=false and 'Г‚ГЉГ‹' or 'Г‚Г›ГЉГ‹','on_'..i,68,row.auto~=false)then
                 row.auto=not(row.auto~=false)
             end
             V.inline(4)
-            if button('Удалить','rm_'..i,94)then rm=i end
+            if button('Г“Г¤Г Г«ГЁГІГј','rm_'..i,94)then rm=i end
             V.inline(4)
             if button('^','up_'..i,42) and i>1 then
                 e.rows[i],e.rows[i-1]=e.rows[i-1],e.rows[i]
@@ -5027,14 +5027,14 @@ local function editor(e)
     end
     imgui.EndChild()
     if rm then table.remove(e.rows,rm);table.remove(e.buffers,rm)end
-    if button('+ Добавить строку','add',225,true)then
+    if button('+ Г„Г®ГЎГ ГўГЁГІГј Г±ГІГ°Г®ГЄГі','add',225,true)then
         if #e.rows<24 then
             e.rows[#e.rows+1]={text='/vr ',interval=180,auto=true}
             e.buffers[#e.buffers+1]=buff('/vr ',512)
-        else e.error='Не более 24 строк'end
+        else e.error='ГЌГҐ ГЎГ®Г«ГҐГҐ 24 Г±ГІГ°Г®ГЄ'end
     end
     V.inline(6)
-    if button('Вставить лавку','shop',160)then
+    if button('Г‚Г±ГІГ ГўГЁГІГј Г«Г ГўГЄГі','shop',160)then
         local i=#e.rows
         if i>0 then
             local value=ffi.string(e.buffers[i])
@@ -5044,23 +5044,23 @@ local function editor(e)
             end
         end
     end
-    V.muted('Макрос {shop} вставляет ссылку/номер своей лавки.')
-    V.muted('Пауза между строками одного ручного запуска, сек:')
+    V.muted('ГЊГ ГЄГ°Г®Г± {shop} ГўГ±ГІГ ГўГ«ГїГҐГІ Г±Г±Г»Г«ГЄГі/Г­Г®Г¬ГҐГ° Г±ГўГ®ГҐГ© Г«Г ГўГЄГЁ.')
+    V.muted('ГЏГ ГіГ§Г  Г¬ГҐГ¦Г¤Гі Г±ГІГ°Г®ГЄГ Г¬ГЁ Г®Г¤Г­Г®ГЈГ® Г°ГіГ·Г­Г®ГЈГ® Г§Г ГЇГіГ±ГЄГ , Г±ГҐГЄ:')
     imgui.SetNextItemWidth(150)
     imgui.InputFloat('##mhpromo_waiting',e.waiting,.1,.5,'%.1f')
     if e.waiting[0]<.5 then e.waiting[0]=.5 elseif e.waiting[0]>10 then e.waiting[0]=10 end
-    if button(e.random_line and'Случайная строка: ВКЛ' or'Случайная строка: ВЫКЛ',
+    if button(e.random_line and'Г‘Г«ГіГ·Г Г©Г­Г Гї Г±ГІГ°Г®ГЄГ : Г‚ГЉГ‹' or'Г‘Г«ГіГ·Г Г©Г­Г Гї Г±ГІГ°Г®ГЄГ : Г‚Г›ГЉГ‹',
         'random',235,e.random_line)then e.random_line=not e.random_line end
-    V.muted('Интервал повтора: 0 = индивидуальный интервал каждой строки.')
-    V.muted('Минимум повтора, сек:')
+    V.muted('Г€Г­ГІГҐГ°ГўГ Г« ГЇГ®ГўГІГ®Г°Г : 0 = ГЁГ­Г¤ГЁГўГЁГ¤ГіГ Г«ГјГ­Г»Г© ГЁГ­ГІГҐГ°ГўГ Г« ГЄГ Г¦Г¤Г®Г© Г±ГІГ°Г®ГЄГЁ.')
+    V.muted('ГЊГЁГ­ГЁГ¬ГіГ¬ ГЇГ®ГўГІГ®Г°Г , Г±ГҐГЄ:')
     M.compact_number(e.interval_min,'value','mhpromo_imin',160,0)
     V.inline(6)
-    V.muted('Максимум, сек:')
+    V.muted('ГЊГ ГЄГ±ГЁГ¬ГіГ¬, Г±ГҐГЄ:')
     M.compact_number(e.interval_max,'value','mhpromo_imax',160,0)
-    V.muted('Лимит отправок шаблона: 0 = без лимита')
+    V.muted('Г‹ГЁГ¬ГЁГІ Г®ГІГЇГ°Г ГўГ®ГЄ ГёГ ГЎГ«Г®Г­Г : 0 = ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ ')
     M.compact_number(e.auto_limit,'value','mhpromo_limit',170,0)
     if e.error then V.red(e.error)end
-    if button('СОХРАНИТЬ ШАБЛОН','save',250,true)then
+    if button('Г‘ГЋГ•ГђГЂГЌГ€Г’Гњ ГГЂГЃГ‹ГЋГЌ','save',250,true)then
         local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
         local ok,reason=P.save_template(e.index,name,e.rows,e.enabled)
         if ok then
@@ -5073,66 +5073,66 @@ local function editor(e)
         else e.error=tostring(reason)end
     end
     V.inline(4)
-    if button('Отмена','cancel',120)then V.mhpromo_edit=nil end
+    if button('ГЋГІГ¬ГҐГ­Г ','cancel',120)then V.mhpromo_edit=nil end
 end
 function V.promo_screen()
     if V.mhpromo_edit then
         return V.list('mhpromo_editor_scroll',function()editor(V.mhpromo_edit)end,{footer=true})
     end
     local settings=P.settings()
-    V.heading('Автопиар · Palatka',function()
-        if button('+ Шаблон','new',155,true)then open_editor(nil)end
+    V.heading('ГЂГўГІГ®ГЇГЁГ Г° В· Palatka',function()
+        if button('+ ГГ ГЎГ«Г®Г­','new',155,true)then open_editor(nil)end
     end,172)
     if P.running then
-        if button('СТОП','stop',127,true)then P.stop()end
+        if button('Г‘Г’ГЋГЏ','stop',127,true)then P.stop()end
     else
-        if button('ПУСК','start',127,true)then
+        if button('ГЏГ“Г‘ГЉ','start',127,true)then
             local ok,why=P.start()
             V.mhpromo_error=ok and nil or tostring(why)
         end
     end
     V.inline(5)
-    if button(settings.continuous and 'Цикл: ВКЛ' or 'Цикл: ВЫКЛ',
+    if button(settings.continuous and 'Г–ГЁГЄГ«: Г‚ГЉГ‹' or 'Г–ГЁГЄГ«: Г‚Г›ГЉГ‹',
         'loop',152,settings.continuous)then
         P.set_option('continuous',not settings.continuous)
     end
     V.inline(5)
-    if button(settings.resume_on_login and'При входе: ВКЛ' or'При входе: ВЫКЛ',
+    if button(settings.resume_on_login and'ГЏГ°ГЁ ГўГµГ®Г¤ГҐ: Г‚ГЉГ‹' or'ГЏГ°ГЁ ГўГµГ®Г¤ГҐ: Г‚Г›ГЉГ‹',
         'resume',191,settings.resume_on_login)then
         P.set_option('resume_on_login',not settings.resume_on_login)
     end
     local left=P.queue_left and P.queue_left()or nil
-    V.muted('Отправлено: '..tostring(P.session_count)..
-        (settings.continuous and' | без лимита'or' / 12')..
-        ' | '..(P.running and(P.pause_reason or'работает')or'выключен')..
-        (left and(' | следующая через '..left..'с')or''))
+    V.muted('ГЋГІГЇГ°Г ГўГ«ГҐГ­Г®: '..tostring(P.session_count)..
+        (settings.continuous and' | ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ 'or' / 12')..
+        ' | '..(P.running and(P.pause_reason or'Г°Г ГЎГ®ГІГ ГҐГІ')or'ГўГ»ГЄГ«ГѕГ·ГҐГ­')..
+        (left and(' | Г±Г«ГҐГ¤ГіГѕГ№Г Гї Г·ГҐГ°ГҐГ§ '..left..'Г±')or''))
     if V.mhpromo_error or P.last_error then V.red(tostring(V.mhpromo_error or P.last_error))end
-    V.muted('Шаблоны со строками /vr, /fam, /gd, /s, /ad и других чатов.')
-    V.muted('Интерфейс Palatka MH / сборка 2.9.3')
+    V.muted('ГГ ГЎГ«Г®Г­Г» Г±Г® Г±ГІГ°Г®ГЄГ Г¬ГЁ /vr, /fam, /gd, /s, /ad ГЁ Г¤Г°ГіГЈГЁГµ Г·Г ГІГ®Гў.')
+    V.muted('Г€Г­ГІГҐГ°ГґГҐГ©Г± Palatka MH / Г±ГЎГ®Г°ГЄГ  2.9.3')
     V.list_rows('mhpromo_templates',settings.templates,124,function(t,i)
         V.row('mhpromo_t_'..i,124,function(w,x,y)
             local lo=tonumber(t.interval_min)or 0
             local hi=tonumber(t.interval_max)or 0
-            local interval=lo>0 and(hi>lo and(lo..'-'..hi..'с')or(lo..'с'))
-                or tostring((t.rows and t.rows[1]and t.rows[1].interval)or 180)..'с'
-            V.at(x,y);V.text(V.fit(t.name or'Шаблон',math.max(80,w-155)))
-            V.at(x,y+27);V.muted(V.fit(#(t.rows or{})..' строк · интервал '..interval..
-                ' · пауза '..tostring(t.waiting or 1.5)..'с',math.max(80,w-155)))
+            local interval=lo>0 and(hi>lo and(lo..'-'..hi..'Г±')or(lo..'Г±'))
+                or tostring((t.rows and t.rows[1]and t.rows[1].interval)or 180)..'Г±'
+            V.at(x,y);V.text(V.fit(t.name or'ГГ ГЎГ«Г®Г­',math.max(80,w-155)))
+            V.at(x,y+27);V.muted(V.fit(#(t.rows or{})..' Г±ГІГ°Г®ГЄ В· ГЁГ­ГІГҐГ°ГўГ Г« '..interval..
+                ' В· ГЇГ ГіГ§Г  '..tostring(t.waiting or 1.5)..'Г±',math.max(80,w-155)))
             V.at(x,y+56)
-            if button(t.auto~=false and'Авто: ВКЛ'or'Авто: ВЫКЛ','enable_'..i,132,t.auto~=false)then
+            if button(t.auto~=false and'ГЂГўГІГ®: Г‚ГЉГ‹'or'ГЂГўГІГ®: Г‚Г›ГЉГ‹','enable_'..i,132,t.auto~=false)then
                 local was=t.auto;t.auto=not(t.auto~=false)
                 if DSP.save_settings and DSP.save_settings()==false then t.auto=was end
             end
             V.inline(4)
-            if button(P.manual_busy and P.manual_template==i and'Отправка...'or'Отправить',
+            if button(P.manual_busy and P.manual_template==i and'ГЋГІГЇГ°Г ГўГЄГ ...'or'ГЋГІГЇГ°Г ГўГЁГІГј',
                 'send_'..i,116,P.manual_busy and P.manual_template==i)then
                 local ok,why=P.send_template_once(i);V.mhpromo_error=ok and nil or tostring(why)
             end
             V.at(x+w-143,y+4)
-            if button('Изменить','edit_'..i,140)then open_editor(i)end
+            if button('Г€Г§Г¬ГҐГ­ГЁГІГј','edit_'..i,140)then open_editor(i)end
             V.at(x+w-143,y+78)
-            if button('Удалить','del_'..i,140)then
-                V.mhpromo_del=i;V.open_popup('Удалить шаблон','mhpromo_delete')
+            if button('Г“Г¤Г Г«ГЁГІГј','del_'..i,140)then
+                V.mhpromo_del=i;V.open_popup('Г“Г¤Г Г«ГЁГІГј ГёГ ГЎГ«Г®Г­','mhpromo_delete')
             end
         end)
     end)
@@ -5140,9 +5140,9 @@ end
 local previous=V.popups
 function V.popups()
     if previous then previous()end
-    V.popup('Удалить шаблон','mhpromo_delete',function()
-        V.text('Удалить шаблон со всеми строками?')
-        if button('Да','yes',105)then
+    V.popup('Г“Г¤Г Г«ГЁГІГј ГёГ ГЎГ«Г®Г­','mhpromo_delete',function()
+        V.text('Г“Г¤Г Г«ГЁГІГј ГёГ ГЎГ«Г®Г­ Г±Г® ГўГ±ГҐГ¬ГЁ Г±ГІГ°Г®ГЄГ Г¬ГЁ?')
+        if button('Г„Г ','yes',105)then
             if P.remove(V.mhpromo_del)then imgui.CloseCurrentPopup()end
         end
         V.inline(5);V.cancel('mhpromo_delete')
@@ -5168,13 +5168,13 @@ local function selected(s)
     return s.routes[index],index
 end
 local function status(e)
-    if e.unavailable_reason=='shop_missing' then return 'Нет лавки' end
-    if e.unavailable_reason=='item_missing' then return 'Нет предмета' end
-    if e.unavailable_reason=='owner_changed' then return 'Смена владельца' end
-    if e.skipped then return 'Пропущено' end
-    if e.sold>=e.qty then return 'Завершено' end
-    if e.bought<e.qty then return 'Покупка' end
-    return 'Продажа'
+    if e.unavailable_reason=='shop_missing' then return 'ГЌГҐГІ Г«Г ГўГЄГЁ' end
+    if e.unavailable_reason=='item_missing' then return 'ГЌГҐГІ ГЇГ°ГҐГ¤Г¬ГҐГІГ ' end
+    if e.unavailable_reason=='owner_changed' then return 'Г‘Г¬ГҐГ­Г  ГўГ«Г Г¤ГҐГ«ГјГ¶Г ' end
+    if e.skipped then return 'ГЏГ°Г®ГЇГіГ№ГҐГ­Г®' end
+    if e.sold>=e.qty then return 'Г‡Г ГўГҐГ°ГёГҐГ­Г®' end
+    if e.bought<e.qty then return 'ГЏГ®ГЄГіГЇГЄГ ' end
+    return 'ГЏГ°Г®Г¤Г Г¦Г '
 end
 local function rect(io)
     DSP.settings.arb_agent_window=DSP.settings.arb_agent_window or{}
@@ -5201,41 +5201,41 @@ local function route_queue(s)
     if total==0 then return end
     local pages=math.max(1,math.ceil(total/4))
     A.queue_page=DSP.clamp(tonumber(A.queue_page)or 1,1,pages)
-    quiet('Маршруты: '..total..'  |  Страница '..A.queue_page..'/'..pages)
+    quiet('ГЊГ Г°ГёГ°ГіГІГ»: '..total..'  |  Г‘ГІГ°Г Г­ГЁГ¶Г  '..A.queue_page..'/'..pages)
     local from=(A.queue_page-1)*4+1
     for i=from,math.min(total,from+3)do
         local e=s.routes[i]
-        if b(V.fit(i..'. '..e.name..' · '..status(e),math.max(100,imgui.GetContentRegionAvail().x-20)),
+        if b(V.fit(i..'. '..e.name..' В· '..status(e),math.max(100,imgui.GetContentRegionAvail().x-20)),
             'route_'..i,-1,s.focus==i)then
             A.focus(i);A.qty_key=nil
         end
     end
     if pages>1 then
-        if b('Ранее','pageprev',110)then A.queue_page=math.max(1,A.queue_page-1)end
+        if b('ГђГ Г­ГҐГҐ','pageprev',110)then A.queue_page=math.max(1,A.queue_page-1)end
         imgui.SameLine(0,8)
-        if b('Далее','pagenext',110)then A.queue_page=math.min(pages,A.queue_page+1)end
+        if b('Г„Г Г«ГҐГҐ','pagenext',110)then A.queue_page=math.min(pages,A.queue_page+1)end
     end
 end
 local function route_info(e,index,total)
-    if not e then quiet('Новых маршрутов пока нет');return end
-    quiet('Сделка '..index..' из '..total..' · '..status(e))
+    if not e then quiet('ГЌГ®ГўГ»Гµ Г¬Г Г°ГёГ°ГіГІГ®Гў ГЇГ®ГЄГ  Г­ГҐГІ');return end
+    quiet('Г‘Г¤ГҐГ«ГЄГ  '..index..' ГЁГ§ '..total..' В· '..status(e))
     label(V.fit(e.name,math.max(120,imgui.GetContentRegionAvail().x-12)))
-    quiet('План '..e.qty..' шт.  |  Ожидаемая прибыль ~ '..money(e.proposed_profit))
-    quiet('Куплено '..e.bought..' · Продано '..e.sold)
+    quiet('ГЏГ«Г Г­ '..e.qty..' ГёГІ.  |  ГЋГ¦ГЁГ¤Г ГҐГ¬Г Гї ГЇГ°ГЁГЎГ»Г«Гј ~ '..money(e.proposed_profit))
+    quiet('ГЉГіГЇГ«ГҐГ­Г® '..e.bought..' В· ГЏГ°Г®Г¤Г Г­Г® '..e.sold)
     if e.skipped then
-        if e.bought>e.sold then red('Товаров на руках: '..(e.bought-e.sold)..' шт.')end
-        quiet('Маршрут остаётся в сессии. Можно вернуть его или перейти дальше.')
+        if e.bought>e.sold then red('Г’Г®ГўГ Г°Г®Гў Г­Г  Г°ГіГЄГ Гµ: '..(e.bought-e.sold)..' ГёГІ.')end
+        quiet('ГЊГ Г°ГёГ°ГіГІ Г®Г±ГІГ ВёГІГ±Гї Гў Г±ГҐГ±Г±ГЁГЁ. ГЊГ®Г¦Г­Г® ГўГҐГ°Г­ГіГІГј ГҐГЈГ® ГЁГ«ГЁ ГЇГҐГ°ГҐГ©ГІГЁ Г¤Г Г«ГјГёГҐ.')
         local half=math.max(105,math.floor((imgui.GetContentRegionAvail().x-6)/2))
-        if b('Вернуть маршрут','restore',half)then
+        if b('Г‚ГҐГ°Г­ГіГІГј Г¬Г Г°ГёГ°ГіГІ','restore',half)then
             local ok,err
             if e.unavailable_reason then ok,err=A.restore_unavailable(index)else ok=A.skip(index,false)end
-            notice(ok and 'Маршрут снова активен' or tostring(err or 'Не удалось вернуть маршрут'))
+            notice(ok and 'ГЊГ Г°ГёГ°ГіГІ Г±Г­Г®ГўГ  Г ГЄГІГЁГўГҐГ­' or tostring(err or 'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј ГўГҐГ°Г­ГіГІГј Г¬Г Г°ГёГ°ГіГІ'))
         end
         imgui.SameLine(0,6)
-        if b('Следующий','skipped_next',half)then A.next(1);A.qty_key=nil end
+        if b('Г‘Г«ГҐГ¤ГіГѕГ№ГЁГ©','skipped_next',half)then A.next(1);A.qty_key=nil end
         return
     end
-    if e.sold>=e.qty then green('Сделка завершена');return end
+    if e.sold>=e.qty then green('Г‘Г¤ГҐГ«ГЄГ  Г§Г ГўГҐГ°ГёГҐГ­Г ');return end
     local buying=e.bought<e.qty
     local side=buying and 'buy' or 'sell'
     local shop=buying and e.seller_shop or e.buyer_shop
@@ -5243,36 +5243,36 @@ local function route_info(e,index,total)
     local price=buying and e.buy_price or e.sell_price
     local remaining=buying and(e.qty-e.bought)or(e.bought-e.sold)
     if remaining<=0 then return end
-    green(buying and 'Купить' or 'Продать')
-    label('Лавка #'..shop..' · '..tostring(owner or'?'))
-    quiet('Осталось '..remaining..' шт.  |  '..money(price)..' / шт.')
-    if b('Метка на лавку #'..shop,'mark',-1)then
-        if not M.mark_shop(shop)then notice('Метка недоступна')end
+    green(buying and 'ГЉГіГЇГЁГІГј' or 'ГЏГ°Г®Г¤Г ГІГј')
+    label('Г‹Г ГўГЄГ  #'..shop..' В· '..tostring(owner or'?'))
+    quiet('ГЋГ±ГІГ Г«Г®Г±Гј '..remaining..' ГёГІ.  |  '..money(price)..' / ГёГІ.')
+    if b('ГЊГҐГІГЄГ  Г­Г  Г«Г ГўГЄГі #'..shop,'mark',-1)then
+        if not M.mark_shop(shop)then notice('ГЊГҐГІГЄГ  Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г ')end
     end
-    if b('Нет лавки','missing_shop',145)then
+    if b('ГЌГҐГІ Г«Г ГўГЄГЁ','missing_shop',145)then
         local ok,err=A.mark_unavailable(index,'shop')
-        notice(ok and 'Лавка исключена из планов' or tostring(err))
+        notice(ok and 'Г‹Г ГўГЄГ  ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г  ГЁГ§ ГЇГ«Г Г­Г®Гў' or tostring(err))
     end
     imgui.SameLine(0,6)
-    if b('Нет предмета','missing_item',160)then
+    if b('ГЌГҐГІ ГЇГ°ГҐГ¤Г¬ГҐГІГ ','missing_item',160)then
         local ok,err=A.mark_unavailable(index,'item')
-        notice(ok and 'Предложение исключено' or tostring(err))
+        notice(ok and 'ГЏГ°ГҐГ¤Г«Г®Г¦ГҐГ­ГЁГҐ ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г®' or tostring(err))
     end
     local key=e.id..':'..side
     if A.qty_key~=key then A.qty_key=key;A.qty_field=imgui.new.int(remaining)end
-    quiet('Подтверждение количества:')
+    quiet('ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГҐ ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ :')
     imgui.SetNextItemWidth(math.min(160,imgui.GetContentRegionAvail().x))
     imgui.InputInt('##agent291_qty',A.qty_field,1,10)
-    if b(buying and 'Подтвердить покупку' or 'Подтвердить продажу','confirm',-1,true)then
+    if b(buying and 'ГЏГ®Г¤ГІГўГҐГ°Г¤ГЁГІГј ГЇГ®ГЄГіГЇГЄГі' or 'ГЏГ®Г¤ГІГўГҐГ°Г¤ГЁГІГј ГЇГ°Г®Г¤Г Г¦Гі','confirm',-1,true)then
         local ok,err=A.confirm(index,side,A.qty_field[0])
-        if ok then A.qty_key=nil;notice('Количество записано')else notice(tostring(err))end
+        if ok then A.qty_key=nil;notice('ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г§Г ГЇГЁГ±Г Г­Г®')else notice(tostring(err))end
     end
     local hint=A.hint
     if hint and hint.route_id==e.id and hint.side==side then
-        quiet('Обнаружен похожий чек: '..hint.qty..' шт.')
-        if b('Принять данные чека','receipt',-1)then
+        quiet('ГЋГЎГ­Г Г°ГіГ¦ГҐГ­ ГЇГ®ГµГ®Г¦ГЁГ© Г·ГҐГЄ: '..hint.qty..' ГёГІ.')
+        if b('ГЏГ°ГЁГ­ГїГІГј Г¤Г Г­Г­Г»ГҐ Г·ГҐГЄГ ','receipt',-1)then
             local ok,err=A.confirm(index,side,hint.qty)
-            if ok then A.qty_key=nil;notice('Чек подтверждён')else notice(tostring(err))end
+            if ok then A.qty_key=nil;notice('Г—ГҐГЄ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­')else notice(tostring(err))end
         end
     end
 end
@@ -5293,26 +5293,26 @@ function A.draw()
         imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse
     if imgui.Begin('##palatka_arbitrage_agent',nil,flags)then
         if V.apply_font then V.apply_font()end
-        if b('Арбитраж · переместить','handle',math.max(100,g.w-112))then end
+        if b('ГЂГ°ГЎГЁГІГ°Г Г¦ В· ГЇГҐГ°ГҐГ¬ГҐГ±ГІГЁГІГј','handle',math.max(100,g.w-112))then end
         if imgui.IsItemActive() and io.MouseDelta then drag(g,io,false)end
         imgui.SameLine(0,5)
         if b(A.queue_expanded and '-' or '+','queue',40)then A.queue_expanded=not A.queue_expanded end
         imgui.SameLine(0,5)
         if b('X','close',43)then A.show(false)end
         local st=A.stats()
-        quiet('Завершено '..st.done..'/'..st.routes..' · В работе '..st.pending)
-        green('Ожидаемый результат ~ '..money(st.profit_estimate))
-        quiet('Мини-агент Palatka / сборка 2.9.3')
+        quiet('Г‡Г ГўГҐГ°ГёГҐГ­Г® '..st.done..'/'..st.routes..' В· Г‚ Г°Г ГЎГ®ГІГҐ '..st.pending)
+        green('ГЋГ¦ГЁГ¤Г ГҐГ¬Г»Г© Г°ГҐГ§ГіГ«ГјГІГ ГІ ~ '..money(st.profit_estimate))
+        quiet('ГЊГЁГ­ГЁ-Г ГЈГҐГ­ГІ Palatka / Г±ГЎГ®Г°ГЄГ  2.9.3')
         imgui.Separator()
         if A.queue_expanded then
             route_queue(s)
             if not A.end_confirm then
-                if b('Закончить сессию','end',-1)then A.end_confirm=true end
+                if b('Г‡Г ГЄГ®Г­Г·ГЁГІГј Г±ГҐГ±Г±ГЁГѕ','end',-1)then A.end_confirm=true end
             else
-                red('Завершить сессию?')
-                if b('Завершить','endyes',140)then A.stop();A.end_confirm=false end
+                red('Г‡Г ГўГҐГ°ГёГЁГІГј Г±ГҐГ±Г±ГЁГѕ?')
+                if b('Г‡Г ГўГҐГ°ГёГЁГІГј','endyes',140)then A.stop();A.end_confirm=false end
                 imgui.SameLine(0,5)
-                if b('Отмена','endno',130)then A.end_confirm=false end
+                if b('ГЋГІГ¬ГҐГ­Г ','endno',130)then A.end_confirm=false end
             end
             imgui.Separator()
         end
@@ -5323,10 +5323,10 @@ function A.draw()
         end
         imgui.EndChild()
         if A.ui_message then quiet(V.fit(A.ui_message,math.max(120,g.w-35)))end
-        if A.save_error then red('Не сохранено: '..tostring(A.save_error))end
-        if b('< Предыдущая','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
+        if A.save_error then red('ГЌГҐ Г±Г®ГµГ°Г Г­ГҐГ­Г®: '..tostring(A.save_error))end
+        if b('< ГЏГ°ГҐГ¤Г»Г¤ГіГ№Г Гї','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
         imgui.SameLine(0,6)
-        if b('Следующая >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
+        if b('Г‘Г«ГҐГ¤ГіГѕГ№Г Гї >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
         -- Native ImGui drag-resize grip, visually aligned to Palatka corners.
         imgui.SetCursorPos(imgui.ImVec2(g.w-39,g.h-36))
         if b('//','resize',29)then end
@@ -5420,14 +5420,14 @@ local function block_related(shop,quote,reason,source)
     return marked
 end
 function A.mark_unavailable(index,reason)
-    if reason~='shop'and reason~='item'then return false,'Неверная причина'end
+    if reason~='shop'and reason~='item'then return false,'ГЌГҐГўГҐГ°Г­Г Гї ГЇГ°ГЁГ·ГЁГ­Г 'end
     local e,s=A.get(index)
-    if not e or not s then return false,'Маршрут не выбран'end
+    if not e or not s then return false,'ГЊГ Г°ГёГ°ГіГІ Г­ГҐ ГўГ»ГЎГ°Г Г­'end
     local side,shop,quote=required_leg(e)
-    if not side then return false,'Маршрут уже завершён'end
+    if not side then return false,'ГЊГ Г°ГёГ°ГіГІ ГіГ¦ГҐ Г§Г ГўГҐГ°ГёВёГ­'end
     if reason=='shop' then
-        if not valid_shop(shop)then return false,'Номер лавки неизвестен'end
-        if not M.mark_shop_missing(shop,30)then return false,'Не удалось отметить лавку'end
+        if not valid_shop(shop)then return false,'ГЌГ®Г¬ГҐГ° Г«Г ГўГЄГЁ Г­ГҐГЁГ§ГўГҐГ±ГІГҐГ­'end
+        if not M.mark_shop_missing(shop,30)then return false,'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г®ГІГ¬ГҐГІГЁГІГј Г«Г ГўГЄГі'end
         block_related(shop,nil,'shop_missing','manual')
     else
         ensure()[quote]={at=now(),reason='item_missing',sid=s.sid}
@@ -5440,7 +5440,7 @@ function A.mark_unavailable(index,reason)
 end
 function A.restore_unavailable(index)
     local e=A.get(index)
-    if not e then return false,'Нет маршрута'end
+    if not e then return false,'ГЌГҐГІ Г¬Г Г°ГёГ°ГіГІГ 'end
     if not e.unavailable_reason then return A.skip(index,false)end
     local reason=e.unavailable_reason
     local shop=e.unavailable_side=='sell'and e.seller_shop or e.buyer_shop
@@ -5589,7 +5589,7 @@ local function persist_appearance()
 end
 
 function DSP.theme.set(name)
-    if not DSP.theme.list[name] then return false,'Неизвестная тема'end
+    if not DSP.theme.list[name] then return false,'ГЌГҐГЁГ§ГўГҐГ±ГІГ­Г Гї ГІГҐГ¬Г 'end
     local old=DSP.theme.current
     DSP.theme.current=name
     DSP.settings.theme=name
@@ -5698,7 +5698,7 @@ local function interval(t)
 end
 local function make_batch(index,t,manual,at)
     local commands=rows(t)
-    if #commands==0 then return nil,'Нет разрешённых строк в шаблоне'end
+    if #commands==0 then return nil,'ГЌГҐГІ Г°Г Г§Г°ГҐГёВёГ­Г­Г»Гµ Г±ГІГ°Г®ГЄ Гў ГёГ ГЎГ«Г®Г­ГҐ'end
     if t.random_line and #commands>1 then commands={commands[math.random(1,#commands)]}end
     return {index=index,commands=commands,pos=1,manual=manual==true,
         due=at,waiting=clamp(t.waiting,.5,10,1.5)}
@@ -5706,26 +5706,26 @@ end
 local function set_stopped(reason)
     local s=P.settings()
     P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
-    P.pause_reason=reason or 'Выключен'
+    P.pause_reason=reason or 'Г‚Г»ГЄГ«ГѕГ·ГҐГ­'
     s.enabled=false
     persist()
 end
 local function report_error(err)
-    P.last_error=tostring(err or'Ошибка отправки')
+    P.last_error=tostring(err or'ГЋГёГЁГЎГЄГ  Г®ГІГЇГ°Г ГўГЄГЁ')
     P.pause_reason=P.last_error
     if DSP.flog then DSP.flog('PROMO: '..P.last_error)end
 end
 function P.start(at)
     at=at or now()
-    if not active()then return false,'Включи хотя бы один шаблон с командами'end
+    if not active()then return false,'Г‚ГЄГ«ГѕГ·ГЁ ГµГ®ГІГї ГЎГ» Г®Г¤ГЁГ­ ГёГ ГЎГ«Г®Г­ Г± ГЄГ®Г¬Г Г­Г¤Г Г¬ГЁ'end
     local s=P.settings()
     if not s.continuous and (P.session_count or 0)>=P.MAX_SESSION then
-        return false,'Лимит отправок сессии исчерпан'
+        return false,'Г‹ГЁГ¬ГЁГІ Г®ГІГЇГ°Г ГўГ®ГЄ Г±ГҐГ±Г±ГЁГЁ ГЁГ±Г·ГҐГ°ГЇГ Г­'
     end
     local prior=s.enabled
     s.enabled=true
     local ok,why=persist()
-    if not ok then s.enabled=prior;return false,tostring(why or'Не удалось сохранить запуск')end
+    if not ok then s.enabled=prior;return false,tostring(why or'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј Г§Г ГЇГіГ±ГЄ')end
     P.running=true;P.last_error=nil;P.pause_reason=nil;P._batch=nil
     P.manual_busy=false;P.manual_template=nil
     P.was_online=false
@@ -5734,7 +5734,7 @@ function P.start(at)
     return true
 end
 function P.stop()
-    set_stopped('Остановлен пользователем')
+    set_stopped('ГЋГ±ГІГ Г­Г®ГўГ«ГҐГ­ ГЇГ®Г«ГјГ§Г®ГўГ ГІГҐГ«ГҐГ¬')
 end
 function P.bootstrap(at)
     at=at or now()
@@ -5746,14 +5746,14 @@ function P.bootstrap(at)
     if s.resume_on_login and s.enabled and active() then
         P.running=true
         P.next_at=at+clamp(s.start_delay,10,120,20)
-        P.pause_reason='Ожидание подключения'
+        P.pause_reason='ГЋГ¦ГЁГ¤Г Г­ГЁГҐ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї'
     end
 end
 function P.send_template_once(index)
-    if P._batch then return false,'Дождись завершения текущего шаблона'end
-    if not connected()then return false,'Нет подключения к игре'end
+    if P._batch then return false,'Г„Г®Г¦Г¤ГЁГ±Гј Г§Г ГўГҐГ°ГёГҐГ­ГЁГї ГІГҐГЄГіГ№ГҐГЈГ® ГёГ ГЎГ«Г®Г­Г 'end
+    if not connected()then return false,'ГЌГҐГІ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї ГЄ ГЁГЈГ°ГҐ'end
     local t=P.settings().templates[index]
-    if not t then return false,'Шаблон не найден'end
+    if not t then return false,'ГГ ГЎГ«Г®Г­ Г­ГҐ Г­Г Г©Г¤ГҐГ­'end
     local batch,why=make_batch(index,t,true,now())
     if not batch then return false,why end
     P._batch=batch
@@ -5772,7 +5772,7 @@ local function finish_batch(batch,at)
             if limit>0 and t.auto_count>=limit then
                 t.auto=false
                 t.auto_count=0
-                P.last_error='Шаблон «'..tostring(t.name or'?')..'»: достигнут лимит'
+                P.last_error='ГГ ГЎГ«Г®Г­ В«'..tostring(t.name or'?')..'В»: Г¤Г®Г±ГІГЁГЈГ­ГіГІ Г«ГЁГ¬ГЁГІ'
             end
             t._promo_due=at+interval(t)
         end
@@ -5785,27 +5785,27 @@ local function step_batch(at,send,online)
     local batch=P._batch
     if not batch or at<batch.due then return false end
     if not online then
-        report_error('Нет соединения: отправка приостановлена')
+        report_error('ГЌГҐГІ Г±Г®ГҐГ¤ГЁГ­ГҐГ­ГЁГї: Г®ГІГЇГ°Г ГўГЄГ  ГЇГ°ГЁГ®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г ')
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         return false
     end
     if not P.settings().continuous and (P.session_count or 0)>=P.MAX_SESSION then
-        set_stopped('Лимит сообщений за сессию')
+        set_stopped('Г‹ГЁГ¬ГЁГІ Г±Г®Г®ГЎГ№ГҐГ­ГЁГ© Г§Г  Г±ГҐГ±Г±ГЁГѕ')
         return false
     end
     local raw=batch.commands[batch.pos]
     local cmd,why=P.expand(raw)
     if not cmd or #cmd>P.MAX_STEP_BYTES then
-        report_error(why or'Команда превышает 200 байт')
+        report_error(why or'ГЉГ®Г¬Г Г­Г¤Г  ГЇГ°ГҐГўГ»ГёГ ГҐГІ 200 ГЎГ Г©ГІ')
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         P.next_at=at+30
         return false
     end
     local sender=send or sampSendChat
-    if type(sender)~='function'then report_error('Отправка чата недоступна');return false end
+    if type(sender)~='function'then report_error('ГЋГІГЇГ°Г ГўГЄГ  Г·Г ГІГ  Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г ');return false end
     local ok,result=pcall(sender,cmd)
     if not ok or result==false then
-        report_error(ok and'Отправка отклонена' or result)
+        report_error(ok and'ГЋГІГЇГ°Г ГўГЄГ  Г®ГІГЄГ«Г®Г­ГҐГ­Г ' or result)
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         P.next_at=at+30
         return false
@@ -5822,7 +5822,7 @@ local function step_batch(at,send,online)
         P.next_at=batch.due
     end
     if not P.settings().continuous and P.session_count>=P.MAX_SESSION then
-        set_stopped('Лимит сообщений за сессию')
+        set_stopped('Г‹ГЁГ¬ГЁГІ Г±Г®Г®ГЎГ№ГҐГ­ГЁГ© Г§Г  Г±ГҐГ±Г±ГЁГѕ')
     end
     return true
 end
@@ -5834,19 +5834,19 @@ function P.tick(at,send,online)
     if not P.running then return false end
     if not online then
         P.was_online=false
-        P.pause_reason='Нет подключения: ожидание'
+        P.pause_reason='ГЌГҐГІ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї: Г®Г¦ГЁГ¤Г Г­ГЁГҐ'
         return false
     end
     local s=P.settings()
     if not P.was_online then
         P.was_online=true
         P.next_at=math.max(P.next_at or 0,at+clamp(s.start_delay,10,120,20))
-        P.pause_reason='Ожидание после входа'
+        P.pause_reason='ГЋГ¦ГЁГ¤Г Г­ГЁГҐ ГЇГ®Г±Г«ГҐ ГўГµГ®Г¤Г '
         return false
     end
     if at<(P.next_at or 0)then return false end
     if not s.continuous and P.session_count>=P.MAX_SESSION then
-        set_stopped('Лимит сообщений за сессию')
+        set_stopped('Г‹ГЁГ¬ГЁГІ Г±Г®Г®ГЎГ№ГҐГ­ГЁГ© Г§Г  Г±ГҐГ±Г±ГЁГѕ')
         return false
     end
     local earliest
@@ -5870,7 +5870,7 @@ function P.tick(at,send,online)
         end
     end
     if not earliest then
-        set_stopped('Нет включённых шаблонов')
+        set_stopped('ГЌГҐГІ ГўГЄГ«ГѕГ·ВёГ­Г­Г»Гµ ГёГ ГЎГ«Г®Г­Г®Гў')
     else
         P.next_at=math.max(at+1,earliest)
     end
@@ -5941,23 +5941,23 @@ local function cell(s,width,tip)
     imgui.NextColumn()
 end
 local function columns(w)
-    -- The same six columns as the Market Helper "Сделки" table.
+    -- The same six columns as the Market Helper "Г‘Г¤ГҐГ«ГЄГЁ" table.
     local ratios={.155,.265,.075,.155,.14,.21}
     local sizes={}
     for i,r in ipairs(ratios)do sizes[i]=math.max(43,math.floor(w*r))end
     imgui.Columns(6,'##mhjournal294_columns',false)
     for i=1,6 do imgui.SetColumnWidth(i-1,sizes[i])end
-    faded('Дата');imgui.NextColumn()
-    faded('Товар');imgui.NextColumn()
-    faded('Кол.');imgui.NextColumn()
-    faded('Цена $');imgui.NextColumn()
-    faded('Тип');imgui.NextColumn()
-    faded('Ник');imgui.NextColumn()
+    faded('Г„Г ГІГ ');imgui.NextColumn()
+    faded('Г’Г®ГўГ Г°');imgui.NextColumn()
+    faded('ГЉГ®Г«.');imgui.NextColumn()
+    faded('Г–ГҐГ­Г  $');imgui.NextColumn()
+    faded('Г’ГЁГЇ');imgui.NextColumn()
+    faded('ГЌГЁГЄ');imgui.NextColumn()
     imgui.Separator()
     return sizes
 end
 local function row(e,sizes)
-    local stamp=(e.ts and e.ts>0)and os.date('%d.%m %H:%M',e.ts)or'—'
+    local stamp=(e.ts and e.ts>0)and os.date('%d.%m %H:%M',e.ts)or'В—'
     cell(stamp,sizes[1],true)
     cell(e.name or'?',sizes[2],true)
     cell(tostring(e.qty or 1)..(e.qty_exact==false and'~'or''),sizes[3])
@@ -5966,12 +5966,12 @@ local function row(e,sizes)
     -- Do not accidentally multiply by quantity a second time.
     cell('$'..money(price):gsub('^%$', ''),sizes[4],true)
     if e.kind=='sell' then
-        imgui.TextColored(DSP.theme.col('good',1),u('Продажа'))
+        imgui.TextColored(DSP.theme.col('good',1),u('ГЏГ°Г®Г¤Г Г¦Г '))
     else
-        imgui.TextColored(DSP.theme.col('accent',1),u('Покупка'))
+        imgui.TextColored(DSP.theme.col('accent',1),u('ГЏГ®ГЄГіГЇГЄГ '))
     end
     imgui.NextColumn()
-    cell(e.partner and e.partner~='' and e.partner or'—',sizes[6],true)
+    cell(e.partner and e.partner~='' and e.partner or'В—',sizes[6],true)
 end
 local function page_nav(s,count)
     local count_pages=math.max(1,math.ceil(count/60))
@@ -5981,7 +5981,7 @@ local function page_nav(s,count)
     imgui.SameLine(0,4)
     if button('<','back',width)then s.page=math.max(1,s.page-1);persist()end
     imgui.SameLine(0,8)
-    faded('Стр. '..s.page..'/'..count_pages..' ('..count..')')
+    faded('Г‘ГІГ°. '..s.page..'/'..count_pages..' ('..count..')')
     imgui.SameLine(0,8)
     if button('>','next',width)then s.page=math.min(count_pages,s.page+1);persist()end
     imgui.SameLine(0,4)
@@ -5995,10 +5995,10 @@ if DSP.settings.craglog then DSP.settings.craglog.open=false end
 
 function V.journal()
     local s=state()
-    V.heading('Журнал сделок')
+    V.heading('Г†ГіГ°Г­Г Г« Г±Г¤ГҐГ«Г®ГЄ')
     local avail=imgui.GetContentRegionAvail().x
-    local labels={{'all','Все'},{'day','Сегодня'},{'week','Неделя'},
-                  {'month','Месяц'},{'date','Дата'}}
+    local labels={{'all','Г‚Г±ГҐ'},{'day','Г‘ГҐГЈГ®Г¤Г­Гї'},{'week','ГЌГҐГ¤ГҐГ«Гї'},
+                  {'month','ГЊГҐГ±ГїГ¶'},{'date','Г„Г ГІГ '}}
     local width=math.max(54,(avail-24)/5)
     for i,p in ipairs(labels)do
         if button(p[2],'period_'..p[1],width,s.period==p[1])then
@@ -6007,10 +6007,10 @@ function V.journal()
         end
         if i<#labels then imgui.SameLine(0,6)end
     end
-    local query,edited=V.search('mhjournal294_search','Поиск товара / ника',-1)
+    local query,edited=V.search('mhjournal294_search','ГЏГ®ГЁГ±ГЄ ГІГ®ГўГ Г°Г  / Г­ГЁГЄГ ',-1)
     if edited then s.page=1 end
     local side_width=math.max(73,(imgui.GetContentRegionAvail().x-12)/3)
-    for i,p in ipairs({{'all','Все сделки'},{'sell','Продажи'},{'buy','Покупки'}})do
+    for i,p in ipairs({{'all','Г‚Г±ГҐ Г±Г¤ГҐГ«ГЄГЁ'},{'sell','ГЏГ°Г®Г¤Г Г¦ГЁ'},{'buy','ГЏГ®ГЄГіГЇГЄГЁ'}})do
         if button(p[2],'side_'..p[1],side_width,s.side==p[1])then
             s.side=p[1];s.page=1;persist()
         end
@@ -6019,7 +6019,7 @@ function V.journal()
     -- Read all once so date selection contains every recorded trade.
     local all=C.trade_rows('all',query or'',s.side)
     if imgui.BeginPopup('##mhjournal294_dates')then
-        faded('Выбери дату')
+        faded('Г‚Г»ГЎГҐГ°ГЁ Г¤Г ГІГі')
         for _,date in ipairs(available_dates(all))do
             local display=date:sub(9,10)..'.'..date:sub(6,7)..'.'..date:sub(1,4)
             if imgui.Selectable(display..'##'..date,s.date==date)then
@@ -6029,8 +6029,8 @@ function V.journal()
         imgui.EndPopup()
     end
     if s.period=='date' then
-        if s.date=='' then faded('Дата не выбрана')
-        else faded('Дата: '..s.date:sub(9,10)..'.'..s.date:sub(6,7)..'.'..s.date:sub(1,4))end
+        if s.date=='' then faded('Г„Г ГІГ  Г­ГҐ ГўГ»ГЎГ°Г Г­Г ')
+        else faded('Г„Г ГІГ : '..s.date:sub(9,10)..'.'..s.date:sub(6,7)..'.'..s.date:sub(1,4))end
     end
 
     local filtered,now={},os.time()
@@ -6042,16 +6042,16 @@ function V.journal()
     table.sort(filtered,function(a,b)return (a.ts or 0)>(b.ts or 0)end)
     local total=C.trade_totals(filtered)
     imgui.Separator()
-    imgui.TextColored(DSP.theme.col('good',1),u('Продажи: '..total.sell_qty..' шт. · '..money(total.sells)))
+    imgui.TextColored(DSP.theme.col('good',1),u('ГЏГ°Г®Г¤Г Г¦ГЁ: '..total.sell_qty..' ГёГІ. В· '..money(total.sells)))
     imgui.SameLine(0,18)
-    imgui.TextColored(DSP.theme.col('accent',1),u('Покупки: '..total.buy_qty..' шт. · '..money(total.buys)))
-    if total.approx then faded('~ В некоторых старых записях количество приблизительное')end
+    imgui.TextColored(DSP.theme.col('accent',1),u('ГЏГ®ГЄГіГЇГЄГЁ: '..total.buy_qty..' ГёГІ. В· '..money(total.buys)))
+    if total.approx then faded('~ Г‚ Г­ГҐГЄГ®ГІГ®Г°Г»Гµ Г±ГІГ Г°Г»Гµ Г§Г ГЇГЁГ±ГїГµ ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® ГЇГ°ГЁГЎГ«ГЁГ§ГЁГІГҐГ«ГјГ­Г®ГҐ')end
     local start=(s.page-1)*60+1
     local finish=math.min(start+59,#filtered)
     local height=math.max(95,imgui.GetContentRegionAvail().y-54)
     if imgui.BeginChild('##mhjournal294_table',imgui.ImVec2(-1,height),true)then
         local sizes=columns(math.max(610,imgui.GetWindowContentRegionWidth()))
-        if #filtered==0 then faded('История сделок пуста.')end
+        if #filtered==0 then faded('Г€Г±ГІГ®Г°ГЁГї Г±Г¤ГҐГ«Г®ГЄ ГЇГіГ±ГІГ .')end
         for i=start,finish do
             local e=filtered[i]
             if e then row(e,sizes)end
@@ -6246,23 +6246,23 @@ local function cell(s,width,tip)
     imgui.NextColumn()
 end
 local function columns(w)
-    -- The same six columns as the Market Helper "Сделки" table.
+    -- The same six columns as the Market Helper "Г‘Г¤ГҐГ«ГЄГЁ" table.
     local ratios={.155,.265,.075,.155,.14,.21}
     local sizes={}
     for i,r in ipairs(ratios)do sizes[i]=math.max(43,math.floor(w*r))end
     imgui.Columns(6,'##mhjournal294_columns',false)
     for i=1,6 do imgui.SetColumnWidth(i-1,sizes[i])end
-    faded('Дата');imgui.NextColumn()
-    faded('Товар');imgui.NextColumn()
-    faded('Кол.');imgui.NextColumn()
-    faded('Цена $');imgui.NextColumn()
-    faded('Тип');imgui.NextColumn()
-    faded('Ник');imgui.NextColumn()
+    faded('Г„Г ГІГ ');imgui.NextColumn()
+    faded('Г’Г®ГўГ Г°');imgui.NextColumn()
+    faded('ГЉГ®Г«.');imgui.NextColumn()
+    faded('Г–ГҐГ­Г  $');imgui.NextColumn()
+    faded('Г’ГЁГЇ');imgui.NextColumn()
+    faded('ГЌГЁГЄ');imgui.NextColumn()
     imgui.Separator()
     return sizes
 end
 local function row(e,sizes)
-    local stamp=(e.ts and e.ts>0)and os.date('%d.%m %H:%M',e.ts)or'—'
+    local stamp=(e.ts and e.ts>0)and os.date('%d.%m %H:%M',e.ts)or'В—'
     cell(stamp,sizes[1],true)
     cell(e.name or'?',sizes[2],true)
     cell(tostring(e.qty or 1)..(e.qty_exact==false and'~'or''),sizes[3])
@@ -6271,12 +6271,12 @@ local function row(e,sizes)
     -- Do not accidentally multiply by quantity a second time.
     cell('$'..money(price):gsub('^%$', ''),sizes[4],true)
     if e.kind=='sell' then
-        imgui.TextColored(DSP.theme.col('good',1),u('Продажа'))
+        imgui.TextColored(DSP.theme.col('good',1),u('ГЏГ°Г®Г¤Г Г¦Г '))
     else
-        imgui.TextColored(DSP.theme.col('accent',1),u('Покупка'))
+        imgui.TextColored(DSP.theme.col('accent',1),u('ГЏГ®ГЄГіГЇГЄГ '))
     end
     imgui.NextColumn()
-    cell(e.partner and e.partner~='' and e.partner or'—',sizes[6],true)
+    cell(e.partner and e.partner~='' and e.partner or'В—',sizes[6],true)
 end
 local function page_nav(s,count)
     local count_pages=math.max(1,math.ceil(count/60))
@@ -6286,7 +6286,7 @@ local function page_nav(s,count)
     imgui.SameLine(0,4)
     if button('<','back',width)then s.page=math.max(1,s.page-1);persist()end
     imgui.SameLine(0,8)
-    faded('Стр. '..s.page..'/'..count_pages..' ('..count..')')
+    faded('Г‘ГІГ°. '..s.page..'/'..count_pages..' ('..count..')')
     imgui.SameLine(0,8)
     if button('>','next',width)then s.page=math.min(count_pages,s.page+1);persist()end
     imgui.SameLine(0,4)
@@ -6300,10 +6300,10 @@ if DSP.settings.craglog then DSP.settings.craglog.open=false end
 
 function V.journal()
     local s=state()
-    V.heading('Журнал сделок')
+    V.heading('Г†ГіГ°Г­Г Г« Г±Г¤ГҐГ«Г®ГЄ')
     local avail=imgui.GetContentRegionAvail().x
-    local labels={{'all','Все'},{'day','Сегодня'},{'week','Неделя'},
-                  {'month','Месяц'},{'date','Дата'}}
+    local labels={{'all','Г‚Г±ГҐ'},{'day','Г‘ГҐГЈГ®Г¤Г­Гї'},{'week','ГЌГҐГ¤ГҐГ«Гї'},
+                  {'month','ГЊГҐГ±ГїГ¶'},{'date','Г„Г ГІГ '}}
     local width=math.max(54,(avail-24)/5)
     for i,p in ipairs(labels)do
         if button(p[2],'period_'..p[1],width,s.period==p[1])then
@@ -6312,10 +6312,10 @@ function V.journal()
         end
         if i<#labels then imgui.SameLine(0,6)end
     end
-    local query,edited=V.search('mhjournal294_search','Поиск товара / ника',-1)
+    local query,edited=V.search('mhjournal294_search','ГЏГ®ГЁГ±ГЄ ГІГ®ГўГ Г°Г  / Г­ГЁГЄГ ',-1)
     if edited then s.page=1 end
     local side_width=math.max(73,(imgui.GetContentRegionAvail().x-12)/3)
-    for i,p in ipairs({{'all','Все сделки'},{'sell','Продажи'},{'buy','Покупки'}})do
+    for i,p in ipairs({{'all','Г‚Г±ГҐ Г±Г¤ГҐГ«ГЄГЁ'},{'sell','ГЏГ°Г®Г¤Г Г¦ГЁ'},{'buy','ГЏГ®ГЄГіГЇГЄГЁ'}})do
         if button(p[2],'side_'..p[1],side_width,s.side==p[1])then
             s.side=p[1];s.page=1;persist()
         end
@@ -6324,7 +6324,7 @@ function V.journal()
     -- A single cached view is shared by the filter bar, date picker, totals and table.
     local all,filtered,total,dates=view_for(query,s)
     if imgui.BeginPopup('##mhjournal294_dates')then
-        faded('Выбери дату')
+        faded('Г‚Г»ГЎГҐГ°ГЁ Г¤Г ГІГі')
         for _,date in ipairs(dates)do
             local display=date:sub(9,10)..'.'..date:sub(6,7)..'.'..date:sub(1,4)
             if imgui.Selectable(display..'##'..date,s.date==date)then
@@ -6334,21 +6334,21 @@ function V.journal()
         imgui.EndPopup()
     end
     if s.period=='date' then
-        if s.date=='' then faded('Дата не выбрана')
-        else faded('Дата: '..s.date:sub(9,10)..'.'..s.date:sub(6,7)..'.'..s.date:sub(1,4))end
+        if s.date=='' then faded('Г„Г ГІГ  Г­ГҐ ГўГ»ГЎГ°Г Г­Г ')
+        else faded('Г„Г ГІГ : '..s.date:sub(9,10)..'.'..s.date:sub(6,7)..'.'..s.date:sub(1,4))end
     end
 
     imgui.Separator()
-    imgui.TextColored(DSP.theme.col('good',1),u('Продажи: '..total.sell_qty..' шт. · '..money(total.sells)))
+    imgui.TextColored(DSP.theme.col('good',1),u('ГЏГ°Г®Г¤Г Г¦ГЁ: '..total.sell_qty..' ГёГІ. В· '..money(total.sells)))
     imgui.SameLine(0,18)
-    imgui.TextColored(DSP.theme.col('accent',1),u('Покупки: '..total.buy_qty..' шт. · '..money(total.buys)))
-    if total.approx then faded('~ В некоторых старых записях количество приблизительное')end
+    imgui.TextColored(DSP.theme.col('accent',1),u('ГЏГ®ГЄГіГЇГЄГЁ: '..total.buy_qty..' ГёГІ. В· '..money(total.buys)))
+    if total.approx then faded('~ Г‚ Г­ГҐГЄГ®ГІГ®Г°Г»Гµ Г±ГІГ Г°Г»Гµ Г§Г ГЇГЁГ±ГїГµ ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® ГЇГ°ГЁГЎГ«ГЁГ§ГЁГІГҐГ«ГјГ­Г®ГҐ')end
     local start=(s.page-1)*60+1
     local finish=math.min(start+59,#filtered)
     local height=math.max(95,imgui.GetContentRegionAvail().y-54)
     if imgui.BeginChild('##mhjournal294_table',imgui.ImVec2(-1,height),true)then
         local sizes=columns(math.max(610,imgui.GetWindowContentRegionWidth()))
-        if #filtered==0 then faded('История сделок пуста.')end
+        if #filtered==0 then faded('Г€Г±ГІГ®Г°ГЁГї Г±Г¤ГҐГ«Г®ГЄ ГЇГіГ±ГІГ .')end
         for i=start,finish do
             local e=filtered[i]
             if e then row(e,sizes)end
@@ -6520,8 +6520,8 @@ local function blocked(s)
     s=normalize(s)
     for _,part in ipairs({
         'banned','you are banned','account blocked','captcha','wrong password','invalid password',
-        'kicked','you are kicked','вы забан','аккаунт заблокирован','капч','неверный пароль',
-        'неправильный пароль','вы были кикнуты','отказ в авторизации',
+        'kicked','you are kicked','ГўГ» Г§Г ГЎГ Г­','Г ГЄГЄГ ГіГ­ГІ Г§Г ГЎГ«Г®ГЄГЁГ°Г®ГўГ Г­','ГЄГ ГЇГ·','Г­ГҐГўГҐГ°Г­Г»Г© ГЇГ Г°Г®Г«Гј',
+        'Г­ГҐГЇГ°Г ГўГЁГ«ГјГ­Г»Г© ГЇГ Г°Г®Г«Гј','ГўГ» ГЎГ»Г«ГЁ ГЄГЁГЄГ­ГіГІГ»','Г®ГІГЄГ Г§ Гў Г ГўГІГ®Г°ГЁГ§Г Г¶ГЁГЁ',
     })do
         if s:find(part,1,true)then return true end
     end
@@ -6677,10 +6677,10 @@ end
 -- Exact spawn option matching only. No guessed row index or teleport coordinates.
 local function spawn_title(title)
     local s=normalize(title)
-    if blocked(s) or s:find('password',1,true) or s:find('парол',1,true)
-        or s:find('авторизац',1,true) then return false end
-    return s:find('спавн',1,true)~=nil or s:find('spawn',1,true)~=nil
-        or s:find('место появлен',1,true)~=nil or s:find('точк появлен',1,true)~=nil
+    if blocked(s) or s:find('password',1,true) or s:find('ГЇГ Г°Г®Г«',1,true)
+        or s:find('Г ГўГІГ®Г°ГЁГ§Г Г¶',1,true) then return false end
+    return s:find('Г±ГЇГ ГўГ­',1,true)~=nil or s:find('spawn',1,true)~=nil
+        or s:find('Г¬ГҐГ±ГІГ® ГЇГ®ГїГўГ«ГҐГ­',1,true)~=nil or s:find('ГІГ®Г·ГЄ ГЇГ®ГїГўГ«ГҐГ­',1,true)~=nil
 end
 function R.observe_dialog(id,style,title,content,at)
     if not R.host then R.remember_address()end
@@ -6815,65 +6815,65 @@ local function number(key,label,step,unit)
     local x=math.min(80,math.max(44,imgui.GetContentRegionAvail().x/4))
     if b('-','dec_'..key,x)then update(key,c[key]-step)end
     V.inline(4,x)
-    V.text(tostring(c[key])..' '..(unit or'с'))
+    V.text(tostring(c[key])..' '..(unit or'Г±'))
     V.inline(5,x)
     if b('+','inc_'..key,x)then update(key,c[key]+step)end
 end
 local function header()
-    V.heading('Реконнект / Спавн',function()
-        if b('Назад','go_back',105)then V.set_screen('settings')end
+    V.heading('ГђГҐГЄГ®Г­Г­ГҐГЄГІ / Г‘ГЇГ ГўГ­',function()
+        if b('ГЌГ Г§Г Г¤','go_back',105)then V.set_screen('settings')end
     end,127)
     local c=R.config()
-    V.muted('Сервер: '..tostring(R.server_key()or'не определён'))
-    V.muted('Состояние: '..tostring(R.status or'выключен'))
+    V.muted('Г‘ГҐГ°ГўГҐГ°: '..tostring(R.server_key()or'Г­ГҐ Г®ГЇГ°ГҐГ¤ГҐГ«ВёГ­'))
+    V.muted('Г‘Г®Г±ГІГ®ГїГ­ГЁГҐ: '..tostring(R.status or'ГўГ»ГЄГ«ГѕГ·ГҐГ­'))
     if V.reconnect_error then V.red(V.reconnect_error)end
-    if b('Реконнект сейчас','manual',math.min(220,imgui.GetContentRegionAvail().x))then
+    if b('ГђГҐГЄГ®Г­Г­ГҐГЄГІ Г±ГҐГ©Г·Г Г±','manual',math.min(220,imgui.GetContentRegionAvail().x))then
         local ok,why=R.manual()
         if not ok then V.reconnect_error=tostring(why)else V.reconnect_error=nil end
     end
     V.inline(5,160)
-    if b('Остановить','stop',150)then R.stop('Отменено пользователем')end
+    if b('ГЋГ±ГІГ Г­Г®ГўГЁГІГј','stop',150)then R.stop('ГЋГІГ¬ГҐГ­ГҐГ­Г® ГЇГ®Г«ГјГ§Г®ГўГ ГІГҐГ«ГҐГ¬')end
 end
 local function general()
     local c=R.config()
-    toggle('enabled','Авто-реконнект (по умолчанию выключен)')
-    toggle('on_lost','После потери соединения / тайм-аута')
-    toggle('on_closed','После закрытия соединения сервером')
-    toggle('on_rejected','После отказа в подключении')
-    V.muted('При бане, кике, пароле и капче автоматизация останавливается.')
-    V.muted('Если игра полностью закрылась, Lua не сможет запустить её заново.')
-    V.muted('Периоды ожидания:')
-    number('initial_delay','Первое подключение после обрыва',1)
-    number('min_delay','Начальная задержка повторов',2)
-    number('max_delay','Максимальная пауза (экспоненциально)',10)
-    number('jitter','Случайная добавка к паузе',1)
-    number('max_attempts','Ограничение числа попыток',1,'раз')
-    number('connect_timeout','Тайм-аут подключения',5)
+    toggle('enabled','ГЂГўГІГ®-Г°ГҐГЄГ®Г­Г­ГҐГЄГІ (ГЇГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ ГўГ»ГЄГ«ГѕГ·ГҐГ­)')
+    toggle('on_lost','ГЏГ®Г±Г«ГҐ ГЇГ®ГІГҐГ°ГЁ Г±Г®ГҐГ¤ГЁГ­ГҐГ­ГЁГї / ГІГ Г©Г¬-Г ГіГІГ ')
+    toggle('on_closed','ГЏГ®Г±Г«ГҐ Г§Г ГЄГ°Г»ГІГЁГї Г±Г®ГҐГ¤ГЁГ­ГҐГ­ГЁГї Г±ГҐГ°ГўГҐГ°Г®Г¬')
+    toggle('on_rejected','ГЏГ®Г±Г«ГҐ Г®ГІГЄГ Г§Г  Гў ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГЁ')
+    V.muted('ГЏГ°ГЁ ГЎГ Г­ГҐ, ГЄГЁГЄГҐ, ГЇГ Г°Г®Г«ГҐ ГЁ ГЄГ ГЇГ·ГҐ Г ГўГІГ®Г¬Г ГІГЁГ§Г Г¶ГЁГї Г®Г±ГІГ Г­Г ГўГ«ГЁГўГ ГҐГІГ±Гї.')
+    V.muted('Г…Г±Г«ГЁ ГЁГЈГ°Г  ГЇГ®Г«Г­Г®Г±ГІГјГѕ Г§Г ГЄГ°Г»Г«Г Г±Гј, Lua Г­ГҐ Г±Г¬Г®Г¦ГҐГІ Г§Г ГЇГіГ±ГІГЁГІГј ГҐВё Г§Г Г­Г®ГўГ®.')
+    V.muted('ГЏГҐГ°ГЁГ®Г¤Г» Г®Г¦ГЁГ¤Г Г­ГЁГї:')
+    number('initial_delay','ГЏГҐГ°ГўГ®ГҐ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГҐ ГЇГ®Г±Г«ГҐ Г®ГЎГ°Г»ГўГ ',1)
+    number('min_delay','ГЌГ Г·Г Г«ГјГ­Г Гї Г§Г Г¤ГҐГ°Г¦ГЄГ  ГЇГ®ГўГІГ®Г°Г®Гў',2)
+    number('max_delay','ГЊГ ГЄГ±ГЁГ¬Г Г«ГјГ­Г Гї ГЇГ ГіГ§Г  (ГЅГЄГ±ГЇГ®Г­ГҐГ­Г¶ГЁГ Г«ГјГ­Г®)',10)
+    number('jitter','Г‘Г«ГіГ·Г Г©Г­Г Гї Г¤Г®ГЎГ ГўГЄГ  ГЄ ГЇГ ГіГ§ГҐ',1)
+    number('max_attempts','ГЋГЈГ°Г Г­ГЁГ·ГҐГ­ГЁГҐ Г·ГЁГ±Г«Г  ГЇГ®ГЇГ»ГІГ®ГЄ',1,'Г°Г Г§')
+    number('connect_timeout','Г’Г Г©Г¬-Г ГіГІ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї',5)
 end
 local function spawns()
     local c=R.config()
-    toggle('spawn_enabled','Автоматически выбрать сохранённый спавн')
-    number('spawn_delay','Пауза до ответа на диалог',1)
-    V.muted('Режим точного выбора: только реально обнаруженные пункты SA-MP.')
-    V.muted('CEF-окна нельзя безопасно выбирать без подтверждённого API.')
-    V.muted('Сначала войди в игру и открой меню выбора спавна.')
+    toggle('spawn_enabled','ГЂГўГІГ®Г¬Г ГІГЁГ·ГҐГ±ГЄГЁ ГўГ»ГЎГ°Г ГІГј Г±Г®ГµГ°Г Г­ВёГ­Г­Г»Г© Г±ГЇГ ГўГ­')
+    number('spawn_delay','ГЏГ ГіГ§Г  Г¤Г® Г®ГІГўГҐГІГ  Г­Г  Г¤ГЁГ Г«Г®ГЈ',1)
+    V.muted('ГђГҐГ¦ГЁГ¬ ГІГ®Г·Г­Г®ГЈГ® ГўГ»ГЎГ®Г°Г : ГІГ®Г«ГјГЄГ® Г°ГҐГ Г«ГјГ­Г® Г®ГЎГ­Г Г°ГіГ¦ГҐГ­Г­Г»ГҐ ГЇГіГ­ГЄГІГ» SA-MP.')
+    V.muted('CEF-Г®ГЄГ­Г  Г­ГҐГ«ГјГ§Гї ГЎГҐГ§Г®ГЇГ Г±Г­Г® ГўГ»ГЎГЁГ°Г ГІГј ГЎГҐГ§ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­Г­Г®ГЈГ® API.')
+    V.muted('Г‘Г­Г Г·Г Г«Г  ГўГ®Г©Г¤ГЁ Гў ГЁГЈГ°Гі ГЁ Г®ГІГЄГ°Г®Г© Г¬ГҐГ­Гѕ ГўГ»ГЎГ®Г°Г  Г±ГЇГ ГўГ­Г .')
     local p=R.profile()
     local selected=p and p.spawn_label or nil
-    V.muted('Сохранено для этого сервера: '..tostring(selected or'вручную'))
-    if b('Сбросить выбор','clear_spawn',205)then
+    V.muted('Г‘Г®ГµГ°Г Г­ГҐГ­Г® Г¤Г«Гї ГЅГІГ®ГЈГ® Г±ГҐГ°ГўГҐГ°Г : '..tostring(selected or'ГўГ°ГіГ·Г­ГіГѕ'))
+    if b('Г‘ГЎГ°Г®Г±ГЁГІГј ГўГ»ГЎГ®Г°','clear_spawn',205)then
         local ok,why=R.select_spawn(nil)
         if not ok then V.reconnect_error=tostring(why)else V.reconnect_error=nil end
     end
     local opts=R.options or{}
     if not R.server_key()then
-        V.muted('Адрес сервера не определён: сначала подключись в лаунчере.')
+        V.muted('ГЂГ¤Г°ГҐГ± Г±ГҐГ°ГўГҐГ°Г  Г­ГҐ Г®ГЇГ°ГҐГ¤ГҐГ«ВёГ­: Г±Г­Г Г·Г Г«Г  ГЇГ®Г¤ГЄГ«ГѕГ·ГЁГ±Гј Гў Г«Г ГіГ­Г·ГҐГ°ГҐ.')
         return
     end
     if #opts==0 then
-        V.muted('Пункты пока не получены из SA-MP-диалога.')
+        V.muted('ГЏГіГ­ГЄГІГ» ГЇГ®ГЄГ  Г­ГҐ ГЇГ®Г«ГіГ·ГҐГ­Г» ГЁГ§ SA-MP-Г¤ГЁГ Г«Г®ГЈГ .')
         return
     end
-    V.muted('Пункты из последнего меню спавна:')
+    V.muted('ГЏГіГ­ГЄГІГ» ГЁГ§ ГЇГ®Г±Г«ГҐГ¤Г­ГҐГЈГ® Г¬ГҐГ­Гѕ Г±ГЇГ ГўГ­Г :')
     for i,row in ipairs(opts)do
         if b((selected==row.label and'[x] 'or'[ ] ')..
             tostring(row.label),'spawn_'..i,-1,selected==row.label)then
@@ -6884,29 +6884,29 @@ local function spawns()
 end
 local function diag()
     local c=R.config()
-    V.muted('Статус: '..tostring(R.status or'Ожидание'))
-    V.muted('Последняя причина: '..tostring(R.last_reason or'—'))
-    V.muted('Попытки: '..tostring(R.attempts or 0)..'/'..tostring(c.max_attempts))
+    V.muted('Г‘ГІГ ГІГіГ±: '..tostring(R.status or'ГЋГ¦ГЁГ¤Г Г­ГЁГҐ'))
+    V.muted('ГЏГ®Г±Г«ГҐГ¤Г­ГїГї ГЇГ°ГЁГ·ГЁГ­Г : '..tostring(R.last_reason or'В—'))
+    V.muted('ГЏГ®ГЇГ»ГІГЄГЁ: '..tostring(R.attempts or 0)..'/'..tostring(c.max_attempts))
     if R.state=='scheduled'then
-        V.muted('Следующая попытка через '..math.max(0,(R.next_at or 0)-os.time())..' с')
+        V.muted('Г‘Г«ГҐГ¤ГіГѕГ№Г Гї ГЇГ®ГЇГ»ГІГЄГ  Г·ГҐГ°ГҐГ§ '..math.max(0,(R.next_at or 0)-os.time())..' Г±')
     end
-    V.muted('Клиентский /reconnect: '..((type(sampProcessChatInput)=='function'
-        or type(sampSendChat)=='function')and'доступен' or'не определён'))
-    V.muted('SA-MP-диалоги: '..tostring(#(R.options or{}))..' пунктов')
-    if R.dialog_id then V.muted('ID последнего меню спавна: '..tostring(R.dialog_id))end
-    V.muted('Команды: /prc (вручную), /prc status, /prc stop')
-    V.muted('Ник и пароль не хранятся. Авторизацию проходишь в игре.')
-    V.muted('При ошибке игры проверь standalone.log и client.log.')
-    if b('Обновить адрес текущего сервера','refresh_server',-1)then
+    V.muted('ГЉГ«ГЁГҐГ­ГІГ±ГЄГЁГ© /reconnect: '..((type(sampProcessChatInput)=='function'
+        or type(sampSendChat)=='function')and'Г¤Г®Г±ГІГіГЇГҐГ­' or'Г­ГҐ Г®ГЇГ°ГҐГ¤ГҐГ«ВёГ­'))
+    V.muted('SA-MP-Г¤ГЁГ Г«Г®ГЈГЁ: '..tostring(#(R.options or{}))..' ГЇГіГ­ГЄГІГ®Гў')
+    if R.dialog_id then V.muted('ID ГЇГ®Г±Г«ГҐГ¤Г­ГҐГЈГ® Г¬ГҐГ­Гѕ Г±ГЇГ ГўГ­Г : '..tostring(R.dialog_id))end
+    V.muted('ГЉГ®Г¬Г Г­Г¤Г»: /prc (ГўГ°ГіГ·Г­ГіГѕ), /prc status, /prc stop')
+    V.muted('ГЌГЁГЄ ГЁ ГЇГ Г°Г®Г«Гј Г­ГҐ ГµГ°Г Г­ГїГІГ±Гї. ГЂГўГІГ®Г°ГЁГ§Г Г¶ГЁГѕ ГЇГ°Г®ГµГ®Г¤ГЁГёГј Гў ГЁГЈГ°ГҐ.')
+    V.muted('ГЏГ°ГЁ Г®ГёГЁГЎГЄГҐ ГЁГЈГ°Г» ГЇГ°Г®ГўГҐГ°Гј standalone.log ГЁ client.log.')
+    if b('ГЋГЎГ­Г®ГўГЁГІГј Г Г¤Г°ГҐГ± ГІГҐГЄГіГ№ГҐГЈГ® Г±ГҐГ°ГўГҐГ°Г ','refresh_server',-1)then
         if not R.remember_address()then
-            V.reconnect_error='Не удалось получить адрес от клиента'
+            V.reconnect_error='ГЌГҐ ГіГ¤Г Г«Г®Г±Гј ГЇГ®Г«ГіГ·ГЁГІГј Г Г¤Г°ГҐГ± Г®ГІ ГЄГ«ГЁГҐГ­ГІГ '
         else V.reconnect_error=nil end
     end
 end
 V.reconnect_tab=V.reconnect_tab or 1
 function R.draw_ui()
     header()
-    local pages={{'Основное',general},{'Спавн',spawns},{'Статус',diag}}
+    local pages={{'ГЋГ±Г­Г®ГўГ­Г®ГҐ',general},{'Г‘ГЇГ ГўГ­',spawns},{'Г‘ГІГ ГІГіГ±',diag}}
     local w=math.max(62,(imgui.GetContentRegionAvail().x-12)/3)
     for i,page in ipairs(pages)do
         if b(page[1],'page_'..i,w,V.reconnect_tab==i)then
@@ -6922,7 +6922,7 @@ function V.tools(screen)
     if screen=='reconnect'then return R.draw_ui()end
     if screen=='settings'then
         local w=imgui.GetContentRegionAvail().x
-        if b('Реконнект / выбор спавна','settings_entry',math.min(300,w))then
+        if b('ГђГҐГЄГ®Г­Г­ГҐГЄГІ / ГўГ»ГЎГ®Г° Г±ГЇГ ГўГ­Г ','settings_entry',math.min(300,w))then
             V.set_screen('reconnect')
             return
         end
@@ -10247,7 +10247,7 @@ local function queue_sell()
                     end
                 end
             end
-            if left > 0 then return nil, p.name .. ': недостаточно в инвентаре' end
+            if left > 0 then return nil, p.name .. ': Г­ГҐГ¤Г®Г±ГІГ ГІГ®Г·Г­Г® Гў ГЁГ­ГўГҐГ­ГІГ Г°ГҐ' end
         end
     end
     return queue
@@ -10264,9 +10264,9 @@ function DSP.auto.start_sell()
         if type(it)~='table' then DSP.notify('Invalid preset row');return false end
         if it.enabled ~= false then n = n + 1 end
     end
-    if n == 0 then DSP.notify('Продажа: пресет пуст'); return end
+    if n == 0 then DSP.notify('ГЏГ°Г®Г¤Г Г¦Г : ГЇГ°ГҐГ±ГҐГІ ГЇГіГ±ГІ'); return end
     if #DSP.auto.inv == 0 then
-        DSP.notify('Продажа: сначала просканируйте инвентарь')
+        DSP.notify('ГЏГ°Г®Г¤Г Г¦Г : Г±Г­Г Г·Г Г«Г  ГЇГ°Г®Г±ГЄГ Г­ГЁГ°ГіГ©ГІГҐ ГЁГ­ГўГҐГ­ГІГ Г°Гј')
         return
     end
     local q_ok,queue,err=pcall(queue_sell)
@@ -10276,17 +10276,17 @@ function DSP.auto.start_sell()
         return false
     end
     if not queue then DSP.notify('Sale: '..tostring(err)); return false end
-    if #queue == 0 then DSP.notify('Продажа: в инвентаре нет позиций из пресета'); return end
+    if #queue == 0 then DSP.notify('ГЏГ°Г®Г¤Г Г¦Г : Гў ГЁГ­ГўГҐГ­ГІГ Г°ГҐ Г­ГҐГІ ГЇГ®Г§ГЁГ¶ГЁГ© ГЁГ§ ГЇГ°ГҐГ±ГҐГІГ '); return end
     local dry_run = DSP.settings.dry_run
     DSP.auto.sell_running = true
     DSP.auto.sell_confirmed = false
     DSP.auto.sell_forbidden = false
     DSP.auto.sell_no_slots = false
-    DSP.auto.status = 'продажа...'
+    DSP.auto.status = 'ГЇГ°Г®Г¤Г Г¦Г ...'
     DSP.flog('PRESET sale accepted: '..#queue..' stacks, dry_run='..tostring(dry_run))
-    log('Продажа: ' .. #queue .. ' стек(ов)')
+    log('ГЏГ°Г®Г¤Г Г¦Г : ' .. #queue .. ' Г±ГІГҐГЄ(Г®Гў)')
     if dry_run then
-        DSP.notify('ТЕСТ: игровые окна не открываются. Для действий нужен режим РЕАЛЬНО.')
+        DSP.notify('Г’Г…Г‘Г’: ГЁГЈГ°Г®ГўГ»ГҐ Г®ГЄГ­Г  Г­ГҐ Г®ГІГЄГ°Г»ГўГ ГѕГІГ±Гї. Г„Г«Гї Г¤ГҐГ©Г±ГІГўГЁГ© Г­ГіГ¦ГҐГ­ Г°ГҐГ¦ГЁГ¬ ГђГ…ГЂГ‹ГњГЌГЋ.')
         -- A preview must NEVER send RakNet clicks or dialog responses.
         DSP.auto.sell_running=true
         DSP.auto.status='sale preview...'
@@ -10311,16 +10311,16 @@ function DSP.auto.start_sell()
             local ok,why=DSP.auto.prepare_stall_inventory()
             if not ok then
                 DSP.auto.sell_running=false
-                DSP.auto.status='продажа: лавка не готова'
-                log('Продажа: '..tostring(why or 'не удалось открыть инвентарь лавки'),'error')
-                DSP.notify('Продажа: '..tostring(why or 'лавка не готова'))
+                DSP.auto.status='ГЇГ°Г®Г¤Г Г¦Г : Г«Г ГўГЄГ  Г­ГҐ ГЈГ®ГІГ®ГўГ '
+                log('ГЏГ°Г®Г¤Г Г¦Г : '..tostring(why or 'Г­ГҐ ГіГ¤Г Г«Г®Г±Гј Г®ГІГЄГ°Г»ГІГј ГЁГ­ГўГҐГ­ГІГ Г°Гј Г«Г ГўГЄГЁ'),'error')
+                DSP.notify('ГЏГ°Г®Г¤Г Г¦Г : '..tostring(why or 'Г«Г ГўГЄГ  Г­ГҐ ГЈГ®ГІГ®ГўГ '))
                 return
             end
             trade_wait(120)
         end
         for _, it in ipairs(queue) do
             if not DSP.auto.sell_running then break end
-            DSP.auto.status = 'продажа: ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
+            DSP.auto.status = 'ГЇГ°Г®Г¤Г Г¦Г : ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
             local json = '{"amount":' .. it.qty .. ',"id":0,"slot":' .. it.slot .. ',"type":1}'
             local got, id, dialog_text = false, nil, nil
             for attempt = 1, 3 do
@@ -10335,13 +10335,13 @@ function DSP.auto.start_sell()
                 DSP.flog('PRESET sale packet: item='..tostring(it.name)..' slot='..it.slot..' qty='..tostring(it.qty))
                 _G.dsp_click_slot(60, -1, 2, json)
                 runtime.transition('sell','wait_item_dialog',tostring(it.name))
-                -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile выставление dialogs).
+                -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ dialogs).
                 id,dialog_text,dialog_title = wait_item({ 26547, 15068, 15069, 15070, 15071 }, it.name, 2600, 'sell')
                 if id then
                     got = true
                     break
                 end
-                log('Продажа: диалог предмета не готов ('..attempt..'): '..tostring(dialog_text or ''):sub(1,90),'error')
+                log('ГЏГ°Г®Г¤Г Г¦Г : Г¤ГЁГ Г«Г®ГЈ ГЇГ°ГҐГ¤Г¬ГҐГІГ  Г­ГҐ ГЈГ®ГІГ®Гў ('..attempt..'): '..tostring(dialog_text or ''):sub(1,90),'error')
                 close_dialog()
                 trade_wait(180)
             end
@@ -10372,7 +10372,7 @@ function DSP.auto.start_sell()
                     ' mode='..(combined and 'qty_price' or 'price_only')..' resp_len='..tostring(#resp))
                 if dry_run then
                     DSP.auto.progress.dry = DSP.auto.progress.dry + 1
-                    log('dry-run: продал бы ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price))
+                    log('dry-run: ГЇГ°Г®Г¤Г Г« ГЎГ» ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price))
                     close_dialog()
                 else
                     DSP.auto.sell_confirmed = false
@@ -10390,35 +10390,35 @@ function DSP.auto.start_sell()
                     end
                     if DSP.auto.sell_no_slots then
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                        log('Продажа: нет свободных мест', 'error')
+                        log('ГЏГ°Г®Г¤Г Г¦Г : Г­ГҐГІ Г±ГўГ®ГЎГ®Г¤Г­Г»Гµ Г¬ГҐГ±ГІ', 'error')
                         DSP.auto.sell_running = false
                         break
                     end
                     if DSP.auto.sell_forbidden then
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                        log('Продажа: запрещено для ' .. it.name, 'error')
+                        log('ГЏГ°Г®Г¤Г Г¦Г : Г§Г ГЇГ°ГҐГ№ГҐГ­Г® Г¤Г«Гї ' .. it.name, 'error')
                     elseif DSP.auto.sell_confirmed then
                         done = done + 1
                         DSP.auto.progress.done = done
-                        log('Выставлено: ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price), 'ok')
+                        log('Г‚Г»Г±ГІГ ГўГ«ГҐГ­Г®: ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price), 'ok')
                     else
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                        log('Продажа: нет подтверждения для ' .. it.name, 'error')
+                        log('ГЏГ°Г®Г¤Г Г¦Г : Г­ГҐГІ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГї Г¤Г«Гї ' .. it.name, 'error')
                     end
                 end
                 trade_wait(DSP.controls and DSP.controls.get and DSP.controls.get('sell_step_pause_ms') or 260)
             else
                 DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                log('Продажа: не открылся диалог для ' .. it.name .. ' (slot ' .. it.slot .. ')', 'error')
+                log('ГЏГ°Г®Г¤Г Г¦Г : Г­ГҐ Г®ГІГЄГ°Г»Г«Г±Гї Г¤ГЁГ Г«Г®ГЈ Г¤Г«Гї ' .. it.name .. ' (slot ' .. it.slot .. ')', 'error')
                 close_dialog()
             end
         end
         DSP.auto.sell_running = false
-        DSP.auto.status = 'продажа: ' .. done .. '/' .. #queue
-        log('Продажа завершена: ' .. done .. '/' .. #queue, 'ok')
+        DSP.auto.status = 'ГЇГ°Г®Г¤Г Г¦Г : ' .. done .. '/' .. #queue
+        log('ГЏГ°Г®Г¤Г Г¦Г  Г§Г ГўГҐГ°ГёГҐГ­Г : ' .. done .. '/' .. #queue, 'ok')
         -- Inventory is now stale; refresh explicitly before another sale.
         DSP.auto.inv = {}
-        DSP.auto.inv_status = 'нужно обновить'
+        DSP.auto.inv_status = 'Г­ГіГ¦Г­Г® Г®ГЎГ­Г®ГўГЁГІГј'
     end)
     return true
 end
@@ -10427,9 +10427,9 @@ function DSP.auto.stop_sell()
     if not DSP.auto.sell_running then return false end
     runtime.cancel()
     DSP.auto.sell_running = false
-    DSP.auto.status = 'продажа остановлена'
+    DSP.auto.status = 'ГЇГ°Г®Г¤Г Г¦Г  Г®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г '
     close_dialog()
-    log('Продажа остановлена')
+    log('ГЏГ°Г®Г¤Г Г¦Г  Г®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г ')
 end
 
       end
@@ -10459,7 +10459,7 @@ local function find_list_index(text, name)
         local base=nm:match('^(.-)%s+%[%d+[^%]]*%]') or nm
         base=fold(base_name(base)):match('^%s*(.-)%s*$')
         if base==wanted then
-            if found~=nil then return nil,'несколько одинаковых строк' end
+            if found~=nil then return nil,'Г­ГҐГ±ГЄГ®Г«ГјГЄГ® Г®Г¤ГЁГ­Г ГЄГ®ГўГ»Гµ Г±ГІГ°Г®ГЄ' end
             found=idx
         end
         idx=idx+1
@@ -10477,10 +10477,10 @@ local function open_shop_menu()
 end
 
 local function buy_one(it, pi, total, dry_run)
-    DSP.auto.status = 'скупка: ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
+    DSP.auto.status = 'Г±ГЄГіГЇГЄГ : ' .. it.name .. ' (' .. pi .. '/' .. total .. ')'
     if not sampIsDialogActive() or (sampGetCurrentDialogId() ~= 3040 and sampGetCurrentDialogId()~=15072) then
         if not open_shop_menu() then
-            log('Скупка: меню не открылось для ' .. it.name, 'error')
+            log('Г‘ГЄГіГЇГЄГ : Г¬ГҐГ­Гѕ Г­ГҐ Г®ГІГЄГ°Г»Г«Г®Г±Гј Г¤Г«Гї ' .. it.name, 'error')
             return false
         end
     end
@@ -10491,7 +10491,7 @@ local function buy_one(it, pi, total, dry_run)
     -- v1.2 hotfix: also accept 15065-15067 (newer search/dialog IDs).
     local id = wait_dialog({ 25663, 15065, 15066, 15067 }, 3000)
     if not id then
-        log('Скупка: строка поиска не открылась', 'error')
+        log('Г‘ГЄГіГЇГЄГ : Г±ГІГ°Г®ГЄГ  ГЇГ®ГЁГ±ГЄГ  Г­ГҐ Г®ГІГЄГ°Г»Г«Г Г±Гј', 'error')
         return false
     end
     wait_text(id, 700)
@@ -10501,22 +10501,22 @@ local function buy_one(it, pi, total, dry_run)
     -- v1.2 hotfix: search results dialog may also be 15068 in newer versions.
     id = wait_dialog({ 25664, 15068 }, 3500)
     if not id then
-        log('Скупка: результаты не открылись: ' .. it.name, 'error')
+        log('Г‘ГЄГіГЇГЄГ : Г°ГҐГ§ГіГ«ГјГІГ ГІГ» Г­ГҐ Г®ГІГЄГ°Г»Г«ГЁГ±Гј: ' .. it.name, 'error')
         return false
     end
     local list_text = DSP.dialog_clean(wait_text(id, 500))
     local idx,index_err = find_list_index(list_text, it.name)
     if idx==nil then
-        log('Скупка: '..tostring(index_err or 'не найдено')..': ' .. it.name, 'error')
+        log('Г‘ГЄГіГЇГЄГ : '..tostring(index_err or 'Г­ГҐ Г­Г Г©Г¤ГҐГ­Г®')..': ' .. it.name, 'error')
         close_dialog()
         return false
     end
     runtime.transition('buy','select_result',tostring(it.name)..' row='..tostring(idx))
     sampSendDialogResponse(id, 1, idx, '')
-    -- v1.2 hotfix: выставление price dialog may also use 15070/15071 in newer Arizona Mobile.
+    -- v1.2 hotfix: ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ price dialog may also use 15070/15071 in newer Arizona Mobile.
     id = wait_dialog({ 26560, 26563, 15070, 15071 }, 3000)
     if not id then
-        log('Скупка: диалог цены не открылся: ' .. it.name, 'error')
+        log('Г‘ГЄГіГЇГЄГ : Г¤ГЁГ Г«Г®ГЈ Г¶ГҐГ­Г» Г­ГҐ Г®ГІГЄГ°Г»Г«Г±Гї: ' .. it.name, 'error')
         return false
     end
     if id == 26560 then
@@ -10524,12 +10524,12 @@ local function buy_one(it, pi, total, dry_run)
         -- v1.2 hotfix: also accept 15071 fallback.
         id = wait_dialog({ 26563, 15071 }, 2000)
     end
-    -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final выставление dialog.
+    -- v1.2 hotfix: accept 15071 as alternative to 26563 for the final ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ dialog.
     if id ~= 26563 and id ~= 15071 then return false end
     local validated_id,txt,dialog_title=wait_item({id},it.name,1700,'buy')
     local base = base_name(it.name)
     if not validated_id then
-        log('Скупка: в диалоге другой товар: ' .. it.name, 'error')
+        log('Г‘ГЄГіГЇГЄГ : Гў Г¤ГЁГ Г«Г®ГЈГҐ Г¤Г°ГіГЈГ®Г© ГІГ®ГўГ Г°: ' .. it.name, 'error')
         close_dialog()
         return false
     end
@@ -10559,20 +10559,20 @@ local function buy_one(it, pi, total, dry_run)
     DSP.flog('PRESET buy input: item='..tostring(it.name)..' dialog='..tostring(id)..
         ' mode='..(combined and 'qty_price' or 'price_only')..' resp_len='..tostring(#resp))
     if dry_run then
-        log('dry-run: купил бы ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price))
+        log('dry-run: ГЄГіГЇГЁГ« ГЎГ» ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price))
         close_dialog()
         return 'dry', tonumber(it.qty) or 1
     end
     -- v1.2 hotfix: use the active dialog id (may be 26563 or 15071 in newer
-    -- Arizona Mobile выставление dialogs). Fallback chain via sampGetCurrentDialogId.
+    -- Arizona Mobile ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ dialogs). Fallback chain via sampGetCurrentDialogId.
     local resp_id = id or (sampGetCurrentDialogId and sampGetCurrentDialogId()) or 26563
     sampSendDialogResponse(resp_id, 1, 0, resp)
-    log('Скупка: ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price), 'ok')
+    log('Г‘ГЄГіГЇГЄГ : ' .. it.name .. ' x' .. qty .. ' @ ' .. DSP.money(it.price), 'ok')
     for _ = 1, 24 do
         if not sampIsDialogActive() then return 'bought', qty end
         trade_wait(30)
     end
-    log('Скупка: нет подтверждения закрытия диалога', 'error')
+    log('Г‘ГЄГіГЇГЄГ : Г­ГҐГІ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГї Г§Г ГЄГ°Г»ГІГЁГї Г¤ГЁГ Г«Г®ГЈГ ', 'error')
     return false
 end
 
@@ -10593,14 +10593,14 @@ function DSP.auto.start_buy()
             list[#list+1] = {name=it.name,price=tonumber(it.price),qty=tonumber(it.qty) or 1}
         end
     end
-    if #list == 0 then DSP.notify('Скупка: пресет пуст или цены 0'); return end
+    if #list == 0 then DSP.notify('Г‘ГЄГіГЇГЄГ : ГЇГ°ГҐГ±ГҐГІ ГЇГіГ±ГІ ГЁГ«ГЁ Г¶ГҐГ­Г» 0'); return end
     local dry_run = DSP.settings.dry_run
     DSP.auto.buy_running = true
-    DSP.auto.status = 'скупка...'
+    DSP.auto.status = 'Г±ГЄГіГЇГЄГ ...'
     DSP.flog('PRESET buy accepted: '..#list..' positions, dry_run='..tostring(dry_run))
-    log('Скупка: ' .. #list .. ' позиций' .. (dry_run and ' (dry-run)' or ''))
+    log('Г‘ГЄГіГЇГЄГ : ' .. #list .. ' ГЇГ®Г§ГЁГ¶ГЁГ©' .. (dry_run and ' (dry-run)' or ''))
     if dry_run then
-        DSP.notify('ТЕСТ: игровые окна не открываются. Для действий нужен режим РЕАЛЬНО.')
+        DSP.notify('Г’Г…Г‘Г’: ГЁГЈГ°Г®ГўГ»ГҐ Г®ГЄГ­Г  Г­ГҐ Г®ГІГЄГ°Г»ГўГ ГѕГІГ±Гї. Г„Г«Гї Г¤ГҐГ©Г±ГІГўГЁГ© Г­ГіГ¦ГҐГ­ Г°ГҐГ¦ГЁГ¬ ГђГ…ГЂГ‹ГњГЌГЋ.')
         -- No shop menu, network packets or dialog interactions in preview.
         runtime.spawn('buy',function()
             DSP.auto.progress.total=#list
@@ -10618,9 +10618,9 @@ function DSP.auto.start_buy()
     runtime.spawn('buy', function()
         DSP.auto.progress.total = #list
         if not open_shop_menu() then
-            log('Скупка: лавка не открылась. Подойдите к лавке.', 'error')
+            log('Г‘ГЄГіГЇГЄГ : Г«Г ГўГЄГ  Г­ГҐ Г®ГІГЄГ°Г»Г«Г Г±Гј. ГЏГ®Г¤Г®Г©Г¤ГЁГІГҐ ГЄ Г«Г ГўГЄГҐ.', 'error')
             DSP.auto.buy_running = false
-            DSP.auto.status = 'скупка: ошибка'
+            DSP.auto.status = 'Г±ГЄГіГЇГЄГ : Г®ГёГЁГЎГЄГ '
             return
         end
         local bought, dry = 0, 0
@@ -10651,8 +10651,8 @@ function DSP.auto.start_buy()
             end
         end
         DSP.auto.buy_running = false
-        DSP.auto.status = 'скупка: ' .. bought .. '/' .. #list .. (dry > 0 and (' (dry ' .. dry .. ')') or '')
-        log('Скупка завершена: ' .. bought .. '/' .. #list, 'ok')
+        DSP.auto.status = 'Г±ГЄГіГЇГЄГ : ' .. bought .. '/' .. #list .. (dry > 0 and (' (dry ' .. dry .. ')') or '')
+        log('Г‘ГЄГіГЇГЄГ  Г§Г ГўГҐГ°ГёГҐГ­Г : ' .. bought .. '/' .. #list, 'ok')
     end)
     return true
 end
@@ -10661,9 +10661,9 @@ function DSP.auto.stop_buy()
     if not DSP.auto.buy_running then return false end
     runtime.cancel()
     DSP.auto.buy_running = false
-    DSP.auto.status = 'скупка остановлена'
+    DSP.auto.status = 'Г±ГЄГіГЇГЄГ  Г®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г '
     close_dialog()
-    log('Скупка остановлена')
+    log('Г‘ГЄГіГЇГЄГ  Г®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г ')
 end
 
 
@@ -10810,7 +10810,7 @@ function A.show(value)
 end
 function A.stop()
     local s=active()
-    if not s then return false,'Нет активной сессии'end
+    if not s then return false,'ГЌГҐГІ Г ГЄГІГЁГўГ­Г®Г© Г±ГҐГ±Г±ГЁГЁ'end
     s.ended=os.time()
     A.show(false)
     return changed()
@@ -10872,7 +10872,7 @@ local function append_routes(routes,cap)
     return fresh
 end
 function A.start(routes)
-    if server()==0 then return false,'Сервер ещё не определён'end
+    if server()==0 then return false,'Г‘ГҐГ°ГўГҐГ° ГҐГ№Вё Г­ГҐ Г®ГЇГ°ГҐГ¤ГҐГ«ВёГ­'end
     local s=active()
     if not s then
         A.data.session={sid=server(),started=os.time(),routes={},focus=1,last_review=0,
@@ -10881,24 +10881,24 @@ function A.start(routes)
     local n=append_routes(routes,24)
     if n==0 and #A.data.session.routes==0 then
         A.data.session=nil
-        return false,'Новых пригодных маршрутов пока нет'
+        return false,'ГЌГ®ГўГ»Гµ ГЇГ°ГЁГЈГ®Г¤Г­Г»Гµ Г¬Г Г°ГёГ°ГіГІГ®Гў ГЇГ®ГЄГ  Г­ГҐГІ'
     end
     A.show(true)
     return true,n
 end
 function A.add_plan(plan)
     local routes=plan and plan.routes
-    if type(routes)~='table'or#routes==0 then return false,'В плане нет маршрутов'end
+    if type(routes)~='table'or#routes==0 then return false,'Г‚ ГЇГ«Г Г­ГҐ Г­ГҐГІ Г¬Г Г°ГёГ°ГіГІГ®Гў'end
     return A.start(routes)
 end
 function A.start_market()
     if M.state.status=='cache'or M.state.status=='error'then
-        return false,'Нет свежего рынка; проверьте API или локальный скан'
+        return false,'ГЌГҐГІ Г±ГўГҐГ¦ГҐГЈГ® Г°Г»Г­ГЄГ ; ГЇГ°Г®ГўГҐГ°ГјГІГҐ API ГЁГ«ГЁ Г«Г®ГЄГ Г«ГјГ­Г»Г© Г±ГЄГ Г­'
     end
     local groups,status
     if M.arbitrage_grouped_ui then groups,status=M.arbitrage_grouped_ui()
     else groups=M.arbitrage_grouped();status='ready'end
-    if status~='ready'or not groups then return false,'Рынок ещё рассчитывается'end
+    if status~='ready'or not groups then return false,'ГђГ»Г­Г®ГЄ ГҐГ№Вё Г°Г Г±Г±Г·ГЁГІГ»ГўГ ГҐГІГ±Гї'end
     local routes={}
     for _,g in ipairs(groups)do for _,r in ipairs(g.routes or{})do routes[#routes+1]=r end end
     table.sort(routes,function(a,b)return(tonumber(a.net_profit)or 0)>(tonumber(b.net_profit)or 0)end)
@@ -10908,7 +10908,7 @@ end
 -- The local quote identity is separate from remote API identities.
 function A.add_local_route(r)
     if type(r)~='table' or not num(r.qty,1,1000000000)then
-        return false,'Скан не подтвердил количество с обеих сторон'
+        return false,'Г‘ГЄГ Г­ Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¤ГЁГ« ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г± Г®ГЎГҐГЁГµ Г±ГІГ®Г°Г®Г­'
     end
     local item_key=tostring(r.id or'?')..':'..tostring(r.ench or 0)
     local row={key=item_key,display=r.name,ench=r.ench or 0}
@@ -10973,12 +10973,12 @@ local function consume(quote,n,at)
 end
 function A.confirm(index,side,amount)
     local e,s=A.get(index)
-    if not e or not s then return false,'Нет такой сделки'end
-    if e.skipped then return false,'Сделка пропущена'end
-    if side~='buy'and side~='sell'then return false,'Неизвестный тип'end
+    if not e or not s then return false,'ГЌГҐГІ ГІГ ГЄГ®Г© Г±Г¤ГҐГ«ГЄГЁ'end
+    if e.skipped then return false,'Г‘Г¤ГҐГ«ГЄГ  ГЇГ°Г®ГЇГіГ№ГҐГ­Г 'end
+    if side~='buy'and side~='sell'then return false,'ГЌГҐГЁГ§ГўГҐГ±ГІГ­Г»Г© ГІГЁГЇ'end
     local limit=side=='buy'and(e.qty-e.bought)or(e.bought-e.sold)
     local q=num(amount,1,limit)
-    if not q then return false,'Количество превышает оставшийся лимит'end
+    if not q then return false,'ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ® ГЇГ°ГҐГўГ»ГёГ ГҐГІ Г®Г±ГІГ ГўГёГЁГ©Г±Гї Г«ГЁГ¬ГЁГІ'end
     local at=os.time()
     -- Stage the ledger change, then roll back *all* in-memory fields if JSON
     -- cannot be persisted. Never acknowledge a trade that would vanish on relog.
@@ -11012,7 +11012,7 @@ function A.confirm(index,side,amount)
         A.data.history=old_history
         A.revision=A.revision+1
         if M.invalidate_arbitrage then M.invalidate_arbitrage()end
-        return false,'Не удалось сохранить сделку: '..tostring(why or 'disk error')
+        return false,'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј Г±Г¤ГҐГ«ГЄГі: '..tostring(why or 'disk error')
     end
     if e.sold==e.qty then A.next(1)end
     return true,q
@@ -11195,12 +11195,12 @@ local function block_related(shop,quote,reason,source)
     return marked
 end
 function A.mark_unavailable(index,reason)
-    if reason~='shop'and reason~='item'then return false,'Неверная причина'end
+    if reason~='shop'and reason~='item'then return false,'ГЌГҐГўГҐГ°Г­Г Гї ГЇГ°ГЁГ·ГЁГ­Г 'end
     local e,s=A.get(index)
-    if not e or not s then return false,'Маршрут не выбран'end
+    if not e or not s then return false,'ГЊГ Г°ГёГ°ГіГІ Г­ГҐ ГўГ»ГЎГ°Г Г­'end
     local side,shop,quote=required_leg(e)
-    if not side then return false,'Маршрут уже завершён'end
-    if reason=='shop' and not valid_shop(shop)then return false,'Номер лавки неизвестен'end
+    if not side then return false,'ГЊГ Г°ГёГ°ГіГІ ГіГ¦ГҐ Г§Г ГўГҐГ°ГёВёГ­'end
+    if reason=='shop' and not valid_shop(shop)then return false,'ГЌГ®Г¬ГҐГ° Г«Г ГўГЄГЁ Г­ГҐГЁГ§ГўГҐГ±ГІГҐГ­'end
     -- Record the old session status so a disk error cannot silently discard routes.
     local before={}
     for i,entry in ipairs(s.routes)do
@@ -11214,7 +11214,7 @@ function A.mark_unavailable(index,reason)
     local unavailable=ensure()
     local old_unavailable=quote and unavailable[quote] or nil
     if reason=='shop' then
-        if not M.mark_shop_missing(shop,30)then return false,'Не удалось отметить лавку'end
+        if not M.mark_shop_missing(shop,30)then return false,'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г®ГІГ¬ГҐГІГЁГІГј Г«Г ГўГЄГі'end
         block_related(shop,nil,'shop_missing','manual')
     else
         unavailable[quote]={at=now(),reason='item_missing',sid=s.sid}
@@ -11232,7 +11232,7 @@ function A.mark_unavailable(index,reason)
         if reason=='item' then unavailable[quote]=old_unavailable end
         A.revision=(A.revision or 0)+1
         if M.invalidate_arbitrage then M.invalidate_arbitrage()end
-        return false,'Не удалось сохранить статус: '..tostring(err)
+        return false,'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј Г±ГІГ ГІГіГ±: '..tostring(err)
     end
     -- Keep the unavailable route on screen, with "Restore" and "Next"
     -- controls. Moving focus without user input would hide the explanation.
@@ -11241,7 +11241,7 @@ function A.mark_unavailable(index,reason)
 end
 function A.restore_unavailable(index)
     local e=A.get(index)
-    if not e then return false,'Нет маршрута'end
+    if not e then return false,'ГЌГҐГІ Г¬Г Г°ГёГ°ГіГІГ 'end
     if not e.unavailable_reason then return A.skip(index,false)end
     local reason=e.unavailable_reason
     local shop=e.unavailable_side=='sell'and e.seller_shop or e.buyer_shop
@@ -11318,13 +11318,13 @@ local function selected(s)
     return s.routes[index],index
 end
 local function status(e)
-    if e.unavailable_reason=='shop_missing' then return 'Нет лавки' end
-    if e.unavailable_reason=='item_missing' then return 'Нет предмета' end
-    if e.unavailable_reason=='owner_changed' then return 'Смена владельца' end
-    if e.skipped then return 'Пропущено' end
-    if e.sold>=e.qty then return 'Завершено' end
-    if e.bought<e.qty then return 'Покупка' end
-    return 'Продажа'
+    if e.unavailable_reason=='shop_missing' then return 'ГЌГҐГІ Г«Г ГўГЄГЁ' end
+    if e.unavailable_reason=='item_missing' then return 'ГЌГҐГІ ГЇГ°ГҐГ¤Г¬ГҐГІГ ' end
+    if e.unavailable_reason=='owner_changed' then return 'Г‘Г¬ГҐГ­Г  ГўГ«Г Г¤ГҐГ«ГјГ¶Г ' end
+    if e.skipped then return 'ГЏГ°Г®ГЇГіГ№ГҐГ­Г®' end
+    if e.sold>=e.qty then return 'Г‡Г ГўГҐГ°ГёГҐГ­Г®' end
+    if e.bought<e.qty then return 'ГЏГ®ГЄГіГЇГЄГ ' end
+    return 'ГЏГ°Г®Г¤Г Г¦Г '
 end
 local function rect(io)
     DSP.settings.arb_agent_window=DSP.settings.arb_agent_window or{}
@@ -11351,41 +11351,41 @@ local function route_queue(s)
     if total==0 then return end
     local pages=math.max(1,math.ceil(total/4))
     A.queue_page=DSP.clamp(tonumber(A.queue_page)or 1,1,pages)
-    quiet('Маршруты: '..total..'  |  Страница '..A.queue_page..'/'..pages)
+    quiet('ГЊГ Г°ГёГ°ГіГІГ»: '..total..'  |  Г‘ГІГ°Г Г­ГЁГ¶Г  '..A.queue_page..'/'..pages)
     local from=(A.queue_page-1)*4+1
     for i=from,math.min(total,from+3)do
         local e=s.routes[i]
-        if b(V.fit(i..'. '..e.name..' · '..status(e),math.max(100,imgui.GetContentRegionAvail().x-20)),
+        if b(V.fit(i..'. '..e.name..' В· '..status(e),math.max(100,imgui.GetContentRegionAvail().x-20)),
             'route_'..i,-1,s.focus==i)then
             A.focus(i);A.qty_key=nil
         end
     end
     if pages>1 then
-        if b('Ранее','pageprev',110)then A.queue_page=math.max(1,A.queue_page-1)end
+        if b('ГђГ Г­ГҐГҐ','pageprev',110)then A.queue_page=math.max(1,A.queue_page-1)end
         imgui.SameLine(0,8)
-        if b('Далее','pagenext',110)then A.queue_page=math.min(pages,A.queue_page+1)end
+        if b('Г„Г Г«ГҐГҐ','pagenext',110)then A.queue_page=math.min(pages,A.queue_page+1)end
     end
 end
 local function route_info(e,index,total)
-    if not e then quiet('Новых маршрутов пока нет');return end
-    quiet('Сделка '..index..' из '..total..' · '..status(e))
+    if not e then quiet('ГЌГ®ГўГ»Гµ Г¬Г Г°ГёГ°ГіГІГ®Гў ГЇГ®ГЄГ  Г­ГҐГІ');return end
+    quiet('Г‘Г¤ГҐГ«ГЄГ  '..index..' ГЁГ§ '..total..' В· '..status(e))
     label(V.fit(e.name,math.max(120,imgui.GetContentRegionAvail().x-12)))
-    quiet('План '..e.qty..' шт.  |  Ожидаемая прибыль ~ '..money(e.proposed_profit))
-    quiet('Куплено '..e.bought..' · Продано '..e.sold)
+    quiet('ГЏГ«Г Г­ '..e.qty..' ГёГІ.  |  ГЋГ¦ГЁГ¤Г ГҐГ¬Г Гї ГЇГ°ГЁГЎГ»Г«Гј ~ '..money(e.proposed_profit))
+    quiet('ГЉГіГЇГ«ГҐГ­Г® '..e.bought..' В· ГЏГ°Г®Г¤Г Г­Г® '..e.sold)
     if e.skipped then
-        if e.bought>e.sold then red('Товаров на руках: '..(e.bought-e.sold)..' шт.')end
-        quiet('Маршрут остаётся в сессии. Можно вернуть его или перейти дальше.')
+        if e.bought>e.sold then red('Г’Г®ГўГ Г°Г®Гў Г­Г  Г°ГіГЄГ Гµ: '..(e.bought-e.sold)..' ГёГІ.')end
+        quiet('ГЊГ Г°ГёГ°ГіГІ Г®Г±ГІГ ВёГІГ±Гї Гў Г±ГҐГ±Г±ГЁГЁ. ГЊГ®Г¦Г­Г® ГўГҐГ°Г­ГіГІГј ГҐГЈГ® ГЁГ«ГЁ ГЇГҐГ°ГҐГ©ГІГЁ Г¤Г Г«ГјГёГҐ.')
         local half=math.max(105,math.floor((imgui.GetContentRegionAvail().x-6)/2))
-        if b('Вернуть маршрут','restore',half)then
+        if b('Г‚ГҐГ°Г­ГіГІГј Г¬Г Г°ГёГ°ГіГІ','restore',half)then
             local ok,err
             if e.unavailable_reason then ok,err=A.restore_unavailable(index)else ok=A.skip(index,false)end
-            notice(ok and 'Маршрут снова активен' or tostring(err or 'Не удалось вернуть маршрут'))
+            notice(ok and 'ГЊГ Г°ГёГ°ГіГІ Г±Г­Г®ГўГ  Г ГЄГІГЁГўГҐГ­' or tostring(err or 'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј ГўГҐГ°Г­ГіГІГј Г¬Г Г°ГёГ°ГіГІ'))
         end
         imgui.SameLine(0,6)
-        if b('Следующий','skipped_next',half)then A.next(1);A.qty_key=nil end
+        if b('Г‘Г«ГҐГ¤ГіГѕГ№ГЁГ©','skipped_next',half)then A.next(1);A.qty_key=nil end
         return
     end
-    if e.sold>=e.qty then green('Сделка завершена');return end
+    if e.sold>=e.qty then green('Г‘Г¤ГҐГ«ГЄГ  Г§Г ГўГҐГ°ГёГҐГ­Г ');return end
     local buying=e.bought<e.qty
     local side=buying and 'buy' or 'sell'
     local shop=buying and e.seller_shop or e.buyer_shop
@@ -11393,36 +11393,36 @@ local function route_info(e,index,total)
     local price=buying and e.buy_price or e.sell_price
     local remaining=buying and(e.qty-e.bought)or(e.bought-e.sold)
     if remaining<=0 then return end
-    green(buying and 'Купить' or 'Продать')
-    label('Лавка #'..shop..' · '..tostring(owner or'?'))
-    quiet('Осталось '..remaining..' шт.  |  '..money(price)..' / шт.')
-    if b('Метка на лавку #'..shop,'mark',-1)then
-        if not M.mark_shop(shop)then notice('Метка недоступна')end
+    green(buying and 'ГЉГіГЇГЁГІГј' or 'ГЏГ°Г®Г¤Г ГІГј')
+    label('Г‹Г ГўГЄГ  #'..shop..' В· '..tostring(owner or'?'))
+    quiet('ГЋГ±ГІГ Г«Г®Г±Гј '..remaining..' ГёГІ.  |  '..money(price)..' / ГёГІ.')
+    if b('ГЊГҐГІГЄГ  Г­Г  Г«Г ГўГЄГі #'..shop,'mark',-1)then
+        if not M.mark_shop(shop)then notice('ГЊГҐГІГЄГ  Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г ')end
     end
-    if b('Нет лавки','missing_shop',145)then
+    if b('ГЌГҐГІ Г«Г ГўГЄГЁ','missing_shop',145)then
         local ok,err=A.mark_unavailable(index,'shop')
-        notice(ok and 'Лавка исключена из планов' or tostring(err))
+        notice(ok and 'Г‹Г ГўГЄГ  ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г  ГЁГ§ ГЇГ«Г Г­Г®Гў' or tostring(err))
     end
     imgui.SameLine(0,6)
-    if b('Нет предмета','missing_item',160)then
+    if b('ГЌГҐГІ ГЇГ°ГҐГ¤Г¬ГҐГІГ ','missing_item',160)then
         local ok,err=A.mark_unavailable(index,'item')
-        notice(ok and 'Предложение исключено' or tostring(err))
+        notice(ok and 'ГЏГ°ГҐГ¤Г«Г®Г¦ГҐГ­ГЁГҐ ГЁГ±ГЄГ«ГѕГ·ГҐГ­Г®' or tostring(err))
     end
     local key=e.id..':'..side
     if A.qty_key~=key then A.qty_key=key;A.qty_field=imgui.new.int(remaining)end
-    quiet('Подтверждение количества:')
+    quiet('ГЏГ®Г¤ГІГўГҐГ°Г¦Г¤ГҐГ­ГЁГҐ ГЄГ®Г«ГЁГ·ГҐГ±ГІГўГ :')
     imgui.SetNextItemWidth(math.min(160,imgui.GetContentRegionAvail().x))
     imgui.InputInt('##agent291_qty',A.qty_field,1,10)
-    if b(buying and 'Подтвердить покупку' or 'Подтвердить продажу','confirm',-1,true)then
+    if b(buying and 'ГЏГ®Г¤ГІГўГҐГ°Г¤ГЁГІГј ГЇГ®ГЄГіГЇГЄГі' or 'ГЏГ®Г¤ГІГўГҐГ°Г¤ГЁГІГј ГЇГ°Г®Г¤Г Г¦Гі','confirm',-1,true)then
         local ok,err=A.confirm(index,side,A.qty_field[0])
-        if ok then A.qty_key=nil;notice('Количество записано')else notice(tostring(err))end
+        if ok then A.qty_key=nil;notice('ГЉГ®Г«ГЁГ·ГҐГ±ГІГўГ® Г§Г ГЇГЁГ±Г Г­Г®')else notice(tostring(err))end
     end
     local hint=A.hint
     if hint and hint.route_id==e.id and hint.side==side then
-        quiet('Обнаружен похожий чек: '..hint.qty..' шт.')
-        if b('Принять данные чека','receipt',-1)then
+        quiet('ГЋГЎГ­Г Г°ГіГ¦ГҐГ­ ГЇГ®ГµГ®Г¦ГЁГ© Г·ГҐГЄ: '..hint.qty..' ГёГІ.')
+        if b('ГЏГ°ГЁГ­ГїГІГј Г¤Г Г­Г­Г»ГҐ Г·ГҐГЄГ ','receipt',-1)then
             local ok,err=A.confirm(index,side,hint.qty)
-            if ok then A.qty_key=nil;notice('Чек подтверждён')else notice(tostring(err))end
+            if ok then A.qty_key=nil;notice('Г—ГҐГЄ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤ВёГ­')else notice(tostring(err))end
         end
     end
 end
@@ -11443,26 +11443,26 @@ function A.draw()
         imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoCollapse
     if imgui.Begin('##palatka_arbitrage_agent',nil,flags)then
         if V.apply_font then V.apply_font()end
-        if b('Арбитраж · переместить','handle',math.max(100,g.w-112))then end
+        if b('ГЂГ°ГЎГЁГІГ°Г Г¦ В· ГЇГҐГ°ГҐГ¬ГҐГ±ГІГЁГІГј','handle',math.max(100,g.w-112))then end
         if imgui.IsItemActive() and io.MouseDelta then drag(g,io,false)end
         imgui.SameLine(0,5)
         if b(A.queue_expanded and '-' or '+','queue',40)then A.queue_expanded=not A.queue_expanded end
         imgui.SameLine(0,5)
         if b('X','close',43)then A.show(false)end
         local st=A.stats()
-        quiet('Завершено '..st.done..'/'..st.routes..' · В работе '..st.pending)
-        green('Ожидаемый результат ~ '..money(st.profit_estimate))
-        quiet('Мини-агент Palatka / сборка '..tostring(DSP.version or '?'))
+        quiet('Г‡Г ГўГҐГ°ГёГҐГ­Г® '..st.done..'/'..st.routes..' В· Г‚ Г°Г ГЎГ®ГІГҐ '..st.pending)
+        green('ГЋГ¦ГЁГ¤Г ГҐГ¬Г»Г© Г°ГҐГ§ГіГ«ГјГІГ ГІ ~ '..money(st.profit_estimate))
+        quiet('ГЊГЁГ­ГЁ-Г ГЈГҐГ­ГІ Palatka / Г±ГЎГ®Г°ГЄГ  '..tostring(DSP.version or '?'))
         imgui.Separator()
         if A.queue_expanded then
             route_queue(s)
             if not A.end_confirm then
-                if b('Закончить сессию','end',-1)then A.end_confirm=true end
+                if b('Г‡Г ГЄГ®Г­Г·ГЁГІГј Г±ГҐГ±Г±ГЁГѕ','end',-1)then A.end_confirm=true end
             else
-                red('Завершить сессию?')
-                if b('Завершить','endyes',140)then A.stop();A.end_confirm=false end
+                red('Г‡Г ГўГҐГ°ГёГЁГІГј Г±ГҐГ±Г±ГЁГѕ?')
+                if b('Г‡Г ГўГҐГ°ГёГЁГІГј','endyes',140)then A.stop();A.end_confirm=false end
                 imgui.SameLine(0,5)
-                if b('Отмена','endno',130)then A.end_confirm=false end
+                if b('ГЋГІГ¬ГҐГ­Г ','endno',130)then A.end_confirm=false end
             end
             imgui.Separator()
         end
@@ -11473,11 +11473,11 @@ function A.draw()
         end
         imgui.EndChild()
         if A.ui_message then quiet(V.fit(A.ui_message,math.max(120,g.w-35)))end
-        if A.save_error then red('Не сохранено: '..tostring(A.save_error))end
-        if A.ui_error then red('Ошибка интерфейса: см. standalone.log')end
-        if b('< Предыдущая','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
+        if A.save_error then red('ГЌГҐ Г±Г®ГµГ°Г Г­ГҐГ­Г®: '..tostring(A.save_error))end
+        if A.ui_error then red('ГЋГёГЁГЎГЄГ  ГЁГ­ГІГҐГ°ГґГҐГ©Г±Г : Г±Г¬. standalone.log')end
+        if b('< ГЏГ°ГҐГ¤Г»Г¤ГіГ№Г Гї','prev',math.max(105,math.floor((g.w-36)/2)))then A.next(-1);A.qty_key=nil end
         imgui.SameLine(0,6)
-        if b('Следующая >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
+        if b('Г‘Г«ГҐГ¤ГіГѕГ№Г Гї >','next',math.max(105,math.floor((g.w-36)/2)))then A.next(1);A.qty_key=nil end
         -- Native ImGui drag-resize grip, visually aligned to Palatka corners.
         imgui.SetCursorPos(imgui.ImVec2(g.w-39,g.h-36))
         if b('//','resize',29)then end
@@ -11561,7 +11561,7 @@ local function interval(t)
 end
 local function make_batch(index,t,manual,at)
     local commands=rows(t)
-    if #commands==0 then return nil,'Нет разрешённых строк в шаблоне'end
+    if #commands==0 then return nil,'ГЌГҐГІ Г°Г Г§Г°ГҐГёВёГ­Г­Г»Гµ Г±ГІГ°Г®ГЄ Гў ГёГ ГЎГ«Г®Г­ГҐ'end
     if t.random_line and #commands>1 then commands={commands[math.random(1,#commands)]}end
     return {index=index,commands=commands,pos=1,manual=manual==true,
         due=at,waiting=clamp(t.waiting,.5,10,1.5)}
@@ -11569,26 +11569,26 @@ end
 local function set_stopped(reason)
     local s=P.settings()
     P.running=false;P._batch=nil;P.manual_busy=false;P.manual_template=nil
-    P.pause_reason=reason or 'Выключен'
+    P.pause_reason=reason or 'Г‚Г»ГЄГ«ГѕГ·ГҐГ­'
     s.enabled=false
     persist()
 end
 local function report_error(err)
-    P.last_error=tostring(err or'Ошибка отправки')
+    P.last_error=tostring(err or'ГЋГёГЁГЎГЄГ  Г®ГІГЇГ°Г ГўГЄГЁ')
     P.pause_reason=P.last_error
     if DSP.flog then DSP.flog('PROMO: '..P.last_error)end
 end
 function P.start(at)
     at=at or now()
-    if not active()then return false,'Включи хотя бы один шаблон с командами'end
+    if not active()then return false,'Г‚ГЄГ«ГѕГ·ГЁ ГµГ®ГІГї ГЎГ» Г®Г¤ГЁГ­ ГёГ ГЎГ«Г®Г­ Г± ГЄГ®Г¬Г Г­Г¤Г Г¬ГЁ'end
     local s=P.settings()
     if not s.continuous and (P.session_count or 0)>=session_limit() then
-        return false,'Лимит отправок сессии исчерпан'
+        return false,'Г‹ГЁГ¬ГЁГІ Г®ГІГЇГ°Г ГўГ®ГЄ Г±ГҐГ±Г±ГЁГЁ ГЁГ±Г·ГҐГ°ГЇГ Г­'
     end
     local prior=s.enabled
     s.enabled=true
     local ok,why=persist()
-    if not ok then s.enabled=prior;return false,tostring(why or'Не удалось сохранить запуск')end
+    if not ok then s.enabled=prior;return false,tostring(why or'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј Г§Г ГЇГіГ±ГЄ')end
     P.running=true;P.last_error=nil;P.pause_reason=nil;P._batch=nil
     P.manual_busy=false;P.manual_template=nil
     P.was_online=false
@@ -11597,7 +11597,7 @@ function P.start(at)
     return true
 end
 function P.stop()
-    set_stopped('Остановлен пользователем')
+    set_stopped('ГЋГ±ГІГ Г­Г®ГўГ«ГҐГ­ ГЇГ®Г«ГјГ§Г®ГўГ ГІГҐГ«ГҐГ¬')
 end
 function P.bootstrap(at)
     at=at or now()
@@ -11609,14 +11609,14 @@ function P.bootstrap(at)
     if s.resume_on_login and s.enabled and active() then
         P.running=true
         P.next_at=at+clamp(s.start_delay,10,120,20)
-        P.pause_reason='Ожидание подключения'
+        P.pause_reason='ГЋГ¦ГЁГ¤Г Г­ГЁГҐ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї'
     end
 end
 function P.send_template_once(index)
-    if P._batch then return false,'Дождись завершения текущего шаблона'end
-    if not connected()then return false,'Нет подключения к игре'end
+    if P._batch then return false,'Г„Г®Г¦Г¤ГЁГ±Гј Г§Г ГўГҐГ°ГёГҐГ­ГЁГї ГІГҐГЄГіГ№ГҐГЈГ® ГёГ ГЎГ«Г®Г­Г 'end
+    if not connected()then return false,'ГЌГҐГІ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї ГЄ ГЁГЈГ°ГҐ'end
     local t=P.settings().templates[index]
-    if not t then return false,'Шаблон не найден'end
+    if not t then return false,'ГГ ГЎГ«Г®Г­ Г­ГҐ Г­Г Г©Г¤ГҐГ­'end
     local batch,why=make_batch(index,t,true,now())
     if not batch then return false,why end
     P._batch=batch
@@ -11635,7 +11635,7 @@ local function finish_batch(batch,at)
             if limit>0 and t.auto_count>=limit then
                 t.auto=false
                 t.auto_count=0
-                P.last_error='Шаблон «'..tostring(t.name or'?')..'»: достигнут лимит'
+                P.last_error='ГГ ГЎГ«Г®Г­ В«'..tostring(t.name or'?')..'В»: Г¤Г®Г±ГІГЁГЈГ­ГіГІ Г«ГЁГ¬ГЁГІ'
             end
             t._promo_due=at+interval(t)
         end
@@ -11648,27 +11648,27 @@ local function step_batch(at,send,online)
     local batch=P._batch
     if not batch or at<batch.due then return false end
     if not online then
-        report_error('Нет соединения: отправка приостановлена')
+        report_error('ГЌГҐГІ Г±Г®ГҐГ¤ГЁГ­ГҐГ­ГЁГї: Г®ГІГЇГ°Г ГўГЄГ  ГЇГ°ГЁГ®Г±ГІГ Г­Г®ГўГ«ГҐГ­Г ')
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         return false
     end
     if not P.settings().continuous and (P.session_count or 0)>=session_limit() then
-        set_stopped('Лимит сообщений за сессию')
+        set_stopped('Г‹ГЁГ¬ГЁГІ Г±Г®Г®ГЎГ№ГҐГ­ГЁГ© Г§Г  Г±ГҐГ±Г±ГЁГѕ')
         return false
     end
     local raw=batch.commands[batch.pos]
     local cmd,why=P.expand(raw)
     if not cmd or #cmd>P.MAX_STEP_BYTES then
-        report_error(why or'Команда превышает 200 байт')
+        report_error(why or'ГЉГ®Г¬Г Г­Г¤Г  ГЇГ°ГҐГўГ»ГёГ ГҐГІ 200 ГЎГ Г©ГІ')
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         P.next_at=at+30
         return false
     end
     local sender=send or sampSendChat
-    if type(sender)~='function'then report_error('Отправка чата недоступна');return false end
+    if type(sender)~='function'then report_error('ГЋГІГЇГ°Г ГўГЄГ  Г·Г ГІГ  Г­ГҐГ¤Г®Г±ГІГіГЇГ­Г ');return false end
     local ok,result=pcall(sender,cmd)
     if not ok or result==false then
-        report_error(ok and'Отправка отклонена' or result)
+        report_error(ok and'ГЋГІГЇГ°Г ГўГЄГ  Г®ГІГЄГ«Г®Г­ГҐГ­Г ' or result)
         P._batch=nil;P.manual_busy=false;P.manual_template=nil
         P.next_at=at+30
         return false
@@ -11685,7 +11685,7 @@ local function step_batch(at,send,online)
         P.next_at=batch.due
     end
     if not P.settings().continuous and P.session_count>=session_limit() then
-        set_stopped('Лимит сообщений за сессию')
+        set_stopped('Г‹ГЁГ¬ГЁГІ Г±Г®Г®ГЎГ№ГҐГ­ГЁГ© Г§Г  Г±ГҐГ±Г±ГЁГѕ')
     end
     return true
 end
@@ -11697,19 +11697,19 @@ function P.tick(at,send,online)
     if not P.running then return false end
     if not online then
         P.was_online=false
-        P.pause_reason='Нет подключения: ожидание'
+        P.pause_reason='ГЌГҐГІ ГЇГ®Г¤ГЄГ«ГѕГ·ГҐГ­ГЁГї: Г®Г¦ГЁГ¤Г Г­ГЁГҐ'
         return false
     end
     local s=P.settings()
     if not P.was_online then
         P.was_online=true
         P.next_at=math.max(P.next_at or 0,at+clamp(s.start_delay,10,120,20))
-        P.pause_reason='Ожидание после входа'
+        P.pause_reason='ГЋГ¦ГЁГ¤Г Г­ГЁГҐ ГЇГ®Г±Г«ГҐ ГўГµГ®Г¤Г '
         return false
     end
     if at<(P.next_at or 0)then return false end
     if not s.continuous and P.session_count>=session_limit() then
-        set_stopped('Лимит сообщений за сессию')
+        set_stopped('Г‹ГЁГ¬ГЁГІ Г±Г®Г®ГЎГ№ГҐГ­ГЁГ© Г§Г  Г±ГҐГ±Г±ГЁГѕ')
         return false
     end
     local earliest
@@ -11733,7 +11733,7 @@ function P.tick(at,send,online)
         end
     end
     if not earliest then
-        set_stopped('Нет включённых шаблонов')
+        set_stopped('ГЌГҐГІ ГўГЄГ«ГѕГ·ВёГ­Г­Г»Гµ ГёГ ГЎГ«Г®Г­Г®Гў')
     else
         P.next_at=math.max(at+1,earliest)
     end
@@ -11756,14 +11756,14 @@ return true
 DSP.controls=DSP.controls or {}
 local C,V,M=DSP.controls,DSP.ui22,DSP.mobile
 local limits={
-    sell_step_pause_ms={100,5000,260,'Пауза между выставлениями, мс'},
-    buy_step_pause_ms={0,5000,0,'Пауза между позициями скупки, мс'},
-    promo_global_cooldown_s={30,3600,30,'Пауза между циклами рекламы, сек'},
-    promo_session_limit={1,200,12,'Лимит команд за сессию'},
-    refresh_seconds={180,3600,300,'Обновление рынка API, сек'},
-    local_offer_ttl_minutes={5,1440,60,'Актуальность локальной лавки, мин'},
-    max_local_shops={20,300,80,'Лавок в локальном кэше'},
-    promo_start_delay={10,120,20,'Пауза после входа, сек'}
+    sell_step_pause_ms={100,5000,260,'ГЏГ ГіГ§Г  Г¬ГҐГ¦Г¤Гі ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГїГ¬ГЁ, Г¬Г±'},
+    buy_step_pause_ms={0,5000,0,'ГЏГ ГіГ§Г  Г¬ГҐГ¦Г¤Гі ГЇГ®Г§ГЁГ¶ГЁГїГ¬ГЁ Г±ГЄГіГЇГЄГЁ, Г¬Г±'},
+    promo_global_cooldown_s={30,3600,30,'ГЏГ ГіГ§Г  Г¬ГҐГ¦Г¤Гі Г¶ГЁГЄГ«Г Г¬ГЁ Г°ГҐГЄГ«Г Г¬Г», Г±ГҐГЄ'},
+    promo_session_limit={1,200,12,'Г‹ГЁГ¬ГЁГІ ГЄГ®Г¬Г Г­Г¤ Г§Г  Г±ГҐГ±Г±ГЁГѕ'},
+    refresh_seconds={180,3600,300,'ГЋГЎГ­Г®ГўГ«ГҐГ­ГЁГҐ Г°Г»Г­ГЄГ  API, Г±ГҐГЄ'},
+    local_offer_ttl_minutes={5,1440,60,'ГЂГЄГІГіГ Г«ГјГ­Г®Г±ГІГј Г«Г®ГЄГ Г«ГјГ­Г®Г© Г«Г ГўГЄГЁ, Г¬ГЁГ­'},
+    max_local_shops={20,300,80,'Г‹Г ГўГ®ГЄ Гў Г«Г®ГЄГ Г«ГјГ­Г®Г¬ ГЄГЅГёГҐ'},
+    promo_start_delay={10,120,20,'ГЏГ ГіГ§Г  ГЇГ®Г±Г«ГҐ ГўГµГ®Г¤Г , Г±ГҐГЄ'}
 }
 C.limits=limits
 local function target(key)
@@ -11785,15 +11785,15 @@ function C.get(key)
     return v
 end
 function C.set(key,value)
-    local spec=limits[key];if not spec then return false,'Неизвестная настройка'end
+    local spec=limits[key];if not spec then return false,'ГЌГҐГЁГ§ГўГҐГ±ГІГ­Г Гї Г­Г Г±ГІГ°Г®Г©ГЄГ 'end
     local n=tonumber(value)
     if not n or n~=n or n%1~=0 or n<spec[1]or n>spec[2]then
-        return false,'Допустимо: '..spec[1]..' - '..spec[2]
+        return false,'Г„Г®ГЇГіГ±ГІГЁГ¬Г®: '..spec[1]..' - '..spec[2]
     end
     local t,k=target(key);local previous=t[k]
     t[k]=n
     local ok,err=DSP.save_settings()
-    if not ok then t[k]=previous;return false,'Не удалось сохранить: '..tostring(err)end
+    if not ok then t[k]=previous;return false,'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј: '..tostring(err)end
     if key=='refresh_seconds' and DSP.market and DSP.market.state then
         DSP.market.state.filter_version=-1
     end
@@ -11808,7 +11808,7 @@ function C.profile(name)
         cautious={800,800,300,12,30,600,30,80},
         relaxed={1200,1500,600,6,45,900,20,60}
     }
-    local values=profiles[name];if not values then return false,'Профиль не найден'end
+    local values=profiles[name];if not values then return false,'ГЏГ°Г®ГґГЁГ«Гј Г­ГҐ Г­Г Г©Г¤ГҐГ­'end
     local previous={}
     for i,key in ipairs(ordered)do
         local t,k=target(key)
@@ -11817,7 +11817,7 @@ function C.profile(name)
     local ok,err=DSP.save_settings()
     if not ok then
         for _,p in ipairs(previous)do p[1][p[2]]=p[3]end
-        return false,'Не удалось сохранить профиль: '..tostring(err)
+        return false,'ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј ГЇГ°Г®ГґГЁГ«Гј: '..tostring(err)
     end
     C._editors={}
     return true
@@ -11845,13 +11845,13 @@ local function status()
     local a,p=DSP.auto or{},DSP.promo or{}
     local left=p.queue_left and p.queue_left()or nil
     local lines={
-        'Продажа: '..(a.sell_running and 'работает' or 'выключена')..
-            ' | Скупка: '..(a.buy_running and 'работает' or 'выключена'),
-        'Операция: '..tostring(a.status or 'готово'),
-        'Авто-пиар: '..(p.running and 'работает' or 'выключен')..
-            ' | Команд: '..tostring(p.session_count or 0)..
-            (left and (' | следующая через '..left..' с')or''),
-        'Рынок: '..tostring(DSP.market and DSP.market.state and DSP.market.state.status or 'нет данных')
+        'ГЏГ°Г®Г¤Г Г¦Г : '..(a.sell_running and 'Г°Г ГЎГ®ГІГ ГҐГІ' or 'ГўГ»ГЄГ«ГѕГ·ГҐГ­Г ')..
+            ' | Г‘ГЄГіГЇГЄГ : '..(a.buy_running and 'Г°Г ГЎГ®ГІГ ГҐГІ' or 'ГўГ»ГЄГ«ГѕГ·ГҐГ­Г '),
+        'ГЋГЇГҐГ°Г Г¶ГЁГї: '..tostring(a.status or 'ГЈГ®ГІГ®ГўГ®'),
+        'ГЂГўГІГ®-ГЇГЁГ Г°: '..(p.running and 'Г°Г ГЎГ®ГІГ ГҐГІ' or 'ГўГ»ГЄГ«ГѕГ·ГҐГ­')..
+            ' | ГЉГ®Г¬Г Г­Г¤: '..tostring(p.session_count or 0)..
+            (left and (' | Г±Г«ГҐГ¤ГіГѕГ№Г Гї Г·ГҐГ°ГҐГ§ '..left..' Г±')or''),
+        'ГђГ»Г­Г®ГЄ: '..tostring(DSP.market and DSP.market.state and DSP.market.state.status or 'Г­ГҐГІ Г¤Г Г­Г­Г»Гµ')
     }
     return lines
 end
@@ -11877,71 +11877,71 @@ end
 local function toggle(label,obj,key,default)
     local on=obj[key]
     if on==nil then on=default end
-    if b(label..': '..(on and 'ВКЛ' or 'ВЫКЛ'),'toggle_'..key,230,on)then
+    if b(label..': '..(on and 'Г‚ГЉГ‹' or 'Г‚Г›ГЉГ‹'),'toggle_'..key,230,on)then
         local old=obj[key]
         obj[key]=not on
         local ok,err=DSP.save_settings()
-        if not ok then obj[key]=old;C.error='Не удалось сохранить: '..tostring(err)
+        if not ok then obj[key]=old;C.error='ГЌГҐ ГіГ¤Г Г«Г®Г±Гј Г±Г®ГµГ°Г Г­ГЁГІГј: '..tostring(err)
         else C.error=nil end
     end
 end
 function C.draw()
-    V.heading('Управление Palatka AI')
-    V.muted('Изменение параметров не запускает команды. Стандартные значения можно вернуть.')
-    if b('Остановить торговлю и пиар','stop_all',300,false,true)then
+    V.heading('Г“ГЇГ°Г ГўГ«ГҐГ­ГЁГҐ Palatka AI')
+    V.muted('Г€Г§Г¬ГҐГ­ГҐГ­ГЁГҐ ГЇГ Г°Г Г¬ГҐГІГ°Г®Гў Г­ГҐ Г§Г ГЇГіГ±ГЄГ ГҐГІ ГЄГ®Г¬Г Г­Г¤Г». Г‘ГІГ Г­Г¤Г Г°ГІГ­Г»ГҐ Г§Г­Г Г·ГҐГ­ГЁГї Г¬Г®Г¦Г­Г® ГўГҐГ°Г­ГіГІГј.')
+    if b('ГЋГ±ГІГ Г­Г®ГўГЁГІГј ГІГ®Г°ГЈГ®ГўГ«Гѕ ГЁ ГЇГЁГ Г°','stop_all',300,false,true)then
         local ok,err=C.stop_all();C.error=not ok and err or nil
     end
     V.inline(5)
-    if b('Стандарт','preset_default',130)then
+    if b('Г‘ГІГ Г­Г¤Г Г°ГІ','preset_default',130)then
         local ok,err=C.profile('default');C.error=not ok and err or nil
     end
-    if b('Бережный','preset_cautious',140)then
+    if b('ГЃГҐГ°ГҐГ¦Г­Г»Г©','preset_cautious',140)then
         local ok,err=C.profile('cautious');C.error=not ok and err or nil
     end
     V.inline(5)
-    if b('Медленный','preset_relaxed',140)then
+    if b('ГЊГҐГ¤Г«ГҐГ­Г­Г»Г©','preset_relaxed',140)then
         local ok,err=C.profile('relaxed');C.error=not ok and err or nil
     end
     if C.error then V.red(C.error)end
     V.list('control_center_fields',function()
-        V.text('Текущий статус')
+        V.text('Г’ГҐГЄГіГ№ГЁГ© Г±ГІГ ГІГіГ±')
         for _,line in ipairs(status())do V.muted(line)end
         if DSP.auto and DSP.auto.progress then
             local pr=DSP.auto.progress
-            V.muted('Прогресс: '..tostring(pr.done or 0)..' / '..tostring(pr.total or 0)..
-                ' | ошибок: '..tostring(pr.failed or 0))
+            V.muted('ГЏГ°Г®ГЈГ°ГҐГ±Г±: '..tostring(pr.done or 0)..' / '..tostring(pr.total or 0)..
+                ' | Г®ГёГЁГЎГ®ГЄ: '..tostring(pr.failed or 0))
         end
         imgui.Separator()
-        V.text('Выставление лавки и скупка')
-        toggle('ТЕСТ без игровых команд',DSP.settings,'dry_run',true)
+        V.text('Г‚Г»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ Г«Г ГўГЄГЁ ГЁ Г±ГЄГіГЇГЄГ ')
+        toggle('Г’Г…Г‘Г’ ГЎГҐГ§ ГЁГЈГ°Г®ГўГ»Гµ ГЄГ®Г¬Г Г­Г¤',DSP.settings,'dry_run',true)
         edit_field('sell_step_pause_ms')
         edit_field('buy_step_pause_ms')
-        V.muted('Реальное выставление запускается вручную во вкладке Торговля.')
-        if b('Перейти к торговле','trade',225)then V.set_screen('palatka')end
+        V.muted('ГђГҐГ Г«ГјГ­Г®ГҐ ГўГ»Г±ГІГ ГўГ«ГҐГ­ГЁГҐ Г§Г ГЇГіГ±ГЄГ ГҐГІГ±Гї ГўГ°ГіГ·Г­ГіГѕ ГўГ® ГўГЄГ«Г Г¤ГЄГҐ Г’Г®Г°ГЈГ®ГўГ«Гї.')
+        if b('ГЏГҐГ°ГҐГ©ГІГЁ ГЄ ГІГ®Г°ГЈГ®ГўГ«ГҐ','trade',225)then V.set_screen('palatka')end
         imgui.Separator()
-        V.text('Авто-пиар')
+        V.text('ГЂГўГІГ®-ГЇГЁГ Г°')
         DSP.settings.promo=DSP.settings.promo or{}
-        toggle('Возобновлять после входа',DSP.settings.promo,'resume_on_login',false)
-        toggle('Повторять без лимита',DSP.settings.promo,'continuous',false)
+        toggle('Г‚Г®Г§Г®ГЎГ­Г®ГўГ«ГїГІГј ГЇГ®Г±Г«ГҐ ГўГµГ®Г¤Г ',DSP.settings.promo,'resume_on_login',false)
+        toggle('ГЏГ®ГўГІГ®Г°ГїГІГј ГЎГҐГ§ Г«ГЁГ¬ГЁГІГ ',DSP.settings.promo,'continuous',false)
         edit_field('promo_global_cooldown_s')
         edit_field('promo_session_limit')
         edit_field('promo_start_delay')
-        V.muted('Интервалы, паузы строк и лимиты шаблонов задаются в редакторе авто-пиара.')
-        V.muted('Соблюдай ограничения сервера: отправка из Lua не подтверждает приём.')
-        if b('Открыть авто-пиар','promo',225)then V.set_screen('promo')end
+        V.muted('Г€Г­ГІГҐГ°ГўГ Г«Г», ГЇГ ГіГ§Г» Г±ГІГ°Г®ГЄ ГЁ Г«ГЁГ¬ГЁГІГ» ГёГ ГЎГ«Г®Г­Г®Гў Г§Г Г¤Г ГѕГІГ±Гї Гў Г°ГҐГ¤Г ГЄГІГ®Г°ГҐ Г ГўГІГ®-ГЇГЁГ Г°Г .')
+        V.muted('Г‘Г®ГЎГ«ГѕГ¤Г Г© Г®ГЈГ°Г Г­ГЁГ·ГҐГ­ГЁГї Г±ГҐГ°ГўГҐГ°Г : Г®ГІГЇГ°Г ГўГЄГ  ГЁГ§ Lua Г­ГҐ ГЇГ®Г¤ГІГўГҐГ°Г¦Г¤Г ГҐГІ ГЇГ°ГЁВёГ¬.')
+        if b('ГЋГІГЄГ°Г»ГІГј Г ГўГІГ®-ГЇГЁГ Г°','promo',225)then V.set_screen('promo')end
         imgui.Separator()
-        V.text('Лавки и данные')
+        V.text('Г‹Г ГўГЄГЁ ГЁ Г¤Г Г­Г­Г»ГҐ')
         edit_field('refresh_seconds')
         edit_field('local_offer_ttl_minutes')
         edit_field('max_local_shops')
-        V.muted('TTL означает свежесть скана, а не удаление истории.')
-        if b('Открыть список лавок','shops',225)then V.set_screen('lavki')end
+        V.muted('TTL Г®Г§Г­Г Г·Г ГҐГІ Г±ГўГҐГ¦ГҐГ±ГІГј Г±ГЄГ Г­Г , Г  Г­ГҐ ГіГ¤Г Г«ГҐГ­ГЁГҐ ГЁГ±ГІГ®Г°ГЁГЁ.')
+        if b('ГЋГІГЄГ°Г»ГІГј Г±ГЇГЁГ±Г®ГЄ Г«Г ГўГ®ГЄ','shops',225)then V.set_screen('lavki')end
         imgui.Separator()
-        V.text('Ломбард')
+        V.text('Г‹Г®Г¬ГЎГ Г°Г¤')
         local ls=DSP.lombard and DSP.lombard.stats and DSP.lombard.stats()
-        if ls then V.muted('В базе: '..tostring(ls.items)..' | страниц: '..tostring(ls.pages))end
-        if b('Открыть ломбард','lombard',225)then V.set_screen('lombard')end
-        V.muted('Нативный скан запускается вручную у меню ломбарда.')
+        if ls then V.muted('Г‚ ГЎГ Г§ГҐ: '..tostring(ls.items)..' | Г±ГІГ°Г Г­ГЁГ¶: '..tostring(ls.pages))end
+        if b('ГЋГІГЄГ°Г»ГІГј Г«Г®Г¬ГЎГ Г°Г¤','lombard',225)then V.set_screen('lombard')end
+        V.muted('ГЌГ ГІГЁГўГ­Г»Г© Г±ГЄГ Г­ Г§Г ГЇГіГ±ГЄГ ГҐГІГ±Гї ГўГ°ГіГ·Г­ГіГѕ Гі Г¬ГҐГ­Гѕ Г«Г®Г¬ГЎГ Г°Г¤Г .')
     end,{footer=false})
 end
 V.control_screen=C.draw
@@ -12017,7 +12017,7 @@ return true
         -- The existing primary nav is a local captured table in the 2.9.6
         -- shell. Add clear on-screen shortcuts instead of rebuilding ImGui.
         local function shortcut(id)
-          if V.button('Управление и интервалы','v297_control_'..id,246,false,true,39) then
+          if V.button('Г“ГЇГ°Г ГўГ«ГҐГ­ГЁГҐ ГЁ ГЁГ­ГІГҐГ°ГўГ Г«Г»','v297_control_'..id,246,false,true,39) then
             V.set_screen('control')
             return true
           end
@@ -12056,5 +12056,514 @@ return true
     if DSP.flog then DSP.flog('Palatka 2.9.7 control center installed') end
     return true
   end
-  return install_v297()
+  local function install_v298()
+    if not install_v297() then return false end
+    if DSP._v298_installed then DSP.version='2.9.8';return true end
+    local ok,err=pcall(function()
+      do
+        local function v298_promo_mobile()
+-- Palatka AI v2.9.8: compact Market Helper-style promotion screen.
+-- Fresh implementation using Palatka models and native mobile mimgui.
+-- Existing templates and per-template options are preserved.
+local V,M,P=DSP.ui22,DSP.mobile,DSP.promo
+if not (V and M and P) then return true end
+if V._promo_mobile_298 then return true end
+V._promo_mobile_298=true
+local ffi=require('ffi')
+local function b(label,id,width,active)
+    return V.button(label,'pm298_'..id,width,active,false,39)
+end
+local function str(v)return DSP.to_u8(tostring(v or''))end
+local function buffer(value,size)
+    local buf=imgui.new.char[size]()
+    local text=DSP.to_u8(tostring(value or''))
+    ffi.fill(buf,size)
+    ffi.copy(buf,text:sub(1,size-1))
+    return buf
+end
+local function save()
+    if DSP.save_settings then return DSP.save_settings()~=false end
+    return true
+end
+local function toggle_auto(i)
+    local t=P.settings().templates[i]
+    if not t then return end
+    local old=t.auto
+    t.auto=(t.auto==false)
+    t.auto_count=0;t._promo_due=nil
+    if not save()then t.auto=old;V.promo298_error='Ошибка сохранения';return end
+    if t.auto then
+        -- In MH an auto_limit=0 means unrestricted template cycles. Preserve
+        -- per-template limits and server pacing, not an unrelated 12-chat cap.
+        local opts=P.settings()
+        if not opts.continuous then
+            local ok,why=P.set_option('continuous',true)
+            if not ok then V.promo298_error=tostring(why);return end
+        end
+        if not P.running then
+            local ok,why=P.start()
+            if not ok then V.promo298_error=tostring(why)end
+        end
+    else
+        local any=false
+        for _,v in ipairs(P.settings().templates)do
+            if v.auto~=false then any=true;break end
+        end
+        if not any and P.running then P.stop()end
+    end
+end
+local function new_editor(index)
+    local t=index and P.settings().templates[index] or nil
+    local edit={index=index,name=buffer(t and t.name or'Новый шаблон',96),
+        rows={},linebuf={},waiting=imgui.new.float(tonumber(t and t.waiting)or 1.5),
+        min=imgui.new.int(tonumber(t and t.interval_min)or 300),
+        max=imgui.new.int(tonumber(t and t.interval_max)or 0),
+        limit=imgui.new.int(tonumber(t and t.auto_limit)or 0),
+        random=t and t.random_line==true or false,
+        auto=t and t.auto~=false or false}
+    if t then
+        for _,r in ipairs(t.rows or{})do
+            edit.rows[#edit.rows+1]={text=r.text or'',auto=r.auto~=false,interval=r.interval or 300}
+        end
+    else
+        edit.rows[1]={text='/s ',auto=true,interval=300}
+    end
+    for i,r in ipairs(edit.rows)do edit.linebuf[i]=buffer(r.text,512)end
+    V.promo298_edit=edit
+end
+local function modify_number(label,ptr,id,lo,hi,step)
+    V.muted(label..': '..tostring(ptr[0])..(id=='wait' and' с' or''))
+    if b('-','minus_'..id,66)then ptr[0]=math.max(lo,ptr[0]-step)end
+    V.inline(4,66)
+    if b('+','plus_'..id,66)then ptr[0]=math.min(hi,ptr[0]+step)end
+    ptr[0]=math.max(lo,math.min(hi,ptr[0]))
+end
+local function editor(e)
+    V.heading('Автопиар / Редактор',function()
+        if b('Назад','back',100)then V.promo298_edit=nil end
+    end,110)
+    if e.error then V.red(e.error)end
+    if b('Сохранить шаблон','save_editor',224,true)then
+        local name=DSP.to_cp(ffi.string(e.name)):match('^%s*(.-)%s*$')
+        for i,r in ipairs(e.rows)do r.text=DSP.to_cp(ffi.string(e.linebuf[i]))end
+        local ok,index=P.save_template(e.index,name,e.rows,e.auto)
+        if ok then
+            local more,why=P.save_template_options(index,{
+                interval_min=e.min[0],interval_max=e.max[0],
+                waiting=e.waiting[0],auto_limit=e.limit[0],random_line=e.random})
+            if more then
+                V.promo298_edit=nil;V.promo298_error=nil
+                if e.auto and not P.running then
+                    local yes,why=P.set_option('continuous',true)
+                    if yes then
+                        local begun,err=P.start()
+                        if not begun then V.promo298_error=tostring(err)end
+                    else V.promo298_error=tostring(why)end
+                end
+            else e.error=tostring(why)end
+        else e.error=tostring(index)end
+    end
+    V.list('pm298_editor',function()
+        V.text('Название')
+        imgui.SetNextItemWidth(-1)
+        imgui.InputText('##pm298_title',e.name,96)
+        V.muted('Каждая строка — отдельная команда. Не более 24 строк.')
+        local remove
+        for i,r in ipairs(e.rows)do
+            V.text('Строка '..i)
+            imgui.SetNextItemWidth(-1)
+            imgui.InputText('##pm298_line_'..i,e.linebuf[i],512)
+            if b(r.auto and'Строка ВКЛ' or'Строка ВЫКЛ','line_toggle_'..i,145,r.auto)then
+                r.auto=not r.auto
+            end
+            V.inline(5,92)
+            if b('Удалить','line_remove_'..i,92)then remove=i end
+            imgui.Separator()
+        end
+        if remove and #e.rows>1 then
+            table.remove(e.rows,remove);table.remove(e.linebuf,remove)
+        end
+        if b('+ Строка','line_add',165,true)then
+            if #e.rows<24 then
+                e.rows[#e.rows+1]={text='/s ',auto=true,interval=300}
+                e.linebuf[#e.linebuf+1]=buffer('/s ',512)
+            else e.error='Достигнут лимит строк'end
+        end
+        V.inline(5,162)
+        if b('<lavka>','insert_lavka',155)then
+            local i=#e.rows
+            if i>0 then
+                local prev=DSP.to_cp(ffi.string(e.linebuf[i]))
+                if #prev<460 then
+                    e.rows[i].text=prev..' <lavka>'
+                    e.linebuf[i]=buffer(e.rows[i].text,512)
+                end
+            end
+        end
+        V.muted('<lavka> — номер твоей лавки, если он обнаружен.')
+        V.text('Интервалы')
+        modify_number('Пауза между строками (0.5-10 c)',e.waiting,'wait',.5,10,.5)
+        modify_number('Минимальный интервал (сек)',e.min,'min',30,3600,30)
+        modify_number('Максимум (0 = без случайности)',e.max,'max',0,3600,30)
+        modify_number('Лимит циклов (0 = без лимита)',e.limit,'limit',0,1000,1)
+        if b(e.random and'Случайная строка: ДА' or'Случайная строка: НЕТ',
+                'random',235,e.random)then e.random=not e.random end
+        if b(e.auto and'Авто: включено' or'Авто: выключено',
+                'edited_auto',235,e.auto)then e.auto=not e.auto end
+        V.muted('Интервал выбирается отдельно для каждого шаблона.')
+    end,{footer=true})
+end
+local function countdown(t)
+    if t.auto==false then return 'Авто выключено'end
+    local low=tonumber(t.interval_min)or 0
+    if low<=0 then low=tonumber((t.rows or{})[1] and t.rows[1].interval)or 300 end
+    local high=tonumber(t.interval_max)or 0
+    local period=high>low and(low..'-'..high)or tostring(low)
+    local due=tonumber(t._promo_due)
+    if not due then
+        local last=tonumber(t.last_sent)or 0
+        due=last>0 and last+low or os.time()
+    end
+    return 'Интервал '..period..'с | осталось '..math.max(0,due-os.time())..'с'
+end
+function V.promo_screen()
+    if V.promo298_edit then return editor(V.promo298_edit)end
+    local s=P.settings()
+    V.heading('Автопиар',function()
+        if b('+ Шаблон','new',155,true)then new_editor(nil)end
+    end,160)
+    V.muted('Как в Market Helper: Пуск / Авто / Редактировать')
+    if P.running then
+        if b('Остановить всё','stop_all',173,true)then P.stop()end
+    else
+        if b('Запустить авто','start_all',173,true)then
+            if not s.continuous then P.set_option('continuous',true)end
+            local ok,why=P.start()
+            V.promo298_error=not ok and tostring(why)or nil
+        end
+    end
+    V.inline(5,130)
+    if b('Настройки','promo_settings',130)then V.set_screen('settings')end
+    V.muted('Состояние: '..(P.running and(P.pause_reason or'работает')or'выключен')..
+        ' | отправлено: '..tostring(P.session_count or 0))
+    if V.promo298_error or P.last_error then V.red(tostring(V.promo298_error or P.last_error))end
+    if #s.templates==0 then
+        V.muted('Нет шаблонов. Нажми + Шаблон.')
+        return
+    end
+    V.list_rows('pm298_templates',s.templates,128,function(t,i)
+        V.row('pm298_t_'..i,128,function(w,x,y)
+            V.at(x,y)
+            V.text(V.fit(t.name or'Шаблон',math.max(105,w-18)))
+            V.at(x,y+28)
+            V.muted(V.fit(#(t.rows or{})..' строк | '..countdown(t),math.max(100,w-18)))
+            local bw=math.max(78,math.floor((w-24)/3))
+            V.at(x,y+64)
+            if b('Пуск','send_'..i,bw)then
+                local ok,why=P.send_template_once(i)
+                V.promo298_error=not ok and tostring(why)or nil
+            end
+            V.inline(5,bw)
+            if b(t.auto~=false and'Авто: ВКЛ' or'Авто: ВЫКЛ','auto_'..i,bw,t.auto~=false)then
+                toggle_auto(i)
+            end
+            V.inline(5,bw)
+            if b('Изменить','edit_'..i,bw)then new_editor(i)end
+        end)
+    end,{footer=true})
+end
+local expand=P.expand
+function P.expand(text)
+    if type(text)=='string' and text:find('<lavka>',1,true)then
+        local number,why=P.own_shop_number()
+        if not number then return nil,tostring(why or'Номер лавки неизвестен')end
+        text=text:gsub('<lavka>',tostring(number))
+    end
+    return expand(text)
+end
+-- The earlier 2.9.7 OTA put control shortcuts in home/trade. Hide those,
+-- without replacing the working home/trade renderers.
+if not V._pm298_button_wrap then
+    V._pm298_button_wrap=true
+    local original=V.button
+    V.button=function(label,id,...)
+        if type(id)=='string' and id:find('^v297_control_') then return false end
+        return original(label,id,...)
+    end
+end
+if not V._pm298_nav_wrap then
+    V._pm298_nav_wrap=true
+    local original=V.list_rows
+    V.list_rows=function(key,rows,...)
+        if key=='navigation' and type(rows)=='table' then
+            local filtered={}
+            for _,item in ipairs(rows)do
+                if type(item)~='table' or item[1]~='control' then
+                    filtered[#filtered+1]=item
+                end
+            end
+            return original(key,filtered,...)
+        end
+        return original(key,rows,...)
+    end
+end
+return true
+
+        end
+        v298_promo_mobile()
+      end
+      do
+        local function v298_fast_rec()
+-- Palatka AI v2.9.8: Fast REC with only real observed spawn choices.
+-- No fake destinations, memory writes, token handling, or blind packet IDs.
+local R,V=DSP.reconnect,DSP.ui22
+if not (R and V) then return true end
+if R._fast_rec298 then return true end
+R._fast_rec298=true
+local function config()
+    DSP.settings.fast_rec=DSP.settings.fast_rec or{}
+    local o=DSP.settings.fast_rec
+    if o.enabled==nil then o.enabled=true end
+    return o
+end
+local function persist()
+    if DSP.save_settings then return DSP.save_settings()~=false end
+    return true
+end
+local function clean(s)
+    return tostring(s or''):gsub('{%x%x%x%x%x%x}',''):gsub('^%s+',''):gsub('%s+$','')
+end
+local function same(a,b)
+    local fn=DSP.lower or string.lower
+    return fn(clean(a))==fn(clean(b))
+end
+local function current_profile()
+    if not R.server_key or not R.server_key()then return nil end
+    return R.profile and R.profile()or nil
+end
+local function actual_options()
+    local t={}
+    for _,entry in ipairs(R.options or{})do
+        if type(entry)=='table' and type(entry.label)=='string' and entry.label~=''then
+            t[#t+1]=entry.label
+        end
+    end
+    return t
+end
+function R.fast_spawns()
+    local p=current_profile()
+    if not p then return {} end
+    -- Never draw fabricated default names: only verified real dialog options.
+    local result,seen={},{}
+    for _,label in ipairs(p.known_spawns or{})do
+        if type(label)=='string'and #label>0 and #label<=100 then
+            local lower=(DSP.lower or string.lower)(label)
+            if not seen[lower]then
+                seen[lower]=true;result[#result+1]=label
+            end
+        end
+    end
+    return result
+end
+local observe=R.observe_dialog
+function R.observe_dialog(id,style,title,content,at)
+    local result=observe(id,style,title,content,at)
+    if result then
+        local p=current_profile()
+        local options=actual_options()
+        if p and #options>0 and #options<=32 then
+            local changed=#(p.known_spawns or{})~=#options
+            if not changed then
+                for i,label in ipairs(options)do
+                    if not same(label,p.known_spawns[i])then changed=true;break end
+                end
+            end
+            if changed then
+                local before=p.known_spawns
+                p.known_spawns=options
+                if not persist()then p.known_spawns=before end
+            end
+        end
+    end
+    return result
+end
+function R.fast(label,at)
+    local p=current_profile()
+    if not p then return false,'Адрес сервера пока не определён'end
+    local confirmed=false
+    for _,known in ipairs(R.fast_spawns())do
+        if same(known,label)then label=known;confirmed=true;break end
+    end
+    if not confirmed then return false,'Точка не подтверждена игровым меню'end
+    local old_label=p.spawn_label
+    local opts=R.config()
+    local prev_auto=opts.spawn_enabled
+    p.spawn_label=label
+    opts.spawn_enabled=true
+    if not persist()then
+        p.spawn_label=old_label;opts.spawn_enabled=prev_auto
+        return false,'Не удалось сохранить выбранную точку'end
+    end
+    local ok,why=R.manual(at)
+    if not ok then return false,why end
+    return true
+end
+-- Fix false positives: immediately after /reconnect the old spawned flag
+-- may still describe the previous session. Only a fresh onSpawn event or a
+-- real observed disconnect/reconnect can confirm success.
+local previous_tick=R.tick
+function R.tick(at)
+    at=at or os.time()
+    local pending=R.state=='connecting'
+    if pending then
+        local spawned=false
+        if type(sampIsLocalPlayerSpawned)=='function'then
+            local ok,value=pcall(sampIsLocalPlayerSpawned)
+            spawned=ok and value==true
+            if ok and not value then R._fast_disconnected=true end
+        end
+        if spawned and not R._fast_disconnected then
+            local old_connected=R.connected
+            R.connected=function()return false end
+            local worked,result=pcall(previous_tick,at)
+            R.connected=old_connected
+            if not worked then error(result) end
+            -- Do not claim success just because /reconnect was submitted.
+            if R.state=='connecting' and at-(R.started_at or at)>=12 then
+                R.status='Ожидание подтверждения нового подключения'
+            end
+            return result
+        end
+    end
+    local prior=R.state
+    local result=previous_tick(at)
+    if prior~='connecting' and R.state=='connecting'then
+        R._fast_disconnected=false
+    end
+    return result
+end
+-- Collect real spawns while the list is visible. No synthetic fallback.
+-- The original reconnect module's onShowDialog handler calls R.observe_dialog,
+-- so the adapter above also works when loaded as an OTA on v2.9.6/2.9.7.
+function R.fast_visible(value)
+    local c=config();if value==nil then return c.enabled~=false end
+    local before=c.enabled;c.enabled=value==true
+    if not persist()then c.enabled=before;return false end
+    return true
+end
+function R.fast_status()
+    local c=R.config()
+    return tostring(R.status or'ожидание')..' | '..tostring(R.attempts or 0)..
+        '/'..tostring(c.max_attempts or 0)
+end
+local function u(s)return DSP.utf8(tostring(s or''))end
+local function pbutton(label,id,width)
+    return imgui.Button(u(label)..'##fast298_'..id,imgui.ImVec2(width,38))
+end
+local function float_ui()
+    local c=config()
+    if not c.enabled then return end
+    if not imgui or not imgui.GetIO then return end
+    local io=imgui.GetIO()
+    local sw,sh=io.DisplaySize.x,io.DisplaySize.y
+    if sw<120 or sh<100 then return end
+    local expanded=c.open==true
+    local w=expanded and math.min(345,sw-20) or 65
+    local items=R.fast_spawns()
+    local h=expanded and math.min(sh-20,math.max(190,154+math.min(#items,6)*43)) or 59
+    local x=tonumber(c.x)or(sw-w-9)
+    local y=tonumber(c.y)or(sh*.42)
+    x=math.max(4,math.min(sw-w-4,x));y=math.max(4,math.min(sh-h-4,y))
+    imgui.SetNextWindowPos(imgui.ImVec2(x,y),imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(w,h),imgui.Cond.Always)
+    imgui.SetNextWindowBgAlpha(.9)
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+
+        imgui.WindowFlags.NoMove+imgui.WindowFlags.NoSavedSettings+
+        imgui.WindowFlags.NoScrollbar
+    local opened=imgui.Begin('##palatka_fast_rec298',nil,flags)
+    if opened then
+        if pbutton(expanded and'Закрыть' or'REC','open',expanded and 132 or 47)then
+            c.open=not expanded
+        end
+        if imgui.IsItemActive and imgui.IsItemActive() and io.MouseDelta then
+            local dx,dy=io.MouseDelta.x,io.MouseDelta.y
+            if math.abs(dx)+math.abs(dy)>1 then
+                c.x=x+dx;c.y=y+dy
+                if DSP.mobile and DSP.mobile.defer_save then
+                    DSP.mobile.defer_save()
+                end
+            end
+        end
+        if expanded then
+            imgui.TextWrapped(u('Fast REC: '..R.fast_status()))
+            if pbutton('Обычный реконнект','manual',math.max(150,w-18))then
+                local ok,why=R.manual()
+                R.fast_error=not ok and tostring(why)or nil
+            end
+            if #items==0 then
+                imgui.TextWrapped(u('Открой реальное меню спавна в игре. Его точки появятся здесь.'))
+            else
+                for i=1,math.min(6,#items)do
+                    if pbutton(items[i],'spawn_'..i,math.max(150,w-18))then
+                        local ok,why=R.fast(items[i])
+                        R.fast_error=not ok and tostring(why)or nil
+                    end
+                end
+            end
+            if R.fast_error then imgui.TextWrapped(u('Ошибка: '..R.fast_error))end
+            if pbutton('Настройки и остальные точки','settings',math.max(150,w-18))then
+                if DSP.mobile and DSP.mobile.set_open then DSP.mobile.set_open(true)end
+                V.set_screen('reconnect')
+                c.open=false
+            end
+        end
+    end
+    imgui.End()
+end
+if imgui and imgui.OnFrame then
+    imgui.OnFrame(function()return R.fast_visible()end,function()
+        local ok,why=xpcall(float_ui,debug.traceback)
+        if not ok and DSP.flog and R._fast_ui_error~=why then
+            R._fast_ui_error=why
+            DSP.flog('FAST REC UI: '..tostring(why))
+        end
+    end)
+end
+local old_ui=R.draw_ui
+if type(old_ui)=='function'then
+    R.draw_ui=function(...)
+        V.muted('Fast REC: значок REC у края экрана')
+        if V.button(R.fast_visible() and'Скрыть REC' or'Показать REC',
+                'fast298_toggle',170)then
+            R.fast_visible(not R.fast_visible())
+        end
+        local points=R.fast_spawns()
+        if #points>0 then
+            V.muted('Из реального меню: '..#points..' точек')
+            for i,label in ipairs(points)do
+                if V.button('REC: '..label,'fast298_point_'..i,-1)then
+                    local ok,why=R.fast(label)
+                    R.fast_error=not ok and tostring(why)or nil
+                end
+            end
+        end
+        if R.fast_error then V.red(R.fast_error)end
+        return old_ui(...)
+    end
+end
+return true
+
+        end
+        v298_fast_rec()
+      end
+    end)
+    if not ok then
+      if DSP.flog then DSP.flog('Palatka 2.9.8 install failed: '..tostring(err))end
+      return false
+    end
+    DSP._v298_installed=true
+    DSP.version='2.9.8'
+    return true
+  end
+  return install_v298()
 end
