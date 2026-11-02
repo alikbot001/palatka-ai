@@ -25137,7 +25137,7 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1825375
+DSP.item_icon_blob_offset = 1830171
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
@@ -34312,6 +34312,8 @@ DSP.auto.stall_inventory_ready = false
 DSP.auto.stall_inventory_seen_at = 0
 DSP.auto.status = 'готов'
 DSP.auto._prev_dialog = nil
+DSP.auto.dialog_seq = DSP.auto.dialog_seq or 0
+DSP.auto.trade_dialog_pending = nil
 
 local runtime = DSP.trade_runtime
 local function trade_wait(ms) runtime.pause(ms) end
@@ -34480,6 +34482,14 @@ local function trade_dialog_matches(id, item_name, kind, body_override)
     return false, body, title
 end
 
+-- Snapshot the dialog sequence BEFORE sending a slot click. Unknown dialog IDs
+-- may be used only if a fresh input dialog is observed after that click.
+function DSP.auto.arm_trade_dialog(kind, item_name)
+    DSP.auto.trade_dialog_pending = {
+        kind = kind, item = base_name(item_name), seq = DSP.auto.dialog_seq or 0,
+    }
+end
+
 local function wait_trade_item_dialog(ids, item_name, timeout, kind)
     local elapsed=0
     local observed=''
@@ -34488,15 +34498,23 @@ local function wait_trade_item_dialog(ids, item_name, timeout, kind)
         if sampIsDialogActive() then
             local id=sampGetCurrentDialogId()
             local allowed=false
-            for _,x in ipairs(ids) do if x==id then allowed=true;break end end
-            if allowed then
+            for _,x in ipairs(ids or {}) do if x==id then allowed=true;break end end
+            local meta=DSP.auto.dialog_meta
+            local pending=DSP.auto.trade_dialog_pending
+            local fresh_input=kind=='sell' and pending and pending.kind==kind
+                and pending.item==base_name(item_name) and meta and meta.id==id
+                and (meta.seq or 0)>pending.seq
+                and (tonumber(meta.style)==1 or tonumber(meta.style)==3)
+            -- Do not accept an arbitrary ID or an unrelated menu. The new
+            -- dialog must be a fresh input opened in response to this click.
+            if allowed or fresh_input then
                 local ok,body,title=trade_dialog_matches(id,item_name,kind)
                 observed=(title or '')..'\n'..(body or '')
                 if ok then
                     local stable=wait_text(id,360)
                     if sampIsDialogActive() and sampGetCurrentDialogId()==id then
                         local ok2,sbody,stitle=trade_dialog_matches(id,item_name,kind,stable)
-                        if ok2 then return id,sbody,stitle end
+                        if ok2 and (allowed or fresh_input) then return id,sbody,stitle end
                     end
                 end
             end
@@ -34569,8 +34587,16 @@ local function inventory_dialog(id, text)
 end
 
 function DSP.auto.on_dialog(id, style, title, b1, b2, text)
+    DSP.auto.dialog_seq = (DSP.auto.dialog_seq or 0) + 1
     DSP.auto.dialog_meta = {id=id, style=style, title=DSP.dialog_clean(title or ''),
-        text=DSP.dialog_clean(text or ''), at=os.time(), mono=os.clock()}
+        text=DSP.dialog_clean(text or ''), at=os.time(), mono=os.clock(),
+        seq=DSP.auto.dialog_seq}
+    if DSP.auto.sell_running or DSP.auto.buy_running then
+        -- IDs and titles only: do not persist dialog content or user input.
+        local safe_title=tostring(DSP.auto.dialog_meta.title):gsub('[\r\n]', ' '):sub(1,80)
+        if DSP.flog then DSP.flog(('TRADE incoming dialog id=%s style=%s title=%s bytes=%d'):format(
+            tostring(id),tostring(style),safe_title,#tostring(text or ''))) end
+    end
     if DSP.market then
         if id == 15073 and DSP.market.mark_cr_dialog then DSP.market.mark_cr_dialog() end
         if DSP.market.observe_cr_detail then
@@ -34851,9 +34877,12 @@ function DSP.auto.start_sell()
                 end
                 runtime.transition('sell','select_item',tostring(it.name)..' slot='..tostring(it.slot))
                 DSP.flog('PRESET sale packet: item='..tostring(it.name)..' slot='..it.slot..' qty='..tostring(it.qty))
+                -- Associate a newly arrived input dialog with THIS slot click.
+                -- Unknown IDs (including Halloween IDs) are accepted only by
+                -- the fresh-input title/body guard in 40_auto.lua.
+                if DSP.auto.arm_trade_dialog then DSP.auto.arm_trade_dialog('sell', it.name) end
                 _G.dsp_click_slot(60, -1, 2, json)
                 runtime.transition('sell','wait_item_dialog',tostring(it.name))
-                -- v1.2 hotfix: also accept 15068-15071 (newer Arizona Mobile выставление dialogs).
                 id,dialog_text,dialog_title = wait_item({ 26547, 15068, 15069, 15070, 15071 }, it.name, 2600, 'sell')
                 if id then
                     got = true
@@ -36125,6 +36154,79 @@ function L.read_json(bs)
     return raknetBitStreamReadString(bs, len)
 end
 
+-- Coalesce only structurally incomplete JSON envelopes from the same packet
+-- interface/subpacket. This does not assume that every 8192-byte message is
+-- fragmented: independent complete messages are processed independently.
+-- Never hold unbounded buffers or splice unrelated interfaces together.
+L._json_fragments = L._json_fragments or {}
+L.JSON_FRAGMENT_MAX = 1048576
+L.JSON_FRAGMENT_TTL_MS = 3500
+
+local function json_envelope_state(raw)
+    local first = raw:find('%S')
+    if not first then return 'other' end
+    local opener = raw:sub(first, first)
+    if opener ~= '{' and opener ~= '[' then return 'other' end
+    local depth, quoted, escaped = 0, false, false
+    for i = first, #raw do
+        local ch = raw:sub(i, i)
+        if quoted then
+            if escaped then escaped = false
+            elseif ch == '\\' then escaped = true
+            elseif ch == '"' then quoted = false end
+        elseif ch == '"' then
+            quoted = true
+        elseif ch == '{' or ch == '[' then
+            depth = depth + 1
+        elseif ch == '}' or ch == ']' then
+            depth = depth - 1
+            if depth < 0 then return 'invalid' end
+            if depth == 0 and raw:sub(i+1):find('%S') then return 'invalid' end
+        end
+    end
+    if depth > 0 or quoted then return 'partial' end
+    return depth == 0 and 'complete' or 'invalid'
+end
+
+function L.coalesce_packet(iface, sub, raw, at_ms)
+    if type(raw) ~= 'string' then return raw end
+    if not (iface == 52 and sub == 2 or iface == 60 and (sub == 0 or sub == 1)) then
+        return raw
+    end
+    at_ms = at_ms or mono_ms()
+    local key = tostring(iface)..':'..tostring(sub)
+    local pending = L._json_fragments[key]
+    if pending and (at_ms - pending.at < 0 or at_ms - pending.at > L.JSON_FRAGMENT_TTL_MS) then
+        L._json_fragments[key] = nil
+        pending = nil
+        if DSP.flog then DSP.flog('LIVE JSON partial expired '..key) end
+    end
+    local standalone = json_envelope_state(raw)
+    if pending and standalone == 'complete' then
+        -- A valid new datagram must not get attached to a stale partial one.
+        L._json_fragments[key] = nil
+        pending = nil
+        if DSP.flog then DSP.flog('LIVE JSON partial superseded '..key) end
+    end
+    local merged = pending and (pending.data..raw) or raw
+    if #merged > L.JSON_FRAGMENT_MAX then
+        L._json_fragments[key] = nil
+        if DSP.flog then DSP.flog('LIVE JSON partial limit exceeded '..key..' bytes='..#merged) end
+        return nil
+    end
+    local state = json_envelope_state(merged)
+    if state == 'partial' then
+        L._json_fragments[key] = {data=merged, at=at_ms}
+        return nil
+    end
+    L._json_fragments[key] = nil
+    if state == 'invalid' then
+        if DSP.flog then DSP.flog('LIVE JSON invalid envelope '..key..' bytes='..#merged) end
+        return nil
+    end
+    return merged
+end
+
 function L.on_receive(packet_id, bs)
     if packet_id ~= 220 then return end
     local original_offset = nil
@@ -36140,7 +36242,11 @@ function L.on_receive(packet_id, bs)
         local iface = raknetBitStreamReadInt8(bs)
         local sub = raknetBitStreamReadInt8(bs)
         local raw = L.read_json(bs)
-        if raw and raw ~= '' then L.handle(iface, sub, raw) end
+        if raw and raw ~= '' then
+            -- Never pass a truncated JSON envelope to decodeJson/cjson.
+            local ready = L.coalesce_packet(iface, sub, raw)
+            if ready then L.handle(iface, sub, ready) end
+        end
     end)
     if not ok then DSP.flog('LIVE packet error: ' .. tostring(err)) end
     if original_offset ~= nil and type(raknetBitStreamSetReadOffset)=='function' then
