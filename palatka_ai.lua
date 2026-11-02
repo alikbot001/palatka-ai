@@ -1,7 +1,7 @@
--- Palatka AI v2.9.13 mobile release, built from src/*.lua
+-- Palatka AI v2.9.14 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.13')
+script_version('2.9.14')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25142,7 +25142,7 @@ local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.9.11'
+DSP.version = '2.9.14'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 

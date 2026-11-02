@@ -1,5 +1,5 @@
 -- Palatka AI 2.9.4 OTA: Market Helper UX, touch scroll, journal, statistics and arbitrage fixes.
-PALATKA_UPDATE_VERSION = '2.9.13'
+PALATKA_UPDATE_VERSION = '2.9.14'
 return function(DSP)
   -- v2.8.6: Independent, additive UI + multi-deal arbitration patch.
   local function install_v286()
@@ -6649,6 +6649,449 @@ return true
     DSP.active_ui_build='2.9.13-center-drag'
     return true
   end
+  -- 2.9.14: install Halloween trade protocol fixes on older OTA clients.
+  local function install_trade_2914()
+    local ok=install_chrome_2913()
+    if not ok then return false end
+    if DSP._trade_2914_installed then DSP.version='2.9.14';return true end
+    local applied,err=pcall(function()
+      local function _v2914_migration()
+-- 2.9.14 OTA migration for clients installed before the Halloween protocol fix.
+-- New standalone builds already contain the equivalent source implementations.
+-- This module runs once after the 2.9.13 UI/stock overlays are installed.
+local A, L = DSP.auto, DSP.live
+if not (A and A.helpers and L and type(A.on_dialog)=='function'
+    and type(A.start_sell)=='function' and type(L.handle)=='function') then
+    error('trade runtime unavailable for 2.9.14 migration')
+end
+
+local h = A.helpers
+if type(A.arm_trade_dialog) ~= 'function' then
+    A.dialog_seq=A.dialog_seq or 0
+    A.arm_trade_dialog=function(kind,item_name)
+        A.trade_dialog_pending={kind=kind,item=h.base_name(item_name),seq=A.dialog_seq or 0}
+    end
+    local old_on_dialog=A.on_dialog
+    A.on_dialog=function(id,style,title,b1,b2,body)
+        A.dialog_seq=(A.dialog_seq or 0)+1
+        local seq=A.dialog_seq
+        local answer=old_on_dialog(id,style,title,b1,b2,body)
+        local meta=A.dialog_meta
+        if meta and meta.id==id then meta.seq=seq end
+        if (A.sell_running or A.buy_running) and DSP.flog then
+            local label=tostring((meta and meta.title)or title or ''):gsub('[\r\n]',' '):sub(1,80)
+            DSP.flog(('TRADE incoming dialog id=%s style=%s title=%s bytes=%d'):format(
+                tostring(id),tostring(style),label,#tostring(body or '')))
+        end
+        return answer
+    end
+    h.wait_trade_item_dialog=function(ids,item_name,timeout,kind)
+        local elapsed,observed=0,''
+        while elapsed<(timeout or 3200) do
+            DSP.trade_runtime.pause(40)
+            elapsed=elapsed+40
+            if sampIsDialogActive() then
+                local id=sampGetCurrentDialogId()
+                local allowed=false
+                for _,old_id in ipairs(ids or {}) do
+                    if id==old_id then allowed=true;break end
+                end
+                local pending=A.trade_dialog_pending
+                local meta=A.dialog_meta
+                local fresh=kind=='sell' and pending and pending.kind==kind
+                    and pending.item==h.base_name(item_name) and meta and meta.id==id
+                    and (meta.seq or 0)>pending.seq
+                    and (tonumber(meta.style)==1 or tonumber(meta.style)==3)
+                if allowed or fresh then
+                    local ok,body,title=h.trade_dialog_matches(id,item_name,kind)
+                    observed=(title or '')..'\n'..(body or '')
+                    if ok then
+                        local stable=h.wait_text(id,360)
+                        if sampIsDialogActive() and sampGetCurrentDialogId()==id then
+                            local matched,final_body,final_title=h.trade_dialog_matches(id,item_name,kind,stable)
+                            if matched then return id,final_body,final_title end
+                        end
+                    end
+                end
+            end
+        end
+        return nil,observed,''
+    end
+end
+-- All clients (including standalone 2.9.13 with this fix already present)
+-- need the stock guard reattached after the 2.9.14 listing source is reloaded.
+A._trade_2914_replace_listing=true
+
+if type(L.coalesce_packet) ~= 'function' then
+    local function time_ms()
+        if getGameTimer then
+            local ok,value=pcall(getGameTimer)
+            if ok and type(value)=='number' then return value end
+        end
+        return os.time()*1000
+    end
+    local function envelope(raw)
+        local first=raw:find('%S')
+        if not first then return 'other' end
+        local opener=raw:sub(first,first)
+        if opener~='{' and opener~='[' then return 'other' end
+        local depth,quoted,escaped=0,false,false
+        for i=first,#raw do
+            local ch=raw:sub(i,i)
+            if quoted then
+                if escaped then escaped=false
+                elseif ch=='\\' then escaped=true
+                elseif ch=='"' then quoted=false end
+            elseif ch=='"' then quoted=true
+            elseif ch=='{' or ch=='[' then depth=depth+1
+            elseif ch=='}' or ch==']' then
+                depth=depth-1
+                if depth<0 then return 'invalid' end
+                if depth==0 and raw:sub(i+1):find('%S') then return 'invalid' end
+            end
+        end
+        if depth>0 or quoted then return 'partial' end
+        return depth==0 and 'complete' or 'invalid'
+    end
+    L._json_fragments=L._json_fragments or {}
+    L.JSON_FRAGMENT_MAX=1048576
+    L.JSON_FRAGMENT_TTL_MS=3500
+    L.coalesce_packet=function(iface,sub,raw,ms)
+        if type(raw)~='string' then return raw end
+        if not (iface==52 and sub==2 or iface==60 and (sub==0 or sub==1)) then
+            return raw
+        end
+        ms=ms or time_ms()
+        local key=tostring(iface)..':'..tostring(sub)
+        local pending=L._json_fragments[key]
+        if pending and (ms-pending.at<0 or ms-pending.at>L.JSON_FRAGMENT_TTL_MS) then
+            L._json_fragments[key]=nil
+            pending=nil
+            if DSP.flog then DSP.flog('LIVE JSON partial expired '..key)end
+        end
+        if pending and envelope(raw)=='complete' then
+            L._json_fragments[key]=nil
+            pending=nil
+            if DSP.flog then DSP.flog('LIVE JSON partial superseded '..key)end
+        end
+        local merged=pending and (pending.data..raw) or raw
+        if #merged>L.JSON_FRAGMENT_MAX then
+            L._json_fragments[key]=nil
+            if DSP.flog then DSP.flog('LIVE JSON partial limit exceeded '..key..' bytes='..#merged)end
+            return nil
+        end
+        local state=envelope(merged)
+        if state=='partial' then
+            L._json_fragments[key]={data=merged,at=ms}
+            return nil
+        end
+        L._json_fragments[key]=nil
+        if state=='invalid' then
+            if DSP.flog then DSP.flog('LIVE JSON invalid envelope '..key..' bytes='..#merged)end
+            return nil
+        end
+        return merged
+    end
+    -- The original Samp packet callback retains its L table reference and
+    -- dynamically invokes L.handle. Wrap that entry point rather than
+    -- registering a second onReceivePacket handler.
+    local old_handle=L.handle
+    L.handle=function(iface,sub,raw)
+        local complete=L.coalesce_packet(iface,sub,raw)
+        if complete~=nil then return old_handle(iface,sub,complete)end
+    end
+end
+return true
+      end
+      if _v2914_migration()==false then error('2.9.14 migration failed')end
+      local function _v2914_listing()
+-- Auto listing orchestration, separate from inventory and dialog observation.
+local runtime = DSP.trade_runtime
+local trade_wait = runtime.pause
+local log = DSP.add_log
+local h = DSP.auto.helpers
+local close_dialog, wait_dialog, wait_text = h.close_dialog, h.wait_dialog, h.wait_text
+local clean, base_name, has_qty = h.clean, h.base_name, h.has_qty
+local wait_item = h.wait_trade_item_dialog
+local trade_dialog_matches, current_dialog_title = h.trade_dialog_matches, h.current_dialog_title
+local trade_dialog_matches, current_dialog_title = h.trade_dialog_matches, h.current_dialog_title
+local function queue_sell()
+    local queue, available = {}, {}
+    local preset=DSP.settings.sell_preset
+    if type(preset)~='table' or type(preset.items)~='table' then return nil,'preset unavailable' end
+    if type(DSP.auto.inv)~='table' then return nil,'inventory unavailable' end
+    for _, p in ipairs(preset.items) do
+        if type(p)~='table' then return nil,'invalid preset row' end
+        if p.enabled ~= false and runtime.positive(p.price) and runtime.positive(p.qty or 1) then
+            if type(p.name)~='string' or p.name=='' then return nil,'invalid item name' end
+            local target = base_name(p.name)
+            local left = tonumber(p.qty) or 1
+            for _, inv in ipairs(DSP.auto.inv) do
+                if type(inv)~='table' or type(inv.stacks)~='table' then
+                    return nil,'inventory slot list is missing; scan inventory again'
+                end
+                if inv.name == p.name or ((tonumber(p.ench) or 0) == 0 and inv.name == target) then
+                    for _, st in ipairs(inv.stacks) do
+                        if type(st)~='table' or type(st.slot)~='number' or st.slot%1~=0
+                            or st.slot<0 or st.slot>1000 then
+                            return nil,'inventory slot invalid; scan inventory again'
+                        end
+                        if left <= 0 then break end
+                        if available[st.slot] == nil then
+                            available[st.slot] = runtime.positive(st.count) and tonumber(st.count) or 0
+                        end
+                        local take = math.min(available[st.slot], left)
+                        if take > 0 then
+                            table.insert(queue, {
+                                name = p.name, base = target, price = p.price,
+                                qty = take, slot = st.slot,
+                            })
+                            left = left - take
+                            available[st.slot] = available[st.slot] - take
+                        end
+                    end
+                end
+            end
+            if left > 0 then return nil, p.name .. ': недостаточно в инвентаре' end
+        end
+    end
+    return queue
+end
+
+function DSP.auto.start_sell()
+    if DSP.auto.sell_running or DSP.auto.scanning then return false end
+    if DSP.auto.buy_running or DSP.auto.scanning then return false end
+    local preset=DSP.settings.sell_preset
+    local items=type(preset)=='table' and preset.items or nil
+    if type(items)~='table' then DSP.notify('Sale preset unavailable');return false end
+    local n = 0
+    for _, it in ipairs(items) do
+        if type(it)~='table' then DSP.notify('Invalid preset row');return false end
+        if it.enabled ~= false then n = n + 1 end
+    end
+    if n == 0 then DSP.notify('Продажа: пресет пуст'); return end
+    if #DSP.auto.inv == 0 then
+        DSP.notify('Продажа: сначала просканируйте инвентарь')
+        return
+    end
+    local q_ok,queue,err=pcall(queue_sell)
+    if not q_ok then
+        DSP.flog('PRESET queue_sell error: '..tostring(queue))
+        DSP.notify('Preset error; check standalone.log')
+        return false
+    end
+    if not queue then DSP.notify('Sale: '..tostring(err)); return false end
+    if #queue == 0 then DSP.notify('Продажа: в инвентаре нет позиций из пресета'); return end
+    local dry_run = DSP.settings.dry_run
+    DSP.auto.sell_running = true
+    DSP.auto.sell_confirmed = false
+    DSP.auto.sell_forbidden = false
+    DSP.auto.sell_no_slots = false
+    DSP.auto.status = 'продажа...'
+    DSP.flog('PRESET sale accepted: '..#queue..' stacks, dry_run='..tostring(dry_run))
+    log('Продажа: ' .. #queue .. ' стек(ов)')
+    if dry_run then
+        DSP.notify('ТЕСТ: игровые окна не открываются. Для действий нужен режим РЕАЛЬНО.')
+        -- A preview must NEVER send RakNet clicks or dialog responses.
+        DSP.auto.sell_running=true
+        DSP.auto.status='sale preview...'
+        runtime.spawn('sell',function()
+            DSP.auto.progress.total=#queue
+            for i,it in ipairs(queue) do
+                DSP.auto.progress.dry=i
+                DSP.auto.progress.done=i
+                log('preview: '..it.name..' x'..it.qty..' @ '..DSP.money(it.price))
+            end
+            DSP.auto.sell_running=false
+            DSP.auto.status='sale preview: '..#queue..' stacks, no packets sent'
+        end)
+        return true
+    end
+    runtime.spawn('sell', function()
+        DSP.auto.progress.total = #queue
+        local done = 0
+        -- Establish the same native stall context as manual listing before
+        -- clicking inventory slots. Without it Arizona may ignore iface60 clicks.
+        if DSP.auto.prepare_stall_inventory then
+            local ok,why=DSP.auto.prepare_stall_inventory()
+            if not ok then
+                DSP.auto.sell_running=false
+                DSP.auto.status='продажа: лавка не готова'
+                log('Продажа: '..tostring(why or 'не удалось открыть инвентарь лавки'),'error')
+                DSP.notify('Продажа: '..tostring(why or 'лавка не готова'))
+                return
+            end
+            trade_wait(120)
+        end
+        for _, it in ipairs(queue) do
+            if not DSP.auto.sell_running then break end
+            DSP.auto.status = 'продажа: ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
+            local json = '{"amount":' .. it.qty .. ',"id":0,"slot":' .. it.slot .. ',"type":1}'
+            local got, id, dialog_text = false, nil, nil
+            for attempt = 1, 3 do
+                close_dialog()
+                DSP.auto.sell_confirmed = false
+                DSP.auto.sell_forbidden, DSP.auto.sell_no_slots = false, false
+                -- Native RakNet must not receive stale/invalid slot data.
+                if type(it.slot)~='number' or it.slot<0 or it.slot>1000 or it.slot%1~=0 then
+                    error('Invalid inventory slot at send: '..tostring(it.slot))
+                end
+                runtime.transition('sell','select_item',tostring(it.name)..' slot='..tostring(it.slot))
+                DSP.flog('PRESET sale packet: item='..tostring(it.name)..' slot='..it.slot..' qty='..tostring(it.qty))
+                -- Associate a newly arrived input dialog with THIS slot click.
+                -- Unknown IDs (including Halloween IDs) are accepted only by
+                -- the fresh-input title/body guard in 40_auto.lua.
+                if DSP.auto.arm_trade_dialog then DSP.auto.arm_trade_dialog('sell', it.name) end
+                _G.dsp_click_slot(60, -1, 2, json)
+                runtime.transition('sell','wait_item_dialog',tostring(it.name))
+                id,dialog_text,dialog_title = wait_item({ 26547, 15068, 15069, 15070, 15071 }, it.name, 2600, 'sell')
+                if id then
+                    got = true
+                    break
+                end
+                log('Продажа: диалог предмета не готов ('..attempt..'): '..tostring(dialog_text or ''):sub(1,90),'error')
+                close_dialog()
+                trade_wait(180)
+            end
+            if got then
+                -- mimgui/MonetLoader may publish the dialog text before the
+                -- native input control is ready. Follow the observed game
+                -- sequence: one short settle, then verify the *same* item/ID.
+                trade_wait(180)
+                local current=sampIsDialogActive() and sampGetCurrentDialogId() or nil
+                local valid,actual,actual_title=false,'',''
+                if current then valid,actual,actual_title=trade_dialog_matches(current,it.name,'sell') end
+                if current~=id or not valid then
+                    got=false
+                    log('\xcf\xf0\xee\xe4\xe0\xe6\xe0: \xe4\xe8\xe0\xeb\xee\xe3 \xf1\xec\xe5\xed\xe8\xeb\xf1\xff \xe4\xee \xee\xf2\xef\xf0\xe0\xe2\xea\xe8, id='..tostring(current)..
+                        ', \xee\xe6\xe8\xe4\xe0\xeb\xf1\xff='..tostring(id)..' \xb7 '..it.name,'error')
+                else
+                    dialog_text,dialog_title=actual,actual_title
+                end
+            end
+            if got then
+                local txt = (dialog_title or '') .. '\n' .. (dialog_text or '')
+                local combined = has_qty(txt)
+                -- Market Helper behavior: amount is already present in the iface60
+                -- slot packet. If this client only asks for price, send only price.
+                local resp = combined and (tostring(it.qty) .. ',' .. tostring(it.price))
+                    or tostring(it.price)
+                DSP.flog('PRESET sale input: item='..tostring(it.name)..' dialog='..tostring(id)..
+                    ' mode='..(combined and 'qty_price' or 'price_only')..' resp_len='..tostring(#resp))
+                if dry_run then
+                    DSP.auto.progress.dry = DSP.auto.progress.dry + 1
+                    log('dry-run: продал бы ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price))
+                    close_dialog()
+                else
+                    DSP.auto.sell_confirmed = false
+                    -- v1.2 hotfix: use the active dialog id (may be 26547 or
+                    -- 15068-15071 in newer Arizona Mobile). Fallback chain.
+                    local resp_id = id or sampGetCurrentDialogId and sampGetCurrentDialogId() or 26547
+                    runtime.transition('sell','submit',tostring(it.name)..' qty='..tostring(it.qty)..' price='..tostring(it.price))
+                    sampSendDialogResponse(resp_id, 1, 0, resp)
+                    for _ = 1, 100 do
+                        if DSP.auto.sell_confirmed then break end
+                        trade_wait(40)
+                    end
+                    if sampIsDialogActive() and sampGetCurrentDialogId()==resp_id then
+                        sampSendDialogResponse(resp_id, 0, 0, '')
+                    end
+                    if DSP.auto.sell_no_slots then
+                        DSP.auto.progress.failed = DSP.auto.progress.failed + 1
+                        log('Продажа: нет свободных мест', 'error')
+                        DSP.auto.sell_running = false
+                        break
+                    end
+                    if DSP.auto.sell_forbidden then
+                        DSP.auto.progress.failed = DSP.auto.progress.failed + 1
+                        log('Продажа: запрещено для ' .. it.name, 'error')
+                    elseif DSP.auto.sell_confirmed then
+                        done = done + 1
+                        DSP.auto.progress.done = done
+                        log('Выставлено: ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price), 'ok')
+                    else
+                        DSP.auto.progress.failed = DSP.auto.progress.failed + 1
+                        log('Продажа: нет подтверждения для ' .. it.name, 'error')
+                    end
+                end
+                trade_wait(260)
+            else
+                DSP.auto.progress.failed = DSP.auto.progress.failed + 1
+                log('Продажа: не открылся диалог для ' .. it.name .. ' (slot ' .. it.slot .. ')', 'error')
+                close_dialog()
+            end
+        end
+        DSP.auto.sell_running = false
+        DSP.auto.status = 'продажа: ' .. done .. '/' .. #queue
+        log('Продажа завершена: ' .. done .. '/' .. #queue, 'ok')
+        -- Inventory is now stale; refresh explicitly before another sale.
+        DSP.auto.inv = {}
+        DSP.auto.inv_status = 'нужно обновить'
+    end)
+    return true
+end
+
+function DSP.auto.stop_sell()
+    if not DSP.auto.sell_running then return false end
+    runtime.cancel()
+    DSP.auto.sell_running = false
+    DSP.auto.status = 'продажа остановлена'
+    close_dialog()
+    log('Продажа остановлена')
+end
+      end
+      if _v2914_listing()==false then error('2.9.14 listing failed')end
+      local function _v2914_stock()
+-- Restore the 2.9.12 stock limit around a reloaded 2.9.14 sale worker.
+-- Existing validate/totals wrappers remain installed; do not wrap them twice.
+local A,S=DSP.auto,DSP.sell_stock_guard
+if not A then error('missing auto engine') end
+if not A._trade_2914_replace_listing then return true end
+if not S or type(S.plan)~='function' then
+    error('sell stock guard missing; refusing to enable unguarded sell')
+end
+local underlying=A.start_sell
+A.start_sell=function(...)
+    local preset=DSP.settings and DSP.settings.sell_preset
+    local changes,summary=S.plan(type(preset)=='table' and preset.items or nil,A.inv)
+    local restore={}
+    for i,change in ipairs(changes or {}) do
+        local row=change.row
+        restore[i]={row=row,qty=row.qty,enabled=row.enabled}
+        if change.qty>0 then row.qty=change.qty else row.enabled=false end
+    end
+    local ok,result=pcall(underlying,...)
+    for i=#restore,1,-1 do
+        local prior=restore[i]
+        prior.row.qty=prior.qty
+        prior.row.enabled=prior.enabled
+    end
+    if not ok then
+        if DSP.flog then DSP.flog('SELL 2.9.14 launch: '..tostring(result))end
+        if DSP.notify then DSP.notify('Sale launch failed; check log')end
+        return false
+    end
+    if result and summary and (summary.adjusted>0 or summary.skipped>0) and DSP.add_log then
+        DSP.add_log('Sale adapted to stock: '..summary.planned..' / '..summary.requested..
+            '; reduced '..summary.adjusted..', absent '..summary.skipped)
+    end
+    return result
+end
+A._trade_2914_replace_listing=nil
+return true
+      end
+      if _v2914_stock()==false then error('2.9.14 stock failed')end
+    end)
+    if not applied then
+      if DSP.flog then DSP.flog('Palatka 2.9.14 update error: '..tostring(err))end
+      return false
+    end
+    DSP._trade_2914_installed=true
+    DSP.version='2.9.14'
+    DSP.active_ui_build='2.9.14'
+    if DSP.flog then DSP.flog('Palatka 2.9.14 trade update installed')end
+    return true
+  end
   -- Install settings guard before any other overlay can save preferences.
   local function module_settings_safety()
 -- Palatka Settings Safety: protect user preferences on every OTA update.
@@ -8699,7 +9142,7 @@ end
 
   -- Palatka AI 2.8.5: accurate trade and passive pawnshop read-only scanner.
   if DSP._v285_installed then
-    return install_chrome_2913()
+    return install_trade_2914()
   end
   local applied,err=pcall(function()
     do
@@ -9899,5 +10342,5 @@ return true
   DSP._v285_installed=true
   DSP.version='2.8.5'
   if DSP.flog then DSP.flog('Palatka 2.8.5 Accurate Trade / Lombard beta installed') end
-  return install_chrome_2913()
+  return install_trade_2914()
 end
