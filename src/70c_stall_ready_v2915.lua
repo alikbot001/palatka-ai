@@ -11,7 +11,7 @@ local previous=L.handle
 L.handle=function(iface,sub,raw)
     if tonumber(iface)==60 and tonumber(sub)==1
         and A.sell_running==true and R.state and R.state.kind=='sell'
-        and R.state.phase=='wait_inventory'
+        and (R.state.phase=='open_inventory' or R.state.phase=='wait_inventory')
         and type(raw)=='string' and raw~='' then
         A.stall_inventory_ready=true
         A.stall_inventory_seen_at=os.time()
