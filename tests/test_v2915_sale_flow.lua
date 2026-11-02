@@ -5,10 +5,11 @@ local function check(name,fn)
     if not ok then failures=failures+1;print('FAIL '..name..': '..tostring(err))
     else print('PASS '..name)end
 end
-local function scenario(ack)
+local function scenario(ack, options)
+    options=options or {}
     local threads,requests,packets,dialog={},{},{},nil
     DSP={
-        settings={sell_preset={items={{name='Item',price=130,qty=2,ench=0,enabled=true}}},
+        settings={sell_preset={items=options.preset or {{name='Item',price=130,qty=2,ench=0,enabled=true}}},
             dry_run=false},
         market={},auto={},
         live={handle=function()end},
@@ -45,7 +46,16 @@ local function scenario(ack)
             DSP.auto.on_dialog(dialog.id,dialog.style,dialog.title,'','',dialog.text)
         else error('unexpected iface '..tostring(iface)) end
     end
-    DSP.auto.inv={{name='Item',count=2,stacks={{slot=3,count=2}}}}
+    DSP.auto.inv=options.inventory or {{name='Item',count=2,stacks={{slot=3,count=2}}}}
+    if options.refreshed then
+        DSP.auto.scan_inventory=function(internal)
+            assert(internal==true and DSP.auto.sell_running,'internal refresh only')
+            DSP.auto.inv=options.refreshed()
+            DSP.auto.scanning=false
+            DSP.auto.inv_status='fresh'
+            return true
+        end
+    end
     return threads,requests,packets
 end
 
@@ -72,6 +82,39 @@ check('iface60/sub1 outside own-stall wait is not accepted',function()
     DSP.trade_runtime.transition('sell','open_shop')
     DSP.live.handle(60,1,'{"name":"Owner"}')
     assert(DSP.auto.stall_inventory_ready==false)
+end)
+check('second listing rescans and uses shifted slot after first sale', function()
+    local refreshes=0
+    local threads,requests,packets=scenario(true,{
+        preset={{name='Item',price=130,qty=2,enabled=true},
+                {name='Other',price=200,qty=1,enabled=true}},
+        inventory={{name='Item',count=2,stacks={{slot=3,count=2}}},
+                   {name='Other',count=1,stacks={{slot=4,count=1}}}},
+        refreshed=function()
+            refreshes=refreshes+1
+            return {{name='Other',count=1,stacks={{slot=0,count=1}}}}
+        end,
+    })
+    assert(DSP.auto.start_sell())
+    threads[1]()
+    assert(#requests==2 and #packets==4,'only some items listed')
+    assert(packets[2].payload:find('"slot":3',1,true),'original slot incorrect')
+    assert(packets[4].payload:find('"slot":0',1,true),'stale slot used for second item')
+    assert(refreshes==1,'expected one fresh scan')
+    assert(DSP.auto.progress.done==2 and DSP.auto.progress.failed==0)
+end)
+check('when fresh inventory no longer contains item, no stale slot packet is sent',function()
+    local threads,requests,packets=scenario(true,{
+        preset={{name='Item',price=130,qty=2,enabled=true},
+                {name='Other',price=200,qty=1,enabled=true}},
+        inventory={{name='Item',count=2,stacks={{slot=3,count=2}}},
+                   {name='Other',count=1,stacks={{slot=4,count=1}}}},
+        refreshed=function() return {} end,
+    })
+    assert(DSP.auto.start_sell())
+    threads[1]()
+    assert(#requests==1 and #packets==2,'stale stock was sold')
+    assert(DSP.auto.progress.failed==1 and DSP.auto.status:find('PARTIAL',1,true))
 end)
 assert(failures==0,'sale-flow regression failures: '..failures)
 print('2.9.15 sale-flow tests: OK')
