@@ -1,7 +1,7 @@
--- Palatka AI v2.9.15 mobile release, built from src/*.lua
+-- Palatka AI v2.9.16 mobile release, built from src/*.lua
 script_name('palatka ai')
 script_author('palatka ai')
-script_version('2.9.15')
+script_version('2.9.16')
 
 if not imgui then imgui = require('mimgui') end
 DSP = DSP or {}
@@ -25137,12 +25137,12 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1838279
+DSP.item_icon_blob_offset = 1842211
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.9.15'
+DSP.version = '2.9.16'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -34695,8 +34695,10 @@ local function parse_inventory(text)
     return grouped
 end
 
-function DSP.auto.scan_inventory()
-    if DSP.auto.scanning or DSP.auto.buy_running or DSP.auto.sell_running then return false end
+function DSP.auto.scan_inventory(internal_sell_refresh)
+    -- Only the active sell worker may request a fresh inventory scan.
+    if DSP.auto.scanning or DSP.auto.buy_running
+       or (DSP.auto.sell_running and internal_sell_refresh ~= true) then return false end
     DSP.auto.scanning = true
     DSP.auto.scan_generation = (DSP.auto.scan_generation or 0) + 1
     local generation = DSP.auto.scan_generation
@@ -34714,7 +34716,7 @@ function DSP.auto.scan_inventory()
             DSP.auto.inv_status = 'таймаут'
             log('Инвентарь: таймаут. Откройте инвентарь через /mm вручную и повторите.', 'error')
         end
-    end)
+    end)    return true
 end
 
 local function inventory_dialog(id, text)
@@ -34892,7 +34894,6 @@ local close_dialog, wait_dialog, wait_text = h.close_dialog, h.wait_dialog, h.wa
 local clean, base_name, has_qty = h.clean, h.base_name, h.has_qty
 local wait_item = h.wait_trade_item_dialog
 local trade_dialog_matches, current_dialog_title = h.trade_dialog_matches, h.current_dialog_title
-local trade_dialog_matches, current_dialog_title = h.trade_dialog_matches, h.current_dialog_title
 local function queue_sell()
     local queue, available = {}, {}
     local preset=DSP.settings.sell_preset
@@ -34934,6 +34935,46 @@ local function queue_sell()
         end
     end
     return queue
+end
+
+-- The original queue uses a point-in-time inventory snapshot. Every confirmed
+-- sale can remove/compact slots. Refresh the inventory before the next packet
+-- and bind the item to its CURRENT confirmed slot, never a stale index.
+local function refresh_sell_inventory()
+    if type(DSP.auto.scan_inventory)~='function' then return false,'inventory scanner unavailable' end
+    runtime.transition('sell','refresh_inventory','scan actual stock before next sale')
+    local started=DSP.auto.scan_inventory(true)
+    if started==false then return false,'inventory refresh blocked' end
+    local elapsed=0
+    while DSP.auto.scanning and elapsed<27000 do
+        trade_wait(50)
+        elapsed=elapsed+50
+    end
+    if DSP.auto.scanning or tostring(DSP.auto.inv_status or ''):find('таймаут',1,true) then
+        return false,'inventory refresh timed out'
+    end
+    if type(DSP.auto.inv)~='table' then return false,'inventory scan returned invalid stock' end
+    if DSP.flog then DSP.flog('PRESET fresh inventory rows='..#DSP.auto.inv) end
+    return true
+end
+
+local function current_sell_stack(item)
+    if type(DSP.auto.inv)~='table' then return nil end
+    local best
+    for _, inv in ipairs(DSP.auto.inv) do
+        if type(inv)=='table' and type(inv.stacks)=='table'
+            and (inv.name==item.name or (inv.name==item.base and item.name==item.base)) then
+            for _, st in ipairs(inv.stacks) do
+                local slot,count=tonumber(st.slot),tonumber(st.count)
+                if slot and slot%1==0 and slot>=0 and slot<=1000
+                    and count and count%1==0 and count>0
+                    and (not best or count>best.count) then
+                    best={slot=slot,count=count}
+                end
+            end
+        end
+    end
+    return best
 end
 
 function DSP.auto.start_sell()
@@ -34988,21 +35029,54 @@ function DSP.auto.start_sell()
     runtime.spawn('sell', function()
         DSP.auto.progress.total = #queue
         local done = 0
-        -- Establish the same native stall context as manual listing before
-        -- clicking inventory slots. Without it Arizona may ignore iface60 clicks.
-        if DSP.auto.prepare_stall_inventory then
-            local ok,why=DSP.auto.prepare_stall_inventory()
-            if not ok then
-                DSP.auto.sell_running=false
-                DSP.auto.status='продажа: лавка не готова'
-                log('Продажа: '..tostring(why or 'не удалось открыть инвентарь лавки'),'error')
-                DSP.notify('Продажа: '..tostring(why or 'лавка не готова'))
-                return
-            end
-            trade_wait(120)
-        end
-        for _, it in ipairs(queue) do
+        local aborted=false
+        local attempted=0
+        for index,it in ipairs(queue) do
             if not DSP.auto.sell_running then break end
+            if index>1 then
+                local ok,why=refresh_sell_inventory()
+                if not ok then
+                    DSP.auto.progress.failed=DSP.auto.progress.failed+1
+                    DSP.auto.status='Sale stopped: inventory refresh failed'
+                    log('PRESET sale halted: '..tostring(why),'error')
+                    aborted=true
+                    break
+                end
+            end
+            local fresh=current_sell_stack(it)
+            if not fresh then
+                DSP.auto.progress.failed=DSP.auto.progress.failed+1
+                DSP.auto.status='Sale stopped: item slot no longer available'
+                log('PRESET sale halted: item not in fresh inventory '..tostring(it.name),'error')
+                aborted=true
+                break
+            end
+            -- A previously planned stack may have split/merged. Never send
+            -- more than the current stack contains; carry the remainder
+            -- forward as a new pending task after this confirmed sale.
+            if fresh.count<it.qty then
+                table.insert(queue,index+1,{
+                    name=it.name,base=it.base,price=it.price,
+                    qty=it.qty-fresh.count,slot=it.slot,
+                })
+                it.qty=fresh.count
+                DSP.auto.progress.total=#queue
+            end
+            it.slot=fresh.slot
+            -- Do not reuse a previous server-side stall context after posting
+            -- a sale; the native menu can close or change after each listing.
+            if DSP.auto.prepare_stall_inventory then
+                local ok,why=DSP.auto.prepare_stall_inventory()
+                if not ok then
+                    DSP.auto.progress.failed=DSP.auto.progress.failed+1
+                    DSP.auto.status='Sale stopped: stall not ready'
+                    log('PRESET sale halted: '..tostring(why or 'stall not ready'),'error')
+                    aborted=true
+                    break
+                end
+                trade_wait(120)
+            end
+            attempted=attempted+1
             DSP.auto.status = 'продажа: ' .. it.name .. ' (' .. done .. '/' .. #queue .. ')'
             local json = '{"amount":' .. it.qty .. ',"id":0,"slot":' .. it.slot .. ',"type":1}'
             local got, id, dialog_text = false, nil, nil
@@ -35089,19 +35163,30 @@ function DSP.auto.start_sell()
                         log('Выставлено: ' .. it.name .. ' x' .. it.qty .. ' @ ' .. DSP.money(it.price), 'ok')
                     else
                         DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                        log('Продажа: нет подтверждения для ' .. it.name, 'error')
+                        DSP.auto.status='Sale stopped: no server confirmation'
+                        log('PRESET sale halted: no confirmation for '..it.name..' slot='..tostring(it.slot),'error')
+                        aborted=true
                     end
                 end
+                if aborted then break end
                 trade_wait(260)
             else
                 DSP.auto.progress.failed = DSP.auto.progress.failed + 1
-                log('Продажа: не открылся диалог для ' .. it.name .. ' (slot ' .. it.slot .. ')', 'error')
+                DSP.auto.status='Sale stopped: item dialog not received'
+                log('PRESET sale halted: no price dialog for '..it.name..' slot='..tostring(it.slot),'error')
                 close_dialog()
+                aborted=true
+                break
             end
         end
         DSP.auto.sell_running = false
-        DSP.auto.status = 'продажа: ' .. done .. '/' .. #queue
-        log('Продажа завершена: ' .. done .. '/' .. #queue, 'ok')
+        if aborted or DSP.auto.sell_no_slots then
+            DSP.auto.status = 'Sale PARTIAL: '..done..'/'..#queue..' (see log)'
+            log('Sale PARTIAL: confirmed '..done..' of '..#queue..' actions; retry only after rescan', 'error')
+        else
+            DSP.auto.status = 'продажа: ' .. done .. '/' .. #queue
+            log('Продажа завершена: ' .. done .. '/' .. #queue, 'ok')
+        end
         -- Inventory is now stale; refresh explicitly before another sale.
         DSP.auto.inv = {}
         DSP.auto.inv_status = 'нужно обновить'
