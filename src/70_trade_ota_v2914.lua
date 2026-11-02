@@ -59,10 +59,10 @@ if type(A.arm_trade_dialog) ~= 'function' then
         end
         return nil,observed,''
     end
-    -- The old listing closure captured the OLD wait helper. The OTA build
-    -- reloads only the listing function and restores stock protection after it.
-    A._trade_2914_replace_listing=true
 end
+-- All clients (including standalone 2.9.13 with this fix already present)
+-- need the stock guard reattached after the 2.9.14 listing source is reloaded.
+A._trade_2914_replace_listing=true
 
 if type(L.coalesce_packet) ~= 'function' then
     local function time_ms()
