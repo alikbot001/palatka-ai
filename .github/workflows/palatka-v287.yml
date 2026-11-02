@@ -83,6 +83,12 @@ jobs:
         run: |
           luajit -b src/60g_window_chrome_v2913.lua /dev/null
           luajit tests/test_v2913_chrome.lua
+      - name: Regression checks for Halloween trading dialogs and JSON packets
+        run: |
+          luajit -b src/40_auto.lua /dev/null
+          luajit -b src/41_trade_listing.lua /dev/null
+          luajit -b src/45_live.lua /dev/null
+          luajit tests/test_halloween_trade.lua
       - name: Build stable standalone
         run: python3 build.py
       - name: Verify standalone release version and retained UI
