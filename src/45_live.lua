@@ -540,6 +540,79 @@ function L.read_json(bs)
     return raknetBitStreamReadString(bs, len)
 end
 
+-- Coalesce only structurally incomplete JSON envelopes from the same packet
+-- interface/subpacket. This does not assume that every 8192-byte message is
+-- fragmented: independent complete messages are processed independently.
+-- Never hold unbounded buffers or splice unrelated interfaces together.
+L._json_fragments = L._json_fragments or {}
+L.JSON_FRAGMENT_MAX = 1048576
+L.JSON_FRAGMENT_TTL_MS = 3500
+
+local function json_envelope_state(raw)
+    local first = raw:find('%S')
+    if not first then return 'other' end
+    local opener = raw:sub(first, first)
+    if opener ~= '{' and opener ~= '[' then return 'other' end
+    local depth, quoted, escaped = 0, false, false
+    for i = first, #raw do
+        local ch = raw:sub(i, i)
+        if quoted then
+            if escaped then escaped = false
+            elseif ch == '\\' then escaped = true
+            elseif ch == '"' then quoted = false end
+        elseif ch == '"' then
+            quoted = true
+        elseif ch == '{' or ch == '[' then
+            depth = depth + 1
+        elseif ch == '}' or ch == ']' then
+            depth = depth - 1
+            if depth < 0 then return 'invalid' end
+            if depth == 0 and raw:sub(i+1):find('%S') then return 'invalid' end
+        end
+    end
+    if depth > 0 or quoted then return 'partial' end
+    return depth == 0 and 'complete' or 'invalid'
+end
+
+function L.coalesce_packet(iface, sub, raw, at_ms)
+    if type(raw) ~= 'string' then return raw end
+    if not (iface == 52 and sub == 2 or iface == 60 and (sub == 0 or sub == 1)) then
+        return raw
+    end
+    at_ms = at_ms or mono_ms()
+    local key = tostring(iface)..':'..tostring(sub)
+    local pending = L._json_fragments[key]
+    if pending and (at_ms - pending.at < 0 or at_ms - pending.at > L.JSON_FRAGMENT_TTL_MS) then
+        L._json_fragments[key] = nil
+        pending = nil
+        if DSP.flog then DSP.flog('LIVE JSON partial expired '..key) end
+    end
+    local standalone = json_envelope_state(raw)
+    if pending and standalone == 'complete' then
+        -- A valid new datagram must not get attached to a stale partial one.
+        L._json_fragments[key] = nil
+        pending = nil
+        if DSP.flog then DSP.flog('LIVE JSON partial superseded '..key) end
+    end
+    local merged = pending and (pending.data..raw) or raw
+    if #merged > L.JSON_FRAGMENT_MAX then
+        L._json_fragments[key] = nil
+        if DSP.flog then DSP.flog('LIVE JSON partial limit exceeded '..key..' bytes='..#merged) end
+        return nil
+    end
+    local state = json_envelope_state(merged)
+    if state == 'partial' then
+        L._json_fragments[key] = {data=merged, at=at_ms}
+        return nil
+    end
+    L._json_fragments[key] = nil
+    if state == 'invalid' then
+        if DSP.flog then DSP.flog('LIVE JSON invalid envelope '..key..' bytes='..#merged) end
+        return nil
+    end
+    return merged
+end
+
 function L.on_receive(packet_id, bs)
     if packet_id ~= 220 then return end
     local original_offset = nil
@@ -555,7 +628,11 @@ function L.on_receive(packet_id, bs)
         local iface = raknetBitStreamReadInt8(bs)
         local sub = raknetBitStreamReadInt8(bs)
         local raw = L.read_json(bs)
-        if raw and raw ~= '' then L.handle(iface, sub, raw) end
+        if raw and raw ~= '' then
+            -- Never pass a truncated JSON envelope to decodeJson/cjson.
+            local ready = L.coalesce_packet(iface, sub, raw)
+            if ready then L.handle(iface, sub, ready) end
+        end
     end)
     if not ok then DSP.flog('LIVE packet error: ' .. tostring(err)) end
     if original_offset ~= nil and type(raknetBitStreamSetReadOffset)=='function' then
