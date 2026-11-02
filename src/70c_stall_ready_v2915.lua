@@ -12,9 +12,7 @@ L.handle=function(iface,sub,raw)
     if tonumber(iface)==60 and tonumber(sub)==1
         and A.sell_running==true and R.state and R.state.kind=='sell'
         and R.state.phase=='wait_inventory'
-        and type(raw)=='string' and #raw>2
-        and (raw:find('"name"',1,true) or raw:find('"owner"',1,true)
-             or raw:find('"nick"',1,true)) then
+        and type(raw)=='string' and raw~='' then
         A.stall_inventory_ready=true
         A.stall_inventory_seen_at=os.time()
         if DSP.flog then DSP.flog('TRADE stall inventory ready (iface60/sub1)')end
