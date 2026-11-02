@@ -1,4 +1,4 @@
-name: Palatka 2.9.14 release
+name: Palatka 2.9.15 sale fix
 on:
   pull_request:
     paths:
@@ -41,20 +41,23 @@ jobs:
               assert live==baseline, f'Unexpected changes to stable {path}'
           print('Functional 2.9.5 baseline preserved')
           PY
-      - name: Generate 2.9.14 OTA, then test syntax, manifest and installer
+      - name: Generate 2.9.15 OTA, then test syntax, manifest and installer
         run: |
-          python3 tools/build_ota_v2914.py
+          python3 tools/build_ota_v2915.py
           luajit -b updates/palatka_update.lua /dev/null
           python3 - <<'PY'
           from pathlib import Path
           import json
           manifest=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert manifest['version']=='2.9.14'
+          assert manifest['version']=='2.9.15'
           assert manifest['size']==len(ota),(manifest['size'],len(ota))
           assert manifest['mode']=='overlay'
-          assert b"PALATKA_UPDATE_VERSION = '2.9.14'" in ota
-          assert ota.count(b'return install_trade_2914()')==2
+          assert b"PALATKA_UPDATE_VERSION = '2.9.15'" in ota
+          assert ota.count(b'return install_stall_2915()')==2
+          assert b'local function install_stall_2915()' in ota
+          assert b'TRADE stall inventory ready (iface60/sub1)' in ota
+          assert b'command /crrtrace registered=' in ota
           assert b'local function install_trade_2914()' in ota
           assert b'TRADE incoming dialog id=' in ota
           assert b'LIVE JSON partial expired' in ota
@@ -66,7 +69,7 @@ jobs:
           assert b"function A.draw()" in ota
           assert b"function V.promo_screen()" in ota
           assert b"function V.journal()" in ota
-          print('OTA 2.9.14 compiled and validated')
+          print('OTA 2.9.15 compiled and validated')
           PY
       - name: Test stable modules and existing behavior
         run: |
@@ -94,6 +97,11 @@ jobs:
           luajit -b src/41_trade_listing.lua /dev/null
           luajit -b src/45_live.lua /dev/null
           luajit tests/test_halloween_trade.lua
+      - name: Test end-to-end stall sell and missing-ack safety
+        run: |
+          luajit -b src/70c_stall_ready_v2915.lua /dev/null
+          luajit -b src/39b_trade_probe.lua /dev/null
+          luajit tests/test_v2915_sale_flow.lua
       - name: Build stable standalone
         run: python3 build.py
       - name: Verify standalone release version and retained UI
@@ -101,8 +109,10 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           raw=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.14' in raw[:1000]
-          assert b"script_version('2.9.14')" in raw[:1000]
+          assert b'Palatka AI v2.9.15' in raw[:1000]
+          assert b"script_version('2.9.15')" in raw[:1000]
+          assert b"TRADE TRACE:" in raw
+          assert b"TRADE stall inventory ready (iface60/sub1)" in raw
           assert b'##palatka_arbitrage_agent' in raw
           assert b'##palatka_mobile' in raw
           assert 'Добавить строку'.encode('cp1251') in raw
@@ -115,13 +125,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add palatka_ai.lua updates/palatka_update.lua version.json
           if ! git diff --cached --quiet; then
-            git commit -m "release: Palatka 2.9.14 standalone and OTA"
+            git commit -m "release: Palatka 2.9.15 standalone and OTA"
             git push origin HEAD:main
           fi
       - name: Upload stable verified Lua
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-2.9.14
+          name: palatka-2.9.15
           path: |
             palatka_ai.lua
             updates/palatka_update.lua
