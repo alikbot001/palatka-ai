@@ -123,7 +123,8 @@ function DSP.auto.prepare_stall_inventory()
         trade_wait(50);elapsed=elapsed+50
         if DSP.auto.stall_inventory_ready then runtime.transition('sell','inventory_ready','iface52/type1');return true end
     end
-    return false,'èíâåíòàðü ëàâêè íå çàãðóçèëñÿ'
+    if DSP.flog then DSP.flog('TRADE stall-open timeout: no iface52/sub2/type1 or iface60/sub1 while waiting')end
+    return false,'Stall inventory did not respond (52/2 or 60/1); see /crrtrace'
 end
 
 function _G.dsp_click_slot(interfaceid, id, subid, json_str)
