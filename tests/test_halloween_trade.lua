@@ -68,6 +68,13 @@ check('multipart JSON is complete before dispatch', function()
     assert(L.coalesce_packet(52,2,first,1000)==nil)
     assert(L.coalesce_packet(52,2,second,1020)==full)
 end)
+check('JSON crossing the exact 8192-byte boundary is reassembled', function()
+    L._json_fragments={}
+    local full='{"type":28,"items":['..string.rep('{"item":7},',900)..'{"item":8}]}'
+    assert(#full>8192)
+    assert(L.coalesce_packet(52,2,full:sub(1,8192),1000)==nil)
+    assert(L.coalesce_packet(52,2,full:sub(8193),1020)==full)
+end)
 check('independent JSON messages do not get glued', function()
     L._json_fragments={}
     local packet='{"type":13,"items":[]}'
