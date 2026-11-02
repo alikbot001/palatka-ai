@@ -257,8 +257,10 @@ local function parse_inventory(text)
     return grouped
 end
 
-function DSP.auto.scan_inventory()
-    if DSP.auto.scanning or DSP.auto.buy_running or DSP.auto.sell_running then return false end
+function DSP.auto.scan_inventory(internal_sell_refresh)
+    -- Only the active sell worker may request a fresh inventory scan.
+    if DSP.auto.scanning or DSP.auto.buy_running
+       or (DSP.auto.sell_running and internal_sell_refresh ~= true) then return false end
     DSP.auto.scanning = true
     DSP.auto.scan_generation = (DSP.auto.scan_generation or 0) + 1
     local generation = DSP.auto.scan_generation
@@ -276,7 +278,7 @@ function DSP.auto.scan_inventory()
             DSP.auto.inv_status = 'òàéìàóò'
             log('Èíâåíòàðü: òàéìàóò. Îòêðîéòå èíâåíòàðü ÷åðåç /mm âðó÷íóþ è ïîâòîðèòå.', 'error')
         end
-    end)
+    end)    return true
 end
 
 local function inventory_dialog(id, text)
