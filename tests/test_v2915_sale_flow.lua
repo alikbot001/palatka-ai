@@ -54,7 +54,7 @@ check('full sale: native iface60/sub1 ack, new price dialog and server confirmat
     assert(DSP.auto.start_sell())
     assert(#threads==1)
     threads[1]()
-    assert(#requests==1,'expected one submitted sale')
+    assert(#requests==1,'expected one submitted sale, packets='..#packets..' status='..tostring(DSP.auto.status)..' phase='..tostring(DSP.trade_runtime.state.phase))
     assert(requests[1].id==28183 and requests[1].value=='2,130','unexpected dialog response')
     assert(#packets==2 and packets[1].iface==8 and packets[2].iface==60)
     assert(DSP.auto.progress.done==1 and DSP.auto.progress.failed==0)
