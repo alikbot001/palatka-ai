@@ -24,6 +24,7 @@ jobs:
       - name: Critical safety and UI regression suite
         run: |
           luajit tests/test_mcr_safe_stock.lua
+          luajit tests/test_mcr_beta_version.lua
           luajit tests/test_v2912_partial_sell.lua
           luajit tests/test_v2913_chrome.lua
           luajit tests/test_v2915_sale_flow.lua
