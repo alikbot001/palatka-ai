@@ -5,7 +5,8 @@ local function stock_preview()
     if V.kind~='sell' then return nil,nil end
     local stock=DSP.sell_stock_guard
     if not stock or type(stock.preview)~='function' then return nil,nil end
-    return stock.preview((preset() and preset().items) or {},DSP.auto.inv)
+    local p=DSP.settings and DSP.settings.sell_preset
+    return stock.preview((type(p)=='table' and p.items) or {},DSP.auto.inv)
 end
 local function busy()return DSP.auto.buy_running or DSP.auto.sell_running end
 local function preset()return V.kind=='sell'and DSP.settings.sell_preset or DSP.settings.buy_preset end
