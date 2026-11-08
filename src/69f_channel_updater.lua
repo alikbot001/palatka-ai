@@ -89,7 +89,7 @@ function CM.verify_file(path,manifest)
     local tail=f:read(128)or ''
     f:close()
     if not head:find("script_name%('palatka ai'%)")
-       or not head:find("script_version%('2%.9%.16'%)")
+       or not head:find("script_version('"..manifest.version.."')",1,true)
        or not head:find("Palatka AI",1,true)
        or not tail:find(']=]',1,true) then
         return false,'Файл не похож на полный Palatka AI Lua' end
