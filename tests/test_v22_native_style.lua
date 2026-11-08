@@ -9,7 +9,8 @@ decodeJson=function()return {}end
 local h=H.new(2340,1080);imgui=h.imgui
 dofile('src/00_core.lua')
 local n=DSP.theme.push_window()
-assert(imgui.GetStyle().Colors[imgui.Col.ChildBg].x==.075,'design colors must not be gamma-corrected twice')
+assert(imgui.GetStyle().Colors[imgui.Col.ChildBg].x==DSP.theme.get().panel[1],
+    'active theme RGB must be passed without gamma correction')
 imgui.PopStyleColor(n)
 DSP.ui={d=1,open_ref=imgui.new.bool(true)};DSP.mobile={};DSP.screens={set=function()end}
 dofile('src/60_ui21_shell.lua')
