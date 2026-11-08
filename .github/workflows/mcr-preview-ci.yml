@@ -1,0 +1,47 @@
+name: MCR mobile preview — build and regression checks
+on:
+  push:
+    branches:
+      - feat/mcr-redesign-trade-safe-20261108
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mcr-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT for strict compilation and tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y luajit
+      - name: Syntax-check modified sources
+        run: |
+          for src in src/00_core.lua src/37_trade_v16.lua src/42a_sell_stock_guard.lua src/60_ui21_shell.lua src/61_ui21_trade.lua src/65_ui22_tools.lua src/69f_channel_updater.lua src/71_mcr_workspace.lua; do
+            luajit -b "$src" /dev/null
+          done
+      - name: Critical safety and UI regression suite
+        run: |
+          luajit tests/test_mcr_safe_stock.lua
+          luajit tests/test_v2912_partial_sell.lua
+          luajit tests/test_v2913_chrome.lua
+          luajit tests/test_v2915_sale_flow.lua
+          luajit tests/test_channel_updater.lua
+      - name: Build autonomous CP1251 script with embedded item icon bank
+        run: |
+          python3 build.py
+          luajit -b palatka_ai.lua /dev/null
+      - name: Run all repository regressions (record legacy failures)
+        continue-on-error: true
+        run: python3 run_tests.py
+      - name: Archive installable preview and test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-mcr-preview
+          path: |
+            palatka_ai.lua
+            docs/test-results.json
+          if-no-files-found: warn
+          retention-days: 10
