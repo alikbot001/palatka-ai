@@ -159,6 +159,61 @@ local function dual_market()
     imgui.EndChild()
 end
 
+-- Small right context rail modeled after the reference screenshot.
+-- All tiles invoke existing business logic, never pretend a server accepted a trade.
+function V.context_actions()
+    local actions={}
+    local function add(label,symbol,callback)
+        actions[#actions+1]={label,symbol,callback}
+    end
+    if V.screen=='palatka' then
+        add('Поиск','?',function()V.tab='items' end)
+        add('Выставить','+',function()
+            if DSP.auto.sell_running or DSP.auto.buy_running then return end
+            V.open_popup('Выставление','launch')
+        end)
+        add('Обновить','R',function()
+            if not (DSP.auto.sell_running or DSP.auto.buy_running) then
+                DSP.auto.scan_inventory()
+            end
+        end)
+        add('Пресеты','P',function()V.open_popup('Наборы','presets')end)
+        if DSP.auto.sell_running or DSP.auto.buy_running then
+            add('Стоп','X',function()
+                if DSP.auto.sell_running then DSP.auto.stop_sell()
+                else DSP.auto.stop_buy()end
+            end)
+        end
+    elseif V.screen=='lavki' or V.screen=='market' then
+        add('Поиск','?',function()
+            V.shop_item=nil;V.shop_detail=nil;V.shops_source='api'
+        end)
+        add('Обновить','R',function()
+            local st=DSP.market.state
+            if st.status~='loading' then DSP.market.pull(st.sid)end
+        end)
+        add('Скан','S',function()
+            V.shops_source='scan';V.shop_item=nil;V.shop_detail=nil
+        end)
+    elseif V.screen=='logs' then
+        add('История','J',function()V.set_screen('history')end)
+        add('Статистика','%',function()V.set_screen('stats')end)
+    elseif V.screen=='more' then
+        add('Настройки','*',function()V.set_screen('settings')end)
+        add('Обновления','U',function()go('updates')end)
+    end
+    local w=math.max(39,imgui.GetContentRegionAvail().x)
+    local x0,y0=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+    for i,e in ipairs(actions)do
+        local y=y0+(i-1)*65
+        V.at(x0,y)
+        if V.button(e[2],'mcr_rail_'..V.screen..'_'..i,w,false,false,36)then e[3]()end
+        V.at(x0,y+38)
+        V.muted(V.fit(e[1],w-2))
+    end
+    V.at(x0,y0+#actions*65)
+end
+
 if type(old_shops)=='function' then
     V.shops=function(...)
         V.shops_source=V.shops_source or 'api'
