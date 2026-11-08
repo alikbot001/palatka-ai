@@ -1,0 +1,29 @@
+name: MCR mobile UI smoke
+on:
+  pull_request:
+    paths:
+      - 'src/69e_mcr_mobile_shell.lua'
+      - 'tests/test_mcr_shell.lua'
+      - 'build.py'
+      - '.github/workflows/mcr-ui-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/69e_mcr_mobile_shell.lua'
+      - 'tests/test_mcr_shell.lua'
+      - 'build.py'
+      - '.github/workflows/mcr-ui-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  ui-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Compile new mobile UI
+        run: luajit -b src/69e_mcr_mobile_shell.lua /dev/null
+      - name: Check old/new navigation compatibility
+        run: luajit tests/test_mcr_shell.lua

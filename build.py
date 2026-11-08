@@ -104,6 +104,7 @@ MODULES = [
     "69b_arbitrage_agent_ui.lua",
     "69c_arbitrage_status.lua",
     "69d_runtime_diagnostic.lua",
+    "69e_mcr_mobile_shell.lua",
     "99_main.lua",
 ]
 
