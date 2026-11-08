@@ -3,6 +3,7 @@
 -- This module is loaded after legacy screens so their business handlers survive.
 local V=DSP.ui21
 local old_shops=V.shops
+local old_trade_journal=V.journal
 
 local function go(id)
     if id=='updates' then
@@ -226,4 +227,16 @@ if type(old_shops)=='function' then
         return dual_market()
     end
 end
+-- The market-trade log and append-only game-event journal are different data
+-- sources. Route History to the preserved event viewer, without a second UI.
+if type(V.mcr_events_journal)=='function' and type(old_trade_journal)=='function' then
+    V.journal=function(...)
+        if V.screen=='history' then
+            V.journal_mode='events'
+            return V.mcr_events_journal(...)
+        end
+        return old_trade_journal(...)
+    end
+end
+
 return true
