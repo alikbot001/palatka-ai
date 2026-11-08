@@ -112,6 +112,10 @@ local function save_package(data, version)
     return true,final
 end
 function updater.install()
+    local queue = DSP.auto or {}
+    if queue.running or queue.buy_running or queue.sell_running then
+        fail('Останови торговую очередь перед обновлением');return false
+    end
     if updater.status ~= 'available' or type(updater.info) ~= 'table' then return false end
     if type(DSP.http_get) ~= 'function' then fail('Сетевой клиент недоступен');return false end
     local info = updater.info
@@ -162,12 +166,11 @@ local function settings_view(w)
     toggle('Экономия ресурсов','fps_saver',false)
     toggle('Оценка торговли поверх игры','overlay_trade',true)
     toggle('Оценка лавки поверх игры','overlay_shop',true)
-    toggle('Мини-журнал', 'ui_2917_minijournal',false)
-    if DSP.settings.ui_2917_minijournal ~= nil and DSP.settings.craglog then
-        local want = DSP.settings.ui_2917_minijournal
-        if DSP.settings.craglog.open ~= want then
-            DSP.settings.craglog.open = want;save_later()
-        end
+    local crag = DSP.settings.craglog or {}
+    local open = crag.open == true
+    if V.text_button((open and '[x] ' or '[ ] ')..'Мини-журнал',
+        'ux2917_toggle_minijournal',-1,false,44) then
+        crag.open = not open;DSP.settings.craglog = crag;save_later()
     end
     V.muted('Темы, прозрачность, размер текста и положение окон находятся в расширенных настройках.')
 end
@@ -240,7 +243,8 @@ V.popups = function()
         V.inline(6,160)
         if button('Установить','update_confirm',160,true) then
             imgui.CloseCurrentPopup()
-            if DSP.auto and DSP.auto.running then fail('Останови торговую очередь перед обновлением')
+            if DSP.auto and (DSP.auto.running or DSP.auto.buy_running or DSP.auto.sell_running) then
+                fail('Останови торговую очередь перед обновлением')
             else updater.install() end
         end
     end,{w=480,h=230})
