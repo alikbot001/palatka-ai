@@ -7,7 +7,13 @@ local function button(s)
     local h=A.host
     return h.imgui.Button(h.utf8(s)) and (not h.can_click or h.can_click())
 end
-local function money(n)return string.format('%.0f',n or 0)end
+local function money(n)
+    local value=string.format('%.0f',n or 0)
+    local sign,digits=value:match('^(-?)(%d+)$')
+    if not digits then return value end
+    local grouped=digits:reverse():gsub('(%d%d%d)','%1.'):reverse():gsub('^%.','')
+    return sign..grouped
+end
 local function source(s)
     return s.source=='local'and'скан' or s.source
 end

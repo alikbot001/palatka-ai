@@ -21,4 +21,16 @@ local found=false
 for _,c in ipairs(calls)do if c[1]=='TextWrapped'and c[2]:find('Откройте',1,true)then found=true end end
 assert(found,'empty-state instructions missing')
 assert(#A.current_results()==0)
+local seller={shop=1,source='local',at=1000,server='102'}
+local buyer={shop=2,source='local',at=1000,server='102'}
+A.result_server='102';A.result_at=1000
+A.results={{name='Item',qty=2,seller=seller,buyer=buyer,buy_price=1000000,
+    sell_price=10000000,cost=2000000,gross=20000000,fee=400000,profit=17600000,currency='SA$'}}
+calls={};A.draw_center();A.draw_right()
+local rendered={};for _,c in ipairs(calls)do if type(c[2])=='string'then rendered[#rendered+1]=c[2]end end
+local output=table.concat(rendered,'\n')
+for _,v in ipairs({'1.000.000','10.000.000','2.000.000','20.000.000','400.000','17.600.000'})do
+    assert(output:find(v,1,true),'money is not grouped: '..v)
+end
+assert(not output:find('1000000',1,true),'ungrouped price remains')
 print('MCR arbitrage UI strict API/balance/empty state: OK')
