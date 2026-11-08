@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "channel": "stable",
+  "version": "2.9.16",
+  "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/main/palatka_ai.lua",
+  "size": 72110155,
+  "sha256": "d52dc5681220edc53e3873a8118f9b67ff76813243266d5b4dbc288c77495868",
+  "notes": "Stable 2.9.16 trade fixes + optional channel switcher"
+}
