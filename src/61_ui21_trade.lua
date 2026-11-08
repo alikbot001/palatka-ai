@@ -231,10 +231,24 @@ local function remove_position()
 end
 local function presets_popup()
     local kind=V.kind
+    local w=math.max(145,imgui.GetContentRegionAvail().x)
+    local tab=math.max(60,(w-6)/2)
+    if b('Продажа','preset_mode_sell',tab,kind=='sell')then V.kind='sell';kind='sell'end
+    V.inline(6)
+    if b('Скупка','preset_mode_buy',tab,kind=='buy')then V.kind='buy';kind='buy'end
+    V.muted('Наборы · выбери текущий пресет или создай новый')
     local list=DSP.presets.list(kind)or{}
-    V.list_rows('preset_library_'..kind,list,46,function(p,i)
-        if b(p.name,'select_'..i,-1,DSP.presets.selected(kind)==i)then report(DSP.presets.select(kind,i))end
-    end,{height=math.max(48,math.min(110,imgui.GetContentRegionAvail().y-240))})
+    V.list_rows('preset_library_'..kind,list,52,function(p,i)
+        V.row('mcr_preset_library_'..i,52,function(rw,x,y)
+            local name=V.fit(tostring(p.name or 'Без названия'),math.max(48,rw-104))
+            V.at(x,y)
+            if b(name,'select_'..i,math.max(48,rw-104),DSP.presets.selected(kind)==i)then
+                report(DSP.presets.select(kind,i))
+            end
+            V.at(x+rw-92,y+12)
+            V.muted(V.fit(tostring(#(p.items or {}))..' поз.',86))
+        end)
+    end,{height=math.max(64,math.min(134,imgui.GetContentRegionAvail().y-245)),footer=false})
     V.preset_name=V.preset_name or imgui.new.char[128]()
     imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_preset_name',DSP.utf8('Íàçâàíèå íàáîðà'),V.preset_name,128)
     local name=DSP.to_cp(ffi.string(V.preset_name))
@@ -314,7 +328,7 @@ function V.popups()
         V.cancel('review');V.inline();if b('Ïîäòâåðäèòü','review_start',176,ok)and ok then if launch() then imgui.CloseCurrentPopup() end end
     end)
     V.popup('Óäàëèòü ïîçèöèþ','remove',remove_position,{w=620,h=200})
-    V.popup('Íàáîðû','presets',presets_popup)
+    V.popup('Наборы','presets',presets_popup,{w=720,h=480})
     V.popup('Íîâûé ïðåäìåò','manual',function()
         V.manual_name=V.manual_name or imgui.new.char[192]()
         imgui.SetNextItemWidth(-1);imgui.InputTextWithHint('##v22_manual',DSP.utf8('Íàçâàíèå êàê â èãðå'),V.manual_name,192)
