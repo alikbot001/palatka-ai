@@ -106,6 +106,7 @@ MODULES = [
     "69d_runtime_diagnostic.lua",
     "69e_mcr_mobile_shell.lua",
     "69f_channel_updater.lua",
+    "69g_beta_channel_identity.lua",
     "99_main.lua",
 ]
 
