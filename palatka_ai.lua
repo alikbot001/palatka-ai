@@ -25137,7 +25137,7 @@ DSP.item_icon_names = {
 ["name_ebf76144e1811623"]="Запечатанный: Наплечник Devil Company",
 ["name_fd2a03207ed79519"]="Запечатанная: Шляпа Devil Company",
 }
-DSP.item_icon_blob_offset = 1842211
+DSP.item_icon_blob_offset = 1869930
 local function __mod_00_core()
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
@@ -48025,6 +48025,640 @@ return true
 end
 __mod_69d_runtime_diagnostic()
 
+local function __mod_69e_mcr_mobile_shell()
+-- MCR-inspired mobile workspace. Additive to the stable 2.9.16 trading runtime.
+-- Only the window shell and navigation change; all native trade dialogs remain in place.
+local V,U,M=DSP.ui21,DSP.ui,DSP.mobile
+if V._mcr_workspace then return end
+V._mcr_workspace=true
+
+local function rgba(r,g,b,a) return imgui.ImVec4(r/255,g/255,b/255,a or 1) end
+local function push_palette()
+    local palette={
+        {'WindowBg',246,237,220},{'ChildBg',249,241,226},
+        {'PopupBg',250,242,228},{'Text',51,50,41},
+        {'TextDisabled',117,104,88},{'Button',206,185,160},
+        {'ButtonHovered',186,164,137},{'ButtonActive',157,138,110},
+        {'FrameBg',239,225,204},{'FrameBgHovered',227,207,179},
+        {'FrameBgActive',221,200,173},{'Border',198,179,150},
+        {'Separator',200,181,153},{'Header',211,193,167},
+        {'HeaderHovered',195,174,145},{'HeaderActive',174,154,126},
+        {'ScrollbarBg',236,223,201},{'ScrollbarGrab',169,147,118},
+        {'ScrollbarGrabHovered',148,128,103},{'ScrollbarGrabActive',125,107,84},
+        {'CheckMark',85,110,59},
+    }
+    local count=0
+    for _,entry in ipairs(palette)do
+        local col=imgui.Col[entry[1]]
+        if col then
+            imgui.PushStyleColor(col,rgba(entry[2],entry[3],entry[4]))
+            count=count+1
+        end
+    end
+    return count
+end
+
+-- The old button helper uses the dark Carbon accent, so replace only its
+-- color selection. IDs, hit sizes and drag suppression stay compatible.
+function V.button(label,id,width,active,primary,height)
+    local n=0
+    if active or primary then
+        imgui.PushStyleColor(imgui.Col.Button,active and rgba(115,137,76) or rgba(104,128,67))
+        imgui.PushStyleColor(imgui.Col.ButtonHovered,rgba(124,147,85))
+        imgui.PushStyleColor(imgui.Col.ButtonActive,rgba(88,109,59))
+        imgui.PushStyleColor(imgui.Col.Text,rgba(255,251,241))
+        n=4
+    end
+    local avail=imgui.GetContentRegionAvail().x
+    local w=width or -1
+    if w>0 then w=math.max(1,math.min(w,avail))end
+    local visible=tostring(label or '')
+    if w>0 then visible=V.fit(visible,math.max(1,w-14))end
+    local pressed=imgui.Button(DSP.utf8(visible)..'##v22_'..tostring(id),imgui.ImVec2(w,height or 42))
+    if n>0 then imgui.PopStyleColor(n)end
+    return pressed and not V.dragged
+end
+
+local primary={
+    {'palatka','Пресет'}, {'lavki','Лавки'}, {'arbitrage','Арбитраж'},
+    {'logs','Логи'}, {'more','Ещё'},
+}
+local catalog={
+    {'storage','Хранилища'}, {'resale','Перепродажа'},
+    {'promo','Автопиар'}, {'scan','Скан лавки'},
+    {'market','Рынок API'}, {'search','Поиск'},
+    {'calculator','Калькулятор'}, {'stats','Статистика'},
+    {'notes','Блокнот'}, {'lombard','Ломбард'},
+    {'history','История'}, {'settings','Настройки'},
+}
+local special={more=true,advanced=true,updates=true}
+local original_set_screen=V.set_screen
+V.set_screen=function(id)
+    if special[id] then
+        if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
+        V.screen=id;V.nav=false
+        return true
+    end
+    return original_set_screen(id)
+end
+
+local function set(id)
+    if V.set_screen(id) then V.mcr_error=nil end
+end
+local function refresh_market()
+    if not (DSP.market and DSP.market.pull and DSP.market.state)then
+        V.mcr_error='Рынок пока недоступен';return
+    end
+    if DSP.market.state.status=='loading' then
+        V.mcr_error='Обновление уже выполняется';return
+    end
+    local sid=(DSP.detect_server and DSP.detect_server()) or DSP.market.state.sid or DSP.settings.server
+    local ok,err=pcall(DSP.market.pull,sid)
+    if not ok then V.mcr_error='Ошибка обновления: '..tostring(err)
+    else V.mcr_error='Запрос обновления цен отправлен' end
+end
+local function refresh_inventory()
+    if not (DSP.auto and DSP.auto.scan_inventory)then
+        V.mcr_error='Сканирование недоступно';return
+    end
+    local ok,started=pcall(DSP.auto.scan_inventory)
+    if not ok then V.mcr_error='Ошибка сканирования: '..tostring(started)
+    elseif started==false then V.mcr_error='Сканирование занято или торговая очередь активна'
+    else V.mcr_error='Сканирование запущено. Откройте инвентарь лавки.'end
+end
+local function context_action(action)
+    if action=='refresh_inventory' then refresh_inventory()
+    elseif action=='refresh_market' then refresh_market()
+    elseif action=='preset' then set('palatka');V.tab='preset'
+    elseif action=='sell' then set('palatka');V.kind='sell';V.tab='items'
+    elseif action=='buy' then set('palatka');V.kind='buy';V.tab='items'
+    elseif action=='launch' then set('palatka');V.tab='preset';V.open_popup('Выставление','launch')
+    elseif action=='settings_view' then V.tools_section=1;set('settings')
+    elseif action=='settings_trade' then V.tools_section=2;set('settings')
+    elseif action=='settings_data' then V.tools_section=3;set('settings')
+    elseif action=='settings_telegram' then V.tools_section=4;set('settings')
+    else set(action) end
+end
+local function context_entries()
+    if V.screen=='palatka' then
+        return {{'Обновить','refresh_inventory'},{'Пресеты','preset'},{'Продажа','sell'},
+            {'Скупка','buy'},{'Выставить','launch'},{'Функции','settings_trade'}}
+    elseif V.screen=='lavki' or V.screen=='market' or V.screen=='scan' then
+        return {{'Обновить','refresh_market'},{'Лавки','lavki'},{'Рынок','market'},
+            {'Скан','scan'},{'Настройки','settings_data'}}
+    elseif V.screen=='logs' or V.screen=='history' or V.screen=='stats' then
+        return {{'Логи','logs'},{'История','history'},{'Статистика','stats'},
+            {'Блокнот','notes'},{'Telegram','settings_telegram'}}
+    elseif V.screen=='settings' or V.screen=='advanced' then
+        return {{'Интерфейс','settings_view'},{'Торговля','settings_trade'},
+            {'Данные','settings_data'},{'Дополнительно','advanced'},
+            {'Обновления','updates'}}
+    else
+        return {{'Обновить','refresh_market'},{'Настройки','settings'},
+            {'Блокнот','notes'},{'Калькулятор','calculator'},
+            {'Обновления','updates'}}
+    end
+end
+
+local function tile_grid(rows,key)
+    local width=math.max(1,imgui.GetContentRegionAvail().x)
+    local columns=width>=440 and 3 or 2
+    local width_per=math.max(70,(width-(columns-1)*7)/columns)
+    for i,entry in ipairs(rows)do
+        if V.button(entry[2],'mcr_tile_'..key..i,width_per,false,false,67)then set(entry[1])end
+        if i%columns~=0 and i<#rows then imgui.SameLine(0,7)end
+    end
+end
+function V.mcr_more()
+    V.heading('Разделы')
+    V.muted('Основные действия — слева. Остальные инструменты доступны здесь.')
+    imgui.Separator()
+    V.list('mcr_more',function()
+        tile_grid(catalog,'more')
+    end,{footer=false})
+end
+function V.mcr_updates()
+    V.heading('Обновления')
+    V.list('mcr_updates',function(w)
+        V.text('Установлена Palatka AI v'..tostring(DSP.version))
+        V.muted('Обновить данные рынка можно отдельной кнопкой справа.')
+        V.muted('Обновить инвентарь можно на вкладке «Пресет».')
+        imgui.Separator()
+        V.text('Обновление самого Lua-скрипта')
+        V.muted('Стабильный выпуск: GitHub / alikbot001 / palatka-ai')
+        V.muted('Файл выпуска: palatka_ai.lua')
+        V.muted('Манифест обновлений: version.json')
+        V.muted('Автоматическая замена выполняемого Lua без проверки загрузчика отключена.')
+        if V.button('Обновить цены сейчас','mcr_refresh_from_updates',math.min(w,275),false,true)then refresh_market()end
+        if V.mcr_error then V.muted(V.fit(V.mcr_error,w))end
+    end,{footer=false})
+end
+local function switch(label,key,default)
+    local current=DSP.settings[key]
+    if current==nil then current=default end
+    if V.button((current and '[x] 'or'[ ] ')..label,'mcr_toggle_'..key,-1)then
+        DSP.settings[key]=not current;M.defer_save()
+    end
+end
+local function number(label,key,min,max)
+    V.muted(label)
+    if M.compact_number(DSP.settings,key,'mcr_num_'..key,math.min(260,imgui.GetContentRegionAvail().x),min)then
+        local n=tonumber(DSP.settings[key]) or min
+        DSP.settings[key]=math.max(min,math.min(max,math.floor(n)))
+        M.defer_save()
+    end
+end
+function V.mcr_advanced()
+    V.heading('Дополнительные настройки')
+    V.list('mcr_advanced',function(w)
+        V.text('Сканирование и кэш')
+        switch('Автоматически сохранять открытые лавки','auto_shop_scan',true)
+        number('Максимум сохранённых лавок (20–300)','max_local_shops',20,300)
+        number('Срок актуальности снимка (мин., 1–1440)','local_offer_ttl_minutes',1,1440)
+        number('Тихое окно сканирования (мс, 200–5000)','scan_quiet_ms',200,5000)
+        number('Ожидание идентификации (мс, 300–10000)','identity_grace_ms',300,10000)
+        imgui.Separator()
+        V.text('Производительность и журнал')
+        switch('Экономия FPS','fps_saver',false)
+        switch('Запись наград и тайников','log_chat_drops',true)
+        number('История цен (дней, 1–30)','price_history_days',1,30)
+    end,{footer=function()
+        if V.button('Сохранить настройки','mcr_advanced_save',math.min(245,w or 245),false,true)then
+            if DSP.save_settings()then
+                if DSP.save_ui_state then DSP.save_ui_state()end
+                V.mcr_error='Настройки сохранены'
+            else V.mcr_error='Не удалось сохранить настройки'end
+        end
+    end})
+end
+
+local previous_tools=V.tools
+V.tools=function(screen)
+    if screen=='advanced' then return V.mcr_advanced()end
+    if screen=='settings' then
+        -- Direct category selection replaces repeated next/previous taps.
+        local cats={{1,'Интерфейс'},{2,'Торговля'},{3,'Данные'},{4,'Telegram'},{5,'Диагностика'}}
+        local available=imgui.GetContentRegionAvail().x
+        local per=available>=540 and 5 or 3
+        local bw=math.max(70,(available-(per-1)*5)/per)
+        for i,row in ipairs(cats)do
+            if V.button(row[2],'mcr_settings_cat_'..i,bw,V.tools_section==row[1],false,36)then
+                V.tools_section=row[1];V.reset_list('settings')
+            end
+            if i%per~=0 and i<#cats then imgui.SameLine(0,5)end
+        end
+        return previous_tools(screen)
+    end
+    return previous_tools(screen)
+end
+
+local original_geometry=V.geometry
+V.geometry=function(sw,sh)
+    local saved=DSP.settings.mobile_window
+    if type(saved)=='table' and saved.w then return original_geometry(sw,sh)end
+    local g=original_geometry(sw,sh)
+    g.w=math.min(sw,math.max(math.min(sw,380),math.min(sw*.67,790)))
+    g.h=math.min(sh,math.max(math.min(sh,275),math.min(sh*.80,465)))
+    g.x=math.max(0,(sw-g.w)*.5)
+    g.y=math.max(math.min(18,sh-g.h),(sh-g.h)*.44)
+    return g
+end
+local function header(g,io)
+    local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+    if V.button('P','mcr_home',41,true,false,35)then set('more')end
+    V.at(x+47,y)
+    local width=math.max(75,g.w-47-54)
+    V.text_button('PALATKA AI   v'..tostring(DSP.version)..'   |   MOVE','mcr_drag',width,false,35)
+    if imgui.IsItemActive() and io.MouseDelta then
+        local d=io.MouseDelta
+        if d.x~=0 or d.y~=0 then
+            DSP.settings.mobile_window={
+                x=DSP.clamp(g.x+d.x,0,math.max(0,io.DisplaySize.x-g.w)),
+                y=DSP.clamp(g.y+d.y,0,math.max(0,io.DisplaySize.y-g.h)),
+                w=g.w,h=g.h}
+            M.defer_save()
+        end
+    end
+    V.at(g.w-48,y)
+    if V.button('X','mcr_close',38,false,false,35)then U.set_open(false)end
+    V.at(x,y+40)
+end
+local function navigation()
+    for i,row in ipairs(primary)do
+        local active=V.screen==row[1] or (row[1]=='more' and (V.screen=='home' or V.screen=='settings'
+            or V.screen=='advanced' or V.screen=='updates' or V.screen=='storage'))
+        if V.button(row[2],'mcr_nav_'..i,-1,active,false,53)then set(row[1])end
+    end
+end
+local function actions()
+    for i,row in ipairs(context_entries())do
+        local label= row[1]
+        if V.button(label,'mcr_action_'..i,-1,false,false,47)then context_action(row[2])end
+    end
+end
+local function workspace()
+    if V.screen=='more' or V.screen=='home' then return V.mcr_more()
+    elseif V.screen=='updates' then return V.mcr_updates()
+    elseif V.screen=='advanced' then return V.mcr_advanced()
+    elseif V.screen=='storage' then return V.storage_screen()
+    elseif V.screen=='scan' then V.shops_source='scan';return V.shops()
+    elseif V.screen=='market' then V.shops_source='api';return V.shops()
+    elseif V.screen=='history' then V.journal_mode='events';return V.journal()
+    elseif V.screen=='palatka' then return V.trade()
+    elseif V.screen=='lavki' then return V.shops()
+    elseif V.screen=='arbitrage' then return V.arbitrage()
+    elseif V.screen=='resale' then return V.flip_screen()
+    elseif V.screen=='promo' then return V.promo_screen()
+    elseif V.screen=='logs' then return V.journal()
+    elseif V.screen=='calculator' then return V.calculator()
+    elseif V.tools then return V.tools(V.screen)
+    else return DSP.screens.draw(V.screen)end
+end
+function U.draw()
+    if DSP.carbon_draw then DSP.carbon_draw.begin_frame()end
+    local io=imgui.GetIO();local sz=io.DisplaySize;local g=V.geometry(sz.x,sz.y)
+    if not V.initialized then
+        V.screen=(U.screen and U.screen~='palatka') and U.screen or 'palatka'
+        V.initialized=true
+    end
+    V.track_touch(io)
+    imgui.SetNextWindowPos(imgui.ImVec2(g.x,g.y),imgui.Cond.Always)
+    imgui.SetNextWindowSize(imgui.ImVec2(g.w,g.h),imgui.Cond.Always)
+    local colors=push_palette()
+    imgui.SetNextWindowBgAlpha(.97)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(8,7))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(5,5))
+    imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(7,7))
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
+    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,5)
+    local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+
+        imgui.WindowFlags.NoMove+imgui.WindowFlags.NoSavedSettings+
+        imgui.WindowFlags.NoScrollbar+(imgui.WindowFlags.NoScrollWithMouse or 0)
+    M.flush_save(false)
+    if imgui.Begin('##palatka_mobile',U.open_ref,flags)then
+        V.font_pixels=V.font_scale_for(1,g.w,U.d);V.apply_font()
+        header(g,io);imgui.Separator()
+        local left=math.min(94,math.max(69,g.w*.13))
+        local right=g.w>=570 and math.min(110,g.w*.16) or 0
+        local body_h=math.max(45,imgui.GetContentRegionAvail().y-49)
+        if imgui.BeginChild('##mcr_nav',imgui.ImVec2(left,body_h),true,imgui.WindowFlags.NoScrollbar)then
+            V.apply_font();navigation()
+        end
+        imgui.EndChild()
+        imgui.SameLine(0,5)
+        if imgui.BeginChild('##mcr_body',imgui.ImVec2(right>0 and -(right+9) or 0,body_h),false,0)then
+            V.apply_font()
+            local ok,err=xpcall(workspace,debug.traceback)
+            if not ok then
+                V.last_error=err
+                if V.errors[V.screen]~=err then DSP.flog('MCR UI: '..tostring(err))end
+                V.errors[V.screen]=err
+                V.red('Ошибка экрана. Подробности в standalone.log')
+            end
+        end
+        imgui.EndChild()
+        if right>0 then
+            imgui.SameLine(0,5)
+            if imgui.BeginChild('##mcr_actions',imgui.ImVec2(0,body_h),true,imgui.WindowFlags.NoScrollbar)then
+                V.apply_font();actions()
+            end
+            imgui.EndChild()
+        end
+        imgui.Separator()
+        if V.button('Обновить','mcr_bottom_refresh',116,false,true,35)then
+            if V.screen=='palatka' then refresh_inventory() else refresh_market()end
+        end
+        imgui.SameLine(0,8)
+        local available=imgui.GetContentRegionAvail().x
+        local status=(DSP.market and DSP.market.state and DSP.market.state.status)or 'offline'
+        V.muted(V.fit(V.mcr_error or ('Рынок: '..tostring(status)..'  |  v'..tostring(DSP.version)),math.max(30,available-12)))
+        if V.popup_pending then
+            local p=V.popup_pending;V.popup_pending=nil
+            imgui.OpenPopup(DSP.utf8(p.title)..'##v22_'..p.id)
+        end
+        if V.popups then V.popups()end
+        V.resize_grip(g,io)
+    end
+    imgui.End();imgui.PopStyleVar(5)
+    if colors>0 then imgui.PopStyleColor(colors)end
+    if U.open_ref and not U.open_ref[0]then M.flush_save(true);U.open=false end
+end
+
+end
+__mod_69e_mcr_mobile_shell()
+
+local function __mod_69f_channel_updater()
+-- Palatka AI Stable/Beta installer (MonetLoader and MoonLoader compatible).
+-- Channels are manifests on separate GitHub branches. No silent updates.
+-- The running Lua file is never touched until a complete download is verified.
+local CM={}
+DSP.channels=CM
+local V,U,M=DSP.ui21,DSP.ui,DSP.mobile
+local ROOT='https://raw.githubusercontent.com/alikbot001/palatka-ai/'
+local MANIFEST={
+    stable=ROOT..'main/updates/channels/stable.json',
+    beta=ROOT..'beta/updates/channels/beta.json',
+}
+CM.selected=(DSP.settings and DSP.settings.update_channel)=='beta' and 'beta' or 'stable'
+CM.state='idle'
+CM.message='Выбери канал и нажми «Проверить».'
+CM.progress=0
+CM.total=0
+CM.manifest=nil
+CM.busy=false
+CM.done=false
+
+local function say(s)
+    CM.message=tostring(s or '')
+    if DSP.flog then DSP.flog('CHANNEL: '..CM.message) end
+end
+local function put_state(state,message)
+    CM.state=state
+    if message then say(message)end
+end
+local function file_size(path)
+    local f=io.open(path,'rb')
+    if not f then return nil end
+    local size=f:seek('end');f:close()
+    return size
+end
+local function read_small(path,max)
+    local f=io.open(path,'rb')
+    if not f then return nil end
+    local data=f:read(max+1);f:close()
+    if not data or #data>max then return nil end
+    return data
+end
+-- Whitelisted origin and branch, including the exact expected Lua filename.
+function CM.allowed_url(channel,url)
+    if type(url)~='string' then return false end
+    local branch=channel=='stable' and 'main' or 'beta'
+    return url==ROOT..branch..'/palatka_ai.lua'
+end
+local function valid_manifest(data,channel)
+    if type(data)~='table' or data.schema~=1 or data.channel~=channel then
+        return nil,'Неверный формат манифеста' end
+    if type(data.version)~='string' or #data.version>40
+        or not data.version:match('^%d+%.%d+%.%d+[%w%.%-]*$') then
+        return nil,'Некорректная версия' end
+    if not CM.allowed_url(channel,data.url) then
+        return nil,'Неизвестный адрес обновления' end
+    local size=tonumber(data.size)
+    if not size or size~=math.floor(size) or size<500000 or size>95000000 then
+        return nil,'Некорректный размер выпуска' end
+    if type(data.sha256)~='string' or not data.sha256:match('^[a-fA-F0-9]+$')
+       or #data.sha256~=64 then return nil,'SHA256 отсутствует' end
+    return {version=data.version,channel=channel,url=data.url,
+        size=size,sha256=data.sha256:lower(),notes=tostring(data.notes or '')}
+end
+function CM.select(channel)
+    if channel~='stable' and channel~='beta' or CM.busy then return false end
+    CM.selected=channel
+    CM.manifest=nil
+    CM.state='idle'
+    CM.message='Канал '..(channel=='stable' and 'Stable' or 'Beta')..
+        '. Нажми «Проверить».'
+    DSP.settings.update_channel=channel
+    if M and M.defer_save then M.defer_save() end
+    return true
+end
+local function path_of_script()
+    if type(thisScript)~='function' then return nil end
+    local ok,s=pcall(thisScript)
+    if not ok or not s or type(s.path)~='string' or s.path=='' then return nil end
+    if not s.path:match('%.lua$') then return nil end
+    return s.path
+end
+function CM.verify_file(path,manifest)
+    if file_size(path)~=manifest.size then
+        return false,'Размер загруженного файла не совпадает с выпуском' end
+    local f=io.open(path,'rb')
+    if not f then return false,'Не удалось прочитать скачанный Lua' end
+    local head=f:read(1000) or ''
+    f:seek('end',-math.min(manifest.size,128))
+    local tail=f:read(128)or ''
+    f:close()
+    if not head:find("script_name%('palatka ai'%)")
+       or not head:find("script_version%('2%.9%.16'%)")
+       or not head:find("Palatka AI",1,true)
+       or not tail:find(']=]',1,true) then
+        return false,'Файл не похож на полный Palatka AI Lua' end
+    -- A native SHA-256 backend is not guaranteed on MonetLoader; the
+    -- release manifest includes a digest for independent verification,
+    -- while this installer enforces HTTPS origin, exact size and header.
+    return true
+end
+local function safe_replace(temp,desired)
+    local backup=desired..'.bak'
+    if file_size(temp)==nil then return false,'Временный файл не найден' end
+    os.remove(backup)
+    local moved,err=os.rename(desired,backup)
+    if not moved then return false,'Не удалось создать копию: '..tostring(err)end
+    local installed,why=os.rename(temp,desired)
+    if not installed then
+        local restored,restore_err=os.rename(backup,desired)
+        return false,'Не удалось заменить Lua: '..tostring(why)..
+            (restored and '; оригинал восстановлен' or
+                '; восстанови резервную копию вручную: '..tostring(restore_err))
+    end
+    return true,backup
+end
+local function native_download(url,path,cb)
+    if type(downloadUrlToFile)~='function' then
+        cb(false,'В MonetLoader нет функции downloadUrlToFile');return
+    end
+    pcall(os.remove,path)
+    local complete=false
+    local ok,err=pcall(downloadUrlToFile,url,path,function(_,status,received,total)
+        if complete then return end
+        if status==5 then
+            CM.progress=tonumber(received)or 0
+            CM.total=tonumber(total)or 0
+        elseif status==6 then
+            complete=true;cb(true)
+        elseif status==58 then
+            complete=true;cb(false,'Загрузка не завершена (сеть или сервер)')
+        end
+    end)
+    if not ok and not complete then cb(false,'Ошибка загрузчика: '..tostring(err))end
+end
+function CM.check()
+    if CM.busy then return false end
+    local path=path_of_script()
+    if not path then put_state('error','Путь текущего Lua недоступен в MonetLoader');return false end
+    local channel=CM.selected
+    local target=path..'.channel.json.tmp'
+    CM.busy=true;CM.manifest=nil
+    put_state('checking','Проверяю '..channel..'...')
+    native_download(MANIFEST[channel],target,function(ok,err)
+        CM.busy=false
+        if not ok then
+            pcall(os.remove,target)
+            return put_state('error',err or 'Не удалось скачать описание выпуска')
+        end
+        local body=read_small(target,8192)
+        pcall(os.remove,target)
+        if not body then return put_state('error','Пустой или слишком большой манифест')end
+        local decoded,parsed=pcall(decodeJson,body)
+        if not decoded then return put_state('error','Не удалось прочитать JSON: '..tostring(parsed))end
+        local info,reason=valid_manifest(parsed,channel)
+        if not info then return put_state('error',reason)end
+        CM.manifest=info
+        put_state('ready',('Найден %s %s; файл %.1f МБ'):format(
+            channel,info.version,info.size/1048576))
+    end)
+    return true
+end
+function CM.install()
+    if CM.busy or CM.state~='ready' or not CM.manifest
+        or CM.manifest.channel~=CM.selected then return false end
+    if DSP.auto and (DSP.auto.sell_running or DSP.auto.buy_running)then
+        put_state('error','Останови торговую очередь перед установкой');return false
+    end
+    local path=path_of_script()
+    if not path then put_state('error','MonetLoader не сообщил путь скрипта');return false end
+    local info=CM.manifest
+    local temp=path..'.new'
+    CM.busy=true;CM.progress=0;CM.total=info.size
+    put_state('downloading','Скачиваю '..info.channel..' '..info.version)
+    native_download(info.url,temp,function(ok,err)
+        CM.busy=false
+        if not ok then
+            pcall(os.remove,temp)
+            return put_state('error',err or 'Загрузка прервана')
+        end
+        put_state('verifying','Проверяю скачанный Lua...')
+        local verified,reason=CM.verify_file(temp,info)
+        if not verified then
+            pcall(os.remove,temp)
+            return put_state('error',reason)
+        end
+        -- Settings and presets are in separate JSON files and survive changes.
+        if DSP.save_settings then
+            local called,saved=pcall(DSP.save_settings)
+            if not called or saved==false then
+                pcall(os.remove,temp)
+                return put_state('error','Не удалось сохранить настройки')
+            end
+        end
+        local installed,backup=safe_replace(temp,path)
+        if not installed then return put_state('error',backup)end
+        CM.done=true
+        put_state('installed','Установлено: '..info.version..
+            ' ('..info.channel..'). Перезапусти игру. Копия: '..backup)
+        if DSP.notify then DSP.notify('Palatka AI: версия установлена. Перезапусти игру.')end
+    end)
+    return true
+end
+local function render()
+    local w=imgui.GetContentRegionAvail().x
+    V.text('Канал выпуска')
+    if V.button('Stable','channel_stable',math.max(70,math.min(154,w*.44)),CM.selected=='stable')then
+        CM.select('stable')
+    end
+    V.inline(7)
+    if V.button('Beta','channel_beta',math.max(70,math.min(154,w*.44)),CM.selected=='beta')then
+        CM.select('beta')
+    end
+    V.muted('Текущая база: v'..tostring(DSP.version)..' · канал '..CM.selected)
+    V.muted(V.fit('Stable: основной выпуск; Beta: тестовые функции без изменений main.',w))
+    if CM.state=='downloading' then
+        local per=(CM.total>0)and math.floor(CM.progress*100/CM.total)or 0
+        V.muted('Загрузка '..math.min(100,math.max(0,per))..'%')
+    end
+    if CM.state=='error' then V.red(V.fit(CM.message,w))
+    else V.muted(V.fit(CM.message,w))end
+    if not CM.busy and CM.state~='installed' then
+        if V.button('Проверить канал','channel_check',math.min(210,w),false,true)then CM.check()end
+        if CM.state=='ready' then
+            V.text('Установка заменит текущий Lua после создания .bak-копии.')
+            if V.button('Установить '..CM.selected,'channel_install',math.min(230,w),false,true)then
+                CM.install()
+            end
+        end
+    end
+    if CM.state=='installed' then V.green('Перезапусти игру, чтобы загрузить выбранную версию.')end
+    V.muted('Ручной запуск, без фонового обновления и автозапуска торговли.')
+end
+CM.render=render
+if V.mcr_updates then V.mcr_updates=render end
+local old_tools=V.tools
+if old_tools then
+    V.tools=function(screen)
+        if screen=='settings' then
+            if V.button('Версии: Stable / Beta','channel_open_in_settings',math.min(270,imgui.GetContentRegionAvail().x),false,true,37)then
+                V.open_popup('Обновление Palatka AI','channel_manager')
+            end
+        end
+        return old_tools(screen)
+    end
+end
+local old_popups=V.popups
+V.popups=function()
+    if old_popups then old_popups()end
+    V.popup('Обновление Palatka AI','channel_manager',render,{w=655,h=365})
+end
+function CM.install_command()
+    if sampRegisterChatCommand then
+        sampRegisterChatCommand('crupdate',function()
+            if U and U.set_open then U.set_open(true)end
+            if V.mcr_updates then V.set_screen('updates')
+            else V.set_screen('settings');V.open_popup('Обновление Palatka AI','channel_manager')end
+        end)
+    end
+end
+
+end
+__mod_69f_channel_updater()
+
+local function __mod_69g_beta_channel_identity()
+-- Build identity: beta updates are published only from the beta branch.
+DSP.release_channel='beta'
+DSP.release_tag='2.9.16-beta.1'
+
+end
+__mod_69g_beta_channel_identity()
+
 local function __mod_99_main()
 -- Main entry: catalog, price base, market, UI, screens, live hooks, craglog, overlay.
 -- v1.2 hotfix (safe-mode): pcall around all install() calls so a
@@ -48058,6 +48692,7 @@ safe('shop_store.install', function() if DSP.shop_store and DSP.shop_store.insta
 safe('lombard.install', function() if DSP.lombard and DSP.lombard.install then DSP.lombard.install() end end)
 safe('auto.install', function() DSP.auto.install() end)
 safe('ui.install',   function() DSP.ui.install() end)
+safe('channels.install', function() if DSP.channels and DSP.channels.install_command then DSP.channels.install_command() end end)
 safe('screens.install', function()
     if DSP.screens and DSP.screens.install then DSP.screens.install() end
 end)

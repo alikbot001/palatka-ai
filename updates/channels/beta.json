@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "channel": "beta",
+  "version": "2.9.16-beta.1",
+  "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/beta/palatka_ai.lua",
+  "size": 72126798,
+  "sha256": "0efdf7bbc89b39043fb873db3ec2c99d4f1ccc4c98c9a8cfb2fa07126168dbf7",
+  "notes": "MCR Mobile UI and manual Stable/Beta selection"
+}
