@@ -1,0 +1,76 @@
+name: Palatka Stable release channel
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stable-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  stable-channel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Build and validate stable release
+        run: |
+          luajit -b src/69f_channel_updater.lua /dev/null
+          luajit tests/test_channel_updater.lua
+          luajit tests/test_v2913_chrome.lua
+          python3 build.py
+          luajit -b palatka_ai.lua /dev/null
+      - name: Write stable channel manifest
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          source=Path('palatka_ai.lua')
+          with source.open('rb') as f:
+              digest=hashlib.file_digest(f,'sha256').hexdigest()
+          data={
+             'schema':1,'channel':'stable','version':'2.9.16',
+             'url':'https://raw.githubusercontent.com/alikbot001/palatka-ai/main/palatka_ai.lua',
+             'size':source.stat().st_size,'sha256':digest,
+             'notes':'Stable 2.9.16 trade fixes + optional channel switcher',
+          }
+          target=Path('updates/channels/stable.json')
+          target.parent.mkdir(parents=True,exist_ok=True)
+          target.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(data)
+          PY
+      - name: Publish stable standalone and channel manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add palatka_ai.lua updates/channels/stable.json
+          if ! git diff --cached --quiet; then
+            git commit -m "release(stable): 2.9.16 with channel manifest"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
+      - name: Publish normal stable GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v2.9.16"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$(git rev-parse HEAD)" \
+              --title "Palatka AI 2.9.16 Stable" \
+              --notes "Стабильные исправления продажи 2.9.16; добавлен ручной выбор Stable/Beta через Настройки или /crupdate. Бета выпускается отдельно и не заменяет main."
+          fi
+          gh release upload "$tag" palatka_ai.lua --clobber
+      - name: Archive stable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-stable-2.9.16
+          path: |
+            palatka_ai.lua
+            updates/channels/stable.json
+          retention-days: 14
