@@ -24,7 +24,10 @@ local function ready()
 end
 function A.draw_center()
     local h=A.host;local B=h.imgui
-    local width=h.center_width and h.center_width() or 0
+    local space=B.GetContentRegionAvail()
+    local rail=h.sidebar_width and h.sidebar_width()or 0
+    local gap=B.GetStyle().ItemSpacing.x
+    local width=math.max(1,math.min(h.center_width and h.center_width()or space.x,space.x-rail-gap))
     local visible=B.BeginChild('Central',B.ImVec2(width,-1),true)
     if visible then
         B.CenterText(h.utf8('Арбитраж'));B.Separator()
@@ -69,11 +72,17 @@ local function calculate()
         A.options.budget=budget;A.options.tax_bp=math.floor(tax*100+0.5);A.calculate()
     end
 end
-local function tile(id,label,icon,action)
+local function tile(id,label,icon,action,height)
     local h=A.host;local B=h.imgui
-    local height=h.sidebar_button_height and h.sidebar_button_height()or 60
     if B.Button(icon..'##pa_rail_'..id,B.ImVec2(-1,height))and(not h.can_click or h.can_click())then action()end
-    B.CenterText(h.utf8(label));B.Spacing()
+    local width=math.max(1,B.GetContentRegionAvail().x-2)
+    local caption=h.utf8(label)
+    if B.CalcTextSize(caption).x>width then
+        repeat caption=caption:gsub('[%z\1-\127\194-\244][\128-\191]*$','')
+        until caption==''or B.CalcTextSize(caption..'..').x<=width
+        caption=caption..'..'
+    end
+    B.CenterText(caption);B.Spacing()
 end
 local function settings()
     local B=A.host.imgui
@@ -88,19 +97,47 @@ end
 function A.draw_right()
     ready()
     local h=A.host;local B=h.imgui
-    local visible=B.BeginChild('RightSidebar',B.ImVec2(h.sidebar_width and h.sidebar_width()or 0,-1))
+    local space=B.GetContentRegionAvail()
+    local width=math.max(1,math.min(h.sidebar_width and h.sidebar_width()or space.x,space.x))
+    local visible=B.BeginChild('RightSidebar',B.ImVec2(width,-1))
     if visible then
         local icons=h.icons or{}
+        local actions={}
+        local function add(id,label,icon,action)actions[#actions+1]={id,label,icon,action}end
         if A.busy then
-            tile('stop','Стоп',icons.STOP or'X',function()A.invalidate();A.status='Расчёт отменён'end)
-        else tile('calculate','Расчёт',icons.CALCULATOR or'=',calculate)end
-        tile('settings','Параметры',icons.GEAR or'*',h.open_settings)
-        tile('cache','База',icons.DATABASE or'B',A.read_market_cache)
-        tile('import','Импорт',icons.FILE_IMPORT or'+',A.read_import)
+            add('stop','Стоп',icons.STOP or'X',function()A.invalidate();A.status='Расчёт отменён'end)
+        else add('calculate','Расчёт',icons.CALCULATOR or'=',calculate)end
+        add('settings','Параметры',icons.GEAR or'*',h.open_settings)
+        add('cache','База',icons.DATABASE or'B',A.read_market_cache)
+        add('import','Импорт',icons.FILE_IMPORT or'+',A.read_import)
         local rows=A.current_results();local r=rows[A.selected]
         if r then
-            tile('seller','Продавец',icons.LOCATION_DOT or'>',function()h.find(r.seller.shop,r.seller.server)end)
-            tile('buyer','Скупщик',icons.LOCATION_CROSSHAIRS or'>',function()h.find(r.buyer.shop,r.buyer.server)end)
+            add('seller','Продавец',icons.LOCATION_DOT or'>',function()h.find(r.seller.shop,r.seller.server)end)
+            add('buyer','Скупщик',icons.LOCATION_CROSSHAIRS or'>',function()h.find(r.buyer.shop,r.buyer.server)end)
+        end
+        local area=B.GetContentRegionAvail()
+        local spacing=B.GetStyle().ItemSpacing.y
+        local overhead=B.GetTextLineHeight()+3*spacing
+        local native=h.sidebar_button_height and h.sidebar_button_height()or 60
+        local minimum=math.min(native,math.max(24,math.floor(native*0.6)))
+        local per=#actions
+        local pager=B.GetTextLineHeight()+2*spacing
+        if (minimum+overhead)*per>area.y then
+            per=math.max(1,math.floor((area.y-pager)/(minimum+overhead)))
+        else pager=0 end
+        local pages=math.ceil(#actions/per)
+        A.rail_page=math.max(1,math.min(A.rail_page or 1,pages))
+        local first=(A.rail_page-1)*per+1
+        local count=math.min(per,#actions-first+1)
+        local height=math.max(1,math.min(native,math.floor((area.y-pager)/count-overhead)))
+        for i=first,first+count-1 do
+            local v=actions[i];tile(v[1],v[2],v[3],v[4],height)
+        end
+        if pages>1 then
+            local half=math.max(1,(area.x-B.GetStyle().ItemSpacing.x)/2)
+            if B.Button('<##pa_rail_prev',B.ImVec2(half,0))and(not h.can_click or h.can_click())then A.rail_page=math.max(1,A.rail_page-1)end
+            B.SameLine()
+            if B.Button('>##pa_rail_next',B.ImVec2(half,0))and(not h.can_click or h.can_click())then A.rail_page=math.min(pages,A.rail_page+1)end
         end
         h.draw_settings_popup(settings)
         B.ScrollMouse('RightSidebar',true)
