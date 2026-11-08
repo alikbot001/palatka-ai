@@ -16,6 +16,12 @@ do
         currency=function()return lIlllI__()and'VC$'or'SA$'end,
         center_width=function()return z_*2+constItemSpacingX*3 end,
         sidebar_width=function()return constWidthSidebar end,
+        sidebar_button_height=function()return constHeightButtonSidebar end,
+        icons=x,
+        open_settings=function()B.OpenPopup(u8('Параметры арбитража'))end,
+        draw_settings_popup=function(draw)
+            (llII___l('Параметры арбитража',1.5,0,draw))()
+        end,
         can_click=llIllll_,
         input_string=function(buffer)return e.string(buffer)end,
         encode=T.encode,decode=T.decode,

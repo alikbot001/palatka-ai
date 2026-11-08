@@ -13,7 +13,9 @@ B.BeginChild=function()depth=depth+1;return true end
 B.EndChild=function()depth=depth-1;assert(depth>=0)end
 local h={imgui=B,utf8=function(s)return s end,now=function()return 1000 end,
     server=function()return '102'end,run=function()error('unexpected work while drawing')end,
-    input_string=function(v)return v end,find=function()error('unexpected game command')end}
+    input_string=function(v)return v end,find=function()error('unexpected game command')end,
+    sidebar_button_height=function()return 70 end,
+    draw_settings_popup=function()end,open_settings=function()end}
 A.install(h)
 A.draw_center();A.draw_right()
 assert(depth==0 and #calls>4,'unbalanced or empty UI')
@@ -21,6 +23,15 @@ local found=false
 for _,c in ipairs(calls)do if c[1]=='TextWrapped'and c[2]:find('Откройте',1,true)then found=true end end
 assert(found,'empty-state instructions missing')
 assert(#A.current_results()==0)
+local tiles=0
+for _,c in ipairs(calls)do
+    if c[1]=='Button'and c[2]:find('##pa_rail_',1,true)then
+        assert(type(c[3])=='table'and c[3].x==-1 and c[3].y==70,'sidebar tile differs from MCR geometry')
+        tiles=tiles+1
+    end
+    assert(c[1]~='InputText'and c[1]~='InputFloat','settings leaked into icon sidebar')
+end
+assert(tiles==4,'expected four MCR action tiles')
 local seller={shop=1,source='local',at=1000,server='102'}
 local buyer={shop=2,source='local',at=1000,server='102'}
 A.result_server='102';A.result_at=1000

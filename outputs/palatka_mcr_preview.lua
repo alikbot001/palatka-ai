@@ -348,6 +348,9 @@ function A.draw_center()
                 if button(r.name..' | '..r.qty..' шт.##pa_route_'..index)then A.selected=index end
                 text('Купить #'..r.seller.shop..': '..money(r.buy_price)..' -> продать #'..r.buyer.shop..': '..money(r.sell_price))
                 text('Затраты '..money(r.cost)..' | прибыль ~'..money(r.profit)..' '..r.currency)
+                if index==A.selected then
+                    text('Выручка: '..money(r.gross)..' | Комиссия: '..money(r.fee))
+                end
                 text(source(r.seller)..' / '..source(r.buyer)..' | возраст '..
                     math.max(0,h.now()-r.seller.at)..' / '..math.max(0,h.now()-r.buyer.at)..' с')
                 B.Separator()
@@ -358,39 +361,51 @@ function A.draw_center()
     end
     B.EndChild()
 end
+local function calculate()
+    local h=A.host
+    local raw=h.input_string(input.budget)
+    local budget=raw:match('^%d+$')and A.engine.integer(raw,0)
+    local tax=tonumber(input.tax[0])
+    if not budget or not tax or tax~=tax or tax<0 or tax>100 then
+        A.error='Неверный бюджет или комиссия'
+    else
+        A.options.budget=budget;A.options.tax_bp=math.floor(tax*100+0.5);A.calculate()
+    end
+end
+local function tile(id,label,icon,action)
+    local h=A.host;local B=h.imgui
+    local height=h.sidebar_button_height and h.sidebar_button_height()or 60
+    if B.Button(icon..'##pa_rail_'..id,B.ImVec2(-1,height))and(not h.can_click or h.can_click())then action()end
+    B.CenterText(h.utf8(label));B.Spacing()
+end
+local function settings()
+    local B=A.host.imgui
+    text('Бюджет (0 = без лимита)')
+    if B.InputText('##pa_budget',input.budget,32)then A.invalidate()end
+    text('Комиссия, %')
+    if B.InputFloat('##pa_tax',input.tax,0.1,1,'%.2f')then A.invalidate()end
+    B.Separator()
+    wrapped('Импорт внешних снимков: PalatkaMCR/import.json')
+    wrapped('База: сохранённые цены Palatka. Чтение кэша не обновляет данные в сети.')
+end
 function A.draw_right()
     ready()
     local h=A.host;local B=h.imgui
     local visible=B.BeginChild('RightSidebar',B.ImVec2(h.sidebar_width and h.sidebar_width()or 0,-1))
     if visible then
-        if button('Рассчитать')then
-            local raw=h.input_string(input.budget)
-            local budget=raw:match('^%d+$')and A.engine.integer(raw,0)
-            local tax=tonumber(input.tax[0])
-            if not budget or not tax or tax~=tax or tax<0 or tax>100 then
-                A.error='Неверный бюджет или комиссия'
-            else
-                A.options.budget=budget;A.options.tax_bp=math.floor(tax*100+0.5);A.calculate()
-            end
-        end
-        if A.busy and button('Отменить')then A.invalidate();A.status='Расчёт отменён'end
-        text('Бюджет (0 = без лимита)')
-        if B.InputText('##pa_budget',input.budget,32)then A.invalidate()end
-        text('Комиссия, %')
-        if B.InputFloat('##pa_tax',input.tax,0.1,1,'%.2f')then A.invalidate()end
-        B.Separator()
-        if button('Импорт JSON')then A.read_import()end
-        wrapped('PalatkaMCR/import.json')
-        if button('Кэш рынка Palatka')then A.read_market_cache()end
+        local icons=h.icons or{}
+        if A.busy then
+            tile('stop','Стоп',icons.STOP or'X',function()A.invalidate();A.status='Расчёт отменён'end)
+        else tile('calculate','Расчёт',icons.CALCULATOR or'=',calculate)end
+        tile('settings','Параметры',icons.GEAR or'*',h.open_settings)
+        tile('cache','База',icons.DATABASE or'B',A.read_market_cache)
+        tile('import','Импорт',icons.FILE_IMPORT or'+',A.read_import)
         local rows=A.current_results();local r=rows[A.selected]
         if r then
-            B.Separator();wrapped(r.name)
-            text('Объём: '..r.qty)
-            text('Затраты: '..money(r.cost));text('Выручка: '..money(r.gross))
-            text('Комиссия: '..money(r.fee));text('Прибыль ~'..money(r.profit))
-            if button('Найти продавца')then h.find(r.seller.shop,r.seller.server)end
-            if button('Найти скупщика')then h.find(r.buyer.shop,r.buyer.server)end
+            tile('seller','Продавец',icons.LOCATION_DOT or'>',function()h.find(r.seller.shop,r.seller.server)end)
+            tile('buyer','Скупщик',icons.LOCATION_CROSSHAIRS or'>',function()h.find(r.buyer.shop,r.buyer.server)end)
         end
+        h.draw_settings_popup(settings)
         B.ScrollMouse('RightSidebar',true)
     end
     B.EndChild()
@@ -471,6 +486,12 @@ do
         currency=function()return lIlllI__()and'VC$'or'SA$'end,
         center_width=function()return z_*2+constItemSpacingX*3 end,
         sidebar_width=function()return constWidthSidebar end,
+        sidebar_button_height=function()return constHeightButtonSidebar end,
+        icons=x,
+        open_settings=function()B.OpenPopup(u8('Параметры арбитража'))end,
+        draw_settings_popup=function(draw)
+            (llII___l('Параметры арбитража',1.5,0,draw))()
+        end,
         can_click=llIllll_,
         input_string=function(buffer)return e.string(buffer)end,
         encode=T.encode,decode=T.decode,
