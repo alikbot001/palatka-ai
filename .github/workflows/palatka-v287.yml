@@ -1,4 +1,4 @@
-name: Palatka 2.9.16 sale revalidation
+name: Palatka 2.9.17 compact UI and sale regression
 on:
   pull_request:
     paths:
@@ -41,20 +41,22 @@ jobs:
               assert live==baseline, f'Unexpected changes to stable {path}'
           print('Functional 2.9.5 baseline preserved')
           PY
-      - name: Generate 2.9.16 OTA, then test syntax, manifest and installer
+      - name: Generate 2.9.17 OTA, then test syntax, manifest and installer
         run: |
-          python3 tools/build_ota_v2916.py
+          python3 tools/build_ota_v2917.py
           luajit -b updates/palatka_update.lua /dev/null
           python3 - <<'PY'
           from pathlib import Path
           import json
           manifest=json.loads(Path('version.json').read_text())
           ota=Path('updates/palatka_update.lua').read_bytes()
-          assert manifest['version']=='2.9.16'
+          assert manifest['version']=='2.9.17'
           assert manifest['size']==len(ota),(manifest['size'],len(ota))
           assert manifest['mode']=='overlay'
-          assert b"PALATKA_UPDATE_VERSION = '2.9.16'" in ota
-          assert ota.count(b'return install_sell_2916()')==2
+          assert b"PALATKA_UPDATE_VERSION = '2.9.17'" in ota
+          assert ota.count(b'return install_ui_2917()')==2
+          assert b'local function install_ui_2917()' in ota
+          assert b'_compact_ui_2917_installed' in ota
           assert b'local function install_sell_2916()' in ota
           assert b'PRESET fresh inventory rows=' in ota
           assert b'PRESET sale halted:' in ota
@@ -72,7 +74,7 @@ jobs:
           assert b"function A.draw()" in ota
           assert b"function V.promo_screen()" in ota
           assert b"function V.journal()" in ota
-          print('OTA 2.9.16 compiled and validated')
+          print('OTA 2.9.17 compiled and validated')
           PY
       - name: Test stable modules and existing behavior
         run: |
@@ -90,6 +92,10 @@ jobs:
         run: |
           luajit -b src/42a_sell_stock_guard.lua /dev/null
           luajit tests/test_v2912_partial_sell.lua
+      - name: Test compact navigation, settings and update validation
+        run: |
+          luajit -b src/69e_compact_ui_v2917.lua /dev/null
+          luajit tests/test_v2917_ui.lua
       - name: Test draggable top bar and centered dialogs
         run: |
           luajit -b src/60g_window_chrome_v2913.lua /dev/null
@@ -105,7 +111,7 @@ jobs:
           luajit -b src/70c_stall_ready_v2915.lua /dev/null
           luajit -b src/39b_trade_probe.lua /dev/null
           luajit tests/test_v2915_sale_flow.lua
-      - name: Verify 2.9.13 UI source is unchanged
+      - name: Verify existing 2.9.13 UI source is unchanged
         run: |
           python3 - <<'PY'
           import subprocess
@@ -129,8 +135,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           raw=Path('palatka_ai.lua').read_bytes()
-          assert b'Palatka AI v2.9.16' in raw[:1000]
-          assert b"script_version('2.9.16')" in raw[:1000]
+          assert b'Palatka AI v2.9.17' in raw[:1000]
+          assert b"script_version('2.9.17')" in raw[:1000]
           assert b'PRESET fresh inventory rows=' in raw
           assert b'Sale PARTIAL:' in raw
           assert b"TRADE TRACE:" in raw
@@ -140,20 +146,20 @@ jobs:
           assert 'Добавить строку'.encode('cp1251') in raw
           print('Stable standalone ready:',len(raw))
           PY
-      - name: Publish standalone only after all checks pass
+      - name: Publish standalone and OTA only after all checks pass
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add palatka_ai.lua updates/palatka_update.lua version.json
           if ! git diff --cached --quiet; then
-            git commit -m "release: Palatka 2.9.16 standalone and OTA"
+            git commit -m "release: Palatka 2.9.17 compact UI standalone and OTA"
             git push origin HEAD:main
           fi
       - name: Upload stable verified Lua
         uses: actions/upload-artifact@v4
         with:
-          name: palatka-2.9.16
+          name: palatka-2.9.17
           path: |
             palatka_ai.lua
             updates/palatka_update.lua
