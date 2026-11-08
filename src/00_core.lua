@@ -1,7 +1,7 @@
 -- Palatka AI standalone core: state, settings, encoding, formatting.
 -- v1.2: theme registry, opacity, ui_state, screen pager state.
 DSP = DSP or {}
-DSP.version = '2.9.16'
+DSP.version = '2.9.17-beta.1'
 DSP.name = 'palatka ai'
 DSP.acc = { 0.516, 0.505, 0.977 }
 
@@ -142,7 +142,7 @@ DSP.settings = {
     buy_preset = { name = '', items = {} },
     sell_preset = { name = '', items = {} },
     -- v1.2 additions
-    theme = 'ocean_blue',
+    theme = 'mcr_sand',
     opacity = 0.97,
     screen = 'palatka',
     crag_pinned = false,
@@ -208,7 +208,7 @@ function DSP.load_settings()
     end
     DSP.settings.buy_preset.items = DSP.settings.buy_preset.items or {}
     DSP.settings.sell_preset.items = DSP.settings.sell_preset.items or {}
-    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'carbon_trade' end
+    if type(DSP.settings.theme) ~= 'string' then DSP.settings.theme = 'mcr_sand' end
     if type(DSP.settings.opacity) ~= 'number' then DSP.settings.opacity = 0.97 end
     if type(DSP.settings.screen) ~= 'string' then DSP.settings.screen = 'palatka' end
     if type(DSP.settings.tax_bp) ~= 'number' then DSP.settings.tax_bp = 200 end
@@ -270,6 +270,17 @@ function DSP.load_settings()
     DSP.settings.scan_quiet_ms = math.max(250, math.min(2500, math.floor(tonumber(DSP.settings.scan_quiet_ms) or 650)))
     DSP.settings.identity_grace_ms = math.max(0, math.min(5000, math.floor(tonumber(DSP.settings.identity_grace_ms) or 1500)))
     if type(DSP.settings.ui_windows) ~= 'table' then DSP.settings.ui_windows = {} end
+    -- One-time opt-in to the user-requested MCR look for legacy defaults.
+    -- Keep explicit personal custom themes and the previous choice recoverable.
+    if d.mcr_theme_migrated ~= true then
+        local previous=DSP.settings.theme
+        if previous=='carbon_trade' or previous=='ocean_blue' then
+            DSP.settings.mcr_previous_theme=previous
+            DSP.settings.theme='mcr_sand'
+        end
+        DSP.settings.mcr_theme_migrated=true
+        DSP.save_settings()
+    end
     if d.v240_migrated ~= true then
         DSP.settings.v240_migrated = true
         DSP.save_settings()
@@ -340,6 +351,14 @@ end
 DSP.theme = DSP.theme or {}
 
 DSP.theme.list = {
+    -- MCR Mobile 1.15.5-inspired light sand palette; keep legacy themes optional.
+    mcr_sand = {
+        name = 'MCR Sand',
+        bg={0.949,0.906,0.800}, panel={0.863,0.796,0.694},
+        accent={0.420,0.486,0.227}, text={0.176,0.188,0.141},
+        muted={0.370,0.365,0.295}, good={0.275,0.415,0.165},
+        bad={0.670,0.235,0.185}, warn={0.605,0.385,0.130},
+    },
     carbon_trade = {
         name = 'Carbon Trade',
         bg={0.060,0.075,0.066}, panel={0.075,0.093,0.080},
@@ -410,7 +429,7 @@ DSP.theme.list = {
     },
 }
 
-DSP.theme.current = 'carbon_trade'
+DSP.theme.current = 'mcr_sand'
 DSP.theme.opacity = 0.97
 
 function DSP.theme.get()
@@ -567,7 +586,7 @@ if not DSP.settings.ui_v14_migrated then
     DSP.settings.ui_v14_migrated=true
     DSP.save_settings()
 end
-DSP.theme.current = DSP.settings.theme or 'carbon_trade'
+DSP.theme.current = DSP.settings.theme or 'mcr_sand'
 DSP.theme.opacity = DSP.clamp(DSP.settings.opacity or 0.97, 0.65, 1.00)
 -- save_ui_state intentionally NOT called on startup: the saved UI position,
 -- theme and opacity belong to the user, not to a fresh script instance.

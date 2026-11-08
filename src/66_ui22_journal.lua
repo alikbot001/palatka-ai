@@ -93,6 +93,8 @@ function V.journal()
         V.list_rows('journal_events_'..V.journal_period..V.journal_category,rows,58,event_row,{toolbar=footer})
     end
 end
+-- Keep the append-only events/loot journal reachable after the newer trade log overrides V.journal.
+V.mcr_events_journal=V.journal
 local previous=V.popups
 function V.popups()
     if previous then previous()end

@@ -114,6 +114,17 @@ local function row(e,sizes)
     imgui.NextColumn()
     cell(e.partner and e.partner~='' and e.partner or'—',sizes[6],true)
 end
+-- In the narrow MCR workspace use compact two-line records rather than
+-- forcing a six-column desktop table outside the available mobile width.
+local function compact_trade_row(e,w)
+    local stamp=(e.ts and e.ts>0) and os.date('%d.%m %H:%M',e.ts) or '—'
+    local amount=money(e.amount)
+    local kind=e.kind=='sell' and 'Продажа (+)' or 'Покупка (-)'
+    text(V.fit(stamp..' · '..tostring(e.name or '?'),w))
+    faded(V.fit(kind..'  '..amount..' · '..tostring(e.qty or 1)..
+        ' шт. · '..tostring(e.partner or '?'),w))
+    imgui.Separator()
+end
 local function page_nav(s,count)
     local count_pages=math.max(1,math.ceil(count/60))
     s.page=math.max(1,math.min(count_pages,s.page))
@@ -183,13 +194,18 @@ function V.journal()
     local finish=math.min(start+59,#filtered)
     local height=math.max(95,imgui.GetContentRegionAvail().y-54)
     if imgui.BeginChild('##mhjournal294_table',imgui.ImVec2(-1,height),true)then
-        local sizes=columns(math.max(610,imgui.GetWindowContentRegionWidth()))
+        local w=imgui.GetContentRegionAvail().x
+        local compact=w<610
+        local sizes=not compact and columns(math.max(610,imgui.GetWindowContentRegionWidth())) or nil
         if #filtered==0 then faded('История сделок пуста.')end
         for i=start,finish do
             local e=filtered[i]
-            if e then row(e,sizes)end
+            if e then
+                if compact then compact_trade_row(e,w)
+                else row(e,sizes)end
+            end
         end
-        imgui.Columns(1)
+        if not compact then imgui.Columns(1)end
         if DSP.mobile and DSP.mobile.touch_scroll then
             DSP.mobile.touch_scroll(imgui.GetIO(),'mhjournal294')
         end

@@ -303,16 +303,14 @@ function V.cancel(id)
 end
 function V.geometry(sw,sh)
     local p=DSP.settings.mobile_window or {}
-    local w=DSP.clamp(tonumber(p.w)or math.min(sw*.93,1120),math.min(sw,380),sw)
-    local h=DSP.clamp(tonumber(p.h)or sh*.88,math.min(sh,275),sh)
+    local w=DSP.clamp(tonumber(p.w)or math.min(sw*.90,math.max(570,sw*.60)),math.min(sw,380),sw)
+    local h=DSP.clamp(tonumber(p.h)or sh*.76,math.min(sh,275),sh)
     return {w=w,h=h,x=DSP.clamp(tonumber(p.x)or (sw-w)*.5,0,math.max(0,sw-w)),
         y=DSP.clamp(tonumber(p.y)or (sh-h)*.35,0,math.max(0,sh-h))}
 end
-local nav={{'palatka','Торговля'},{'lavki','Лавки'},{'storage','Хранилища'},
- {'arbitrage','Арбитраж'},{'resale','Перепродажа'},{'promo','Автопиар'},
- {'scan','Скан лавки'},{'search','Поиск товара'},{'calculator','Калькулятор'},
- {'logs','Журнал'},{'stats','Статистика'},{'notes','Заметки'},
- {'market','Рынок'},{'lombard','Ломбард'},{'history','История'},{'settings','Настройки'}}
+-- Five canonical destinations; legacy functions remain reachable from More.
+local nav={{'presets','Пресеты','P'},{'palatka','Лавка','L'},
+    {'lavki','Лавки','S'},{'logs','Логи','J'},{'more','Ещё','+'}}
 function V.set_screen(id)
     if U._notes_dirty and M.save_notes and not M.save_notes()then return false end
     if id=='storage' then
@@ -320,6 +318,11 @@ function V.set_screen(id)
         V.storage_tab='scan'
         V.storage_scan_mode=V.storage_scan_mode or 'trunk'
         V.reset_list('storage_scan_panel')
+    end
+    if id=='presets' then
+        V.screen='palatka';V.nav=false
+        V.open_popup('Наборы','presets')
+        return true
     end
     V.screen=id;V.nav=false
     if DSP.screens and DSP.screens.set then DSP.screens.set(id)end
@@ -410,11 +413,11 @@ function U.draw()
         if c then DSP.flog(string.format('UI22 native bg %.3f %.3f %.3f %.3f colors=%d',c.x,c.y,c.z,c.w,colors or 0))end
         V.style_reported=true
     end
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(9,7))
-    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(6,5))
-    imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(8,10))
-    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,5)
-    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,5)
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding,imgui.ImVec2(7,5))
+    imgui.PushStyleVarVec2(imgui.StyleVar.ItemSpacing,imgui.ImVec2(4,4))
+    imgui.PushStyleVarVec2(imgui.StyleVar.FramePadding,imgui.ImVec2(6,6))
+    imgui.PushStyleVarFloat(imgui.StyleVar.WindowRounding,2)
+    imgui.PushStyleVarFloat(imgui.StyleVar.FrameRounding,2)
     local flags=imgui.WindowFlags.NoTitleBar+imgui.WindowFlags.NoResize+imgui.WindowFlags.NoMove+
         imgui.WindowFlags.NoSavedSettings+imgui.WindowFlags.NoScrollbar+(imgui.WindowFlags.NoScrollWithMouse or 0)
     M.flush_save(false)
@@ -428,23 +431,27 @@ function U.draw()
         local drawer_only=V.nav and not wide
         if show_side then
             local h=math.max(30,imgui.GetContentRegionAvail().y-48)
-            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(182,g.w*.25),h),true,imgui.WindowFlags.NoScrollbar)then
+            if imgui.BeginChild('##v22_carbon_nav',imgui.ImVec2(drawer_only and 0 or math.min(79,g.w*.14),h),true,imgui.WindowFlags.NoScrollbar)then
                 V.apply_font()
-                V.muted('ÍÀÂÈÃÀÖÈß')
-                if V.button('Ãëàâíàÿ','carbon_home_nav',-1,V.screen=='home',V.screen=='home',43)then V.set_screen('home')end
-                V.list_rows('navigation',nav,44,function(e,i)
-                    local symbols={palatka='= ',lavki='# ',arbitrage='> ',resale='* ',promo='@ ',scan='[] ',
-                        search='? ',calculator='+ ',logs='| ',stats='% ',notes='- ',storage='[] ',market='$ ',history=': ',settings=': '}
-                    if V.button((symbols[e[1]] or ' ')..e[2],'nav_'..i,-1,V.screen==e[1],V.screen==e[1],42)then V.set_screen(e[1])end
-                end,{height=math.max(70,imgui.GetContentRegionAvail().y-85),footer=true})
-                if imgui.GetContentRegionAvail().y>25 then V.muted('  PALATKA AI · LIVE')end
+                V.list_rows('navigation',nav,64,function(e,i,w)
+                    local x,y=imgui.GetCursorPosX(),imgui.GetCursorPosY()
+                    local selected=V.screen==e[1] or (e[1]=='presets' and false)
+                    local tile_w=math.min(57,math.max(40,w-12))
+                    if V.button(e[3],'mcr_nav_'..i,tile_w,selected,selected,35)then V.set_screen(e[1])end
+                    V.at(x,y+37)
+                    V.muted(V.fit(e[2],math.max(42,w-6)))
+                end,{height=math.max(70,imgui.GetContentRegionAvail().y-20),footer=false})
             end
             imgui.EndChild()
             if not drawer_only then V.inline(4)end
         end
         if not drawer_only then
-            -- Workspace and global footer are separate, as in the supplied Carbon HTML.
-            if imgui.BeginChild('##v22_workspace',imgui.ImVec2(0,-48),false,0)then
+            -- Right rail appears only when wide enough; it owns actual screen
+            -- actions and never creates a second renderer or touch overlay.
+            local context_rail=g.w>=720 and type(V.context_actions)=='function'
+            local center_width=context_rail and
+                math.max(155,imgui.GetContentRegionAvail().x-82) or 0
+            if imgui.BeginChild('##v22_workspace',imgui.ImVec2(center_width,-48),false,0)then
                 V.apply_font()
                 local ok,err=xpcall(function()
                     if V.screen=='home'then V.home()
@@ -453,6 +460,7 @@ function U.draw()
                     elseif V.screen=='market'then V.shops_source='api';V.shops()
                     elseif V.screen=='history'then V.journal_mode='events';V.journal()
                     elseif V.screen=='palatka'then V.trade()
+                    elseif V.screen=='more'then V.more()
                     elseif V.screen=='lavki'then V.shops()
                     elseif V.screen=='arbitrage'then V.arbitrage()
                     elseif V.screen=='resale'then V.flip_screen()
@@ -469,6 +477,15 @@ function U.draw()
                 end
             end
             imgui.EndChild()
+            if context_rail then
+                V.inline(5)
+                if imgui.BeginChild('##mcr_context_rail',imgui.ImVec2(75,-48),
+                    true,imgui.WindowFlags.NoScrollbar)then
+                    V.apply_font()
+                    V.context_actions()
+                end
+                imgui.EndChild()
+            end
             imgui.Separator()
             if V.button('Îêíà','carbon_windows',100,false,true,38)then V.nav=not V.nav end
             V.inline()
