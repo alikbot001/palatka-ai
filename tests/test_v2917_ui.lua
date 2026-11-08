@@ -53,6 +53,11 @@ assert(not updater.newer('2.9.17','2.9.18'))
 assert(not updater.newer('bad','2.9.17'))
 assert(updater.check())
 assert(updater.status=='available' and updater.info.version=='2.9.18')
+DSP.auto.sell_running=true
+assert(not updater.install(), 'running sale must block an update')
+assert(updater.status=='error')
+DSP.auto.sell_running=false
+assert(updater.check() and updater.status=='available')
 assert(updater.install())
 assert(updater.status=='installed' and DSP.version=='2.9.18')
 assert(io.open('./palatka_ota_2.9.18.lua','rb')~=nil)
@@ -60,7 +65,7 @@ os.remove('./palatka_ota_2.9.18.lua')
 manifest.url='https://attacker.invalid/payload.lua'
 assert(updater.check())
 assert(updater.status=='error','untrusted manifest URL must be rejected')
-assert(#urls==3,'network is only used for explicit check/install/check')
+assert(#urls==4,'network is only used for explicit check/install/check')
 V.settings_group='view'
 V.tools('settings')
 V.settings_group='legacy'
