@@ -46,3 +46,26 @@ jobs:
             docs/test-results.json
           if-no-files-found: warn
           retention-days: 10
+
+  baseline-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y luajit
+      - name: Measure unchanged main baseline regressions
+        continue-on-error: true
+        run: python3 run_tests.py
+      - name: Upload baseline test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-stable-main-baseline-tests
+          path: docs/test-results.json
+          if-no-files-found: warn
+          retention-days: 10
