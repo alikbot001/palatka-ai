@@ -52,7 +52,7 @@ function V.button(label,id,width,active,primary,height)
 end
 
 local primary={
-    {'palatka','Пресет'}, {'lavki','Лавка'}, {'arbitrage','Лавки'},
+    {'palatka','Пресет'}, {'lavki','Лавки'}, {'arbitrage','Арбитраж'},
     {'logs','Логи'}, {'more','Ещё'},
 }
 local catalog={
