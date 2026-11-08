@@ -105,6 +105,7 @@ MODULES = [
     "69c_arbitrage_status.lua",
     "69d_runtime_diagnostic.lua",
     "69f_channel_updater.lua",
+    "71_mcr_workspace.lua",
     "99_main.lua",
 ]
 
