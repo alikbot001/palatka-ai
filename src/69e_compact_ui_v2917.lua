@@ -326,4 +326,5 @@ V.home = function()
     end,{footer=false})
 end
 V._compact_ui_2917_installed=true
+DSP.version='2.9.17'
 return true
