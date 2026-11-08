@@ -12,7 +12,7 @@ local V={list_rows=function(key,rows) rendered[key]=rows end,
     popup=noop,open_popup=noop,
     set_screen=function(s)screen=s end}
 imgui={Separator=noop,CloseCurrentPopup=noop}
-local payload = "PALATKA_UPDATE_VERSION = '2.9.18'\nreturn function(d) d.version='2.9.18';return true end\n"
+local payload = "PALATKA_UPDATE_VERSION = '2.9.18'\n-- Test payload padded to pass the minimum download-size validation.\nreturn function(d) d.version='2.9.18';return true end\n"
 local manifest = {
     version='2.9.18',size=#payload,mode='overlay',
     url='https://raw.githubusercontent.com/alikbot001/palatka-ai/main/updates/palatka_update.lua',
