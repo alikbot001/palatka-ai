@@ -30,6 +30,7 @@ safe('shop_store.install', function() if DSP.shop_store and DSP.shop_store.insta
 safe('lombard.install', function() if DSP.lombard and DSP.lombard.install then DSP.lombard.install() end end)
 safe('auto.install', function() DSP.auto.install() end)
 safe('ui.install',   function() DSP.ui.install() end)
+safe('channels.install', function() if DSP.channels and DSP.channels.install_command then DSP.channels.install_command() end end)
 safe('screens.install', function()
     if DSP.screens and DSP.screens.install then DSP.screens.install() end
 end)
