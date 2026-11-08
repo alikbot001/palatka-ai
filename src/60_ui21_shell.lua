@@ -446,8 +446,12 @@ function U.draw()
             if not drawer_only then V.inline(4)end
         end
         if not drawer_only then
-            -- Workspace and global footer are separate, as in the supplied Carbon HTML.
-            if imgui.BeginChild('##v22_workspace',imgui.ImVec2(0,-48),false,0)then
+            -- Right rail appears only when wide enough; it owns actual screen
+            -- actions and never creates a second renderer or touch overlay.
+            local context_rail=g.w>=720 and type(V.context_actions)=='function'
+            local center_width=context_rail and
+                math.max(155,imgui.GetContentRegionAvail().x-82) or 0
+            if imgui.BeginChild('##v22_workspace',imgui.ImVec2(center_width,-48),false,0)then
                 V.apply_font()
                 local ok,err=xpcall(function()
                     if V.screen=='home'then V.home()
@@ -473,6 +477,15 @@ function U.draw()
                 end
             end
             imgui.EndChild()
+            if context_rail then
+                V.inline(5)
+                if imgui.BeginChild('##mcr_context_rail',imgui.ImVec2(75,-48),
+                    true,imgui.WindowFlags.NoScrollbar)then
+                    V.apply_font()
+                    V.context_actions()
+                end
+                imgui.EndChild()
+            end
             imgui.Separator()
             if V.button('Îêíà','carbon_windows',100,false,true,38)then V.nav=not V.nav end
             V.inline()
