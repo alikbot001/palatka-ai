@@ -1,0 +1,82 @@
+name: Palatka Beta channel release
+on:
+  push:
+    branches: [beta]
+    paths:
+      - 'src/**'
+      - 'build.py'
+      - 'tests/**'
+      - '.github/workflows/beta-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: palatka-beta-release
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y luajit
+      - name: Compile and test beta
+        run: |
+          luajit -b src/69f_channel_updater.lua /dev/null
+          luajit -b src/69e_mcr_mobile_shell.lua /dev/null
+          luajit tests/test_channel_updater.lua
+          luajit tests/test_mcr_shell.lua
+          luajit tests/test_v2913_chrome.lua
+          python3 build.py
+          luajit -b palatka_ai.lua /dev/null
+      - name: Generate Beta channel manifest
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          source=Path('palatka_ai.lua')
+          with source.open('rb') as f:
+              digest=hashlib.file_digest(f, 'sha256').hexdigest()
+          data={
+            'schema':1,'channel':'beta','version':'2.9.16-beta.1',
+            'url':'https://raw.githubusercontent.com/alikbot001/palatka-ai/beta/palatka_ai.lua',
+            'size':source.stat().st_size,'sha256':digest,
+            'notes':'MCR Mobile UI and manual Stable/Beta selection',
+          }
+          target=Path('updates/channels/beta.json')
+          target.parent.mkdir(parents=True,exist_ok=True)
+          target.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(data)
+          PY
+      - name: Publish Beta script and channel JSON to beta branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add palatka_ai.lua updates/channels/beta.json
+          if ! git diff --cached --quiet; then
+            git commit -m "beta: publish v2.9.16-beta.1 Lua and channel manifest"
+            git push origin HEAD:beta
+          fi
+      - name: Publish prerelease with standalone Lua
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v2.9.16-beta.1"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$(git rev-parse HEAD)" --prerelease \
+              --title "Palatka AI 2.9.16 Beta 1 — MCR UI + Stable/Beta" \
+              --notes "Тестовый выпуск: светлый компактный интерфейс, меню инструментов и ручное переключение Stable/Beta. Установка: один palatka_ai.lua в MonetLoader. Не проверено нативно на телефоне."
+          fi
+          gh release upload "$tag" palatka_ai.lua --clobber
+      - name: Archive build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: palatka-beta-2.9.16-beta.1
+          path: |
+            palatka_ai.lua
+            updates/channels/beta.json
+          retention-days: 14
