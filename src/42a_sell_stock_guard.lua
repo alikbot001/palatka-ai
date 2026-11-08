@@ -12,6 +12,9 @@ local function positive(v)
 end
 local function base(name)return (tostring(name or ''):gsub('%s*%(%+%d+%)%s*$',''))end
 local function matches(p,inv)
+    -- Never combine distinct game identities just because labels are equal.
+    if p.id~=nil and (inv.id==nil or tostring(p.id)~=tostring(inv.id)) then return false end
+    if p.ench~=nil and inv.ench~=nil and tonumber(p.ench)~=tonumber(inv.ench) then return false end
     return inv.name==p.name or ((tonumber(p.ench)or 0)==0 and inv.name==base(p.name))
 end
 -- A broken/incomplete snapshot must NOT silently authorize a sale.
@@ -26,8 +29,9 @@ function S.plan(items,inventory)
                 or st.slot>1000 or st.slot%1~=0 then return nil end
             local n=positive(st.count)
             if not n then return nil end
-            if slots[st.slot]==nil then slots[st.slot]=n;owners[st.slot]=inv.name
-            elseif slots[st.slot]~=n or owners[st.slot]~=inv.name then return nil end
+            local identity=tostring(inv.id or '')..'|'..inv.name..'|'..tostring(inv.ench or 0)
+            if slots[st.slot]==nil then slots[st.slot]=n;owners[st.slot]=identity
+            elseif slots[st.slot]~=n or owners[st.slot]~=identity then return nil end
         end
     end
     local changes,summary={},{adjusted=0,skipped=0,requested=0,planned=0}
@@ -62,9 +66,34 @@ function S.plan(items,inventory)
     end
     return changes,summary
 end
+-- A read-only proposal for the UI. Row identity points at the existing preset,
+-- while desired/available/planned are independent quantities.
+function S.preview(items,inventory)
+    local changes,summary=S.plan(items,inventory)
+    if not changes then return nil,'Inventory scan is unavailable or inconsistent' end
+    local limited={}
+    for _,c in ipairs(changes)do limited[c.row]=c.qty end
+    local rows={}
+    for _,row in ipairs(items)do
+        if type(row)=='table' and row.enabled~=false then
+            local desired=positive(row.qty)or 0
+            local planned=limited[row]
+            if planned==nil then planned=desired end
+            rows[row]={desired_qty=desired,inventory_qty=planned,
+                reserved_qty=0,pending_qty=0,confirmed_listed_qty=nil,
+                planned_qty=planned,available_qty=planned,shortfall=math.max(0,desired-planned),
+                snapshot_timestamp=DSP.auto.inventory_seen_at or DSP.auto.inv_updated_at,
+                source='inventory scanner, unconfirmed server listing'}
+        end
+    end
+    return rows,summary
+end
 local function with_stock(fn)
     local p=DSP.settings and DSP.settings.sell_preset
     local changes,summary=S.plan(type(p)=='table' and p.items or nil,A.inv)
+    -- Invalid or conflicting slots must fail closed. The old fallback called
+    -- the unmodified live executor with stale quantities.
+    if not changes then return false,'inventory snapshot missing or inconsistent',nil,nil,nil end
     local old={}
     for i,c in ipairs(changes or {})do
         old[i]={row=c.row,qty=c.row.qty,enabled=c.row.enabled}
@@ -94,7 +123,8 @@ if type(T.totals)=='function'then
         local ok,result=with_stock(function()return totals(kind)end)
         if ok then return result end
         if DSP.flog then DSP.flog('SELL totals: '..tostring(result))end
-        return totals(kind)
+        return {complete=false,positions=0,qty=0,invalid=1,
+            overflow=false,invalid_stock=true}
     end
 end
 local start=A.start_sell
