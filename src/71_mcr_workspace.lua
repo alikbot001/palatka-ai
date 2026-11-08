@@ -44,7 +44,9 @@ local home={
     {'Цены','market','S'}, {'Настройки','settings','*'},
     {'Лавка','palatka','L'}, {'Арбитраж','arbitrage','R'},
     {'Хранилища','storage','H'}, {'Интерфейс','settings','UI'},
-    {'Перепродажа','resale','
+    {'Перепродажа','resale','$'}, {'Чужие лавки','lavki','N'},
+    {'Логи','logs','J'}, {'Калькулятор','calculator','+'},
+}
 function V.home()
     V.heading('Palatka AI',function()
         if V.button('Обновить рынок','mcr_home_refresh',145,false,true,33)then
