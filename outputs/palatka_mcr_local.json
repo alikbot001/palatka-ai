@@ -1,0 +1,20 @@
+{
+  "license_blocks_removed": 7,
+  "changed_functions": [
+    "A_",
+    "p_",
+    "lIl_IllI",
+    "lIl__llI",
+    "lII__IlI",
+    "lIllIII_",
+    "lI__IIlI"
+  ],
+  "catalogue_items": 9069,
+  "config_namespace": "Palatka MCR Local",
+  "base_authentication": "removed for local workflows",
+  "mcr_network": "blocked",
+  "native_acceptance": false,
+  "version": "3.0.0-local.1",
+  "sha256": "5e439c42abf7d0f2757f02f611dd653c3b2c58facdb4d0834c20cae012bd995d",
+  "bytes": 2069654
+}
