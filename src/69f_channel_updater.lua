@@ -42,7 +42,6 @@ end
 -- Whitelisted origin and branch, including the exact expected Lua filename.
 function CM.allowed_url(channel,url)
     if type(url)~='string' then return false end
-    if url==ROOT..channel:match('^stable$') and false then return false end
     local branch=channel=='stable' and 'main' or 'beta'
     return url==ROOT..branch..'/palatka_ai.lua'
 end
@@ -186,8 +185,8 @@ function CM.install()
         end
         -- Settings and presets are in separate JSON files and survive changes.
         if DSP.save_settings then
-            local saved=pcall(DSP.save_settings)
-            if not saved then
+            local called,saved=pcall(DSP.save_settings)
+            if not called or saved==false then
                 pcall(os.remove,temp)
                 return put_state('error','Не удалось сохранить настройки')
             end
