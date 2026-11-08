@@ -270,6 +270,17 @@ function DSP.load_settings()
     DSP.settings.scan_quiet_ms = math.max(250, math.min(2500, math.floor(tonumber(DSP.settings.scan_quiet_ms) or 650)))
     DSP.settings.identity_grace_ms = math.max(0, math.min(5000, math.floor(tonumber(DSP.settings.identity_grace_ms) or 1500)))
     if type(DSP.settings.ui_windows) ~= 'table' then DSP.settings.ui_windows = {} end
+    -- One-time opt-in to the user-requested MCR look for legacy defaults.
+    -- Keep explicit personal custom themes and the previous choice recoverable.
+    if d.mcr_theme_migrated ~= true then
+        local previous=DSP.settings.theme
+        if previous=='carbon_trade' or previous=='ocean_blue' then
+            DSP.settings.mcr_previous_theme=previous
+            DSP.settings.theme='mcr_sand'
+        end
+        DSP.settings.mcr_theme_migrated=true
+        DSP.save_settings()
+    end
     if d.v240_migrated ~= true then
         DSP.settings.v240_migrated = true
         DSP.save_settings()
