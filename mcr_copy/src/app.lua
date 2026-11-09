@@ -1,7 +1,7 @@
 -- Adapters and lifecycle; file access/calculation always run outside rendering.
 return function(E)
 local A={engine=E,state=E.new(),results={},options={tax_bp=200,budget=0,ttl=3600},
-    selected=1,page=1,generation=0,dirty=false,busy=false,status='Нет снимков'}
+    page=1,generation=0,dirty=false,busy=false,status='Нет снимков'}
 function A.install(host)A.host=host end
 local function fields(row,h)
     local id=row.item_id or row.id
@@ -11,7 +11,28 @@ local function fields(row,h)
         currency=h.currency(),price=row[h.fields.price],qty=row[h.fields.qty]}
 end
 function A.invalidate()
-    A.generation=A.generation+1;A.results={};A.selected=1;A.page=1;A.busy=false
+    A.generation=A.generation+1;A.results={};A.selected=nil;A.route_details=false;A.page=1;A.busy=false
+end
+-- Display labels never participate in server identity or cache lookup.
+function A.server_label()
+    local sid=A.host.market_server_id and A.host.market_server_id()
+    if sid==101 or sid==102 or sid==103 then return 'Arizona Mobile '..(sid-100)end
+    local name=A.host.server_name and A.host.server_name()or ''
+    name=tostring(name):gsub('{%x%x%x%x%x%x}',''):gsub('[%c]',' ')
+    if name==''or name:find('[/\\]')or name:find('://',1,true)then return 'Текущий сервер'end
+    return name
+end
+function A.select_route(index)
+    if not A.current_results()[index]then return false end
+    A.selected=index;A.route_details=true;return true
+end
+function A.selected_route()return A.current_results()[A.selected]end
+function A.track_selected(side)
+    local route=A.selected_route()
+    if not route then A.error='Выберите актуальный маршрут';return false end
+    local shop=side=='buy'and route.seller or side=='sell'and route.buyer
+    if not shop or shop.server~=A.host.server()then return false end
+    A.host.find(shop.shop,shop.server);return true
 end
 function A.capture(snapshot)
     local h=A.host

@@ -2,5 +2,6 @@
   "original_functions": 1370,
   "local_build_functions": 1450,
   "identical_normalized_bytecode_functions": 1343,
-  "full_game_validation": false
+  "full_game_validation": false,
+  "tested_version": "3.0.0-local.1"
 }

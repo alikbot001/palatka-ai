@@ -13,14 +13,15 @@ do
             if not ip or not port then return ''end
             return tostring(lIlllIIl(tostring(ip)..':'..tostring(port))or '')
         end,
+        server_name=function()return sampGetCurrentServerName()end,
         currency=function()return lIlllI__()and'VC$'or'SA$'end,
         center_width=function()return z_*2+constItemSpacingX*3 end,
         sidebar_width=function()return constWidthSidebar end,
         sidebar_button_height=function()return constHeightButtonSidebar end,
         icons=x,
-        open_settings=function()B.OpenPopup(u8('Параметры арбитража'))end,
-        draw_settings_popup=function(draw)
-            (llII___l('Параметры арбитража',1.5,0,draw))()
+        open_popup=function(title)B.OpenPopup(u8(title))end,
+        draw_popup=function(title,draw)
+            (llII___l(title,1.5,0,draw))()
         end,
         can_click=llIllll_,
         input_string=function(buffer)return e.string(buffer)end,

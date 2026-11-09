@@ -116,7 +116,7 @@ def main():
     raw,report=build()
     out=ROOT/'outputs/palatka_mcr_local.lua';out.write_bytes(raw)
     subprocess.run(['luajit','-b',str(out),'/dev/null'],check=True)
-    report.update(version='3.0.0-local.1',sha256=hashlib.sha256(raw).hexdigest(),bytes=len(raw))
+    report.update(version='3.0.0-local.2',sha256=hashlib.sha256(raw).hexdigest(),bytes=len(raw))
     (ROOT/'outputs/palatka_mcr_local.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))
 

@@ -122,6 +122,7 @@ function E.routes(state,server,now,options,yield_fn)
             if net>cost then
                 result[#result+1]={name=a.offer.name,id=a.offer.id,variant=a.offer.variant,
                     currency=a.offer.currency,qty=n,seller=a.shop,buyer=b.shop,
+                    seller_qty=a.offer.qty,buyer_qty=b.offer.qty,
                     buy_price=a.offer.price,sell_price=b.offer.price,cost=cost,gross=gross,
                     fee=gross-net,net=net,profit=net-cost}
                 a.left=a.left-n;b.left=b.left-n;spent=spent+cost

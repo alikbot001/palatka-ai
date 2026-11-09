@@ -15,12 +15,41 @@ local function money(n)
     return sign..grouped
 end
 local function source(s)
-    return s.source=='local'and'скан' or s.source
+    local labels={['local']='Скан в игре',['va-ta-cache']='Сохранённые цены рынка',
+        ['mcr-cloud']='Импорт MCR',import='Импорт файла'}
+    return labels[s.source]or'Внешний снимок'
 end
 local function ready()
     if input then return end
     local B=A.host.imgui
     input={budget=B.new.char[32]('0'),tax=B.new.float(2)}
+end
+local function item_title(r)
+    wrapped(r.name)
+    if r.variant and r.variant~='0:0'then text('Модификация: '..r.variant)end
+    text('Предмет #'..tostring(r.id))
+end
+local function quote(label,shop,price,currency)
+    text(label);wrapped('Лавка #'..shop.shop..(shop.owner~=''and shop.owner and' | '..shop.owner or''))
+    text(money(price)..' '..currency..' за шт.')
+    wrapped(source(shop)..' | '..math.max(0,A.host.now()-shop.at)..' с назад')
+end
+local function details(r)
+    if button('< К списку')then A.route_details=false end
+    item_title(r);A.host.imgui.Separator()
+    text('План: '..money(r.qty)..' шт.')
+    quote('Купить у продавца',r.seller,r.buy_price,r.currency)
+    text('В продаже по снимку: '..(r.seller_qty and money(r.seller_qty)..' шт.'or'неизвестно'))
+    if button('Найти продавца##pa_find_buy')then A.track_selected('buy')end
+    A.host.imgui.Separator()
+    quote('Сдать в скупку',r.buyer,r.sell_price,r.currency)
+    text('Скупка по снимку: '..(r.buyer_qty and money(r.buyer_qty)..' шт.'or'неизвестно'))
+    if button('Найти скупку##pa_find_sell')then A.track_selected('sell')end
+    A.host.imgui.Separator()
+    text('Затраты: '..money(r.cost)..' '..r.currency)
+    wrapped('Выручка: '..money(r.gross)..' | Комиссия: '..money(r.fee))
+    text('Прибыль: ~'..money(r.profit)..' '..r.currency)
+    wrapped('Кнопки отмечают лавку для этого товара. Покупка и сдача выполняются вручную. Снимок не гарантирует текущий остаток.')
 end
 function A.draw_center()
     local h=A.host;local B=h.imgui
@@ -31,12 +60,15 @@ function A.draw_center()
     local visible=B.BeginChild('Central',B.ImVec2(width,-1),true)
     if visible then
         B.CenterText(h.utf8('Арбитраж'));B.Separator()
-        text('Сервер: '..h.server()..' | '..A.status)
+        wrapped(A.server_label()..' | '..A.status)
         wrapped('Оценка по объявлениям. Наличие товара и цену проверяйте в игре.')
         local rows=A.current_results()
-        if #rows==0 then
+        local selected=rows[A.selected]
+        if A.route_details and selected then
+            details(selected)
+        elseif #rows==0 then
             if A.busy then text('Расчёт...')
-            else wrapped('Откройте лавки, чтобы сохранить их товары. Затем нажмите «Рассчитать». Внешние снимки можно добавить кнопкой «Импорт JSON».')end
+            else wrapped('Откройте лавки, чтобы сохранить их товары. Затем нажмите «Расчёт». Сохранённые цены и импорт доступны в «Источниках».')end
         else
             local pages=math.max(1,math.ceil(#rows/8))
             A.page=math.min(A.page,pages)
@@ -45,13 +77,15 @@ function A.draw_center()
             if button('>##pa_page')then A.page=math.min(pages,A.page+1)end
             for index=(A.page-1)*8+1,math.min(#rows,A.page*8)do
                 local r=rows[index]
-                if button(r.name..' | '..r.qty..' шт.##pa_route_'..index)then A.selected=index end
-                text('Купить #'..r.seller.shop..': '..money(r.buy_price)..' -> продать #'..r.buyer.shop..': '..money(r.sell_price))
-                text('Затраты '..money(r.cost)..' | прибыль ~'..money(r.profit)..' '..r.currency)
+                item_title(r)
+                if button('Открыть маршрут #'..index..'##pa_route_'..index)then A.select_route(index)end
+                text('План: '..money(r.qty)..' шт.')
+                wrapped('Купить #'..r.seller.shop..': '..money(r.buy_price)..' -> продать #'..r.buyer.shop..': '..money(r.sell_price))
+                wrapped('Затраты '..money(r.cost)..' | прибыль ~'..money(r.profit)..' '..r.currency)
                 if index==A.selected then
-                    text('Выручка: '..money(r.gross)..' | Комиссия: '..money(r.fee))
+                    wrapped('Выручка: '..money(r.gross)..' | Комиссия: '..money(r.fee))
                 end
-                text(source(r.seller)..' / '..source(r.buyer)..' | возраст '..
+                wrapped(source(r.seller)..' / '..source(r.buyer)..' | возраст '..
                     math.max(0,h.now()-r.seller.at)..' / '..math.max(0,h.now()-r.buyer.at)..' с')
                 B.Separator()
             end
@@ -91,8 +125,21 @@ local function settings()
     text('Комиссия, %')
     if B.InputFloat('##pa_tax',input.tax,0.1,1,'%.2f')then A.invalidate()end
     B.Separator()
-    wrapped('Импорт внешних снимков: PalatkaMCR/import.json')
-    wrapped('База: сохранённые цены Palatka. Чтение кэша не обновляет данные в сети.')
+end
+local function sources()
+    wrapped('Скан в игре: откройте лавку, чтобы сохранить её товары и время наблюдения.')
+    A.host.imgui.Separator()
+    wrapped('Сохранённые цены: загрузить снимки из базы Palatka для текущего сервера. Эта кнопка не обновляет цены в интернете.')
+    if button('Загрузить сохранённые цены')then A.read_market_cache()end
+    A.host.imgui.Separator()
+    wrapped('Импорт: прочитать подготовленный файл PalatkaMCR/import.json. Данные других серверов не участвуют в текущем расчёте.')
+    if button('Импортировать файл')then A.read_import()end
+end
+local function popup(title,draw)
+    local B=A.host.imgui
+    local screen=B.GetIO().DisplaySize
+    B.SetNextWindowPos(B.ImVec2(screen.x/2,screen.y/2),B.Cond.Appearing,B.ImVec2(0.5,0.5))
+    A.host.draw_popup(title,draw)
 end
 function A.draw_right()
     ready()
@@ -107,13 +154,10 @@ function A.draw_right()
         if A.busy then
             add('stop','Стоп',icons.STOP or'X',function()A.invalidate();A.status='Расчёт отменён'end)
         else add('calculate','Расчёт',icons.CALCULATOR or'=',calculate)end
-        add('settings','Параметры',icons.GEAR or'*',h.open_settings)
-        add('cache','База',icons.DATABASE or'B',A.read_market_cache)
-        add('import','Импорт',icons.FILE_IMPORT or'+',A.read_import)
-        local rows=A.current_results();local r=rows[A.selected]
-        if r then
-            add('seller','Продавец',icons.LOCATION_DOT or'>',function()h.find(r.seller.shop,r.seller.server)end)
-            add('buyer','Скупщик',icons.LOCATION_CROSSHAIRS or'>',function()h.find(r.buyer.shop,r.buyer.server)end)
+        add('settings','Параметры',icons.GEAR or'*',function()h.open_popup('Параметры арбитража')end)
+        add('sources','Источники',icons.DATABASE or'B',function()h.open_popup('Источники цен')end)
+        if A.selected_route()then
+            add('route','Маршрут',icons.LOCATION_DOT or'>',function()A.route_details=true end)
         end
         local area=B.GetContentRegionAvail()
         local spacing=B.GetStyle().ItemSpacing.y
@@ -139,7 +183,8 @@ function A.draw_right()
             B.SameLine()
             if B.Button('>##pa_rail_next',B.ImVec2(half,0))and(not h.can_click or h.can_click())then A.rail_page=math.min(pages,A.rail_page+1)end
         end
-        h.draw_settings_popup(settings)
+        popup('Параметры арбитража',settings)
+        popup('Источники цен',sources)
         B.ScrollMouse('RightSidebar',true)
     end
     B.EndChild()
