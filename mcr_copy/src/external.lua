@@ -13,11 +13,14 @@ local function offers(rows,currency,text,options)
         if not known and not(options.read_only_unknown and type(r.name)=='string'and r.name~='')then return nil end
         local level=tonumber(r.ench or 0)
         if not level or level%1~=0 or level<0 then return nil end
-        local variant=tostring(level)..':0'
+        local embedded=r.embedded_item_id==nil and 0 or tonumber(r.embedded_item_id)
+        if not embedded or embedded<0 or embedded%1~=0 then return nil end
+        local variant=tostring(level)..':'..embedded
         for _,field in ipairs({'quality','strength','wear'})do
             if r[field]~=nil then variant=variant..':'..field..'='..tostring(r[field])end
         end
         out[#out+1]={id=known and tostring(known)or'name:'..r.name,variant=known and variant or nil,
+            bonus_level=known and level or nil,embedded_item_id=known and embedded or nil,
             name=text and text(r.name or tostring(r.item_id))or r.name,
             price=r.price,qty=r.qty,currency=currency}
     end

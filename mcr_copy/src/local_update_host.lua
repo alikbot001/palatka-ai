@@ -4,7 +4,7 @@ local A=PalatkaMCR
 local function notify(message)sampAddChatMessage('[Palatka] '..message,0xFFD166)end
 A.updater=A.new_updater({
     current_build=A.build,current_version=A.version,base=A.update_base,
-    sha256=A.sha256,yield=function()wait(0)end,compile=loadstring,
+    sha256=A.sha256,yield=function()wait(0)end,compile=loadstring,decode=T.decode,
     get=function(url,done)
         A.host.run(function()
             lIl_l_lI('GET',url,{headers={['Cache-Control']='no-cache'}},function(response)

@@ -1,5 +1,6 @@
 -- Explicit installs only. Automatic checks announce a release once per build.
 return function(h)
+assert(type(h.decode)=='function','updater host.decode must be a function')
 local remembered=tonumber(h.remembered())
 if not remembered or remembered%1~=0 or remembered<0 or remembered>=1000000 then remembered=0 end
 local U={busy=false,notified=remembered}
@@ -34,9 +35,13 @@ function U.check(manual,install)
             U.busy=false
             if info.build~=U.notified then
                 U.notified=info.build
+                U.pending_remember=info.build
                 h.notify('Доступна новая версия '..info.version..'. Обновить: /crrupdate')
-                local saved,why=h.remember(info.build)
-                if not saved then U.error='Не сохранено уведомление: '..tostring(why)end
+            end
+            if U.pending_remember then
+                local saved,why=h.remember(U.pending_remember)
+                if saved then U.pending_remember=nil;U.error=nil
+                else U.error='Не сохранено уведомление: '..tostring(why)end
             end
             return
         end

@@ -25,17 +25,18 @@
   "tested_version": "3.0.0-local.1",
   "current_ui_native_acceptance": false,
   "installed_candidate": {
-    "version": "3.0.0-local.3",
-    "sha256": "cb19af6d095d44eab4418f8c516229239f523c65cceafa5f9c6a51150a293092",
+    "version": "3.0.0-local.5",
+    "sha256": "bbb6f5b16e204cba6f1fe49194564ad89d0e3ae1e2111a0ca78db796ea59afe1",
     "phone_sha256_matches": true,
+    "main_window_opened": true,
+    "script_manager_version_verified": true,
     "native_ui_verified": false,
-    "command": "crr"
+    "updater_error_reproduced": true
   },
   "prepared_candidate": {
-    "version": "3.0.0-local.5",
+    "version": "3.0.0-local.6",
     "phone_installed": false,
     "native_ui_verified": false,
-    "native_updater_verified": false,
-    "blocker": "ADB device not connected"
+    "native_updater_verified": false
   }
 }

@@ -7,7 +7,8 @@ local function fields(row,h)
     local id=row.item_id or row.id
     if not id or tostring(id)=='' then return nil end
     return {id=tostring(id),name=tostring(row[h.fields.name] or h.name(id) or id),
-        variant=tostring(row.ench or row.bonus_level or 0)..':'..tostring(row.unic_id or 0),
+        variant=tostring(row.ench or row.bonus_level or 0)..':'..tostring(row.embedded_item_id or row.unic_id or 0),
+        bonus_level=row.ench or row.bonus_level,embedded_item_id=row.embedded_item_id,
         currency=h.currency(),price=row[h.fields.price],qty=row[h.fields.qty]}
 end
 function A.invalidate()
@@ -75,18 +76,24 @@ function A.capture_external(data)
         if not row.item_id then return false,'missing item id'end
         s[side][#s[side]+1]={id=tostring(row.item_id),name=row.item_name,
             variant=tostring(row.bonus_level or 0)..':'..tostring(row.embedded_item_id or 0),
+            bonus_level=row.bonus_level,embedded_item_id=row.embedded_item_id,
             currency=row.currency or h.currency(),price=row.price,qty=row.quantity}
     end
     return A.import({schema=1,shops={s}})
 end
-function A.import(pack)
+function A.import(pack,reconcile)
     if type(pack)~='table' or pack.schema~=1 or type(pack.shops)~='table'then
         return false,'ожидается schema=1, shops=[]'
     end
     -- Validate every record before publishing any changes.
     local next_state=E.new()
-    for key,value in pairs(A.state.shops)do next_state.shops[key]=value end
     next_state.revision=A.state.revision
+    for key,value in pairs(A.state.shops)do
+        if reconcile and value.server==reconcile.server and value.source==reconcile.source
+            and not reconcile.present[value.shop]then
+            next_state.revision=next_state.revision+1
+        else next_state.shops[key]=value end
+    end
     for _,s in ipairs(pack.shops)do
         local ok,err=E.observe(next_state,s)
         if not ok then return false,err end
@@ -165,7 +172,17 @@ function A.refresh_market(done,force)
             local pack=A.external.vata(data,sid,server,h.currency(),h.to_cp,
                 {read_only_unknown=true,source='market-helper'})
             if #pack.shops==0 and #data.shops>0 then finish(false,'Нет пригодных снимков');return end
-            local imported,why=A.import(pack)
+            local reconcile
+            if data.has_more==false then
+                local present={}
+                for _,row in ipairs(data.shops)do
+                    if type(row)=='table'and tonumber(row.server_id)==sid then
+                        local number=tonumber(row.shop_num);if number then present[number]=true end
+                    end
+                end
+                reconcile={server=server,source='market-helper',present=present}
+            end
+            local imported,why=A.import(pack,reconcile)
             if not imported then finish(false,why);return end
             A.market_server=server;A.market_updated=h.now();A.error=nil
             A.status='Market Helper: '..#pack.shops..' лавок';A.flush();finish(true)

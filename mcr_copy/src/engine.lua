@@ -33,7 +33,8 @@ local function side(rows)
             old.qty=old.qty and qty and math.max(old.qty,qty) or nil
         else
             local r={key=key,id=id,variant=variant,currency=currency,
-                name=tostring(v.name or id),price=price,qty=qty}
+                name=tostring(v.name or id),price=price,qty=qty,
+                bonus_level=integer(v.bonus_level,0),embedded_item_id=integer(v.embedded_item_id,0)}
             seen[duplicate]=r;out[#out+1]=r
         end
     end

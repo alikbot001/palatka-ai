@@ -31,9 +31,14 @@ local function read(state,build)
     end)
 end
 local function item(o,side)
-    local level=tonumber((o.variant or''):match('^(%d+):'))
-    return{item_id=tonumber(o.id),item_name=P.title(o),quantity=o.qty,price=o.price,
-        item_type=side,bonus_level=level,variant=o.variant,currency=o.currency}
+    local name=P.title(o)
+    if o.embedded_item_id and o.variant and o.variant:match('^%d+:%d+$')then
+        name=lI_IIllI(o.name,o.bonus_level or 0)
+    end
+    return{item_id=tonumber(o.id),item_name=name,quantity=o.qty,price=o.price,
+        item_type=side,bonus_level=o.bonus_level,variant=o.variant,currency=o.currency,
+        embedded_item_id=o.embedded_item_id,
+        embedded_item_text=o.embedded_item_id and lI_IIlII(o.embedded_item_id)or nil}
 end
 local function shop(s,query)
     local out={shop_id=s.shop,nickname=s.owner,nickname_label=s.owner,

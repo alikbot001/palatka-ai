@@ -12,8 +12,8 @@ import subprocess
 
 from build_mcr_copy import ROOT, assemble
 
-VERSION='3.0.0-local.5'
-BUILD=5
+VERSION='3.0.0-local.6'
+BUILD=6
 UPDATE_BASE='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 
 TOKEN=re.compile(r'''--\[(=*)\[.*?\]\1\]|--[^\n]*|\[(=*)\[.*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z_0-9]*|\S''',re.S)

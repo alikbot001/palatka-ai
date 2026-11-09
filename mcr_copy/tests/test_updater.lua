@@ -35,4 +35,13 @@ U.check(true,true);assert(installed==1 and U.error:find('Началась опе
 activate_during_download=false
 active=false;manifest.build=5;manifest.version='3.0.0-local.5'
 U.check(true,true);assert(installed==1,'same version reinstalled')
+manifest.build=8;manifest.version='3.0.0-local.8'
+local attempts,announced=0,0
+local retry=factory({current_build=6,base=base,decode=function()return manifest end,
+ get=function(_,done)done('manifest')end,remembered=function()return 0 end,
+ notify=function()announced=announced+1 end,remember=function(build)
+  assert(build==8);attempts=attempts+1;return attempts>1,'disk full'
+ end})
+retry.check(false,false);retry.check(false,false)
+assert(announced==1 and attempts==2,'notification persistence was not retried without spam')
 print('Update notification/manual install/hash/origin/busy guards: OK')

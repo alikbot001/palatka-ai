@@ -13,6 +13,8 @@ function lIl_l__l(s,status,result)s.status=status;s.result=result end
 u8=function(text)return text end
 string.rlower=string.lower
 function lI______ (value)return tostring(value)end
+function lI_IIllI(name,level)return level>0 and name..' (+'..level..')'or name end
+function lI_IIlII(id)return id>0 and'Embedded '..id or''end
 i={};V={};X={};r6={};h6={};Y6={};x6={pageLimit=100};stateAvgPriceLavok={}
 local fm={}
 function lII_llll()return fm end
@@ -33,4 +35,12 @@ lIl___Il('Item');assert(Y6.status=='true'and Y6.result.sell_data[1].avg_price==1
 lIl_IIlI('Item',false);assert(stateAvgPriceLavok.status==2 and stateAvgPriceLavok.avg_sell_price==100)
 lIl___Il('Item',nil,'other');assert(Y6.status=='false','foreign currency/server accepted')
 assert(U.main.userKey=='')
+assert(E.observe(state,{server='mobile2',shop=8,owner='B',at=1000,source='local',sell={
+ {id='6',variant='4:888',bonus_level=4,embedded_item_id=888,name='Embedded item',price=900,qty=1,currency='SA$'},
+ {id='7',variant='4:999',name='Opaque variant',price=900,qty=1,currency='SA$'}},buy={}}))
+lI_II_lI(8,'mobile2')
+local embedded=V.result.items[1]
+assert(embedded.embedded_item_id==888 and embedded.embedded_item_text=='Embedded 888','embedded item fields lost')
+assert(embedded.item_name=='Embedded item (+4)','native item naming changed')
+assert(V.result.items[2].embedded_item_id==nil,'opaque discriminator guessed to be embedded item ID')
 print('Native shops/search/details/price views with empty MCR key: OK')
