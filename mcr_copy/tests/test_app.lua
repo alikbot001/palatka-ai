@@ -8,7 +8,16 @@ local h={now=function()return 1000 end,server=function()return '102'end,
     encode=function(v)disk.saved=v;return 'json'end,decode=function()return disk.saved end,
     read=function()return nil end,write=function(_,data)disk.data=data;return true end,
     run=function(fn)queue[#queue+1]=fn end,yield=function()end}
+local registered,main_opened,arb_opened={},0,0
+h.register=function(name,fn)assert(not registered[name],'duplicate command');registered[name]=fn end
+h.open_main=function()main_opened=main_opened+1 end
+h.open=function()arb_opened=arb_opened+1 end
 local A=factory(E);A.install(h)
+A.start();A.start()
+assert(type(registered.crr)=='function','/crr was not registered')
+registered.crr();assert(main_opened==1 and arb_opened==0,'/crr opened arbitrage instead of the main interface')
+registered.parb();assert(arb_opened==1)
+
 assert(A.capture({shop_num=1,owner='a',scanned_at=1000,
     sell_items={{item_id=5,name='Item',price=100,count=3}},buy_items={}}))
 assert(A.capture({shop_num=2,owner='b',scanned_at=1000,

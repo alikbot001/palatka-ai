@@ -45,6 +45,7 @@ do
         end,
         yield=function()wait(0)end,
         register=sampRegisterChatCommand,
+        open_main=function()o_(true)end,
         open=function()O3=F3.arbitrage;M3[0]=true end,
         find=function(number,server)
             if server~=PalatkaMCR.host.server()then

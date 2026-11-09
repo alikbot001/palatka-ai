@@ -164,6 +164,7 @@ function A.calculate()
 end
 function A.start()
     if A.started then return end;A.started=true
+    A.host.register('crr',A.host.open_main)
     A.host.register('parb',A.host.open)
     A.host.run(function()A.load()end)
 end

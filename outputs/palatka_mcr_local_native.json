@@ -25,9 +25,10 @@
   "tested_version": "3.0.0-local.1",
   "current_ui_native_acceptance": false,
   "installed_candidate": {
-    "version": "3.0.0-local.2",
-    "sha256": "d818d5fa311e0c9f1e26342846a1dcd3997afe2439391f0201fe4416f119221c",
+    "version": "3.0.0-local.3",
+    "sha256": "cb19af6d095d44eab4418f8c516229239f523c65cceafa5f9c6a51150a293092",
     "phone_sha256_matches": true,
-    "native_ui_verified": false
+    "native_ui_verified": false,
+    "command": "crr"
   }
 }

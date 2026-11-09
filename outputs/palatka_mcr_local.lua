@@ -305,6 +305,7 @@ function A.calculate()
 end
 function A.start()
     if A.started then return end;A.started=true
+    A.host.register('crr',A.host.open_main)
     A.host.register('parb',A.host.open)
     A.host.run(function()A.load()end)
 end
@@ -626,6 +627,7 @@ do
         end,
         yield=function()wait(0)end,
         register=sampRegisterChatCommand,
+        open_main=function()o_(true)end,
         open=function()O3=F3.arbitrage;M3[0]=true end,
         find=function(number,server)
             if server~=PalatkaMCR.host.server()then
