@@ -70,4 +70,72 @@ print('MCR requests blocked; no fake success; game/own bot transport preserved: 
             p=Path(tmp)/'network.lua';p.write_bytes(harness.encode('cp1251'))
             subprocess.run(['luajit',str(p)],check=True)
 
+    def test_empty_key_sale_requires_owner_and_item_acknowledgements(self):
+        spec=importlib.util.spec_from_file_location('sale_builder',ROOT/'build_mcr_local.py')
+        mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+        source=mod.build()[0].decode('cp1251')
+        table_start=source.index('local r=(function(r)')
+        table_end=source.index('})',source.index('({',table_start))+2
+        harness=source[table_start:table_end]+'''
+local U={main={userKey=''},delay={sampSendSell=1,timeOutSell=3}}
+local H_={z=0};local Q6={};local A={};local stateProceses={}
+local isSetProcessPause,isParseInventoryDialogs=false,false
+local O6,o6,q6,C6,W6,D6,R6,I6
+local sends,owner_ack,item_ack,pending,rows=0,false,false,false,{}
+local logs={};local e_={secondaryInfo=1,debug=2}
+local T={encode=function(item)
+ assert(item.amount==2 and item.id==17 and item.slot==4)
+ return 'encoded-listing'
+end}
+local cef={send_click=function(event,action,rid,payload)
+ assert(event==60 and action==2 and rid==123 and payload=='encoded-listing')
+ sends=sends+1;pending=true
+end}
+local function wait(ms)
+ assert(type(ms)=='number' and ms>=0)
+ if owner_ack and Q6.isWaitOwnerPacket then
+  Q6.isOwnerPacketMatched=true;Q6.rid=123
+ end
+ if pending and item_ack then I6=true;pending=false end
+end
+local function lI_I___l(value)assert(value==false)end
+local function lI_lIIl_()end
+local function lI_lIIIl()end
+local function lI_lII__(command)assert(type(command)=='string')end
+local function lI_lII_l()return rows end
+local function lI_lIl_l(name,slot,lvl)
+ assert(name=='test' and slot==4 and lvl==0);return 1
+end
+local function lI__I_lI(message,level)
+ assert(type(message)=='string' and (level==1 or level==2))
+ logs[#logs+1]=message
+end
+local function E_(key)assert(key=='');return key end
+local function f_(key)assert(key=='');return 0 end
+PalatkaMCR={local_ready=function()return true end}
+'''+mod.extract_function(source,'p_')+'\n'+mod.extract_function(source,'lI_lIlI_')+'''
+local function scenario(owner,item,inventory)
+ owner_ack=owner;item_ack=item;rows=inventory
+ sends=0;pending=false;o6=true;Q6={};A={1};logs={};stateProceses={}
+ lI_lIlI_(false)
+ assert(U.main.userKey=='','sale created a license key')
+ assert(not Q6.isWaitOwnerPacket,'owner wait was left active')
+ return sends,stateProceses.sendPresetSell
+end
+local row={amount=2,id=17,slot=4,name='test',lvl=0,itemIndex=1}
+local count,finished=scenario(false,true,{row})
+assert(count==0 and not finished,'listing sent without owner acknowledgement')
+count,finished=scenario(true,true,{})
+assert(count==0 and not finished,'empty inventory submitted')
+count,finished=scenario(true,true,{row})
+assert(count==1 and finished,'empty-key local sale did not process real ACK path')
+count,finished=scenario(true,false,{row})
+assert(count==3,'missing item ACK did not respect original retry bound')
+assert(#logs>=2,'timeout was not reported')
+print('empty-key sale: owner timeout, empty inventory, ACK, bounded retries: OK')
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'sale.lua';path.write_bytes(harness.encode('cp1251'))
+            subprocess.run(['luajit',str(path)],check=True,cwd=ROOT)
+
 if __name__=='__main__':unittest.main()
