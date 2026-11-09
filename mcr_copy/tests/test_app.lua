@@ -13,10 +13,15 @@ h.register=function(name,fn)assert(not registered[name],'duplicate command');reg
 h.open_main=function()main_opened=main_opened+1 end
 h.open=function()arb_opened=arb_opened+1 end
 local A=factory(E);A.install(h)
+local update_checks,notification_starts=0,0
+A.updater={check=function(manual,install)
+ assert(manual and install);update_checks=update_checks+1
+end,start=function()notification_starts=notification_starts+1 end}
 A.start();A.start()
 assert(type(registered.crr)=='function','/crr was not registered')
 registered.crr();assert(main_opened==1 and arb_opened==0,'/crr opened arbitrage instead of the main interface')
 registered.parb();assert(arb_opened==1)
+registered.crrupdate();assert(update_checks==1 and notification_starts==1,'updater command/scheduler duplicated or missing')
 
 assert(A.capture({shop_num=1,owner='a',scanned_at=1000,
     sell_items={{item_id=5,name='Item',price=100,count=3}},buy_items={}}))

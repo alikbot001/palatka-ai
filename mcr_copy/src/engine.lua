@@ -12,7 +12,8 @@ local function shop_key(server,shop)return tostring(server)..'/'..tostring(shop)
 function E.new()return{shops={},revision=0}end
 local function side(rows)
     if type(rows)~='table' then return nil,'invalid offers'end
-    if #rows>256 then return nil,'too many offers in one snapshot'end
+    -- The public mobile feed contains shops with almost 300 rows per side.
+    if #rows>512 then return nil,'too many offers in one snapshot'end
     local out,seen={},{}
     for _,v in ipairs(rows)do
         if type(v)~='table' then return nil,'invalid offer'end

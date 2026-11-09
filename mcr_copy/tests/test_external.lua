@@ -15,3 +15,13 @@ assert(#P.vata({shops={{server_id=102,shop_num=1}}},102,'ip','SA$').shops==0,'gu
 assert(#P.vata({shops={{server_id=102,shop_num=1,updated_at=1000,
     sell_slots={{name='Unknown',qty=5,price=10}}}}},102,'ip','SA$').shops==0,'guessed identity')
 print('MCR external cache normalization: OK')
+local raw={shops={{server_id=102,shop_num=4,updated_at=1000,sell_slots={
+ {item_id=0,name='Unknown ID',price=100,qty=3},
+ {item_id=5,name='Item',price=100,qty=3,quality=7},
+ {item_id=5,name='Item',price=100,qty=3,quality=8},
+}}}}
+local public=P.vata(raw,102,'ip','SA$',nil,{read_only_unknown=true,source='market-helper'})
+assert(#public.shops==1 and #public.shops[1].sell==3,'public rows discarded with unknown ID')
+assert(public.shops[1].sell[1].variant==nil,'unknown item made actionable')
+assert(public.shops[1].sell[2].variant~=public.shops[1].sell[3].variant,'quality mixed')
+assert(public.shops[1].source=='market-helper')

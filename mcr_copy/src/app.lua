@@ -128,11 +128,48 @@ function A.read_market_cache()
             if not ok then A.error='Ответ рынка JSON: '..tostring(data);return end
         end
         if server~=A.host.server()then A.error='Сервер изменился';return end
-        local pack=A.external.vata(data,sid,server,A.host.currency(),A.host.to_cp)
+        local pack=A.external.vata(data,sid,server,A.host.currency(),A.host.to_cp,{read_only_unknown=true})
         if #pack.shops==0 then A.error='В кэше нет полных снимков этого сервера';return end
         local imported,why=A.import(pack)
         if not imported then A.error=tostring(why);return end
         A.status='Импортировано лавок: '..#pack.shops;A.error=nil;A.flush()
+    end)
+end
+-- One public request per server at a time, with a two-minute cache. Failures
+-- retain observations; a delayed response never publishes into another server.
+function A.refresh_market(done,force)
+    local h=A.host;local server=h.server();local sid=h.market_server_id()
+    if A.market_pending and A.market_pending.server==server then
+        A.market_pending.waiters[#A.market_pending.waiters+1]=done;return
+    end
+    if not force and A.market_server==server and A.market_updated and h.now()-A.market_updated<120 then
+        h.run(function()done(true)end);return
+    end
+    local request={server=server,waiters={done}};A.market_pending=request
+    h.run(function()
+        local function finish(ok,err)
+            if A.market_pending==request then A.market_pending=nil end
+            if err then A.error='Market Helper: '..tostring(err)end
+            for _,callback in ipairs(request.waiters)do callback(ok,err)end
+        end
+        if not sid or server==''then finish(false,'Мобильный сервер не определён');return end
+        h.fetch_market(sid,function(raw,err)
+            if server~=h.server()or A.market_pending~=request then finish(false,'Сервер изменился');return end
+            if not raw then finish(false,err or'Нет ответа');return end
+            if #raw>8*1024*1024 then finish(false,'Ответ слишком большой');return end
+            local ok,data=pcall(h.decode,raw)
+            if not ok or type(data)~='table'or data.ok==false or type(data.shops)~='table'then
+                finish(false,'Неверный ответ базы');return
+            end
+            if data.has_more then finish(false,'База вернула неполную страницу');return end
+            local pack=A.external.vata(data,sid,server,h.currency(),h.to_cp,
+                {read_only_unknown=true,source='market-helper'})
+            if #pack.shops==0 and #data.shops>0 then finish(false,'Нет пригодных снимков');return end
+            local imported,why=A.import(pack)
+            if not imported then finish(false,why);return end
+            A.market_server=server;A.market_updated=h.now();A.error=nil
+            A.status='Market Helper: '..#pack.shops..' лавок';A.flush();finish(true)
+        end)
     end)
 end
 function A.load()
@@ -166,6 +203,10 @@ function A.start()
     if A.started then return end;A.started=true
     A.host.register('crr',A.host.open_main)
     A.host.register('parb',A.host.open)
+    if A.updater then
+        A.host.register('crrupdate',function()A.updater.check(true,true)end)
+        A.updater.start()
+    end
     A.host.run(function()A.load()end)
 end
 function A.current_results()

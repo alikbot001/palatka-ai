@@ -7,14 +7,16 @@
     "lIl__llI",
     "lII__IlI",
     "lIllIII_",
-    "lI__IIlI"
+    "lI__IIlI",
+    "lIlIII_l",
+    "lI__IIll"
   ],
   "catalogue_items": 9069,
   "config_namespace": "Palatka MCR Local",
   "base_authentication": "removed for local workflows",
   "mcr_network": "blocked",
   "native_acceptance": false,
-  "version": "3.0.0-local.3",
-  "sha256": "cb19af6d095d44eab4418f8c516229239f523c65cceafa5f9c6a51150a293092",
-  "bytes": 2073220
+  "version": "3.0.0-local.5",
+  "sha256": "bbb6f5b16e204cba6f1fe49194564ad89d0e3ae1e2111a0ca78db796ea59afe1",
+  "bytes": 2096865
 }

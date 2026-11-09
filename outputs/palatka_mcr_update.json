@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "channel": "mcr-local",
+  "build": 5,
+  "version": "3.0.0-local.5",
+  "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/palatka_mcr_local.lua",
+  "size": 2096865,
+  "sha256": "bbb6f5b16e204cba6f1fe49194564ad89d0e3ae1e2111a0ca78db796ea59afe1",
+  "notes": "База Market Helper без ключа MCR; /crrupdate и уведомления об обновлении."
+}

@@ -16,7 +16,7 @@ local function money(n)
 end
 local function source(s)
     local labels={['local']='Скан в игре',['va-ta-cache']='Сохранённые цены рынка',
-        ['mcr-cloud']='Импорт MCR',import='Импорт файла'}
+        ['market-helper']='Market Helper',['mcr-cloud']='Импорт MCR',import='Импорт файла'}
     return labels[s.source]or'Внешний снимок'
 end
 local function ready()
@@ -127,6 +127,9 @@ local function settings()
     B.Separator()
 end
 local function sources()
+    wrapped('Market Helper: получить лавки текущего мобильного сервера без ключа MCR. Это внешний источник; снимки могут отставать от игры.')
+    if button('Обновить лавки и цены')then A.refresh_market(function()end,true)end
+    A.host.imgui.Separator()
     wrapped('Скан в игре: откройте лавку, чтобы сохранить её товары и время наблюдения.')
     A.host.imgui.Separator()
     wrapped('Сохранённые цены: загрузить снимки из базы Palatka для текущего сервера. Эта кнопка не обновляет цены в интернете.')

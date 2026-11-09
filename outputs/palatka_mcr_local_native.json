@@ -30,5 +30,12 @@
     "phone_sha256_matches": true,
     "native_ui_verified": false,
     "command": "crr"
+  },
+  "prepared_candidate": {
+    "version": "3.0.0-local.5",
+    "phone_installed": false,
+    "native_ui_verified": false,
+    "native_updater_verified": false,
+    "blocker": "ADB device not connected"
   }
 }

@@ -45,6 +45,13 @@ do
         end,
         yield=function()wait(0)end,
         register=sampRegisterChatCommand,
+        fetch_market=function(sid,done)
+            lIl_l_lI('GET','https://va-ta.com/api/shops/pull?server='..sid,nil,
+                function(response)
+                    if response.status_code~=200 then done(nil,'HTTP '..tostring(response.status_code));return end
+                    done(response.text)
+                end,function(err)done(nil,err)end,20)
+        end,
         open_main=function()o_(true)end,
         open=function()O3=F3.arbitrage;M3[0]=true end,
         find=function(number,server)

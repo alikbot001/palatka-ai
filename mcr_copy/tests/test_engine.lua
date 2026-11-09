@@ -36,6 +36,6 @@ assert(not E.observe(v,snap(1,{row(0/0,4)})),'NaN quote accepted')
 assert(not E.observe(v,snap(1,{row(1e16,4)})),'inexact price accepted')
 local q=E.new();E.observe(q,snap(1,{row(1,1)},{row(100,1)}))
 assert(#E.routes(q,'102',1000,{})==0,'self trade')
-local many={};for i=1,257 do many[i]=row(i,1)end
+local many={};for i=1,513 do many[i]=row(i,1)end
 assert(not E.observe(q,snap(3,many)),'unbounded snapshot accepted')
 print('MCR arbitrage engine: OK')

@@ -5,6 +5,9 @@ do
     local allowed={['api.telegram.org']=true,['server-api.arizona.games']=true,
         ['server-api.azgames-cdn.ru']=true}
     local function permitted(url)
+        if tostring(url):match('^https://va%-ta%.com/api/shops/pull%?')then return true end
+        local base=PalatkaMCR.update_base
+        if base and(url==base..'palatka_mcr_update.json'or url==base..'palatka_mcr_local.lua')then return true end
         local host=tostring(url or ''):match('^https://([^/:]+)')
         return host and allowed[host:lower()]==true
     end

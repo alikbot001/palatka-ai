@@ -1,0 +1,5 @@
+local hash=assert(loadfile('mcr_copy/src/sha256.lua'))()
+assert(hash('')=='e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+assert(hash('abc')=='ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+assert(hash(string.rep('a',1000000))=='cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0')
+print('SHA256 empty/abc/million-byte vectors: OK')
