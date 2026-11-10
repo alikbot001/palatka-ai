@@ -26,7 +26,7 @@ class LocalBuildTests(unittest.TestCase):
 assert(r[32]=='Palatka MCR Local','configuration namespace was not separated')
 local connected=true
 local saved={}
-local L6={};local U={main={userKey='',activePreset='Main.json'}}
+local L6={};local U={main={userKey='',activePreset='Main.json'},telegram={}}
 local H_={z=0,v=0,q=0,k=''};local Z_,P_,n_=0,0,''
 local presetDataVersion=0;local d,p={},{};local S='presets/';local g='config/'
 local a={save=function(value,path)saved[path]=value end}
@@ -48,6 +48,52 @@ print('empty-key lifecycle, local readiness, full settings and presets: OK')
             f=Path(tmp)/'test.lua';f.write_bytes(harness.encode('cp1251'))
             subprocess.run(['luajit',str(f)],check=True,cwd=ROOT)
         self.assertTrue('Не используется сервер MCR'in source)
+
+    def test_offline_native_catalogue_refresh(self):
+        spec=importlib.util.spec_from_file_location('catalog_builder',ROOT/'build_mcr_local.py')
+        mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+        source=mod.build()[0].decode('cp1251')
+        parts=[mod.extract_function(source,n)for n in ['lI_IlIII','lI_IlIIl','lIl_IIII']]
+        harness="""local M={['1']='Apple',['2']='Pear',['3']='Apple'}
+local O={};local nameT='name';local U={lavka={}}
+local saved=0
+local function lIllIIlI()saved=saved+1 end
+local function lIllIIll()saved=saved+1 end
+local function lIllIIIl()saved=saved+1 end
+local PalatkaMCR={catalogue=assert(loadfile('mcr_copy/src/catalogue.lua'))()}
+"""+'\n'.join(parts)+"""
+lI_IlIII();assert(#O==2 and O[1].name=='Apple'and O[2].name=='Pear')
+O={{name='Manual item'}};lIl_IIII();assert(#O==3,'refresh removed manual/native names')
+lI_IlIIl();assert(M['1']=='Apple' and U.lavka.lastUpdateAllItemsID>0)
+assert(saved>=4)
+print('Native buy/ID catalogues refresh entirely offline: OK')
+"""
+        with tempfile.TemporaryDirectory()as tmp:
+            path=Path(tmp)/'catalogue.lua';path.write_bytes(harness.encode('cp1251'))
+            subprocess.run(['luajit',str(path)],check=True,cwd=ROOT)
+
+    def test_unavailable_mcr_bot_does_not_report_sent(self):
+        spec=importlib.util.spec_from_file_location('notify_builder',ROOT/'build_mcr_local.py')
+        mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+        source=mod.build()[0].decode('cp1251')
+        start=source.index('local r=(function(r)')
+        end=source.index('})',source.index('({',start))+2
+        harness=source[start:end]+"""
+local U={main={userKey=''},telegram={use_self=false,use_mcr=true,notifications={
+ test={isActive=true},balance={isActive=false},noItemsBuyBalance={isActive=false}}}}
+local function p_(value)return value end
+local function lI__I_lI(message)assert(type(message)=='string')end
+local function lIl_I__l()return ''end
+"""+'\n'.join(mod.extract_function(source,n)for n in ['lIl_lllI','lIl_llI_'])+"""
+assert(lIl_lllI('test')==false,'MCR bot pretended to send without key')
+assert(lIl_llI_('test','message')==false,'notification router reported false success')
+U.telegram.use_self=true;U.telegram.token='';U.telegram.idGroup='test'
+assert(lIl_llI_('test','message')==false,'missing own bot token pretended to send')
+print('Unavailable/misconfigured Telegram transport does not report sent: OK')
+"""
+        with tempfile.TemporaryDirectory()as tmp:
+            path=Path(tmp)/'notify.lua';path.write_bytes(harness.encode('cp1251'))
+            subprocess.run(['luajit',str(path)],check=True,cwd=ROOT)
 
     def test_mcr_network_is_not_replaced_by_fake_success(self):
         code=(ROOT/'mcr_copy/src/local_network.lua').read_text()

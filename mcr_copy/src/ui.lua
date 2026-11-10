@@ -91,6 +91,7 @@ function A.draw_center()
             end
         end
         if A.error then wrapped('Ошибка: '..A.error)end
+        if A.notice then wrapped(A.notice)end
         B.ScrollMouse('Central',true)
     end
     B.EndChild()
@@ -121,14 +122,16 @@ end
 local function settings()
     local B=A.host.imgui
     text('Бюджет (0 = без лимита)')
-    if B.InputText('##pa_budget',input.budget,32)then A.invalidate()end
+    if B.InputText('##pa_budget',input.budget,32)then A.follow_market=false;A.invalidate()end
     text('Комиссия, %')
-    if B.InputFloat('##pa_tax',input.tax,0.1,1,'%.2f')then A.invalidate()end
+    if B.InputFloat('##pa_tax',input.tax,0.1,1,'%.2f')then A.follow_market=false;A.invalidate()end
     B.Separator()
 end
 local function sources()
     wrapped('Market Helper: получить лавки текущего мобильного сервера без ключа MCR. Это внешний источник; снимки могут отставать от игры.')
-    if button('Обновить лавки и цены')then A.refresh_market(function()end,true)end
+    if button('Обновить лавки и цены')then
+        if A.follow_market then A.calculate(true)else A.refresh_market(function()end,true)end
+    end
     A.host.imgui.Separator()
     wrapped('Скан в игре: откройте лавку, чтобы сохранить её товары и время наблюдения.')
     A.host.imgui.Separator()
@@ -155,7 +158,7 @@ function A.draw_right()
         local actions={}
         local function add(id,label,icon,action)actions[#actions+1]={id,label,icon,action}end
         if A.busy then
-            add('stop','Стоп',icons.STOP or'X',function()A.invalidate();A.status='Расчёт отменён'end)
+            add('stop','Стоп',icons.STOP or'X',function()A.follow_market=false;A.invalidate();A.status='Расчёт отменён'end)
         else add('calculate','Расчёт',icons.CALCULATOR or'=',calculate)end
         add('settings','Параметры',icons.GEAR or'*',function()h.open_popup('Параметры арбитража')end)
         add('sources','Источники',icons.DATABASE or'B',function()h.open_popup('Источники цен')end)

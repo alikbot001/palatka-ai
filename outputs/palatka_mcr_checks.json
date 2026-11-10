@@ -1,0 +1,94 @@
+{
+  "scope": "mcr_local_targeted",
+  "checked_at": "2026-11-10T05:22:55.678114+00:00",
+  "version": "3.0.0-local.7",
+  "artifact_sha256": "4f5286a6a5d46de672705cdf3adfe5f808a38e8aecf522357095e6def1326100",
+  "lua_suites": 12,
+  "native_acceptance": false,
+  "checks": [
+    {
+      "command": "luajit mcr_copy/tests/test_engine.lua",
+      "exit_code": 0,
+      "stdout": "MCR arbitrage engine: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_app.lua",
+      "exit_code": 0,
+      "stdout": "MCR adapters/persistence/cancellation: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_external.lua",
+      "exit_code": 0,
+      "stdout": "MCR external cache normalization: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_ui.lua",
+      "exit_code": 0,
+      "stdout": "MCR arbitrage UI strict API/balance/empty state: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_market.lua",
+      "exit_code": 0,
+      "stdout": "Independent shop list and asking-price statistics: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_market_refresh.lua",
+      "exit_code": 0,
+      "stdout": "Public market refresh/cache/failure/server isolation: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_market_host.lua",
+      "exit_code": 0,
+      "stdout": "Native shops/search/details/price views with empty MCR key: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_sha256.lua",
+      "exit_code": 0,
+      "stdout": "SHA256 empty/abc/million-byte vectors: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_updater.lua",
+      "exit_code": 0,
+      "stdout": "Update notification/manual install/hash/origin/busy guards: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_update_file.lua",
+      "exit_code": 0,
+      "stdout": "Staged file install/backup/failed rename preserves running file: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_update_host.lua",
+      "exit_code": 0,
+      "stdout": "Real native updater host wiring/manifest decode/notification: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_autorefresh.lua",
+      "exit_code": 0,
+      "stdout": "Calculate refreshes quotes; background changes recompute opportunities: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "/usr/bin/python3 -m unittest discover -s mcr_copy/tests -p 'test_*.py'",
+      "exit_code": 0,
+      "stdout": "empty-key lifecycle, local readiness, full settings and presets: OK\nempty-key sale: owner timeout, empty inventory, ACK, bounded retries: OK\nMCR requests blocked; no fake success; game/own bot transport preserved: OK\nNative buy/ID catalogues refresh entirely offline: OK\nUnavailable/misconfigured Telegram transport does not report sent: OK\n",
+      "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 5.484s\n\nOK\n"
+    },
+    {
+      "command": "/usr/bin/python3 build_mcr_local.py",
+      "exit_code": 0,
+      "stdout": "{\n  \"license_blocks_removed\": 7,\n  \"changed_functions\": [\n    \"A_\",\n    \"p_\",\n    \"lIl_IllI\",\n    \"lIl__llI\",\n    \"lII__IlI\",\n    \"lIllIII_\",\n    \"lI__IIlI\",\n    \"lIlIII_l\",\n    \"lI__IIll\",\n    \"lI_IlIII\",\n    \"lIl_IIII\",\n    \"lI_IlIIl\",\n    \"llIllIll\",\n    \"SettingsUI.TelegramMcrBot\",\n    \"lIl_lllI\"\n  ],\n  \"catalogue_items\": 9069,\n  \"config_namespace\": \"Palatka MCR Local\",\n  \"base_authentication\": \"removed for local workflows\",\n  \"mcr_network\": \"blocked\",\n  \"native_acceptance\": false,\n  \"version\": \"3.0.0-local.7\",\n  \"sha256\": \"4f5286a6a5d46de672705cdf3adfe5f808a38e8aecf522357095e6def1326100\",\n  \"bytes\": 2095959\n}\n",
+      "stderr": ""
+    }
+  ]
+}

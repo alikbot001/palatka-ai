@@ -197,7 +197,7 @@ function A.load()
     local imported,why=A.import(pack)
     if not imported then A.error='Локальная база: '..tostring(why)end
 end
-function A.calculate()
+function A.compute()
     A.invalidate();A.busy=true;A.error=nil
     local token=A.generation;local revision=A.state.revision;local server=A.host.server()
     local options={};for k,v in pairs(A.options)do options[k]=v end
@@ -216,6 +216,16 @@ function A.calculate()
         A.flush()
     end)
 end
+function A.calculate(force)
+    A.follow_market=true
+    if not A.host.fetch_market then A.compute();return end
+    A.invalidate();A.busy=true;A.status='Обновляю цены...'
+    A.refresh_market(function(ok,err)
+        if not A.follow_market then return end
+        A.notice=not ok and('Сеть недоступна: расчёт по сохранённым снимкам. '..tostring(err))or nil
+        A.compute()
+    end,force)
+end
 function A.start()
     if A.started then return end;A.started=true
     A.host.register('crr',A.host.open_main)
@@ -225,6 +235,14 @@ function A.start()
         A.updater.start()
     end
     A.host.run(function()A.load()end)
+    if A.host.poll_market then
+        A.host.poll_market(function()
+            A.refresh_market(function(ok,err)
+                A.notice=not ok and('Сеть недоступна: сохранённые снимки. '..tostring(err))or nil
+                if A.follow_market then A.compute()end
+            end)
+        end)
+    end
 end
 function A.current_results()
     if A.result_server~=A.host.server() or A.result_at and A.host.now()-A.result_at>A.options.ttl then
@@ -233,7 +251,7 @@ function A.current_results()
     -- A quote can expire before the calculation as a whole does.
     for _,r in ipairs(A.results)do
         local now=A.host.now()
-        if now-r.seller.at>A.options.ttl or now-r.buyer.at>A.options.ttl then return{}end
+        if now<r.seller.at or now<r.buyer.at or now-r.seller.at>A.options.ttl or now-r.buyer.at>A.options.ttl then return{}end
     end
     return A.results
 end

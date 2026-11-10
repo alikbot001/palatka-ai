@@ -96,8 +96,10 @@ function E.routes(state,server,now,options,yield_fn)
         table.sort(g.buyers,function(a,b)return a.shop.shop<b.shop.shop end)
         for _,a in ipairs(g.sellers)do
             for _,b in ipairs(g.buyers)do
-                if a.shop.shop~=b.shop.shop and E.net(b.offer.price,tax)>a.offer.price then
-                    pairs_[#pairs_+1]={a=a,b=b,gain=E.net(b.offer.price,tax)-a.offer.price}
+                local unit=E.net(b.offer.price,tax)
+                local fraction=((b.offer.price%10000)*(10000-tax))%10000
+                if a.shop.shop~=b.shop.shop and(unit>a.offer.price or unit==a.offer.price and fraction>0)then
+                    pairs_[#pairs_+1]={a=a,b=b,gain=unit-a.offer.price+fraction/10000}
                 end
                 steps=steps+1;if yield_fn and steps%128==0 then yield_fn()end
                 if steps>=20000 then limited=true;break end

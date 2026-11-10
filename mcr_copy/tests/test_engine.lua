@@ -39,3 +39,8 @@ assert(#E.routes(q,'102',1000,{})==0,'self trade')
 local many={};for i=1,513 do many[i]=row(i,1)end
 assert(not E.observe(q,snap(3,many)),'unbounded snapshot accepted')
 print('MCR arbitrage engine: OK')
+local rounding=E.new()
+assert(E.observe(rounding,snap(1,{row(100,100)})))
+assert(E.observe(rounding,snap(2,{},{row(103,100)})))
+local lot=E.routes(rounding,'102',1000,{tax_bp=200,budget=10000})
+assert(#lot==1 and lot[1].profit==94,'unit rounding discarded a profitable lot')

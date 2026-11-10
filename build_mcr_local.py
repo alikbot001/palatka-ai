@@ -12,8 +12,8 @@ import subprocess
 
 from build_mcr_copy import ROOT, assemble
 
-VERSION='3.0.0-local.6'
-BUILD=6
+VERSION='3.0.0-local.7'
+BUILD=7
 UPDATE_BASE='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 
 TOKEN=re.compile(r'''--\[(=*)\[.*?\]\1\]|--[^\n]*|\[(=*)\[.*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z_0-9]*|\S''',re.S)
@@ -66,6 +66,7 @@ L6.local_ready=PalatkaMCR.local_ready()
 L6.authState='local';L6.status_code=0;L6.status_response=''
 L6.status_text='Локальный режим — ключ MCR не используется'
 U.main.userKey=''
+U.telegram.use_mcr=false
 end"""
     replace_function('lIl_IllI',setup)
     replace_function('lIl__llI','function lIl__llI()lIl_IllI()end')
@@ -77,11 +78,22 @@ B.TextWrapped(u8('Palatka MCR Local работает без ключа MCR. До
 B.TextWrapped(u8('Лавки и цены: Market Helper и локальные снимки. Обновление скрипта: /crrupdate.'))
 end""")
     replace_function('lI__IIll','function lI__IIll()return end')
+    replace_function('lI_IlIII',"function lI_IlIII()O=PalatkaMCR.catalogue(M,nameT,O);lIllIIlI()end")
+    replace_function('lIl_IIII','function lIl_IIII()lI_IlIII()end')
+    replace_function('lI_IlIIl','function lI_IlIIl()lIllIIll();U.lavka.lastUpdateAllItemsID=os.time();lIllIIIl()end')
+    for name in ['llIllIll','SettingsUI.TelegramMcrBot']:
+        replace_function(name,"function "+name+"()B.TextWrapped(u8('Бот MCR недоступен в локальной версии. Настройте своего Telegram-бота; ключ MCR не нужен.'))end")
     settings_view=extract_function(source,'llIIl_ll')
     clear_key='if B.Button(u8(r[962229-958337]))then'
     at=settings_view.index(clear_key)
     end=block_end(settings_view,at)
     source=source.replace(settings_view,settings_view[:at]+"B.TextWrapped(u8('Локальная версия: ключ MCR не нужен. /crrupdate — обновить скрипт.'))"+settings_view[end:],1)
+    settings_view=extract_function(source,'llIIl_ll')
+    marker=settings_view.index('U.main.cloudObxod=not U.main.cloudObxod')
+    start=settings_view.rfind('if B.Checkbox(',0,marker)
+    end=block_end(settings_view,start)
+    if start<0 or end-start>1000:raise ValueError('Unexpected MCR mirror setting')
+    source=source.replace(settings_view,settings_view[:start]+"B.TextWrapped(u8('Рыночные данные: Market Helper и свои сканы. Зеркало MCR не используется.'))"+settings_view[end:],1)
     # These five smallest blocks contain only licensing/hash guards. Inventory,
     # ownership, amount, dialog and acknowledgement checks outside them remain.
     removed=[]
@@ -105,6 +117,14 @@ end""")
     body=extract_function(source,'lIl_llI_')
     start=body.index('local a=(H_.z');end=body.index('local T=p_',start)
     source=source.replace(body,body[:start]+body[end:],1);removed.append(body[start:end])
+    sender=extract_function(source,'lIl_lllI')
+    start=sender.index('if U.telegram.use_self then');end=block_end(sender,start)
+    own=sender[start:end]
+    own=own[:-3]+'return true end'
+    replace_function('lIl_lllI','function lIl_lllI(h)'+own+' return false end')
+    router=extract_function(source,'lIl_llI_')
+    if router.count('lIl_lllI(B)return true')!=1:raise ValueError('Unexpected notification result')
+    source=source.replace(router,router.replace('lIl_lllI(B)return true','return lIl_lllI(B)'),1)
     # UI readiness now means the local game client exists, never a remote license.
     source=re.sub(r'\bL6\.status\b','L6.local_ready',source)
     source=source.replace('PalatkaMCR.start();','PalatkaMCR.start();lIl_IllI();',1)
@@ -122,6 +142,8 @@ end""")
         lines.append(f'if M["{key}"]==nil then M["{key}"]={literal} end')
     lines.append('end\n')
     source+='\n'.join(lines)
+    catalogue=(ROOT/'mcr_copy/src/catalogue.lua').read_text()
+    source+='\nPalatkaMCR.catalogue=(function()\n'+catalogue+'\nend)();\nO=PalatkaMCR.catalogue(M,nameT,O);\n'
     market=(ROOT/'mcr_copy/src/market.lua').read_text()
     bridge=(ROOT/'mcr_copy/src/local_market_host.lua').read_text()
     source+='\nPalatkaMCR.market=(function()\n'+market+'\nend)();\n'+bridge+'\n'

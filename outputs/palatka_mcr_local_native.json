@@ -25,18 +25,21 @@
   "tested_version": "3.0.0-local.1",
   "current_ui_native_acceptance": false,
   "installed_candidate": {
-    "version": "3.0.0-local.5",
-    "sha256": "bbb6f5b16e204cba6f1fe49194564ad89d0e3ae1e2111a0ca78db796ea59afe1",
-    "phone_sha256_matches": true,
-    "main_window_opened": true,
-    "script_manager_version_verified": true,
+    "version": "3.0.0-local.6",
+    "sha256": "a8035147516a9a56dd0c91b7f967ac1a438664aac199a60f668b87cb8769ec70",
+    "phone_file_installed": true,
+    "staged_sha256_verified": true,
+    "reload_command_sent": true,
+    "startup_chat_observed": true,
     "native_ui_verified": false,
-    "updater_error_reproduced": true
+    "native_updater_verified": false,
+    "blocker": "ADB disconnected before repeated /crrupdate"
   },
   "prepared_candidate": {
-    "version": "3.0.0-local.6",
+    "version": "3.0.0-local.7",
     "phone_installed": false,
     "native_ui_verified": false,
-    "native_updater_verified": false
+    "native_updater_verified": false,
+    "blocker": "ADB disconnected"
   }
 }

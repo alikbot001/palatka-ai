@@ -9,14 +9,20 @@
     "lIllIII_",
     "lI__IIlI",
     "lIlIII_l",
-    "lI__IIll"
+    "lI__IIll",
+    "lI_IlIII",
+    "lIl_IIII",
+    "lI_IlIIl",
+    "llIllIll",
+    "SettingsUI.TelegramMcrBot",
+    "lIl_lllI"
   ],
   "catalogue_items": 9069,
   "config_namespace": "Palatka MCR Local",
   "base_authentication": "removed for local workflows",
   "mcr_network": "blocked",
   "native_acceptance": false,
-  "version": "3.0.0-local.6",
-  "sha256": "a8035147516a9a56dd0c91b7f967ac1a438664aac199a60f668b87cb8769ec70",
-  "bytes": 2098614
+  "version": "3.0.0-local.7",
+  "sha256": "4f5286a6a5d46de672705cdf3adfe5f808a38e8aecf522357095e6def1326100",
+  "bytes": 2095959
 }
