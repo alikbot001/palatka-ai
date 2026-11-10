@@ -1,6 +1,6 @@
 -- Render only through the original MCR mimgui instance, styles and child panels.
 return function(A)
-local input,body_view
+local input,body_view,calculate
 local function text(s)A.host.imgui.Text(A.host.utf8(tostring(s)))end
 local function wrapped(s)A.host.imgui.TextWrapped(A.host.utf8(tostring(s)))end
 local function button(s,size)
@@ -109,7 +109,10 @@ local function tabs()
     for i,key in ipairs(keys)do
         if i>1 then B.SameLine()end
         if B.ButtonClickable((A.workspace_tab or'routes')~=key,A.host.utf8(labels[i]..'##pa_tab_'..key),B.ImVec2(width,0))
-            and(not A.host.can_click or A.host.can_click())then A.workspace_tab=key end
+            and(not A.host.can_click or A.host.can_click())then
+            A.workspace_tab=key
+            if key=='resale'and not A.resale_started then calculate()end
+        end
     end
 end
 function A.draw_center()
@@ -174,19 +177,21 @@ function A.draw_center()
     end
     B.EndChild()
 end
-local function calculate()
+calculate=function(force)
+    ready()
     local h=A.host
     local raw=h.input_string(input.budget)
     local budget=raw:match('^%d+$')and A.engine.integer(raw,0)
     local tax=tonumber(input.tax[0])
     if not budget or not tax or tax~=tax or tax<0 or tax>100 then
-        A.error='Неверный бюджет или комиссия'
+        A.error='Неверный бюджет или комиссия';return false
     else
         if A.apply_resale_settings then
             local valid,why=A.apply_resale_settings()
-            if not valid then A.error=why;return end
+            if not valid then A.error=why;return false end
         end
-        A.options.budget=budget;A.options.tax_bp=math.floor(tax*100+0.5);A.calculate()
+        A.options.budget=budget;A.options.tax_bp=math.floor(tax*100+0.5);A.calculate(force==true)
+        return true
     end
 end
 local function tile(id,label,icon,action,height)
@@ -286,6 +291,6 @@ function A.draw_right()
     B.EndChild()
 end
 A.ui={text=text,wrapped=wrapped,button=button,money=money,item_title=item_title,
-    caption=caption,age=age,list=list,popup=popup,quote=quote}
+    caption=caption,age=age,list=list,popup=popup,quote=quote,calculate=calculate}
 return A
 end

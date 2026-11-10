@@ -12,8 +12,8 @@ import subprocess
 
 from build_mcr_copy import ROOT, assemble
 
-VERSION='3.0.0-local.10'
-BUILD=10
+VERSION='3.0.0-local.11'
+BUILD=11
 UPDATE_BASE='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 
 TOKEN=re.compile(r'''--\[(=*)\[.*?\]\1\]|--[^\n]*|\[(=*)\[.*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z_0-9]*|\S''',re.S)
@@ -54,6 +54,15 @@ def build():
     raw=(ROOT/'mcr_copy/vendor/mcrm-1.15.5.lua').read_bytes()
     base,_=assemble(raw)
     source=config_namespace(base.decode('cp1251'))
+    # Snapshot buttons must revalidate the captured owner before marking a shop.
+    for pattern,replacement,expected in [
+        (r'sampSendChat\(r\[[^\]]+\]\.\.a\.shop_id\)',
+         'PalatkaMCR.navigate(a.shop_id,a.nickname,a.server)',3),
+        (r'sampSendChat\(r\[[^\]]+\]\.\.T\.LavkaUid\)',
+         'PalatkaMCR.navigate(T.LavkaUid,T.username,T.serverId)',1),
+    ]:
+        source,count=re.subn(pattern,replacement,source)
+        if count!=expected:raise ValueError('Unexpected snapshot navigation anchors')
     changed=[]
     def replace_function(name,replacement):
         nonlocal source
@@ -211,7 +220,7 @@ def main():
     (ROOT/'outputs/palatka_mcr_local.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     manifest={'schema':1,'channel':'mcr-local','build':BUILD,'version':VERSION,
         'url':UPDATE_BASE+'palatka_mcr_local.lua','size':len(raw),'sha256':report['sha256'],
-        'notes':'Перепродажа от 10% после комиссии, учёт спроса и продаж за 30 дней; журнал закупок/частичных продаж; вертикальная прокрутка.'}
+        'notes':'Исправлен пустой рынок: автоматический расчёт, ходовость без обязательного фильтра, независимое истечение строк и причины отбора. Защита от смешивания владельцев лавок и неверного возраста сканов.'}
     (ROOT/'outputs/palatka_mcr_update.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))
 

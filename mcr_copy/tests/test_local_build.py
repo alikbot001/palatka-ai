@@ -7,6 +7,14 @@ import unittest
 ROOT=Path(__file__).resolve().parents[2]
 
 class LocalBuildTests(unittest.TestCase):
+    def test_all_snapshot_find_buttons_revalidate_captured_identity(self):
+        spec=importlib.util.spec_from_file_location('navigation_builder',ROOT/'build_mcr_local.py')
+        mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+        source=mod.build()[0].decode('cp1251')
+        self.assertEqual(source.count('PalatkaMCR.navigate(a.shop_id,a.nickname,a.server)'),3)
+        self.assertEqual(source.count('PalatkaMCR.navigate(T.LavkaUid,T.username,T.serverId)'),1)
+        self.assertNotRegex(source,r'sampSendChat\(r\[[^\]]+\]\.\.(?:a\.shop_id|T\.LavkaUid)\)')
+
     def test_empty_key_local_lifecycle_and_settings(self):
         path=ROOT/'build_mcr_local.py'
         self.assertTrue(path.exists(),'missing independent client builder')

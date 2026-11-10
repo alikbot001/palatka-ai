@@ -57,4 +57,24 @@ B.BeginChild=function(id,size)
 end
 h.draw_popup=function(title,draw)if title=='Параметры арбитража'then draw()end end
 A.draw_right();assert(bounded,'additional settings grew the native popup off screen')
+local queue,fetches={},0
+h.run=function(fn)queue[#queue+1]=fn end
+h.fetch_market=function()fetches=fetches+1 end
+A.workspace_tab='routes';A.resale_started=false;click='##pa_tab_resale';A.draw_center()
+assert(A.follow_market and A.resale_started and #queue>0,'first market tab did not start calculation')
+assert(fetches==0,'network ran directly inside the render callback')
+while #queue>0 do table.remove(queue,1)()end
+assert(fetches==1)
+local generation=A.generation
+click='##pa_tab_routes';A.draw_center();click='##pa_tab_resale';A.draw_center()
+assert(A.generation==generation,'returning to market repeatedly restarts calculation')
+calls={};A.busy=false;A.resale_busy=false;A.resale_results={}
+A.resale_report={shops=0,offers=0,no_reference=0,no_margin=0,no_demand=0,below_roi=0,budget_or_qty=0}
+A.workspace_body('resale',{},nil,false)
+assert(table.concat(calls,'\n'):find('Свежих предложений',1,true),'empty source reason invisible')
+calls={};A.resale_report={shops=4,offers=4,no_reference=0,no_margin=1,no_demand=2,below_roi=1,budget_or_qty=0}
+A.workspace_body('resale',{},nil,false)
+local empty=table.concat(calls,'\n')
+assert(empty:find('Фильтр спроса: 2',1,true)and empty:find('Порог прибыли: 1',1,true),'filter reasons invisible')
+assert(empty:find('##pa_resale_refresh',1,true),'empty market has no refresh action')
 print('Resale UI: monthly popularity, separate reference/target/fees, selection and stale guards OK')

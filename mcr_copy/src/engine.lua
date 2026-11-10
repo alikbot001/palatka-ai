@@ -50,11 +50,19 @@ function E.observe(state,snapshot)
     local buys;buys,err=side(snapshot.buy or{});if not buys then return false,err end
     local key=shop_key(server,shop)
     local old=state.shops[key]
-    if old and (old.at>at or old.at==at and old.source=='local' and snapshot.source~='local')then
+    local source=tostring(snapshot.source or 'import')
+    if old and (old.at>at or old.at==at and old.source=='local' and source~='local')then
         return true,'older snapshot ignored'
     end
-    state.shops[key]={server=server,shop=shop,at=at,source=tostring(snapshot.source or 'import'),
-        owner=tostring(snapshot.owner or ''),sell=sells,buy=buys}
+    local owner=tostring(snapshot.owner or '')
+    local conflict=snapshot.owner_conflict==true
+    if old and old.at==at and not(source=='local'and old.source~='local')then
+        conflict=conflict or old.owner_conflict==true or old.owner~=owner
+    end
+    -- Persist ambiguity, but let a strictly newer scan establish a new identity.
+    if conflict then owner='';sells={};buys={}end
+    state.shops[key]={server=server,shop=shop,at=at,source=source,
+        owner=owner,owner_conflict=conflict or nil,sell=sells,buy=buys}
     state.revision=state.revision+1
     -- Bound persistent state without relying on a rendering frame.
     local keys={};for k,s in pairs(state.shops)do keys[#keys+1]={key=k,at=s.at}end

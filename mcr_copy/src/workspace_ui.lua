@@ -61,8 +61,19 @@ function A.workspace_body(tab,rows,selected,show_details)
     elseif A.busy or A.resale_busy then g.wrapped('Считаю цены и спрос...')
     else
         g.wrapped('Подходящих вариантов пока нет')
-        g.wrapped('Нужны свежие предложения, минимум 3 независимых продавца и признаки спроса. Нажмите «Расчёт».')
-        g.wrapped('По умолчанию: от 10% после комиссии, до 10 шт. на товар. Порог меняется в параметрах справа.')
+        local r=A.resale_report
+        if #(A.resale_results or{})>0 then g.wrapped('Срок данных истёк. Обновите расчёт.')
+        elseif not r then g.wrapped('Нажмите «Обновить расчёт», чтобы загрузить лавки.')
+        elseif r.offers==0 then g.wrapped('Свежих предложений с ценой и количеством на этом сервере нет.')
+        else
+            g.wrapped('Проверено: '..r.shops..' лавок, '..r.offers..' предложений.')
+            for _,field in ipairs({{'Мало независимых продавцов','no_reference'},{'Нет разницы в цене','no_margin'},
+                {'Фильтр спроса','no_demand'},{'Порог прибыли','below_roi'},{'Бюджет или лимит количества','budget_or_qty'}})do
+                if (r[field[2]]or 0)>0 then g.wrapped(field[1]..': '..r[field[2]])end
+            end
+        end
+        g.wrapped('Порог: '..string.format('%.1f',A.resale_options.min_roi_bp/100)..'% после комиссии. Ходовость учитывается первой; скорость без статистики неизвестна.')
+        if g.button('Обновить расчёт##pa_resale_refresh',A.host.imgui.ImVec2(-1,0))then g.calculate(true)end
     end
     if A.resale_error then g.wrapped(A.resale_error)end
     if A.demand_error then g.wrapped('Статистика 30 дней недоступна: '..A.demand_error)end

@@ -1,9 +1,9 @@
 {
   "scope": "mcr_local_targeted",
-  "checked_at": "2026-11-10T17:04:28.422926+00:00",
-  "version": "3.0.0-local.10",
-  "artifact_sha256": "556d244a00c976793f15264a07fbd35c774a52ded435a9ca81a68e8aebaec54b",
-  "lua_suites": 24,
+  "checked_at": "2026-11-10T17:45:45.544823+00:00",
+  "version": "3.0.0-local.11",
+  "artifact_sha256": "a69341a95ca059c7b8b5278c8919e904f1e6439e0569f3e6be4441264a37142f",
+  "lua_suites": 27,
   "native_acceptance": false,
   "checks": [
     {
@@ -151,15 +151,33 @@
       "stderr": ""
     },
     {
+      "command": "luajit mcr_copy/tests/test_resale_visibility.lua",
+      "exit_code": 0,
+      "stdout": "Resale visibility: ranked unknown demand and independent row expiry/selection OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_shop_identity.lua",
+      "exit_code": 0,
+      "stdout": "OK: scan time ages quotes instead of cache update time\nOK: invalid present scan time is never replaced by update time\nOK: same owner split sides merge at the same original scan time\nOK: different owners at equal scan time stay unavailable in every row order\nOK: newer original scan replaces older owner without mixing sides\nOK: external conflict clears existing cached offers\nOK: engine same-time owner conflict cannot resurrect on a third row\nOK: local observation wins equal-time external conflict in either order\nMCR shop identity: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_navigation.lua",
+      "exit_code": 0,
+      "stdout": "Navigation: forced refresh, owner changes, stale UI, reconnect, expiry and response identity receipts: OK\n",
+      "stderr": ""
+    },
+    {
       "command": "/usr/bin/python3 -m unittest discover -s mcr_copy/tests -p 'test_*.py'",
       "exit_code": 0,
       "stdout": "empty-key lifecycle, local readiness, full settings and presets: OK\nempty-key sale: owner timeout, empty inventory, ACK, bounded retries: OK\nMCR requests blocked; no fake success; game/own bot transport preserved: OK\nNative buy/ID catalogues refresh entirely offline: OK\nUnavailable/misconfigured Telegram transport does not report sent: OK\n",
-      "stderr": ".............\n----------------------------------------------------------------------\nRan 13 tests in 8.887s\n\nOK\n"
+      "stderr": "..............\n----------------------------------------------------------------------\nRan 14 tests in 10.305s\n\nOK\n"
     },
     {
       "command": "/usr/bin/python3 build_mcr_local.py",
       "exit_code": 0,
-      "stdout": "{\n  \"license_blocks_removed\": 7,\n  \"changed_functions\": [\n    \"A_\",\n    \"p_\",\n    \"lIl_IllI\",\n    \"lIl__llI\",\n    \"lII__IlI\",\n    \"lIllIII_\",\n    \"lI__IIlI\",\n    \"lIlIII_l\",\n    \"lI__IIll\",\n    \"lI_IlIII\",\n    \"lIl_IIII\",\n    \"lI_IlIIl\",\n    \"SettingsUI.TelegramMcrBot\",\n    \"llIllIll\",\n    \"lIl_l__I\",\n    \"lII____l\",\n    \"lII___lI\",\n    \"lIl_lllI\"\n  ],\n  \"catalogue_items\": 9069,\n  \"config_namespace\": \"Palatka MCR Local\",\n  \"base_authentication\": \"removed for local workflows\",\n  \"mcr_network\": \"blocked\",\n  \"native_acceptance\": false,\n  \"version\": \"3.0.0-local.10\",\n  \"sha256\": \"556d244a00c976793f15264a07fbd35c774a52ded435a9ca81a68e8aebaec54b\",\n  \"bytes\": 2153604\n}\n",
+      "stdout": "{\n  \"license_blocks_removed\": 7,\n  \"changed_functions\": [\n    \"A_\",\n    \"p_\",\n    \"lIl_IllI\",\n    \"lIl__llI\",\n    \"lII__IlI\",\n    \"lIllIII_\",\n    \"lI__IIlI\",\n    \"lIlIII_l\",\n    \"lI__IIll\",\n    \"lI_IlIII\",\n    \"lIl_IIII\",\n    \"lI_IlIIl\",\n    \"SettingsUI.TelegramMcrBot\",\n    \"llIllIll\",\n    \"lIl_l__I\",\n    \"lII____l\",\n    \"lII___lI\",\n    \"lIl_lllI\"\n  ],\n  \"catalogue_items\": 9069,\n  \"config_namespace\": \"Palatka MCR Local\",\n  \"base_authentication\": \"removed for local workflows\",\n  \"mcr_network\": \"blocked\",\n  \"native_acceptance\": false,\n  \"version\": \"3.0.0-local.11\",\n  \"sha256\": \"a69341a95ca059c7b8b5278c8919e904f1e6439e0569f3e6be4441264a37142f\",\n  \"bytes\": 2160113\n}\n",
       "stderr": ""
     }
   ]

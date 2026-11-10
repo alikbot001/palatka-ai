@@ -33,6 +33,7 @@ function A.track_selected(side)
     if not route then A.error='Выберите актуальный маршрут';return false end
     local shop=side=='buy'and route.seller or side=='sell'and route.buyer
     if not shop or shop.server~=A.host.server()then return false end
+    if A.navigate then return A.navigate(shop)end
     A.host.find(shop.shop,shop.server);return true
 end
 function A.capture(snapshot)
@@ -154,10 +155,10 @@ function A.refresh_market(done,force)
     end
     local request={server=server,waiters={done}};A.market_pending=request
     h.run(function()
-        local function finish(ok,err)
+        local function finish(ok,err,receipt)
             if A.market_pending==request then A.market_pending=nil end
             if err then A.error='Market Helper: '..tostring(err)end
-            for _,callback in ipairs(request.waiters)do callback(ok,err)end
+            for _,callback in ipairs(request.waiters)do callback(ok,err,receipt)end
         end
         if not sid or server==''then finish(false,'Мобильный сервер не определён');return end
         h.fetch_market(sid,function(raw,err)
@@ -185,7 +186,7 @@ function A.refresh_market(done,force)
             local imported,why=A.import(pack,reconcile)
             if not imported then finish(false,why);return end
             A.market_server=server;A.market_updated=h.now();A.error=nil
-            A.status='Market Helper: '..#pack.shops..' лавок';A.flush();finish(true)
+            A.status='Market Helper: '..#pack.shops..' лавок';A.flush();finish(true,nil,pack)
         end)
     end)
 end

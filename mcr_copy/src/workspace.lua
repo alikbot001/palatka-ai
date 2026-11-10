@@ -1,8 +1,9 @@
 -- Compose optional analyzers and a separate durable manual ledger.
 return function(A,E,R,P,D)
-A.resale_options={min_roi_bp=1000,max_qty=10,popular_only=true}
+A.resale_options={min_roi_bp=1000,max_qty=10,popular_only=false}
 A.purchase_state=P.new();A.book_revision=0
-local invalidate,compute,load,refresh=A.invalidate,A.compute,A.load,A.refresh_market
+local invalidate,compute,load,refresh,calculate=A.invalidate,A.compute,A.load,A.refresh_market,A.calculate
+function A.calculate(force)A.resale_started=true;calculate(force)end
 function A.refresh_popularity(done,force)
     local h=A.host;local server,currency=h.server(),h.currency()
     if not h.fetch_popularity or not D or currency~='SA$'then done(false);return end
@@ -41,6 +42,7 @@ function A.refresh_market(done,force)
 end
 function A.invalidate()
     invalidate();A.resale_results={};A.resale_selected=nil;A.resale_details=false;A.resale_busy=false
+    A.resale_choice=nil;A.resale_view=nil;A.resale_report=nil;A.resale_error=nil
 end
 function A.load_book()
     A.book_loaded=false
@@ -114,6 +116,7 @@ function A.record_sale(lot_id,params,done)
     end,params,done)
 end
 function A.compute()
+    A.resale_started=true
     compute()
     local h=A.host;local server,currency=h.server(),h.currency()
     local token,revision=A.generation,A.state.revision
@@ -130,7 +133,7 @@ function A.compute()
     h.run(function()
         if token~=A.generation then return end
         if server~=h.server()or currency~=h.currency()then A.resale_busy=false;return end
-        local rows,why=R.rank(A.state,server,h.now(),options,function()
+        local rows,why,report=R.rank(A.state,server,h.now(),options,function()
             h.yield()
             return token==A.generation and server==h.server()and currency==h.currency()
         end)
@@ -138,7 +141,7 @@ function A.compute()
         A.resale_busy=false
         if server~=h.server()or currency~=h.currency()or revision~=A.state.revision then return end
         A.resale_results=rows;A.resale_server=server;A.resale_currency=currency
-        A.resale_at=h.now();A.resale_revision=revision;A.resale_error=why
+        A.resale_at=h.now();A.resale_revision=revision;A.resale_error=why;A.resale_report=report
     end)
 end
 function A.current_resale()
@@ -146,18 +149,32 @@ function A.current_resale()
     if A.resale_server~=h.server()or A.resale_currency~=h.currency()
         or A.resale_revision~=A.state.revision or not A.resale_at or now<A.resale_at
         or now-A.resale_at>A.options.ttl then return{}end
-    for _,row in ipairs(A.resale_results or{})do
-        if now<row.seller.at or now>(row.valid_until or row.seller.at+A.options.ttl)then return{}end
+    local cache=A.resale_view
+    if not cache or cache.raw~=A.resale_results or cache.at~=now then
+        local rows,selected={},nil
+        for _,row in ipairs(A.resale_results or{})do
+            if now>=row.seller.at and now<=(row.valid_until or row.seller.at+A.options.ttl)then
+                rows[#rows+1]=row
+                if row==A.resale_choice then selected=#rows end
+            end
+        end
+        if A.resale_choice then
+            A.resale_selected=selected
+            if not selected then A.resale_choice=nil;A.resale_details=false end
+        end
+        cache={raw=A.resale_results,at=now,rows=rows};A.resale_view=cache
     end
-    return A.resale_results or{}
+    return cache.rows
 end
 function A.select_resale(index)
-    if not A.current_resale()[index]then return false end
-    A.resale_selected=index;A.resale_details=true;return true
+    local row=A.current_resale()[index]
+    if not row then return false end
+    A.resale_selected=index;A.resale_choice=row;A.resale_details=true;return true
 end
 function A.track_resale()
     local row=A.current_resale()[A.resale_selected]
     if not row or row.seller.server~=A.host.server()then return false end
+    if A.navigate then return A.navigate(row.seller)end
     A.host.find(row.seller.shop,row.seller.server);return true
 end
 return A

@@ -67,8 +67,10 @@ function R.rank(state,server,now,options,yield_fn)
     end
     if not checkpoint(true)then return {},'cancelled'end
     local groups={}
+    local report={shops=0,offers=0,no_reference=0,no_margin=0,no_demand=0,below_roi=0,budget_or_qty=0,accepted=0}
     for _,shop in pairs(state.shops)do
         if shop.server==tostring(server) and shop.at<=now and now-shop.at<=p.ttl then
+            report.shops=report.shops+1
             for _,side in ipairs({'sell','buy'})do
                 for _,o in ipairs(shop[side])do
                     if o.variant and o.currency==p.currency then
@@ -76,7 +78,7 @@ function R.rank(state,server,now,options,yield_fn)
                         groups[o.key]=g
                         local m=merchant(shop)
                         if side=='sell' then
-                            if o.qty then g.asks[#g.asks+1]={shop=shop,offer=o}end
+                            if o.qty then g.asks[#g.asks+1]={shop=shop,offer=o};report.offers=report.offers+1 end
                             local old=g.peers[m]
                             if not old or o.price<old.price then
                                 g.peers[m]={shop=shop,price=o.price,valid_until=add(shop.at,p.ttl)}
@@ -169,13 +171,15 @@ function R.rank(state,server,now,options,yield_fn)
                 if evidence.market_qty_30d>=300 then evidence.kind='market_sales'
                 elseif evidence.own_events>=3 and evidence.own_qty>=20 then evidence.kind='own_sales'
                 elseif evidence.buyer_shops>=2 and evidence.buyer_qty>=20 then evidence.kind='buy_orders'end
-                if target>a.offer.price and (not p.popular_only or evidence.kind~='unknown')then
+                if target<=a.offer.price then report.no_margin=report.no_margin+1
+                elseif p.popular_only and evidence.kind=='unknown'then report.no_demand=report.no_demand+1
+                else
                     candidates[#candidates+1]={a=a,key=key,target=target,reference=reference,
                         peer_price=peer_price,history_price=history_price,
                         peer_count=#prices,popularity=evidence,valid_until=valid_until,
                         unit_gain=E.net(target,p.tax_bp)-a.offer.price}
                 end
-            end
+            else report.no_reference=report.no_reference+1 end
         end
     end
     table.sort(candidates,function(a,b)
@@ -210,12 +214,13 @@ function R.rank(state,server,now,options,yield_fn)
                     peer_count=c.peer_count,cost=cost,gross=gross,fee=gross-net,net=net,
                     profit=profit,roi_bp=roi(profit,cost),popularity=c.popularity,valid_until=c.valid_until}
                 used[c.key]=(used[c.key]or 0)+n;spent=spent+cost
-            end
-        end
+            else report.below_roi=report.below_roi+1 end
+        else report.budget_or_qty=report.budget_or_qty+1 end
         if not checkpoint()then return {},'cancelled'end
     end
     if not checkpoint(true)then return {},'cancelled'end
-    return rows
+    report.accepted=#rows
+    return rows,nil,report
 end
 return R
 end

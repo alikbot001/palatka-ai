@@ -95,6 +95,7 @@ do
         end,
         open_main=function()o_(true)end,
         open=function()O3=F3.arbitrage;M3[0]=true end,
+        notify=function(message)sampAddChatMessage('[CRR] {FFFFFF}'..message,-1)end,
         find=function(number,server)
             if server~=PalatkaMCR.host.server()then
                 PalatkaMCR.error='Сервер изменился';return

@@ -31,19 +31,28 @@ function P.vata(data,source_server,target_server,currency,text,options)
     local merged={}
     for _,s in ipairs(type(data)=='table'and data.shops or{})do
         if type(s)=='table' and tonumber(s.server_id)==tonumber(source_server)then
-            local n,at=positive(s.shop_num),positive(s.updated_at)
+            local n=positive(s.shop_num)
+            local scan=s.scanned_at
+            if scan==nil then scan=s.updated_at end
+            local at=positive(scan)
             if n and at then
                 local sell=offers(s.sell_slots,currency,text,options)
                 local buy=offers(s.buy_slots,currency,text,options)
                 if sell and buy then
                     local old=merged[n]
+                    local owner=tostring(s.owner or '')
                     if not old or at>old.at then
-                        old={server=target_server,shop=n,owner=tostring(s.owner or ''),at=at,
+                        old={server=target_server,shop=n,owner=owner,at=at,
                             source=options.source or'va-ta-cache',sell={},buy={}};merged[n]=old
                     end
                     if at==old.at then
-                        if #sell>#old.sell then old.sell=sell end
-                        if #buy>#old.buy then old.buy=buy end
+                        if old.owner_conflict or old.owner~=owner then
+                            -- Keep a tombstone so a third row cannot revive an arbitrary owner.
+                            old.owner_conflict=true;old.owner='';old.sell={};old.buy={}
+                        else
+                            if #sell>#old.sell then old.sell=sell end
+                            if #buy>#old.buy then old.buy=buy end
+                        end
                     end
                 end
             end
