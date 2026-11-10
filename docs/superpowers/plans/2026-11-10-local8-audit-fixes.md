@@ -83,5 +83,14 @@
 - [x] Run all dedicated Lua/Python suites and bytecode compilation; compare legacy test baseline if run.
 - [x] Bump to local.8/build 8; build manifest and artifact together, verify size/SHA/version and CP1251.
 - [x] Record verification and remaining native limitations, update plan checkboxes.
-- [ ] Commit/push feature branch, immutable candidate tag, update PR #26 without merging stable.
+- [x] Commit/push feature branch, immutable candidate tag, update PR #26 without merging stable.
 - [x] Check ADB inventory; install only if safely accessible, otherwise explicitly report not installed.
+
+## Verified delivery
+
+- Candidate source commit: `684e14f`; published tag: `mcr-local.8`; draft PR #26 updated.
+- `python3 mcr_copy/verify.py`: all 12 Lua suites and 13 Python tests pass, build/bytecode exit 0.
+- Final SHA256: `a294d6e235dd1916d135f3bb7fd33fb2c83384e2a3062025be72302299f8784c`; 2,103,273 bytes.
+- Published GitHub raw bytes downloaded and matched the final size/SHA.
+- ADB inventory empty; not installed or accepted on Android. No real trades.
+- Review decisions: keep pending UID blocking both loaders; use existing libc monotonic clock with explicit failure; preserve exact asking-price totals; require explicit recovery after selected ID disappears. All covered by regression tests.
