@@ -56,6 +56,7 @@ print('empty-key lifecycle, local readiness, full settings and presets: OK')
         parts=[mod.extract_function(source,n)for n in ['lI_IlIII','lI_IlIIl','lIl_IIII']]
         harness="""local M={['1']='Apple',['2']='Pear',['3']='Apple'}
 local O={};local nameT='name';local U={lavka={}}
+local F3={buy=2};local O3=F3.buy
 local saved=0
 local function lIllIIlI()saved=saved+1 end
 local function lIllIIll()saved=saved+1 end

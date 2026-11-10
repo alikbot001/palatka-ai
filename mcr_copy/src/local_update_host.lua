@@ -15,7 +15,8 @@ A.updater=A.new_updater({
     end,
     notify=notify,
     busy=function()
-        return o6 or g6 or s6 or u6 or isParseInventoryDialogs or isSetProcessPause
+        return m6 or o6 or g6 or s6 or u6 or isParseInventoryDialogs
+            or isParseInventoryDialogsForBuy or isSetProcessPause
             or(autoShopState and autoShopState.active)or A.busy
     end,
     install=function(body)return A.install_file(thisScript().path,body)end,

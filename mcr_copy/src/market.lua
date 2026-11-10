@@ -15,9 +15,20 @@ function M.title(o)
     local level=o.variant:match('^(%d+):0$')
     if level then
         if o.name:match('%(%+%d+%)$')then return o.name end
-        return o.name..' (+'..level..')'
+        return o.name..'(+'..level..')'
     end
     return o.name..' ['..o.variant..']'
+end
+function M.same_name(a,b)
+    local function canonical(name)return tostring(name):gsub('%s+%(%+(%d+)%)$','(+%1)')end
+    return canonical(a)==canonical(b)
+end
+function M.lookup_name(o)
+    local level=o.variant and o.variant:match('^(%d+):%d+$')
+    if o.embedded_item_id~=nil and level then
+        return M.title({name=o.name,variant=level..':0'})
+    end
+    return M.title(o)
 end
 local function add(side,o)
     side.min=side.min and math.min(side.min,o.price)or o.price
@@ -38,7 +49,7 @@ function M.prices(shops)
                 local key=o.id..'\031'..tostring(o.variant)..'\031'..o.currency
                 local row=groups[key]
                 if not row then
-                    row={name=M.title(o),id=o.id,variant=o.variant,currency=o.currency,
+                    row={name=M.title(o),lookup_name=M.lookup_name(o),id=o.id,variant=o.variant,currency=o.currency,
                         sell={sum=0,qty=0,offers=0},buy={sum=0,qty=0,offers=0}}
                     groups[key]=row
                 end

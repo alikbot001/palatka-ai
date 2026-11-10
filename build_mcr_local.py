@@ -12,8 +12,8 @@ import subprocess
 
 from build_mcr_copy import ROOT, assemble
 
-VERSION='3.0.0-local.7'
-BUILD=7
+VERSION='3.0.0-local.8'
+BUILD=8
 UPDATE_BASE='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 
 TOKEN=re.compile(r'''--\[(=*)\[.*?\]\1\]|--[^\n]*|\[(=*)\[.*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z_0-9]*|\S''',re.S)
@@ -79,10 +79,39 @@ B.TextWrapped(u8('Лавки и цены: Market Helper и локальные с
 end""")
     replace_function('lI__IIll','function lI__IIll()return end')
     replace_function('lI_IlIII',"function lI_IlIII()O=PalatkaMCR.catalogue(M,nameT,O);lIllIIlI()end")
-    replace_function('lIl_IIII','function lIl_IIII()lI_IlIII()end')
+    replace_function('lIl_IIII','function lIl_IIII()if O3==F3.sell then lI_I___l(true)elseif O3==F3.buy then lI_IlIII()end end')
     replace_function('lI_IlIIl','function lI_IlIIl()lIllIIll();U.lavka.lastUpdateAllItemsID=os.time();lIllIIIl()end')
-    for name in ['llIllIll','SettingsUI.TelegramMcrBot']:
+    for name in ['SettingsUI.TelegramMcrBot']:
         replace_function(name,"function "+name+"()B.TextWrapped(u8('Бот MCR недоступен в локальной версии. Настройте своего Telegram-бота; ключ MCR не нужен.'))end")
+    telegram_view=extract_function(source,'llIllIll')
+    marker=telegram_view.index('U.telegram.use_mcr=true U.telegram.use_self=false')
+    start=telegram_view.rfind('if B.Checkbox(',0,marker)
+    end=block_end(telegram_view,start)
+    replace_function('llIllIll',telegram_view[:start]+"B.TextWrapped(u8('Бот MCR недоступен; используйте своего бота.'))"+telegram_view[end:])
+    # The original watchdog measured CPU time, which barely moves while the
+    # client waits for a network response. Keep its queue/cancellation protocol.
+    watchdog=extract_function(source,'lIl_l__I')
+    if watchdog.count('os.clock()')!=1:raise ValueError('Unexpected HTTP watchdog clock')
+    replace_function('lIl_l__I',watchdog.replace('os.clock()','PalatkaMCR.elapsed()'))
+    # A missing/changed stats dialog must not hold up the main processors forever.
+    # Do not clear isCheckUID: only the genuine stats parser grants readiness.
+    uid=extract_function(source,'lII____l')
+    guard="""local expires=PalatkaMCR.elapsed()+30
+local initialAttempts=h.attempts
+local function expired()
+ if PalatkaMCR.elapsed()<expires and h.attempts-initialAttempts<5 then return false end
+ h.stage='timeout';h.loopActive=false
+ lI__I_lI('Не получены данные персонажа. Введите /stats для повторного определения UID.',e_.secondaryInfo)
+ return true
+end """
+    uid=uid.replace('local h=L6.uidCheck ', 'local h=L6.uidCheck '+guard,1)
+    for marker in ['while not isSampAvailable()do','while not h.forceRequested and not lII_____(B)do','while L6.isCheckUID do']:
+        if uid.count(marker)!=1:raise ValueError('Unexpected UID discovery loop')
+        uid=uid.replace(marker,marker+' if expired()then return end ',1)
+    replace_function('lII____l',uid)
+    native_ready=extract_function(source,'lII___lI')
+    replace_function('lII___lI',native_ready.replace('function lII___lI()',
+        'function lII___lI()if L6.isCheckUID then return false end ',1))
     settings_view=extract_function(source,'llIIl_ll')
     clear_key='if B.Button(u8(r[962229-958337]))then'
     at=settings_view.index(clear_key)
@@ -130,6 +159,8 @@ end""")
     source=source.replace('PalatkaMCR.start();','PalatkaMCR.start();lIl_IllI();',1)
     ready=f"\nPalatkaMCR.version='{VERSION}';PalatkaMCR.build={BUILD};PalatkaMCR.update_base='{UPDATE_BASE}'\n"
     ready+="PalatkaMCR.local_ready=function()return type(isSampAvailable)=='function'and isSampAvailable()or false end\n"
+    elapsed=(ROOT/'mcr_copy/src/elapsed.lua').read_text()
+    ready+='PalatkaMCR.elapsed=(function()\n'+elapsed+"\nend)()(require 'ffi')\n"
     marker='local r=(function(r)'
     source=source.replace(marker,ready+marker,1)
     network=(ROOT/'mcr_copy/src/local_network.lua').read_text()
@@ -157,8 +188,10 @@ end""")
         source=source[:match.start()]+"B.CenterCenterText(u8(type(Y6.result)=='string'and Y6.result or'Нет свежих цен. Обновите базу Market Helper.'))"+source[end:]
     price_view=extract_function(source,'llIlIIIl')
     annotated=re.sub(r'B\.BeginChild\((r\[[^\]]+\]),a\)',
-        lambda m:m[0]+"B.TextWrapped(u8('Средние цены объявлений Market Helper и своих сканов; не история сделок.'))",
+        lambda m:m[0]+"PalatkaMCR.draw_price_identity_selector();B.TextWrapped(u8('Средние цены объявлений Market Helper и своих сканов; не история сделок.'))",
         price_view)
+    if annotated.count('PalatkaMCR.draw_price_identity_selector()')!=3:
+        raise ValueError('Unexpected native price view children')
     source=source.replace(price_view,annotated,1)
     for field,module in [('sha256','sha256'),('new_updater','updater'),('install_file','update_file')]:
         code=(ROOT/'mcr_copy/src'/f'{module}.lua').read_text()
@@ -178,7 +211,7 @@ def main():
     (ROOT/'outputs/palatka_mcr_local.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     manifest={'schema':1,'channel':'mcr-local','build':BUILD,'version':VERSION,
         'url':UPDATE_BASE+'palatka_mcr_local.lua','size':len(raw),'sha256':report['sha256'],
-        'notes':'База Market Helper без ключа MCR; /crrupdate и уведомления об обновлении.'}
+        'notes':'Исправлены обновление инвентаря, Telegram, поиск цен по ID, запоздавшие ответы и тайм-ауты; усилена защита /crrupdate.'}
     (ROOT/'outputs/palatka_mcr_update.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))
 

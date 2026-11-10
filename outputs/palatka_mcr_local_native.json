@@ -36,10 +36,10 @@
     "blocker": "ADB disconnected before repeated /crrupdate"
   },
   "prepared_candidate": {
-    "version": "3.0.0-local.7",
+    "version": "3.0.0-local.8",
     "phone_installed": false,
     "native_ui_verified": false,
     "native_updater_verified": false,
-    "blocker": "ADB disconnected"
+    "blocker": "ADB device inventory empty on 2026-11-10"
   }
 }
