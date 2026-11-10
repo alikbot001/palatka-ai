@@ -1,0 +1,45 @@
+{
+  "settings_namespace": "Palatka MCR Local",
+  "settings_created_on_phone": true,
+  "mcr_key_empty": true,
+  "all_native_controls_tested": false,
+  "real_trades_tested": false,
+  "fresh_native_startup": {
+    "date": "2026-11-09",
+    "timezone": "Asia/Baku",
+    "component": "com.arizona21.game.web/com.arizona.game.GTASA",
+    "loader": "NeoMLoader 1.0.68 build 168",
+    "script_loading_at": "07:09:12",
+    "loader_reported_success_at": "07:09:13",
+    "settings_sections": 18,
+    "mcr_key_empty": true
+  },
+  "ui_probe": {
+    "method": "temporary copy opening M3 after startup",
+    "visible_window_confirmed": false,
+    "blocker": "client connection/account login stage",
+    "production_file_restored": true,
+    "restored_sha256": "5e439c42abf7d0f2757f02f611dd653c3b2c58facdb4d0834c20cae012bd995d",
+    "test_client_stopped": true
+  },
+  "tested_version": "3.0.0-local.1",
+  "current_ui_native_acceptance": false,
+  "installed_candidate": {
+    "version": "3.0.0-local.10",
+    "sha256": "556d244a00c976793f15264a07fbd35c774a52ded435a9ca81a68e8aebaec54b",
+    "phone_file_installed": true,
+    "staged_sha256_verified": true,
+    "reload_command_sent": false,
+    "startup_chat_observed": false,
+    "native_ui_verified": false,
+    "native_updater_verified": false,
+    "blocker": "User requested GitHub-only handoff; no command typed. File replacement verified; native reload unconfirmed."
+  },
+  "prepared_candidate": {
+    "version": "3.0.0-local.10",
+    "phone_installed": true,
+    "native_ui_verified": false,
+    "native_updater_verified": false,
+    "blocker": "Native reload not confirmed; user will download/run manually."
+  }
+}

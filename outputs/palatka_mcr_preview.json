@@ -1,0 +1,11 @@
+{
+  "version": "3.0.0-mcr-preview.1",
+  "base_version": "MCR Mobile 1.15.5",
+  "base_sha256": "e9bde4c5299e53118af664012d4aa1e9644373b489bdb0a3ff603bf74c4ab8d5",
+  "sha256": "555cd40e5a23379e1f611a3209bcc4681c0d80eb78e423d684a1d49575d0dbdd",
+  "bytes": 1496720,
+  "integration_patches": 9,
+  "native_acceptance": false,
+  "base_authentication": "preserved",
+  "local_arbitrage_requires_mcr_key": false
+}

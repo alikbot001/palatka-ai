@@ -1,0 +1,46 @@
+local f=io.open('mcr_copy/src/engine.lua','rb')
+assert(f,'missing independent arbitrage engine');f:close()
+local E=assert(loadfile('mcr_copy/src/engine.lua'))()
+local function row(price,qty,variant)
+    return{id='5',variant=variant or '0',name='Item',price=price,qty=qty,currency='SA$'}
+end
+local function snap(shop,sell,buy,server,at,source)
+    return{shop=shop,owner='P'..shop,server=server or '102',at=at or 1000,
+        source=source or 'local',sell=sell or{},buy=buy or{}}
+end
+local s=E.new()
+assert(E.observe(s,snap(1,{row(100,3)})))
+assert(E.observe(s,snap(2,{},{row(150,700)})))
+local r=E.routes(s,'102',1000,{tax_bp=200})
+assert(#r==1 and r[1].qty==3 and r[1].cost==300 and r[1].gross==450)
+assert(r[1].seller_qty==3 and r[1].buyer_qty==700,'source stock confused with planned volume')
+assert(r[1].fee==9 and r[1].profit==141)
+assert(#E.routes(s,'103',1000,{})==0,'cross-server leak')
+assert(#E.routes(s,'102',5000,{})==0,'stale quotes accepted')
+assert(E.observe(s,snap(1,{row(100,50)},nil,nil,990,'external')))
+assert(E.routes(s,'102',1000,{})[1].qty==3,'external duplicated local stock')
+assert(E.observe(s,snap(3,{row(90,4)})))
+assert(E.observe(s,snap(4,{},{row(140,2)})))
+r=E.routes(s,'102',1000,{tax_bp=200,budget=500})
+local qty,cost=0,0
+for _,v in ipairs(r)do qty=qty+v.qty;cost=cost+v.cost end
+assert(qty<=7 and cost<=500,'quantity or budget consumed twice')
+local v=E.new()
+E.observe(v,snap(1,{row(1,4,'1')}))
+E.observe(v,snap(2,{},{row(100,4,'2')}))
+assert(#E.routes(v,'102',1000,{})==0,'enhancements mixed')
+E.observe(v,snap(1,{row(1,nil)}))
+E.observe(v,snap(2,{},{row(100,4)}))
+assert(#E.routes(v,'102',1000,{})==0,'unknown stock guessed')
+assert(not E.observe(v,snap(1,{row(0/0,4)})),'NaN quote accepted')
+assert(not E.observe(v,snap(1,{row(1e16,4)})),'inexact price accepted')
+local q=E.new();E.observe(q,snap(1,{row(1,1)},{row(100,1)}))
+assert(#E.routes(q,'102',1000,{})==0,'self trade')
+local many={};for i=1,513 do many[i]=row(i,1)end
+assert(not E.observe(q,snap(3,many)),'unbounded snapshot accepted')
+print('MCR arbitrage engine: OK')
+local rounding=E.new()
+assert(E.observe(rounding,snap(1,{row(100,100)})))
+assert(E.observe(rounding,snap(2,{},{row(103,100)})))
+local lot=E.routes(rounding,'102',1000,{tax_bp=200,budget=10000})
+assert(#lot==1 and lot[1].profit==94,'unit rounding discarded a profitable lot')

@@ -1,0 +1,31 @@
+{
+  "license_blocks_removed": 7,
+  "changed_functions": [
+    "A_",
+    "p_",
+    "lIl_IllI",
+    "lIl__llI",
+    "lII__IlI",
+    "lIllIII_",
+    "lI__IIlI",
+    "lIlIII_l",
+    "lI__IIll",
+    "lI_IlIII",
+    "lIl_IIII",
+    "lI_IlIIl",
+    "SettingsUI.TelegramMcrBot",
+    "llIllIll",
+    "lIl_l__I",
+    "lII____l",
+    "lII___lI",
+    "lIl_lllI"
+  ],
+  "catalogue_items": 9069,
+  "config_namespace": "Palatka MCR Local",
+  "base_authentication": "removed for local workflows",
+  "mcr_network": "blocked",
+  "native_acceptance": false,
+  "version": "3.0.0-local.12",
+  "sha256": "16eb0ffc1bc8b1625d885b8bb1e03910ae7d8ccac89f910827a264e03ca9b1b0",
+  "bytes": 2160116
+}
