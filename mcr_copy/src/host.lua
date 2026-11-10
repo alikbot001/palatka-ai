@@ -59,7 +59,7 @@ do
         yield=function()wait(0)end,
         register=sampRegisterChatCommand,
         poll_market=function(refresh)
-            lua_thread.create(function()wait(2000);while true do refresh();wait(120000)end end)
+            lua_thread.create(function()wait(2000);while true do refresh();wait(60000)end end)
         end,
         fetch_market=function(sid,done)
             lIl_l_lI('GET','https://va-ta.com/api/shops/pull?server='..sid,nil,

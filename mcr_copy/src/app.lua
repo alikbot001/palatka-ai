@@ -143,14 +143,14 @@ function A.read_market_cache()
         A.status='Импортировано лавок: '..#pack.shops;A.error=nil;A.flush()
     end)
 end
--- One public request per server at a time, with a two-minute cache. Failures
+-- One public request per server at a time, with a one-minute cache. Failures
 -- retain observations; a delayed response never publishes into another server.
 function A.refresh_market(done,force)
     local h=A.host;local server=h.server();local sid=h.market_server_id()
     if A.market_pending and A.market_pending.server==server then
         A.market_pending.waiters[#A.market_pending.waiters+1]=done;return
     end
-    if not force and A.market_server==server and A.market_updated and h.now()-A.market_updated<120 then
+    if not force and A.market_server==server and A.market_updated and h.now()-A.market_updated<60 then
         h.run(function()done(true)end);return
     end
     local request={server=server,waiters={done}};A.market_pending=request
@@ -241,7 +241,7 @@ function A.start()
             A.refresh_market(function(ok,err)
                 A.notice=not ok and('Сеть недоступна: сохранённые снимки. '..tostring(err))or nil
                 if A.follow_market then A.compute()end
-            end)
+            end,true)
         end)
     end
 end

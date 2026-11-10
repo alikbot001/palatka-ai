@@ -1,6 +1,6 @@
 -- Configuration: Palatka MCR Local; independent client build.
 script_name('Palatka MCR Local')
-script_version('3.0.0-local.11')
+script_version('3.0.0-local.12')
 -- Palatka full MCR client preview; original attribution retained.
 PalatkaMCR=(function()
 local E=(function()
@@ -298,14 +298,14 @@ function A.read_market_cache()
         A.status='Импортировано лавок: '..#pack.shops;A.error=nil;A.flush()
     end)
 end
--- One public request per server at a time, with a two-minute cache. Failures
+-- One public request per server at a time, with a one-minute cache. Failures
 -- retain observations; a delayed response never publishes into another server.
 function A.refresh_market(done,force)
     local h=A.host;local server=h.server();local sid=h.market_server_id()
     if A.market_pending and A.market_pending.server==server then
         A.market_pending.waiters[#A.market_pending.waiters+1]=done;return
     end
-    if not force and A.market_server==server and A.market_updated and h.now()-A.market_updated<120 then
+    if not force and A.market_server==server and A.market_updated and h.now()-A.market_updated<60 then
         h.run(function()done(true)end);return
     end
     local request={server=server,waiters={done}};A.market_pending=request
@@ -396,7 +396,7 @@ function A.start()
             A.refresh_market(function(ok,err)
                 A.notice=not ok and('Сеть недоступна: сохранённые снимки. '..tostring(err))or nil
                 if A.follow_market then A.compute()end
-            end)
+            end,true)
         end)
     end
 end
@@ -1771,7 +1771,7 @@ end)()
 local A=factory(E);A.external=external;A.vertical_list=V;workspace(A,E,resale(E),purchases(E),popularity(E));navigation(A);ui(A);workspace_ui(A);purchases_ui(A);return A
 end)()
 
-PalatkaMCR.version='3.0.0-local.11';PalatkaMCR.build=11;PalatkaMCR.update_base='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
+PalatkaMCR.version='3.0.0-local.12';PalatkaMCR.build=12;PalatkaMCR.update_base='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 PalatkaMCR.local_ready=function()return type(isSampAvailable)=='function'and isSampAvailable()or false end
 PalatkaMCR.elapsed=(function()
 -- Elapsed seconds for deadlines. CLOCK_MONOTONIC keeps suspend/low CPU and
@@ -1874,7 +1874,7 @@ do
         yield=function()wait(0)end,
         register=sampRegisterChatCommand,
         poll_market=function(refresh)
-            lua_thread.create(function()wait(2000);while true do refresh();wait(120000)end end)
+            lua_thread.create(function()wait(2000);while true do refresh();wait(60000)end end)
         end,
         fetch_market=function(sid,done)
             lIl_l_lI('GET','https://va-ta.com/api/shops/pull?server='..sid,nil,

@@ -12,8 +12,8 @@ import subprocess
 
 from build_mcr_copy import ROOT, assemble
 
-VERSION='3.0.0-local.11'
-BUILD=11
+VERSION='3.0.0-local.12'
+BUILD=12
 UPDATE_BASE='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 
 TOKEN=re.compile(r'''--\[(=*)\[.*?\]\1\]|--[^\n]*|\[(=*)\[.*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z_0-9]*|\S''',re.S)
@@ -220,7 +220,7 @@ def main():
     (ROOT/'outputs/palatka_mcr_local.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     manifest={'schema':1,'channel':'mcr-local','build':BUILD,'version':VERSION,
         'url':UPDATE_BASE+'palatka_mcr_local.lua','size':len(raw),'sha256':report['sha256'],
-        'notes':'Исправлен пустой рынок: автоматический расчёт, ходовость без обязательного фильтра, независимое истечение строк и причины отбора. Защита от смешивания владельцев лавок и неверного возраста сканов.'}
+        'notes':'Рынок обновляется раз в минуту; активный арбитраж пересчитывается по новым данным. Минутный кэш и защита от повторных запросов сохраняются.'}
     (ROOT/'outputs/palatka_mcr_update.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))
 

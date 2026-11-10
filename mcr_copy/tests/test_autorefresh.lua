@@ -1,3 +1,19 @@
+-- Execute the actual MonetLoader polling host with a virtual clock/coroutine.
+do
+ local captured,thread,ticks
+ ticks=0
+ local env=setmetatable({getWorkingDirectory=function()return'.'end,F3={},T={},NeomText={},
+  PalatkaMCR={install=function(host)captured=host end},
+  lua_thread={create=function(fn)thread=coroutine.create(fn)end},
+  wait=function(ms)coroutine.yield(ms)end},{__index=_G})
+ local host=assert(loadfile('mcr_copy/src/host.lua'));setfenv(host,env);host()
+ captured.poll_market(function()ticks=ticks+1 end)
+ local ok,delay=coroutine.resume(thread);assert(ok and delay==2000 and ticks==0)
+ ok,delay=coroutine.resume(thread)
+ assert(ok and delay==60000 and ticks==1,'native polling timer is not one minute')
+ ok,delay=coroutine.resume(thread)
+ assert(ok and delay==60000 and ticks==2,'native polling stopped after the first refresh')
+end
 local E=assert(loadfile('mcr_copy/src/engine.lua'))()
 local A=assert(loadfile('mcr_copy/src/app.lua'))()(E)
 A.external=assert(loadfile('mcr_copy/src/external.lua'))()
@@ -16,10 +32,14 @@ local function drain()while #queue>0 do table.remove(queue,1)()end end
 A.start();drain()
 A.calculate();drain()
 assert(requests==1,'calculation did not refresh live quotes')
-reply('data');drain();assert(#A.results==1 and A.results[1].profit==94)
+now=1001;reply('data');drain();assert(#A.results==1 and A.results[1].profit==94)
 assert(type(poll)=='function','background refresh was not scheduled')
-now=1121;data.shops[2].buy_slots[1].price=90;data.shops[2].updated_at=1121
-poll();drain();reply('data');drain()
+now=1059;A.refresh_market(function(ok)assert(ok)end);drain()
+assert(requests==1,'fresh quotes were fetched again before one minute')
+now=1060;data.shops[2].buy_slots[1].price=90;data.shops[2].updated_at=1060
+poll();drain();assert(requests==2,'one-minute refresh was blocked by the old cache')
+poll();drain();assert(requests==2,'pending minute refresh duplicated the public request')
+reply('data');drain()
 assert(#A.results==0,'background refresh left the old opportunity visible')
 local before=requests
 A.calculate(true);drain()
