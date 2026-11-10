@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "mcr-local",
-  "build": 8,
-  "version": "3.0.0-local.8",
+  "build": 9,
+  "version": "3.0.0-local.9",
   "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/palatka_mcr_local.lua",
-  "size": 2103273,
-  "sha256": "a294d6e235dd1916d135f3bb7fd33fb2c83384e2a3062025be72302299f8784c",
-  "notes": "Исправлены обновление инвентаря, Telegram, поиск цен по ID, запоздавшие ответы и тайм-ауты; усилена защита /crrupdate."
+  "size": 2105456,
+  "sha256": "a524326f9945b41c1cbc106845feb9a644b93acaf0ff4a9976dc28936b77a109",
+  "notes": "Понятный арбитраж: карточки товаров, отдельные цены покупки и скупки, расчёт по шагам, закреплённые итог и навигация."
 }

@@ -1,6 +1,6 @@
 -- Configuration: Palatka MCR Local; independent client build.
 script_name('Palatka MCR Local')
-script_version('3.0.0-local.8')
+script_version('3.0.0-local.9')
 -- Palatka full MCR client preview; original attribution retained.
 PalatkaMCR=(function()
 local E=(function()
@@ -409,12 +409,15 @@ end)()
 local ui=(function()
 -- Render only through the original MCR mimgui instance, styles and child panels.
 return function(A)
-local input
+local input,body_view
 local function text(s)A.host.imgui.Text(A.host.utf8(tostring(s)))end
 local function wrapped(s)A.host.imgui.TextWrapped(A.host.utf8(tostring(s)))end
-local function button(s)
+local function button(s,size)
     local h=A.host
-    return h.imgui.Button(h.utf8(s)) and (not h.can_click or h.can_click())
+    local clicked
+    if size then clicked=h.imgui.Button(h.utf8(s),size)
+    else clicked=h.imgui.Button(h.utf8(s))end
+    return clicked and(not h.can_click or h.can_click())
 end
 local function money(n)
     local value=string.format('%.0f',n or 0)
@@ -435,30 +438,56 @@ local function ready()
 end
 local function item_title(r)
     wrapped(r.name)
-    if r.variant and r.variant~='0:0'then text('Модификация: '..r.variant)end
-    text('Предмет #'..tostring(r.id))
+    local label='ID '..tostring(r.id)
+    local level,embedded,extra=tostring(r.variant):match('^(%d+):(%d+)(.*)$')
+    if level then
+        if tonumber(level)>0 then label=label..' | Улучшение +'..level end
+        if tonumber(embedded)>0 then label=label..' | Вложение #'..embedded end
+        local labels={quality='Качество',strength='Прочность',wear='Износ'}
+        label=label..extra:gsub(':([%a_]+)=([^:]+)',function(key,value)
+            return' | '..(labels[key]or key)..': '..value
+        end)
+    elseif r.variant then label=label..' | Модификация: '..r.variant end
+    wrapped(label)
+end
+local function age(at)
+    local seconds=math.max(0,A.host.now()-at)
+    if seconds<60 then return seconds..' с' end
+    return math.floor(seconds/60)..' мин'
 end
 local function quote(label,shop,price,currency)
-    text(label);wrapped('Лавка #'..shop.shop..(shop.owner~=''and shop.owner and' | '..shop.owner or''))
-    text(money(price)..' '..currency..' за шт.')
-    wrapped(source(shop)..' | '..math.max(0,A.host.now()-shop.at)..' с назад')
+    wrapped(label)
+    wrapped('Лавка #'..shop.shop..(shop.owner and shop.owner~=''and' | '..shop.owner or''))
+    wrapped(money(price)..' '..currency..' за шт.')
+    wrapped(source(shop)..' | Снимку '..age(shop.at))
 end
 local function details(r)
-    if button('< К списку')then A.route_details=false end
+    local B=A.host.imgui
     item_title(r);A.host.imgui.Separator()
-    text('План: '..money(r.qty)..' шт.')
-    quote('Купить у продавца',r.seller,r.buy_price,r.currency)
-    text('В продаже по снимку: '..(r.seller_qty and money(r.seller_qty)..' шт.'or'неизвестно'))
-    if button('Найти продавца##pa_find_buy')then A.track_selected('buy')end
+    quote('1. Купить у продавца',r.seller,r.buy_price,r.currency)
+    wrapped('Есть у продавца: '..(r.seller_qty and money(r.seller_qty)..' шт.'or'неизвестно'))
+    if button('Найти продавца #'..r.seller.shop..'##pa_find_buy',B.ImVec2(-1,0))then A.track_selected('buy')end
     A.host.imgui.Separator()
-    quote('Сдать в скупку',r.buyer,r.sell_price,r.currency)
-    text('Скупка по снимку: '..(r.buyer_qty and money(r.buyer_qty)..' шт.'or'неизвестно'))
-    if button('Найти скупку##pa_find_sell')then A.track_selected('sell')end
+    quote('2. Сдать в скупку',r.buyer,r.sell_price,r.currency)
+    wrapped('Скупщик принимает: '..(r.buyer_qty and money(r.buyer_qty)..' шт.'or'неизвестно'))
+    if button('Найти скупку #'..r.buyer.shop..'##pa_find_sell',B.ImVec2(-1,0))then A.track_selected('sell')end
     A.host.imgui.Separator()
-    text('Затраты: '..money(r.cost)..' '..r.currency)
-    wrapped('Выручка: '..money(r.gross)..' | Комиссия: '..money(r.fee))
-    text('Прибыль: ~'..money(r.profit)..' '..r.currency)
-    wrapped('Кнопки отмечают лавку для этого товара. Покупка и сдача выполняются вручную. Снимок не гарантирует текущий остаток.')
+    wrapped('3. Расчёт на '..money(r.qty)..' шт.')
+    wrapped('Затраты: '..money(r.cost)..' '..r.currency)
+    wrapped('Выручка: '..money(r.gross)..' '..r.currency)
+    wrapped('Комиссия: '..money(r.fee)..' '..r.currency)
+    wrapped('После комиссии: '..money(r.net or(r.gross-r.fee))..' '..r.currency)
+    B.Separator()
+    wrapped('Расчёт по снимкам. Проверьте цену и остаток в игре. Кнопки отмечают лавки этого товара; сделки выполняются вручную.')
+end
+local function entry(r,index)
+    local B=A.host.imgui
+    item_title(r)
+    wrapped('Купить в лавке #'..r.seller.shop..': '..money(r.buy_price)..' '..r.currency..' / шт.')
+    wrapped('Сдать в лавку #'..r.buyer.shop..': '..money(r.sell_price)..' '..r.currency..' / шт.')
+    wrapped('Объём: '..money(r.qty)..' шт. | Прибыль: ~'..money(r.profit)..' '..r.currency)
+    if button('Посмотреть расчёт##pa_route_'..index,B.ImVec2(-1,0))then A.select_route(index)end
+    B.Spacing();B.Separator();B.Spacing()
 end
 function A.draw_center()
     local h=A.host;local B=h.imgui
@@ -468,40 +497,57 @@ function A.draw_center()
     local width=math.max(1,math.min(h.center_width and h.center_width()or space.x,space.x-rail-gap))
     local visible=B.BeginChild('Central',B.ImVec2(width,-1),true)
     if visible then
-        B.CenterText(h.utf8('Арбитраж'));B.Separator()
-        wrapped(A.server_label()..' | '..A.status)
-        wrapped('Оценка по объявлениям. Наличие товара и цену проверяйте в игре.')
         local rows=A.current_results()
         local selected=rows[A.selected]
-        if A.route_details and selected then
-            details(selected)
-        elseif #rows==0 then
-            if A.busy then text('Расчёт...')
-            else wrapped('Откройте лавки, чтобы сохранить их товары. Затем нажмите «Расчёт». Сохранённые цены и импорт доступны в «Источниках».')end
-        else
-            local pages=math.max(1,math.ceil(#rows/8))
-            A.page=math.min(A.page,pages)
-            if button('<##pa_page')then A.page=math.max(1,A.page-1)end
-            B.SameLine();text(A.page..' / '..pages);B.SameLine()
-            if button('>##pa_page')then A.page=math.min(pages,A.page+1)end
-            for index=(A.page-1)*8+1,math.min(#rows,A.page*8)do
-                local r=rows[index]
-                item_title(r)
-                if button('Открыть маршрут #'..index..'##pa_route_'..index)then A.select_route(index)end
-                text('План: '..money(r.qty)..' шт.')
-                wrapped('Купить #'..r.seller.shop..': '..money(r.buy_price)..' -> продать #'..r.buyer.shop..': '..money(r.sell_price))
-                wrapped('Затраты '..money(r.cost)..' | прибыль ~'..money(r.profit)..' '..r.currency)
-                if index==A.selected then
-                    wrapped('Выручка: '..money(r.gross)..' | Комиссия: '..money(r.fee))
-                end
-                wrapped(source(r.seller)..' / '..source(r.buyer)..' | возраст '..
-                    math.max(0,h.now()-r.seller.at)..' / '..math.max(0,h.now()-r.buyer.at)..' с')
-                B.Separator()
-            end
+        local show_details=A.route_details and selected
+        B.CenterText(h.utf8('Арбитраж'))
+        wrapped(A.server_label())
+        if show_details and button('< Все варианты##pa_back',B.ImVec2(-1,0))then
+            A.route_details=false;show_details=false
         end
-        if A.error then wrapped('Ошибка: '..A.error)end
-        if A.notice then wrapped(A.notice)end
-        B.ScrollMouse('Central',true)
+        B.Separator()
+        local line=B.GetTextLineHeight()
+        local gap_y=B.GetStyle().ItemSpacing.y
+        local footer=line+B.GetFrameHeight()+gap_y*4
+        if show_details then
+            local available_width=math.max(1,B.GetContentRegionAvail().x)
+            local function lines(s)return math.ceil(B.CalcTextSize(h.utf8(s)).x/available_width)+1 end
+            footer=line*(lines('План: '..money(selected.qty)..' шт.')+
+                lines('Прибыль: ~'..money(selected.profit)..' '..selected.currency))+gap_y*4
+        end
+        local body_height=math.max(1,B.GetContentRegionAvail().y-footer)
+        local per_page=body_height>=(line*7+gap_y*10)*2 and 2 or 1
+        local pages=math.max(1,math.ceil(#rows/per_page))
+        A.page=math.max(1,math.min(A.page,pages))
+        if B.BeginChild('pa_arb_body',B.ImVec2(0,body_height),false)then
+            local view=h.server()..'/'..A.generation..'/'..
+                (show_details and'details/'..A.selected or'list/'..A.page..'/'..per_page)
+            if body_view~=view then B.SetScrollY(0);body_view=view end
+            if show_details then details(selected)
+            elseif #rows==0 then
+                if A.busy then wrapped('Обновляю цены и рассчитываю варианты...')
+                else
+                    wrapped('Вариантов пока нет')
+                    wrapped('Нажмите «Расчёт», чтобы получить цены и найти варианты. Откройте лавки для сохранения своих снимков. Дополнительные источники — справа.')
+                end
+            else
+                for index=(A.page-1)*per_page+1,math.min(#rows,A.page*per_page)do entry(rows[index],index)end
+            end
+            if A.error then wrapped('Ошибка: '..A.error)end
+            if A.notice then wrapped(A.notice)end
+            B.ScrollMouse('pa_arb_body',true)
+        end
+        B.EndChild()
+        if show_details then
+            wrapped('План: '..money(selected.qty)..' шт.')
+            wrapped('Прибыль: ~'..money(selected.profit)..' '..selected.currency)
+        else
+            text('Страница '..A.page..' / '..pages)
+            local half=math.max(1,(B.GetContentRegionAvail().x-gap)/2)
+            if button('<##pa_page',B.ImVec2(half,0))then A.page=math.max(1,A.page-1)end
+            B.SameLine()
+            if button('>##pa_page',B.ImVec2(half,0))then A.page=math.min(pages,A.page+1)end
+        end
     end
     B.EndChild()
 end
@@ -671,7 +717,7 @@ end)()
 local A=factory(E);A.external=external;ui(A);return A
 end)()
 
-PalatkaMCR.version='3.0.0-local.8';PalatkaMCR.build=8;PalatkaMCR.update_base='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
+PalatkaMCR.version='3.0.0-local.9';PalatkaMCR.build=9;PalatkaMCR.update_base='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 PalatkaMCR.local_ready=function()return type(isSampAvailable)=='function'and isSampAvailable()or false end
 PalatkaMCR.elapsed=(function()
 -- Elapsed seconds for deadlines. CLOCK_MONOTONIC keeps suspend/low CPU and

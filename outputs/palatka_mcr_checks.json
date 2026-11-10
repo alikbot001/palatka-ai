@@ -1,9 +1,9 @@
 {
   "scope": "mcr_local_targeted",
-  "checked_at": "2026-11-10T11:49:46.280326+00:00",
-  "version": "3.0.0-local.8",
-  "artifact_sha256": "a294d6e235dd1916d135f3bb7fd33fb2c83384e2a3062025be72302299f8784c",
-  "lua_suites": 12,
+  "checked_at": "2026-11-10T12:12:26.552502+00:00",
+  "version": "3.0.0-local.9",
+  "artifact_sha256": "a524326f9945b41c1cbc106845feb9a644b93acaf0ff4a9976dc28936b77a109",
+  "lua_suites": 13,
   "native_acceptance": false,
   "checks": [
     {
@@ -28,6 +28,12 @@
       "command": "luajit mcr_copy/tests/test_ui.lua",
       "exit_code": 0,
       "stdout": "MCR arbitrage UI strict API/balance/empty state: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": "luajit mcr_copy/tests/test_ui_geometry.lua",
+      "exit_code": 0,
+      "stdout": "Arbitrage fixed header/footer, wrapped content and scroll boundaries: 72 layouts + 5000-route page OK\n",
       "stderr": ""
     },
     {
@@ -82,12 +88,12 @@
       "command": "/usr/bin/python3 -m unittest discover -s mcr_copy/tests -p 'test_*.py'",
       "exit_code": 0,
       "stdout": "empty-key lifecycle, local readiness, full settings and presets: OK\nempty-key sale: owner timeout, empty inventory, ACK, bounded retries: OK\nMCR requests blocked; no fake success; game/own bot transport preserved: OK\nNative buy/ID catalogues refresh entirely offline: OK\nUnavailable/misconfigured Telegram transport does not report sent: OK\n",
-      "stderr": ".............\n----------------------------------------------------------------------\nRan 13 tests in 8.409s\n\nOK\n"
+      "stderr": ".............\n----------------------------------------------------------------------\nRan 13 tests in 8.413s\n\nOK\n"
     },
     {
       "command": "/usr/bin/python3 build_mcr_local.py",
       "exit_code": 0,
-      "stdout": "{\n  \"license_blocks_removed\": 7,\n  \"changed_functions\": [\n    \"A_\",\n    \"p_\",\n    \"lIl_IllI\",\n    \"lIl__llI\",\n    \"lII__IlI\",\n    \"lIllIII_\",\n    \"lI__IIlI\",\n    \"lIlIII_l\",\n    \"lI__IIll\",\n    \"lI_IlIII\",\n    \"lIl_IIII\",\n    \"lI_IlIIl\",\n    \"SettingsUI.TelegramMcrBot\",\n    \"llIllIll\",\n    \"lIl_l__I\",\n    \"lII____l\",\n    \"lII___lI\",\n    \"lIl_lllI\"\n  ],\n  \"catalogue_items\": 9069,\n  \"config_namespace\": \"Palatka MCR Local\",\n  \"base_authentication\": \"removed for local workflows\",\n  \"mcr_network\": \"blocked\",\n  \"native_acceptance\": false,\n  \"version\": \"3.0.0-local.8\",\n  \"sha256\": \"a294d6e235dd1916d135f3bb7fd33fb2c83384e2a3062025be72302299f8784c\",\n  \"bytes\": 2103273\n}\n",
+      "stdout": "{\n  \"license_blocks_removed\": 7,\n  \"changed_functions\": [\n    \"A_\",\n    \"p_\",\n    \"lIl_IllI\",\n    \"lIl__llI\",\n    \"lII__IlI\",\n    \"lIllIII_\",\n    \"lI__IIlI\",\n    \"lIlIII_l\",\n    \"lI__IIll\",\n    \"lI_IlIII\",\n    \"lIl_IIII\",\n    \"lI_IlIIl\",\n    \"SettingsUI.TelegramMcrBot\",\n    \"llIllIll\",\n    \"lIl_l__I\",\n    \"lII____l\",\n    \"lII___lI\",\n    \"lIl_lllI\"\n  ],\n  \"catalogue_items\": 9069,\n  \"config_namespace\": \"Palatka MCR Local\",\n  \"base_authentication\": \"removed for local workflows\",\n  \"mcr_network\": \"blocked\",\n  \"native_acceptance\": false,\n  \"version\": \"3.0.0-local.9\",\n  \"sha256\": \"a524326f9945b41c1cbc106845feb9a644b93acaf0ff4a9976dc28936b77a109\",\n  \"bytes\": 2105456\n}\n",
       "stderr": ""
     }
   ]

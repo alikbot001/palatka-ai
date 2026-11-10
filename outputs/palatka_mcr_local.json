@@ -25,7 +25,7 @@
   "base_authentication": "removed for local workflows",
   "mcr_network": "blocked",
   "native_acceptance": false,
-  "version": "3.0.0-local.8",
-  "sha256": "a294d6e235dd1916d135f3bb7fd33fb2c83384e2a3062025be72302299f8784c",
-  "bytes": 2103273
+  "version": "3.0.0-local.9",
+  "sha256": "a524326f9945b41c1cbc106845feb9a644b93acaf0ff4a9976dc28936b77a109",
+  "bytes": 2105456
 }

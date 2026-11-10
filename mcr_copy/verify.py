@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
-TESTS=('engine','app','external','ui','market','market_refresh','market_host',
+TESTS=('engine','app','external','ui','ui_geometry','market','market_refresh','market_host',
        'sha256','updater','update_file','update_host','autorefresh')
 
 def main():
