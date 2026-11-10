@@ -2,6 +2,7 @@ local E=assert(loadfile('mcr_copy/src/engine.lua'))()
 local A=assert(loadfile('mcr_copy/src/app.lua'))()(E)
 local f=io.open('mcr_copy/src/ui.lua','rb');assert(f,'missing MCR arbitrage section');f:close()
 assert(loadfile('mcr_copy/src/ui.lua'))()(A)
+A.vertical_list=assert(loadfile('mcr_copy/src/vertical_list.lua'))()
 local calls,depth={},0
 local available={x=480,y=600}
 local B={new={char=setmetatable({},{__index=function()return function(s)return s end end}),
@@ -12,6 +13,10 @@ B.GetContentRegionAvail=function()return available end
 B.GetStyle=function()return{ItemSpacing={x=8,y=4}}end
 B.GetTextLineHeight=function()return 20 end
 B.GetFrameHeight=function()return 26 end
+B.GetScrollY=function()return 0 end
+B.GetCursorPosY=function()return 0 end
+B.Dummy=record('Dummy')
+B.ButtonClickable=function(enabled,...)if enabled then return B.Button(...)end end
 B.CalcTextSize=function(s)return{x=#s*10,y=20}end
 B.GetIO=function()return{DisplaySize={x=2340,y=1080}}end
 B.Cond={Appearing='appearing'}
@@ -46,6 +51,9 @@ for _,c in ipairs(calls)do
  assert(not(c[1]=='ScrollMouse'and c[2]=='Central'),'header/footer scroll with the item list')
 end
 assert(body,'arbitrage has no independently scrolling body')
+for _,c in ipairs(calls)do
+ assert(not(c[1]=='Button'and c[2]:find('##pa_page',1,true)),'horizontal route pagination remains')
+end
 local tiles=0
 for _,c in ipairs(calls)do
     if c[1]=='Button'and c[2]:find('##pa_rail_',1,true)and not c[2]:find('pa_rail_prev',1,true)and not c[2]:find('pa_rail_next',1,true)then

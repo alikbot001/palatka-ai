@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "mcr-local",
-  "build": 9,
-  "version": "3.0.0-local.9",
+  "build": 10,
+  "version": "3.0.0-local.10",
   "url": "https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/palatka_mcr_local.lua",
-  "size": 2105456,
-  "sha256": "a524326f9945b41c1cbc106845feb9a644b93acaf0ff4a9976dc28936b77a109",
-  "notes": "Понятный арбитраж: карточки товаров, отдельные цены покупки и скупки, расчёт по шагам, закреплённые итог и навигация."
+  "size": 2153604,
+  "sha256": "556d244a00c976793f15264a07fbd35c774a52ded435a9ca81a68e8aebaec54b",
+  "notes": "Перепродажа от 10% после комиссии, учёт спроса и продаж за 30 дней; журнал закупок/частичных продаж; вертикальная прокрутка."
 }

@@ -1,6 +1,6 @@
 -- Configuration: Palatka MCR Local; independent client build.
 script_name('Palatka MCR Local')
-script_version('3.0.0-local.9')
+script_version('3.0.0-local.10')
 -- Palatka full MCR client preview; original attribution retained.
 PalatkaMCR=(function()
 local E=(function()
@@ -406,6 +406,617 @@ return A
 end
 
 end)()
+local resale=(function()
+-- Asking-price estimates and reported sale aggregates remain separate evidence.
+return function(E)
+local R={}
+local MAX=E.MAX
+local priority={market_sales=1,own_sales=2,buy_orders=3,unknown=4}
+local function owner(shop)
+    return tostring(shop.owner or ''):lower():match('^%s*(.-)%s*$')
+end
+local function merchant(shop)
+    local name=owner(shop)
+    return name~='' and 'owner:'..name or 'shop:'..tostring(shop.shop)
+end
+local function same(a,b)
+    return a.shop==b.shop or owner(a)~='' and owner(a)==owner(b)
+end
+local function add(a,b)return a>MAX-b and MAX or a+b end
+local function product(a,b)
+    if b>0 and a<=math.floor(MAX/b)then return a*b end
+end
+-- Compare rational numbers using Euclidean quotients, without large products.
+local function ge(a,b,c,d)
+    local reverse=false
+    while true do
+        local x,y=math.floor(a/b),math.floor(c/d)
+        if x~=y then return reverse and x<y or not reverse and x>y end
+        local ar,cr=a%b,c%d
+        if ar==0 or cr==0 then
+            if ar==cr then return true end
+            return reverse and ar==0 or not reverse and ar~=0
+        end
+        a,b,c,d=b,ar,d,cr;reverse=not reverse
+    end
+end
+local function roi(profit,cost)
+    local whole=math.floor(profit/cost)
+    if whole>math.floor(MAX/10000)then return MAX end
+    local lo,hi=0,9999
+    while lo<hi do
+        local mid=lo+math.floor((hi-lo+1)/2)
+        if ge(profit%cost,cost,mid,10000)then lo=mid else hi=mid-1 end
+    end
+    return add(whole*10000,lo)
+end
+local function settings(o)
+    if type(o)~='table' or type(o.currency)~='string' or o.currency=='' then return end
+    local p={currency=o.currency,popular_only=o.popular_only~=false,own_sales=o.own_sales or {},
+        market_sales=type(o.market_sales)=='table' and o.market_sales or {}}
+    for _,spec in ipairs({{'ttl',3600,1,86400},{'tax_bp',200,0,10000},
+        {'budget',0,0,MAX},{'min_roi_bp',1000,0,MAX},{'max_qty',10,1,1000000000},
+        {'min_peers',3,3,128},{'undercut_bp',100,0,10000}})do
+        local v=o[spec[1]];if v==nil then v=spec[2]end
+        p[spec[1]]=E.integer(v,spec[3],spec[4]);if not p[spec[1]]then return end
+    end
+    if type(p.own_sales)~='table' then return end
+    return p
+end
+function R.rank(state,server,now,options,yield_fn)
+    local p=settings(options)
+    now=E.integer(now,1)
+    if not p or not now or type(state)~='table' or type(state.shops)~='table' then
+        return {},'invalid options/state'
+    end
+    local steps=0
+    local function checkpoint(force)
+        steps=steps+1
+        return not yield_fn or not(force or steps%128==0) or yield_fn()~=false
+    end
+    if not checkpoint(true)then return {},'cancelled'end
+    local groups={}
+    for _,shop in pairs(state.shops)do
+        if shop.server==tostring(server) and shop.at<=now and now-shop.at<=p.ttl then
+            for _,side in ipairs({'sell','buy'})do
+                for _,o in ipairs(shop[side])do
+                    if o.variant and o.currency==p.currency then
+                        local g=groups[o.key]or {asks={},peers={},buyers={}}
+                        groups[o.key]=g
+                        local m=merchant(shop)
+                        if side=='sell' then
+                            if o.qty then g.asks[#g.asks+1]={shop=shop,offer=o}end
+                            local old=g.peers[m]
+                            if not old or o.price<old.price then
+                                g.peers[m]={shop=shop,price=o.price,valid_until=add(shop.at,p.ttl)}
+                            elseif o.price==old.price then
+                                old.valid_until=math.min(old.valid_until,add(shop.at,p.ttl))
+                            end
+                        elseif o.qty then
+                            local b=g.buyers[m]or {shop=shop,orders={},prices={}}
+                            g.buyers[m]=b
+                            local old=b.prices[o.price]
+                            if old then
+                                old.qty=math.max(old.qty,o.qty)
+                                old.valid_until=math.min(old.valid_until,add(shop.at,p.ttl))
+                            else
+                                local order={price=o.price,qty=o.qty,valid_until=add(shop.at,p.ttl)}
+                                b.orders[#b.orders+1]=order;b.prices[o.price]=order
+                            end
+                        end
+                    end
+                    if not checkpoint()then return {},'cancelled'end
+                end
+            end
+        end
+    end
+    -- A suffix of declared quantities permits bounded per-merchant demand queries.
+    for _,g in pairs(groups)do
+        for _,b in pairs(g.buyers)do
+            table.sort(b.orders,function(a,c)return a.price<c.price end)
+            local qty,expiry=0,MAX
+            for i=#b.orders,1,-1 do
+                qty=add(qty,b.orders[i].qty);b.orders[i].total=qty
+                expiry=math.min(expiry,b.orders[i].valid_until);b.orders[i].valid_until=expiry
+                if not checkpoint()then return {},'cancelled'end
+            end
+        end
+    end
+    local candidates={}
+    for key,g in pairs(groups)do
+        for _,a in ipairs(g.asks)do
+            local prices={}
+            local valid_until=add(a.shop.at,p.ttl)
+            for _,peer in pairs(g.peers)do
+                if not same(a.shop,peer.shop)then
+                    prices[#prices+1]=peer.price;valid_until=math.min(valid_until,peer.valid_until)
+                end
+                if not checkpoint()then return {},'cancelled'end
+            end
+            if #prices>=p.min_peers then
+                table.sort(prices)
+                local mid=math.floor((#prices+1)/2)
+                local reference=prices[mid]
+                if #prices%2==0 then reference=reference+math.floor((prices[mid+1]-reference)/2)end
+                local peer_price,history_price=reference,nil
+                local evidence={kind='unknown',buyer_shops=0,buyer_qty=0,own_events=0,own_qty=0,
+                    market_qty_30d=0}
+                for _,b in pairs(g.buyers)do
+                    if not same(a.shop,b.shop)then
+                        local lo,hi=1,#b.orders+1
+                        while lo<hi do
+                            local m=lo+math.floor((hi-lo)/2)
+                            if b.orders[m].price>=a.offer.price then hi=m else lo=m+1 end
+                        end
+                        if b.orders[lo]then
+                            evidence.buyer_shops=evidence.buyer_shops+1
+                            evidence.buyer_qty=add(evidence.buyer_qty,b.orders[lo].total)
+                            valid_until=math.min(valid_until,b.orders[lo].valid_until)
+                        end
+                    end
+                    if not checkpoint()then return {},'cancelled'end
+                end
+                local own=p.own_sales[key]
+                if type(own)=='table' and E.integer(own.last_at,1,now)
+                    and now-own.last_at<=604800
+                    and (own.valid_until==nil or E.integer(own.valid_until,now))then
+                    evidence.own_events=E.integer(own.events,0)or 0
+                    evidence.own_qty=E.integer(own.qty,0)or 0
+                    valid_until=math.min(valid_until,own.valid_until or MAX,add(own.last_at,604800))
+                end
+                local sales=p.market_sales[key]
+                if type(sales)=='table' and E.integer(sales.qty_30d,0)
+                    and E.integer(sales.updated_at,1,now) and E.integer(sales.valid_until,now)then
+                    evidence.market_qty_30d=E.integer(sales.qty_30d,0)
+                    evidence.market_updated_at=E.integer(sales.updated_at,1,now)
+                    evidence.market_source='va-ta.com/market'
+                    valid_until=math.min(valid_until,sales.valid_until)
+                    history_price=E.integer(sales.reference_price,1)
+                    if history_price then reference=math.min(reference,history_price)end
+                end
+                local target=E.net(reference,p.undercut_bp)
+                if evidence.market_qty_30d>=300 then evidence.kind='market_sales'
+                elseif evidence.own_events>=3 and evidence.own_qty>=20 then evidence.kind='own_sales'
+                elseif evidence.buyer_shops>=2 and evidence.buyer_qty>=20 then evidence.kind='buy_orders'end
+                if target>a.offer.price and (not p.popular_only or evidence.kind~='unknown')then
+                    candidates[#candidates+1]={a=a,key=key,target=target,reference=reference,
+                        peer_price=peer_price,history_price=history_price,
+                        peer_count=#prices,popularity=evidence,valid_until=valid_until,
+                        unit_gain=E.net(target,p.tax_bp)-a.offer.price}
+                end
+            end
+        end
+    end
+    table.sort(candidates,function(a,b)
+        local x,y=a.popularity,b.popularity
+        if x.kind~=y.kind then return priority[x.kind]<priority[y.kind]end
+        if x.market_qty_30d~=y.market_qty_30d then return x.market_qty_30d>y.market_qty_30d end
+        if x.own_events~=y.own_events then return x.own_events>y.own_events end
+        if x.own_qty~=y.own_qty then return x.own_qty>y.own_qty end
+        if x.buyer_shops~=y.buyer_shops then return x.buyer_shops>y.buyer_shops end
+        if x.buyer_qty~=y.buyer_qty then return x.buyer_qty>y.buyer_qty end
+        if a.unit_gain~=b.unit_gain then return a.unit_gain>b.unit_gain end
+        if a.key~=b.key then return a.key<b.key end
+        if a.a.shop.shop~=b.a.shop.shop then return a.a.shop.shop<b.a.shop.shop end
+        return a.a.offer.price<b.a.offer.price
+    end)
+    local rows,used,spent={},{},0
+    for _,c in ipairs(candidates)do
+        local a=c.a
+        local n=math.min(a.offer.qty,p.max_qty-(used[c.key]or 0),
+            math.floor(MAX/a.offer.price),math.floor(MAX/c.target))
+        if p.budget>0 then n=math.min(n,math.floor((p.budget-spent)/a.offer.price))end
+        n=math.min(n,math.floor((MAX-spent)/a.offer.price))
+        local cost,gross=product(a.offer.price,n),product(c.target,n)
+        if cost and gross then
+            local net=E.net(gross,p.tax_bp)
+            local profit=net-cost
+            if profit>0 and ge(profit,cost,p.min_roi_bp,10000)then
+                rows[#rows+1]={id=a.offer.id,variant=a.offer.variant,name=a.offer.name,
+                    currency=a.offer.currency,qty=n,seller=a.shop,seller_qty=a.offer.qty,
+                    buy_price=a.offer.price,sell_price=c.target,reference_price=c.reference,
+                    peer_price=c.peer_price,history_price=c.history_price,
+                    peer_count=c.peer_count,cost=cost,gross=gross,fee=gross-net,net=net,
+                    profit=profit,roi_bp=roi(profit,cost),popularity=c.popularity,valid_until=c.valid_until}
+                used[c.key]=(used[c.key]or 0)+n;spent=spent+cost
+            end
+        end
+        if not checkpoint()then return {},'cancelled'end
+    end
+    if not checkpoint(true)then return {},'cancelled'end
+    return rows
+end
+return R
+end
+
+end)()
+local purchases=(function()
+-- Manual purchase/sale records. These entries are never server confirmations.
+return function(E)
+    local P={}
+    local MAX=E.MAX
+    local function integer(v,minimum,maximum)
+        return type(v)=='number' and v==v and v%1==0 and v>=minimum and v<=(maximum or MAX)
+    end
+    local function text(v,limit)
+        return type(v)=='string' and #v<=limit and v:find('%S') and not v:find('[%z\031]')
+    end
+    local function fields(v,allowed)
+        if type(v)~='table' or getmetatable(v)~=nil then return false end
+        for k in pairs(v)do if not allowed[k]then return false end end
+        return true
+    end
+    local function fieldset(names)
+        local t={};for name in names:gmatch('%S+')do t[name]=true end;return t
+    end
+    local state_fields=fieldset('schema next_id lots sales')
+    local lot_fields=fieldset('id server currency name item_id variant unit_cost qty remaining at note')
+    local sale_fields=fieldset('id lot_id qty net_total cost profit at note')
+    local buy_fields=fieldset('server currency name item_id variant unit_cost qty at note')
+    local sell_fields=fieldset('qty net_total at note')
+    local function clone(row)
+        local out={};for k,v in pairs(row)do out[k]=v end;return out
+    end
+    local function dense(rows,limit)
+        if type(rows)~='table' or getmetatable(rows)~=nil or #rows>limit then return false end
+        local count=0
+        for k in pairs(rows)do
+            if not integer(k,1,#rows)then return false end
+            count=count+1
+        end
+        return count==#rows
+    end
+    local function product(a,b)
+        if b==0 or a<=math.floor(MAX/b)then return a*b end
+    end
+    local function add(a,b)
+        if b>=0 and a<=MAX-b or b<0 and a>=-MAX-b then return a+b end
+    end
+    local function note(v)return v==nil or type(v)=='string' and #v<=4096 and not v:find('%z')end
+    local function lot_valid(l)
+        return fields(l,lot_fields) and integer(l.id,1) and text(l.server,128) and text(l.currency,64)
+            and text(l.name,1024) and (l.item_id==nil or text(l.item_id,128))
+            and (l.variant==nil or text(l.variant,128)) and integer(l.unit_cost,0)
+            and integer(l.qty,1) and integer(l.remaining,0,l.qty) and integer(l.at,1) and note(l.note)
+            and product(l.unit_cost,l.qty)~=nil
+    end
+    function P.new()return{schema=1,next_id=1,lots={},sales={}}end
+    function P.validate(pack)
+        if not fields(pack,state_fields) or pack.schema~=1 or not integer(pack.next_id,1,2501)
+            or not dense(pack.lots,500) or not dense(pack.sales,2000)then return nil,'invalid purchase ledger schema'end
+        local out=P.new();out.next_id=pack.next_id
+        local ids,lots,sold={},{},{}
+        local previous=0
+        for _,l in ipairs(pack.lots)do
+            if not lot_valid(l) or l.id<=previous or l.id>=pack.next_id then return nil,'invalid purchase lot'end
+            ids[l.id]=true;lots[l.id]=l;sold[l.id]=0;previous=l.id
+            out.lots[#out.lots+1]=clone(l)
+        end
+        previous=0
+        for _,s in ipairs(pack.sales)do
+            if not fields(s,sale_fields) or not integer(s.id,1) or s.id<=previous or ids[s.id]
+                or s.id>=pack.next_id or not integer(s.lot_id,1) or not integer(s.qty,1)
+                or not integer(s.net_total,0) or not integer(s.cost,0) or not integer(s.profit,-MAX)
+                or not integer(s.at,1) or not note(s.note)then return nil,'invalid recorded sale'end
+            local l=lots[s.lot_id]
+            if not l or s.id<=l.id or s.at<l.at or s.qty>l.qty-sold[l.id]then return nil,'invalid sale allocation'end
+            local cost=product(l.unit_cost,s.qty)
+            if cost==nil or cost~=s.cost or s.net_total-cost~=s.profit then return nil,'conflicting sale totals'end
+            ids[s.id]=true;sold[l.id]=sold[l.id]+s.qty;previous=s.id
+            out.sales[#out.sales+1]=clone(s)
+        end
+        if #pack.lots+#pack.sales~=pack.next_id-1 then return nil,'missing ledger IDs'end
+        for id=1,pack.next_id-1 do if not ids[id]then return nil,'missing ledger ID'end end
+        for _,l in ipairs(pack.lots)do
+            if l.remaining~=l.qty-sold[l.id]then return nil,'conflicting remaining quantity'end
+        end
+        return out
+    end
+    local function identity(v)
+        if type(v)=='number' and integer(v,0)then return string.format('%.0f',v)end
+        return v
+    end
+    function P.buy(state,input)
+        local out,err=P.validate(state);if not out then return nil,err end
+        if #out.lots>=500 then return nil,'purchase lot capacity reached'end
+        if not fields(input,buy_fields)then return nil,'invalid purchase input'end
+        local l=clone(input);l.id=out.next_id;l.remaining=l.qty
+        l.item_id=identity(l.item_id);l.variant=identity(l.variant)
+        if not lot_valid(l)then return nil,'invalid purchase values'end
+        out.lots[#out.lots+1]=l;out.next_id=out.next_id+1
+        return out,clone(l)
+    end
+    function P.sell(state,lot_id,input)
+        local out,err=P.validate(state);if not out then return nil,err end
+        if #out.sales>=2000 then return nil,'recorded sale capacity reached'end
+        if not integer(lot_id,1) or not fields(input,sell_fields) or not integer(input.qty,1)
+            or not integer(input.net_total,0) or not integer(input.at,1) or not note(input.note)then
+            return nil,'invalid sale input'
+        end
+        local lot
+        for _,l in ipairs(out.lots)do if l.id==lot_id then lot=l;break end end
+        if not lot or input.qty>lot.remaining or input.at<lot.at then return nil,'sale exceeds available lot or time'end
+        local cost=product(lot.unit_cost,input.qty)
+        if cost==nil then return nil,'sale cost overflow'end
+        local s={id=out.next_id,lot_id=lot_id,qty=input.qty,net_total=input.net_total,
+            cost=cost,profit=input.net_total-cost,at=input.at,note=input.note}
+        lot.remaining=lot.remaining-s.qty
+        out.sales[#out.sales+1]=s;out.next_id=out.next_id+1
+        return out,clone(s)
+    end
+    local function view_error(message)return{lots={},error=message},message end
+    function P.view(state,server,currency)
+        local pack,err=P.validate(state);if not pack then return view_error(err)end
+        if not text(server,128) or not text(currency,64)then return view_error('invalid ledger scope')end
+        local out={lots={},invested=0,realized_profit=0,sold_qty=0};local selected={}
+        for _,l in ipairs(pack.lots)do
+            if l.server==server and l.currency==currency then
+                out.invested=add(out.invested,product(l.unit_cost,l.remaining))
+                if out.invested==nil then return view_error('invested total overflow')end
+                out.lots[#out.lots+1]=l;selected[l.id]=true
+            end
+        end
+        for _,s in ipairs(pack.sales)do
+            if selected[s.lot_id]then
+                out.realized_profit=add(out.realized_profit,s.profit);out.sold_qty=add(out.sold_qty,s.qty)
+                if out.realized_profit==nil or out.sold_qty==nil then return view_error('recorded sale total overflow')end
+            end
+        end
+        table.sort(out.lots,function(a,b)
+            if (a.remaining>0)~=(b.remaining>0)then return a.remaining>0 end
+            if a.at~=b.at then return a.at>b.at end
+            return a.id>b.id
+        end)
+        return out
+    end
+    function P.evidence(state,server,currency,now)
+        local pack,err=P.validate(state);if not pack then return{},err end
+        if not text(server,128) or not text(currency,64) or not integer(now,1)then return{},'invalid evidence scope/time'end
+        local lots,out={},{}
+        for _,l in ipairs(pack.lots)do
+            if l.server==server and l.currency==currency and l.item_id and l.variant then lots[l.id]=l end
+        end
+        for _,s in ipairs(pack.sales)do
+            local l=lots[s.lot_id]
+            if l and s.net_total>0 and s.at<=now and now-s.at<=604800 then
+                local key=l.item_id..'\031'..l.variant..'\031'..l.currency
+                local row=out[key] or {events=0,qty=0,last_at=0,valid_until=MAX}
+                local qty=add(row.qty,s.qty)
+                if not qty then return{},'own sale quantity overflow'end
+                local expiry=s.at<=MAX-604800 and s.at+604800 or MAX
+                row.events=row.events+1;row.qty=qty;row.last_at=math.max(row.last_at,s.at)
+                row.valid_until=math.min(row.valid_until,expiry);out[key]=row
+            end
+        end
+        return out
+    end
+    return P
+end
+
+end)()
+local popularity=(function()
+-- Optional reported 30-day sales volume from the public Market Helper list.
+-- Its name-only rows can only identify an unmodified, unique catalogue item.
+return function(E)
+local D={}
+function D.parse(pack,now,currency,unique_item,to_cp)
+    if currency~='SA$'then return{}end
+    if type(pack)~='table'or pack.ok~=true or type(pack.items)~='table'then return nil,'Неверная статистика спроса'end
+    local count=0
+    for k in pairs(pack.items)do
+        if not E.integer(k,1)then return nil,'Ожидался список статистики'end
+        count=count+1
+    end
+    if count~=#pack.items or count>1000 then return nil,'Неполный список статистики'end
+    local out,seen={},{}
+    for _,row in ipairs(pack.items)do
+        if type(row)=='table'and type(row.name)=='string'then
+            local name=to_cp and to_cp(row.name)or row.name
+            local id=unique_item(name)
+            local qty=E.integer(row.qty_sold_30d,0)
+            local at=E.integer(row.updated_at,math.max(1,now-86400),now)
+            if id and qty and at then
+                local key=tostring(id)..'\31'..'0:0\31'..currency
+                if seen[key]then out[key]=nil
+                else out[key]={qty_30d=qty,updated_at=at,valid_until=math.min(now+900,at+86400),
+                    reference_price=E.integer(row.avg,1)}end
+                seen[key]=true
+            end
+        end
+    end
+    return out
+end
+return D
+end
+
+end)()
+local workspace=(function()
+-- Compose optional analyzers and a separate durable manual ledger.
+return function(A,E,R,P,D)
+A.resale_options={min_roi_bp=1000,max_qty=10,popular_only=true}
+A.purchase_state=P.new();A.book_revision=0
+local invalidate,compute,load,refresh=A.invalidate,A.compute,A.load,A.refresh_market
+function A.refresh_popularity(done,force)
+    local h=A.host;local server,currency=h.server(),h.currency()
+    if not h.fetch_popularity or not D or currency~='SA$'then done(false);return end
+    local sid=h.market_server_id()
+    if A.demand_pending and A.demand_pending.server==server and A.demand_pending.currency==currency then
+        A.demand_pending.waiters[#A.demand_pending.waiters+1]=done;return
+    end
+    if not force and A.market_sales_server==server and A.market_sales_currency==currency
+        and A.market_sales_at and h.now()>=A.market_sales_at and h.now()-A.market_sales_at<900 then
+        h.run(function()done(true)end);return
+    end
+    local request={server=server,currency=currency,waiters={done}};A.demand_pending=request
+    h.run(function()
+        if A.demand_pending~=request or server~=h.server()or currency~=h.currency()then
+            if A.demand_pending==request then A.demand_pending=nil end
+            for _,callback in ipairs(request.waiters)do callback(false)end
+            return
+        end
+        h.fetch_popularity(sid,function(pack,why)
+            local current=A.demand_pending==request and server==h.server()and currency==h.currency()
+            if A.demand_pending==request then A.demand_pending=nil end
+            local rows
+            if current and pack then rows,why=D.parse(pack,h.now(),currency,h.unique_item,h.to_cp)end
+            if rows then
+                A.market_sales=rows;A.market_sales_server=server;A.market_sales_currency=currency
+                A.market_sales_at=h.now();A.demand_error=nil
+            elseif current then A.demand_error=tostring(why or'Статистика недоступна')end
+            for _,callback in ipairs(request.waiters)do callback(rows~=nil)end
+            if rows and A.follow_market then A.compute()end
+        end)
+    end)
+end
+function A.refresh_market(done,force)
+    A.refresh_popularity(function()end,force)
+    refresh(done,force)
+end
+function A.invalidate()
+    invalidate();A.resale_results={};A.resale_selected=nil;A.resale_details=false;A.resale_busy=false
+end
+function A.load_book()
+    A.book_loaded=false
+    local ok,raw,why=pcall(A.host.read,'purchases.json')
+    if not ok or why then A.book_error='Закупки: '..tostring(why or raw);return false end
+    local next_state
+    if raw==nil then next_state=P.new()
+    else
+        local decoded,pack=pcall(A.host.decode,raw)
+        if not decoded then A.book_error='Закупки JSON: '..tostring(pack);return false end
+        next_state,why=P.validate(pack)
+        if not next_state then A.book_error='Закупки: '..tostring(why);return false end
+    end
+    A.purchase_state=next_state;A.book_loaded=true;A.book_error=nil
+    A.book_revision=A.book_revision+1;A.book_view_key=nil
+    return true
+end
+function A.load()load();A.load_book()end
+function A.purchases_view()
+    if not A.book_loaded then return{lots={},error=A.book_error,loading=not A.book_error}end
+    local h=A.host;local server,currency=h.server(),h.currency()
+    local key=server..'/'..currency..'/'..A.book_revision
+    if A.book_view_key~=key then
+        A.book_view_key=key;A.book_cache={lots={},loading=true}
+        local state=A.purchase_state
+        h.run(function()
+            if key~=A.book_view_key or state~=A.purchase_state then return end
+            A.book_cache=P.view(state,server,currency)
+        end)
+    end
+    return A.book_cache
+end
+local function record(action,params,done)
+    if A.book_busy then return false,'Сохранение уже идёт'end
+    if not A.book_loaded then return false,A.book_error or'Журнал ещё загружается'end
+    local h=A.host;local server,currency=h.server(),h.currency()
+    if server==''then return false,'Сначала подключитесь к серверу'end
+    local data={};for k,v in pairs(params)do data[k]=v end
+    data.server=server;data.currency=currency;data.at=h.now()
+    local revision,state_before=A.book_revision,A.purchase_state
+    A.book_busy=true
+    h.run(function()
+        local function finish(ok,value)
+            A.book_busy=false;A.book_notice=ok and'Запись сохранена' or tostring(value)
+            if done then done(ok,value)end
+        end
+        if server~=h.server()or currency~=h.currency()then finish(false,'Сервер изменился');return end
+        if not A.book_loaded or revision~=A.book_revision or state_before~=A.purchase_state then
+            finish(false,A.book_error or'Журнал изменился; повторите запись');return
+        end
+        local state,row=action(A.purchase_state,data)
+        if not state then finish(false,row);return end
+        local ok,raw=pcall(h.encode,state)
+        if not ok then finish(false,'Не удалось подготовить запись: '..tostring(raw));return end
+        local written,saved,err=pcall(h.write,'purchases.json',raw)
+        if not written or not saved then finish(false,'Не удалось сохранить: '..tostring(err or saved));return end
+        A.purchase_state=state;A.book_revision=A.book_revision+1;A.book_view_key=nil
+        finish(true,row)
+    end)
+    return true
+end
+function A.record_purchase(params,done)
+    return record(function(state,p)return P.buy(state,p)end,params,done)
+end
+function A.record_sale(lot_id,params,done)
+    return record(function(state,p)
+        local lot
+        for _,row in ipairs(state.lots)do if row.id==lot_id then lot=row;break end end
+        if not lot or lot.server~=p.server or lot.currency~=p.currency then return nil,'Партия другого сервера или валюты'end
+        return P.sell(state,lot_id,{qty=p.qty,net_total=p.net_total,at=p.at,note=p.note})
+    end,params,done)
+end
+function A.compute()
+    compute()
+    local h=A.host;local server,currency=h.server(),h.currency()
+    local token,revision=A.generation,A.state.revision
+    local options={};for k,v in pairs(A.resale_options)do options[k]=v end
+    options.currency=currency;options.budget=A.options.budget;options.tax_bp=A.options.tax_bp;options.ttl=A.options.ttl
+    options.own_sales=A.book_loaded and P.evidence(A.purchase_state,server,currency,h.now())or{}
+    options.market_sales={}
+    if A.market_sales_server==server and A.market_sales_currency==currency then
+        for key,row in pairs(A.market_sales or{})do
+            if row.valid_until>=h.now()and row.updated_at<=h.now()then options.market_sales[key]=row end
+        end
+    end
+    A.resale_busy=true
+    h.run(function()
+        if token~=A.generation then return end
+        if server~=h.server()or currency~=h.currency()then A.resale_busy=false;return end
+        local rows,why=R.rank(A.state,server,h.now(),options,function()
+            h.yield()
+            return token==A.generation and server==h.server()and currency==h.currency()
+        end)
+        if token~=A.generation then return end
+        A.resale_busy=false
+        if server~=h.server()or currency~=h.currency()or revision~=A.state.revision then return end
+        A.resale_results=rows;A.resale_server=server;A.resale_currency=currency
+        A.resale_at=h.now();A.resale_revision=revision;A.resale_error=why
+    end)
+end
+function A.current_resale()
+    local h=A.host;local now=h.now()
+    if A.resale_server~=h.server()or A.resale_currency~=h.currency()
+        or A.resale_revision~=A.state.revision or not A.resale_at or now<A.resale_at
+        or now-A.resale_at>A.options.ttl then return{}end
+    for _,row in ipairs(A.resale_results or{})do
+        if now<row.seller.at or now>(row.valid_until or row.seller.at+A.options.ttl)then return{}end
+    end
+    return A.resale_results or{}
+end
+function A.select_resale(index)
+    if not A.current_resale()[index]then return false end
+    A.resale_selected=index;A.resale_details=true;return true
+end
+function A.track_resale()
+    local row=A.current_resale()[A.resale_selected]
+    if not row or row.seller.server~=A.host.server()then return false end
+    A.host.find(row.seller.shop,row.seller.server);return true
+end
+return A
+end
+
+end)()
+local V=(function()
+-- Fixed-height native rows: full scroll extent, only viewport rows are drawn.
+local V={}
+function V.draw(B,id,rows,stride,height,draw,reset)
+    if #rows==0 then return end
+    local top=B.GetCursorPosY()
+    local scroll=reset and 0 or B.GetScrollY()
+    local first=math.max(1,math.min(#rows,math.floor(math.max(0,scroll-top)/stride)+1))
+    local last=math.min(#rows,first+math.ceil(height/stride)+1)
+    local gap=B.GetStyle().ItemSpacing.y
+    if first>1 then B.Dummy(B.ImVec2(1,(first-1)*stride-gap))end
+    for index=first,last do
+        if B.BeginChild(id..'_'..index,B.ImVec2(0,stride-gap),true)then draw(rows[index],index)end
+        B.EndChild()
+    end
+    if last<#rows then B.Dummy(B.ImVec2(1,(#rows-last)*stride-gap))end
+end
+return V
+
+end)()
 local ui=(function()
 -- Render only through the original MCR mimgui instance, styles and child panels.
 return function(A)
@@ -455,6 +1066,28 @@ local function age(at)
     if seconds<60 then return seconds..' с' end
     return math.floor(seconds/60)..' мин'
 end
+local function caption(s)
+    local h=A.host;local B=h.imgui;local value=h.utf8(tostring(s):gsub('[%c]',' '))
+    local width=math.max(1,B.GetContentRegionAvail().x)
+    if B.CalcTextSize(value).x>width then
+        repeat value=value:gsub('[%z\1-\127\194-\244][\128-\191]*$','')
+        until value==''or B.CalcTextSize(value..'..').x<=width
+        value=value..'..'
+    end
+    B.Text(value)
+end
+local function list(rows,id,draw,extra_lines)
+    local B=A.host.imgui;local style=B.GetStyle()
+    local padding=style.WindowPadding or{x=8,y=8}
+    local width=math.max(1,B.GetContentRegionAvail().x-padding.x*2)
+    local function lines(value)return math.max(1,math.ceil(B.CalcTextSize(A.host.utf8(value)).x/width))end
+    local quote=lines('Купить в лавке #1000000000: 9.007.199.254.740.991')
+    local profit=lines('Прибыль ~9.007.199.254.740.991 SA$')
+    local count=lines('Количество: 1.000.000.000 шт.')
+    local height=B.GetTextLineHeight()*(2+quote*2+profit+count+(extra_lines or 0))+
+        B.GetFrameHeight()+style.ItemSpacing.y*9+padding.y*2
+    A.vertical_list.draw(B,id,rows,height,A.body_height,draw,A.reset_body_scroll)
+end
 local function quote(label,shop,price,currency)
     wrapped(label)
     wrapped('Лавка #'..shop.shop..(shop.owner and shop.owner~=''and' | '..shop.owner or''))
@@ -482,12 +1115,22 @@ local function details(r)
 end
 local function entry(r,index)
     local B=A.host.imgui
-    item_title(r)
-    wrapped('Купить в лавке #'..r.seller.shop..': '..money(r.buy_price)..' '..r.currency..' / шт.')
-    wrapped('Сдать в лавку #'..r.buyer.shop..': '..money(r.sell_price)..' '..r.currency..' / шт.')
-    wrapped('Объём: '..money(r.qty)..' шт. | Прибыль: ~'..money(r.profit)..' '..r.currency)
+    caption(r.name);caption('ID '..r.id..' | '..r.currency..' за шт.')
+    wrapped('Купить в лавке #'..r.seller.shop..': '..money(r.buy_price))
+    wrapped('Сдать в лавку #'..r.buyer.shop..': '..money(r.sell_price))
+    wrapped('Прибыль: ~'..money(r.profit)..' '..r.currency)
+    wrapped('Объём: '..money(r.qty)..' шт.')
     if button('Посмотреть расчёт##pa_route_'..index,B.ImVec2(-1,0))then A.select_route(index)end
-    B.Spacing();B.Separator();B.Spacing()
+end
+local function tabs()
+    local B=A.host.imgui;local keys={'routes','resale','purchases'}
+    local labels={'Лавки','Рынок','Покупки'}
+    local width=math.max(1,(B.GetContentRegionAvail().x-B.GetStyle().ItemSpacing.x*2)/3)
+    for i,key in ipairs(keys)do
+        if i>1 then B.SameLine()end
+        if B.ButtonClickable((A.workspace_tab or'routes')~=key,A.host.utf8(labels[i]..'##pa_tab_'..key),B.ImVec2(width,0))
+            and(not A.host.can_click or A.host.can_click())then A.workspace_tab=key end
+    end
 end
 function A.draw_center()
     local h=A.host;local B=h.imgui
@@ -497,18 +1140,21 @@ function A.draw_center()
     local width=math.max(1,math.min(h.center_width and h.center_width()or space.x,space.x-rail-gap))
     local visible=B.BeginChild('Central',B.ImVec2(width,-1),true)
     if visible then
-        local rows=A.current_results()
-        local selected=rows[A.selected]
-        local show_details=A.route_details and selected
-        B.CenterText(h.utf8('Арбитраж'))
+        tabs()
+        local tab=A.workspace_tab or'routes'
+        local rows=tab=='routes'and A.current_results()or A.workspace_rows and A.workspace_rows(tab)or{}
+        local selected=tab=='routes'and rows[A.selected]or tab=='resale'and rows[A.resale_selected]
+        local show_details=selected and(tab=='routes'and A.route_details or tab=='resale'and A.resale_details)
+        B.CenterText(h.utf8(tab=='resale'and'Перепродажа'or tab=='purchases'and'Мои закупки'or'Арбитраж'))
         wrapped(A.server_label())
         if show_details and button('< Все варианты##pa_back',B.ImVec2(-1,0))then
-            A.route_details=false;show_details=false
+            A.route_details=false;A.resale_details=false;show_details=false
         end
+        if tab=='purchases'and A.purchases_header then A.purchases_header()end
         B.Separator()
         local line=B.GetTextLineHeight()
         local gap_y=B.GetStyle().ItemSpacing.y
-        local footer=line+B.GetFrameHeight()+gap_y*4
+        local footer=line*(tab=='purchases'and 4 or 2)+gap_y*4
         if show_details then
             local available_width=math.max(1,B.GetContentRegionAvail().x)
             local function lines(s)return math.ceil(B.CalcTextSize(h.utf8(s)).x/available_width)+1 end
@@ -516,14 +1162,14 @@ function A.draw_center()
                 lines('Прибыль: ~'..money(selected.profit)..' '..selected.currency))+gap_y*4
         end
         local body_height=math.max(1,B.GetContentRegionAvail().y-footer)
-        local per_page=body_height>=(line*7+gap_y*10)*2 and 2 or 1
-        local pages=math.max(1,math.ceil(#rows/per_page))
-        A.page=math.max(1,math.min(A.page,pages))
+        A.body_height=body_height
         if B.BeginChild('pa_arb_body',B.ImVec2(0,body_height),false)then
-            local view=h.server()..'/'..A.generation..'/'..
-                (show_details and'details/'..A.selected or'list/'..A.page..'/'..per_page)
-            if body_view~=view then B.SetScrollY(0);body_view=view end
-            if show_details then details(selected)
+            local view=h.server()..'/'..A.generation..'/'..tab..'/'..(tab=='purchases'and(A.book_revision or 0)or 0)..'/'..
+                (show_details and'details/'..tostring(tab=='routes'and A.selected or A.resale_selected)or'list')
+            A.reset_body_scroll=body_view~=view
+            if A.reset_body_scroll then B.SetScrollY(0);body_view=view end
+            if tab~='routes'and A.workspace_body then A.workspace_body(tab,rows,selected,show_details)
+            elseif show_details then details(selected)
             elseif #rows==0 then
                 if A.busy then wrapped('Обновляю цены и рассчитываю варианты...')
                 else
@@ -531,7 +1177,7 @@ function A.draw_center()
                     wrapped('Нажмите «Расчёт», чтобы получить цены и найти варианты. Откройте лавки для сохранения своих снимков. Дополнительные источники — справа.')
                 end
             else
-                for index=(A.page-1)*per_page+1,math.min(#rows,A.page*per_page)do entry(rows[index],index)end
+                list(rows,'pa_route_row',entry)
             end
             if A.error then wrapped('Ошибка: '..A.error)end
             if A.notice then wrapped(A.notice)end
@@ -542,11 +1188,8 @@ function A.draw_center()
             wrapped('План: '..money(selected.qty)..' шт.')
             wrapped('Прибыль: ~'..money(selected.profit)..' '..selected.currency)
         else
-            text('Страница '..A.page..' / '..pages)
-            local half=math.max(1,(B.GetContentRegionAvail().x-gap)/2)
-            if button('<##pa_page',B.ImVec2(half,0))then A.page=math.max(1,A.page-1)end
-            B.SameLine()
-            if button('>##pa_page',B.ImVec2(half,0))then A.page=math.min(pages,A.page+1)end
+            if tab=='purchases'and A.purchase_footer then A.purchase_footer(A.current_book_view or{})
+            else wrapped('Вариантов: '..#rows..'. Листайте вниз.')end
         end
     end
     B.EndChild()
@@ -559,6 +1202,10 @@ local function calculate()
     if not budget or not tax or tax~=tax or tax<0 or tax>100 then
         A.error='Неверный бюджет или комиссия'
     else
+        if A.apply_resale_settings then
+            local valid,why=A.apply_resale_settings()
+            if not valid then A.error=why;return end
+        end
         A.options.budget=budget;A.options.tax_bp=math.floor(tax*100+0.5);A.calculate()
     end
 end
@@ -576,11 +1223,17 @@ local function tile(id,label,icon,action,height)
 end
 local function settings()
     local B=A.host.imgui
+    local height=math.min(B.GetIO().DisplaySize.y*.45,B.GetTextLineHeight()*10)
+    if B.BeginChild('pa_arb_settings',B.ImVec2(0,height),false)then
     text('Бюджет (0 = без лимита)')
     if B.InputText('##pa_budget',input.budget,32)then A.follow_market=false;A.invalidate()end
     text('Комиссия, %')
     if B.InputFloat('##pa_tax',input.tax,0.1,1,'%.2f')then A.follow_market=false;A.invalidate()end
     B.Separator()
+    if A.resale_settings then A.resale_settings()end
+    B.ScrollMouse('pa_arb_settings',true)
+    end
+    B.EndChild()
 end
 local function sources()
     wrapped('Market Helper: получить лавки текущего мобильного сервера без ключа MCR. Это внешний источник; снимки могут отставать от игры.')
@@ -612,12 +1265,12 @@ function A.draw_right()
         local icons=h.icons or{}
         local actions={}
         local function add(id,label,icon,action)actions[#actions+1]={id,label,icon,action}end
-        if A.busy then
+        if A.busy or A.resale_busy then
             add('stop','Стоп',icons.STOP or'X',function()A.follow_market=false;A.invalidate();A.status='Расчёт отменён'end)
         else add('calculate','Расчёт',icons.CALCULATOR or'=',calculate)end
         add('settings','Параметры',icons.GEAR or'*',function()h.open_popup('Параметры арбитража')end)
         add('sources','Источники',icons.DATABASE or'B',function()h.open_popup('Источники цен')end)
-        if A.selected_route()then
+        if (A.workspace_tab==nil or A.workspace_tab=='routes')and A.selected_route()then
             add('route','Маршрут',icons.LOCATION_DOT or'>',function()A.route_details=true end)
         end
         local area=B.GetContentRegionAvail()
@@ -646,9 +1299,284 @@ function A.draw_right()
         end
         popup('Параметры арбитража',settings)
         popup('Источники цен',sources)
+        if A.workspace_popups then A.workspace_popups()end
+        if A.purchase_popups then A.purchase_popups()end
         B.ScrollMouse('RightSidebar',true)
     end
     B.EndChild()
+end
+A.ui={text=text,wrapped=wrapped,button=button,money=money,item_title=item_title,
+    caption=caption,age=age,list=list,popup=popup,quote=quote}
+return A
+end
+
+end)()
+local workspace_ui=(function()
+-- Native resale view; provenance distinguishes history, orders and estimates.
+return function(A)
+local g=A.ui
+local settings
+local function popularity(row,full)
+    local p=row.popularity
+    if p.kind=='market_sales'then
+        local label='Продано за 30 дней: '..g.money(p.market_qty_30d)..' шт.'
+        if full then
+            g.wrapped('По данным Market Helper | '..label)
+            g.wrapped('Обновление источника: '..g.age(p.market_updated_at)..' назад')
+        else g.caption(label)end
+    elseif p.kind=='own_sales'then
+        g.wrapped('Ваши записи за 7 дней: '..g.money(p.own_qty)..' шт. / '..p.own_events..' продаж')
+    elseif p.kind=='buy_orders'then
+        g.wrapped('Заявки на скупку: '..p.buyer_shops..' лавки, '..g.money(p.buyer_qty)..' шт.')
+    else g.wrapped('Скорость продаж неизвестна')end
+    if full then g.wrapped('Заявки показывают спрос, а прошлые продажи не гарантируют будущий сбыт.')end
+end
+local function entry(row,index)
+    local B=A.host.imgui
+    g.caption(row.name);g.caption('ID '..row.id..' | '..row.currency..' за шт.')
+    g.wrapped('Купить в лавке #'..row.seller.shop..': '..g.money(row.buy_price))
+    g.wrapped('Цель продажи: '..g.money(row.sell_price))
+    g.wrapped('Прибыль: ~'..g.money(row.profit)..' '..row.currency)
+    g.wrapped('Объём: '..g.money(row.qty)..' шт. | +'..string.format('%.1f',row.roi_bp/100)..'%')
+    popularity(row,false)
+    if g.button('Посмотреть расчёт##pa_resale_'..index,B.ImVec2(-1,0))then A.select_resale(index)end
+end
+local function details(row)
+    local B=A.host.imgui
+    g.item_title(row);B.Separator()
+    g.quote('1. Купить у продавца',row.seller,row.buy_price,row.currency)
+    g.wrapped('Есть по снимку: '..g.money(row.seller_qty)..' шт.')
+    if g.button('Найти лавку #'..row.seller.shop..'##pa_resale_find',B.ImVec2(-1,0))then A.track_resale()end
+    B.Separator();g.wrapped('2. Оценка перепродажи')
+    g.wrapped('Другие продавцы: '..row.peer_count..' | '..g.money(row.peer_price or row.reference_price)..' '..row.currency)
+    if row.history_price then g.wrapped('Цена рынка по источнику: '..g.money(row.history_price)..' '..row.currency)end
+    g.wrapped('Цель продажи: '..g.money(row.sell_price)..' '..row.currency..' за шт.')
+    popularity(row,true);B.Separator()
+    g.wrapped('3. Расчёт на '..g.money(row.qty)..' шт.')
+    for _,field in ipairs({{'Затраты','cost'},{'Выручка','gross'},{'Комиссия','fee'},{'После комиссии','net'}})do
+        g.wrapped(field[1]..': '..g.money(row[field[2]])..' '..row.currency)
+    end
+    g.wrapped('Доходность: ~'..string.format('%.2f',row.roi_bp/100)..'% после комиссии')
+    if A.open_purchase and g.button('Записать закупку##pa_note_purchase',B.ImVec2(-1,0))then A.open_purchase(row)end
+    g.wrapped('Запись закупки — ручная заметка. Скрипт не покупает товар и не выставляет его автоматически.')
+end
+function A.workspace_rows(tab)
+    if tab=='resale'then return A.current_resale()end
+    A.current_book_view=A.purchases_view()
+    return A.current_book_view.lots or{}
+end
+function A.workspace_body(tab,rows,selected,show_details)
+    if tab=='purchases'then
+        if A.draw_purchases then A.draw_purchases(rows,A.current_book_view or{})end
+        return
+    end
+    if show_details then details(selected)
+    elseif #rows>0 then g.list(rows,'pa_resale_row',entry,2)
+    elseif A.busy or A.resale_busy then g.wrapped('Считаю цены и спрос...')
+    else
+        g.wrapped('Подходящих вариантов пока нет')
+        g.wrapped('Нужны свежие предложения, минимум 3 независимых продавца и признаки спроса. Нажмите «Расчёт».')
+        g.wrapped('По умолчанию: от 10% после комиссии, до 10 шт. на товар. Порог меняется в параметрах справа.')
+    end
+    if A.resale_error then g.wrapped(A.resale_error)end
+    if A.demand_error then g.wrapped('Статистика 30 дней недоступна: '..A.demand_error)end
+end
+local function ready()
+    if settings then return end
+    local B=A.host.imgui
+    settings={roi=B.new.float(A.resale_options.min_roi_bp/100),qty=B.new.char[32](tostring(A.resale_options.max_qty)),
+        popular=B.new.bool(A.resale_options.popular_only)}
+end
+function A.resale_settings()
+    ready();local B=A.host.imgui
+    g.wrapped('Перепродажа: минимальная прибыль, %')
+    if B.InputFloat('##pa_resale_roi',settings.roi,1,5,'%.1f')then A.follow_market=false;A.invalidate()end
+    g.wrapped('Максимум штук на один товар')
+    if B.InputText('##pa_resale_qty',settings.qty,32)then A.follow_market=false;A.invalidate()end
+    if B.Checkbox(A.host.utf8('Только с признаками спроса'),settings.popular)then A.follow_market=false;A.invalidate()end
+end
+function A.apply_resale_settings()
+    ready()
+    local roi=tonumber(settings.roi[0]);local raw=A.host.input_string(settings.qty)
+    local qty=raw:match('^%d+$')and A.engine.integer(raw,1,1000000000)
+    if not roi or roi~=roi or roi<0 or roi>100 or not qty then return false,'Неверный порог прибыли или количество'end
+    A.resale_options.min_roi_bp=math.floor(roi*100+0.5);A.resale_options.max_qty=qty
+    A.resale_options.popular_only=settings.popular[0]==true
+    return true
+end
+return A
+end
+
+end)()
+local purchases_ui=(function()
+-- Manual notes only; saving these forms never executes or confirms a game trade.
+return function(A)
+local purchase,sale
+local function scope(f)
+    local h=A.host
+    return f.server==h.server()and f.currency==h.currency()
+end
+local function number(raw,minimum)
+    raw=tostring(raw or ''):match('^%s*(.-)%s*$')
+    if not raw:match('^%d+$')then
+        local first,separator,rest=raw:match('^(%d%d?%d?)([. ])(.+)$')
+        if not first then return end
+        while rest~=''do
+            if not rest:sub(1,3):match('^%d%d%d$')then return end
+            rest=rest:sub(4)
+            if rest~=''then
+                if rest:sub(1,1)~=separator or #rest==1 then return end
+                rest=rest:sub(2)
+            end
+        end
+        raw=raw:gsub('[. ]','')
+    end
+    return A.engine.integer(raw,minimum)
+end
+local function buffer(value,capacity)
+    if type(value)=='number'then value=string.format('%.0f',value)end
+    return A.host.imgui.new.char[capacity](A.host.utf8(tostring(value or '')))
+end
+local function raw(value)return A.host.input_string(value)end
+local function cp(value)
+    local h=A.host
+    return h.to_cp and h.to_cp(raw(value))or raw(value)
+end
+local function form(row)
+    local h=A.host
+    local exact=row and row.id~=nil and row.variant~=nil
+    return {server=row and row.seller and row.seller.server or h.server(),
+        server_label=A.server_label(),
+        currency=row and row.currency or h.currency(),
+        name=not exact and buffer(row and row.name,1024)or nil,note=buffer('',4096),
+        qty=buffer(row and row.qty or '',32),cost=buffer(row and row.buy_price or '',32),
+        item_id=row and row.id,variant=row and row.variant,
+        title=row and row.name,exact=exact}
+end
+function A.open_purchase(row)
+    purchase=form(row);A.pending_purchase_popup='Записать покупку'
+end
+function A.purchases_header()
+    local g,B=A.ui,A.host.imgui
+    if g.button('Записать покупку',B.ImVec2(-1,0))and A.book_loaded and not A.book_busy then
+        A.open_purchase()
+    end
+    if not A.book_loaded then g.wrapped(A.book_error or 'Закупки загружаются...')end
+end
+local function open_sale(lot)
+    sale={server=lot.server,server_label=A.server_label(),currency=lot.currency,id=lot.id,title=lot.name,
+        remaining=lot.remaining,qty=buffer('',32),net=buffer('',32),note=buffer('',4096)}
+    A.pending_purchase_popup='Записать продажу'
+end
+function A.draw_purchases(rows,view)
+    local g,B=A.ui,A.host.imgui
+    if view.error then g.wrapped(view.error);return end
+    if view.loading then g.wrapped('Закупки загружаются...');return end
+    if #rows==0 then g.wrapped('Пока нет записей о покупках');return end
+    g.list(rows,'pa_purchase_list',function(lot)
+        g.caption(lot.name)
+        g.wrapped('Цена: '..g.money(lot.unit_cost)..' '..lot.currency..' / шт.')
+        g.wrapped('Остаток: '..g.money(lot.remaining)..' / '..g.money(lot.qty)..' шт.')
+        g.caption(lot.note and lot.note~=''and lot.note or 'Без заметки')
+        if lot.remaining>0 then
+            if g.button('Записать продажу##pa_sell_'..lot.id,B.ImVec2(-1,0))then open_sale(lot)end
+        else g.text('Партия закрыта')end
+    end)
+end
+function A.purchase_footer(view)
+    if view.error or view.loading then return end
+    local g=A.ui;local currency=A.host.currency()
+    g.wrapped('Вложено: '..g.money(view.invested)..' '..currency)
+    g.wrapped('Прибыль по ручным записям: '..g.money(view.realized_profit)..' '..currency)
+end
+local function input(label,id,value,capacity,f)
+    local h=A.host
+    A.ui.wrapped(label)
+    if f.pending or f.saved then A.ui.wrapped(cp(value))
+    else h.imgui.InputText(h.utf8(id),value,capacity)end
+end
+local function can_save(f)
+    if f.pending or f.saved then return false end
+    if not scope(f)then f.error='Сервер или валюта изменились. Откройте форму заново.';return false end
+    if not A.book_loaded then f.error=A.book_error or 'Журнал ещё загружается';return false end
+    if A.book_busy then f.error='Сохранение уже идёт';return false end
+    return true
+end
+local function submit(f,action)
+    f.pending=true;f.error=nil
+    local accepted,why=action(function(ok,result)
+        f.pending=false;f.saved=ok==true
+        if not ok then f.error=tostring(result or 'Не удалось сохранить запись')end
+    end)
+    if not accepted then f.pending=false;f.error=tostring(why or 'Не удалось сохранить запись')end
+end
+local function save_purchase()
+    local f=purchase
+    if not can_save(f)then return end
+    local qty,cost=number(raw(f.qty),1),number(raw(f.cost),0)
+    local name=f.exact and f.title or cp(f.name)
+    if not qty or cost==nil or not name:find('%S')then
+        f.error='Введите название, целое количество и цену. Цена 0 допустима.';return
+    end
+    local p={name=name,qty=qty,unit_cost=cost,note=cp(f.note)}
+    if f.exact then p.item_id=f.item_id;p.variant=f.variant end
+    submit(f,function(done)return A.record_purchase(p,done)end)
+end
+local function save_sale()
+    local f=sale
+    if not can_save(f)then return end
+    local qty,net=number(raw(f.qty),1),number(raw(f.net),0)
+    if not qty or qty>f.remaining or net==nil then
+        f.error='Введите целое количество в пределах остатка и фактически полученную сумму.';return
+    end
+    submit(f,function(done)return A.record_sale(f.id,{qty=qty,net_total=net,note=cp(f.note)},done)end)
+end
+local function body(id,f,draw)
+    local B=A.host.imgui;local g=A.ui
+    g.wrapped(f.server_label..' | '..f.currency)
+    local height=math.max(1,math.min(B.GetIO().DisplaySize.y*.4,B.GetTextLineHeight()*8))
+    if B.BeginChild(id,B.ImVec2(0,height),false)then
+        draw()
+        if not scope(f)then g.wrapped('Сервер или валюта изменились. Откройте форму заново.')end
+        if f.error then g.wrapped(f.error)end
+        B.ScrollMouse(id,true)
+    end
+    B.EndChild()
+end
+local function save_button(f,label,id,action)
+    if f.saved then A.ui.text('Записано')
+    elseif f.pending then A.ui.text('Сохраняю...')
+    elseif A.ui.button(label..id,A.host.imgui.ImVec2(-1,0))then action()end
+end
+function A.purchase_popups()
+    local g=A.ui
+    if A.pending_purchase_popup then
+        A.host.open_popup(A.pending_purchase_popup);A.pending_purchase_popup=nil
+    end
+    g.popup('Записать покупку',function()
+        if not purchase then return end
+        local f=purchase
+        body('pa_purchase_form',f,function()
+            if f.exact then g.item_title({id=f.item_id,variant=f.variant,name=f.title})
+            else input('Название','##pa_purchase_name',f.name,1024,f)end
+            input('Количество, шт.','##pa_purchase_qty',f.qty,32,f)
+            input('Цена за штуку (0 допустим)','##pa_purchase_cost',f.cost,32,f)
+            input('Заметка','##pa_purchase_note',f.note,4096,f)
+        end)
+        save_button(f,'Сохранить покупку','##pa_purchase_save',save_purchase)
+    end)
+    g.popup('Записать продажу',function()
+        if not sale then return end
+        local f=sale
+        body('pa_sale_form',f,function()
+            g.wrapped(f.title)
+            g.wrapped('Остаток: '..g.money(f.remaining)..' шт.')
+            input('Продано, шт.','##pa_sale_qty',f.qty,32,f)
+            input('Фактически получено всего (после комиссии)','##pa_sale_net',f.net,32,f)
+            input('Заметка','##pa_sale_note',f.note,4096,f)
+        end)
+        save_button(f,'Сохранить продажу','##pa_sale_save',save_sale)
+    end)
 end
 return A
 end
@@ -714,10 +1642,10 @@ end
 return P
 
 end)()
-local A=factory(E);A.external=external;ui(A);return A
+local A=factory(E);A.external=external;A.vertical_list=V;workspace(A,E,resale(E),purchases(E),popularity(E));ui(A);workspace_ui(A);purchases_ui(A);return A
 end)()
 
-PalatkaMCR.version='3.0.0-local.9';PalatkaMCR.build=9;PalatkaMCR.update_base='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
+PalatkaMCR.version='3.0.0-local.10';PalatkaMCR.build=10;PalatkaMCR.update_base='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 PalatkaMCR.local_ready=function()return type(isSampAvailable)=='function'and isSampAvailable()or false end
 PalatkaMCR.elapsed=(function()
 -- Elapsed seconds for deadlines. CLOCK_MONOTONIC keeps suspend/low CPU and
@@ -762,6 +1690,7 @@ end function lIl_Illl(h)local B=""for h in h:gmatch(r[-170908+172990])do local a
 -- This block is assembled inside the original top-level lexical scope.
 do
     local root=getWorkingDirectory():gsub('\\','/')..'/PalatkaMCR'
+    local name_index
     F3.arbitrage=10
     PalatkaMCR.install({
         imgui=B,utf8=u8,now=os.time,
@@ -788,6 +1717,18 @@ do
         input_string=function(buffer)return e.string(buffer)end,
         encode=T.encode,decode=T.decode,
         to_cp=NeomText.MixedToCp1251,
+        unique_item=function(name)
+            if not name_index then
+                name_index={}
+                for id,title in pairs(M)do
+                    if tonumber(id)and type(title)=='string'then
+                        if name_index[title]~=nil then name_index[title]=false
+                        else name_index[title]=tostring(id)end
+                    end
+                end
+            end
+            return name_index[name]or nil
+        end,
         market_server_id=function()
             local name=tostring(sampGetCurrentServerName()or ''):lower()
             if name:find('mobile%s*iii')or name:find('mobile%s*3')then return 103 end
@@ -816,6 +1757,31 @@ do
                     done(response.text)
                 end,function(err)done(nil,err)end,20)
         end,
+        fetch_popularity=function(sid,done)
+            if sid~=101 and sid~=102 and sid~=103 then done(nil,'Мобильный сервер не определён');return end
+            local combined={ok=true,items={}}
+            local function page(number)
+                local url='https://va-ta.com/api/site/market-list?server='..sid..'&page='..number..'&limit=100&sort=popular'
+                lIl_l_lI('GET',url,nil,function(response)
+                    if response.status_code~=200 then done(nil,'Статистика HTTP '..tostring(response.status_code));return end
+                    if type(response.text)~='string'or #response.text>1024*1024 then done(nil,'Слишком большой ответ статистики');return end
+                    local ok,data=pcall(T.decode,response.text)
+                    if not ok or type(data)~='table'or data.ok~=true or type(data.items)~='table'
+                        or tonumber(data.page)~=number then done(nil,'Неверный ответ статистики');return end
+                    local count=0;for k in pairs(data.items)do
+                        if type(k)~='number'or k%1~=0 or k<1 then done(nil,'Неверный список статистики');return end
+                        count=count+1
+                    end
+                    if count~=#data.items or count>100 then done(nil,'Неверная страница статистики');return end
+                    for _,row in ipairs(data.items)do combined.items[#combined.items+1]=row end
+                    local pages=tonumber(data.pages)
+                    if not pages or pages%1~=0 or pages<1 then done(nil,'Нет числа страниц статистики');return end
+                    if number<math.min(3,pages)then page(number+1)
+                    else combined.partial=pages>3;done(combined)end
+                end,function(err)done(nil,err)end,20)
+            end
+            page(1)
+        end,
         open_main=function()o_(true)end,
         open=function()O3=F3.arbitrage;M3[0]=true end,
         find=function(number,server)
@@ -827,7 +1793,11 @@ do
         end,
         read=function(name)
             local path=root..'/'..name
-            if not Y.attributes(path)then return nil end
+            local attributes,stat_error,stat_code=Y.attributes(path)
+            if not attributes then
+                if stat_code==2 then return nil end
+                return nil,stat_error or'Не удалось проверить файл'
+            end
             local file,err=io.open(path,'rb')
             if not file then return nil,err end
             local content=file:read(8*1024*1024+1)
@@ -863,8 +1833,11 @@ do
     local reason='Не используется сервер MCR: доступна локальная работа'
     local allowed={['api.telegram.org']=true,['server-api.arizona.games']=true,
         ['server-api.azgames-cdn.ru']=true}
-    local function permitted(url)
+    local function permitted(url,method)
         if tostring(url):match('^https://va%-ta%.com/api/shops/pull%?')then return true end
+        if tostring(url):match('^https://va%-ta%.com/api/site/market%-list%?server=10[123]&page=[123]&limit=100&sort=popular$')then
+            return method==nil or method=='GET'
+        end
         local base=PalatkaMCR.update_base
         if base and(url==base..'palatka_mcr_update.json'or url==base..'palatka_mcr_local.lua')then return true end
         local host=tostring(url or ''):match('^https://([^/:]+)')
@@ -872,7 +1845,7 @@ do
     end
     local old_http=lIl_l_lI
     lIl_l_lI=function(method,url,options,success,failure,timeout)
-        if not permitted(url)then
+        if not permitted(url,method)then
             if failure then failure(reason)end
             return false,reason
         end
@@ -889,7 +1862,7 @@ do
     local old_request=G.request
     G.request=function(request,...)
         local url=type(request)=='table'and request.url or request
-        if not permitted(url)then return nil,reason end
+        if not permitted(url,type(request)=='table'and request.method or nil)then return nil,reason end
         return old_request(request,...)
     end
     PalatkaMCR.local_mode=true

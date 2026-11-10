@@ -46,6 +46,28 @@ local function age(at)
     if seconds<60 then return seconds..' с' end
     return math.floor(seconds/60)..' мин'
 end
+local function caption(s)
+    local h=A.host;local B=h.imgui;local value=h.utf8(tostring(s):gsub('[%c]',' '))
+    local width=math.max(1,B.GetContentRegionAvail().x)
+    if B.CalcTextSize(value).x>width then
+        repeat value=value:gsub('[%z\1-\127\194-\244][\128-\191]*$','')
+        until value==''or B.CalcTextSize(value..'..').x<=width
+        value=value..'..'
+    end
+    B.Text(value)
+end
+local function list(rows,id,draw,extra_lines)
+    local B=A.host.imgui;local style=B.GetStyle()
+    local padding=style.WindowPadding or{x=8,y=8}
+    local width=math.max(1,B.GetContentRegionAvail().x-padding.x*2)
+    local function lines(value)return math.max(1,math.ceil(B.CalcTextSize(A.host.utf8(value)).x/width))end
+    local quote=lines('Купить в лавке #1000000000: 9.007.199.254.740.991')
+    local profit=lines('Прибыль ~9.007.199.254.740.991 SA$')
+    local count=lines('Количество: 1.000.000.000 шт.')
+    local height=B.GetTextLineHeight()*(2+quote*2+profit+count+(extra_lines or 0))+
+        B.GetFrameHeight()+style.ItemSpacing.y*9+padding.y*2
+    A.vertical_list.draw(B,id,rows,height,A.body_height,draw,A.reset_body_scroll)
+end
 local function quote(label,shop,price,currency)
     wrapped(label)
     wrapped('Лавка #'..shop.shop..(shop.owner and shop.owner~=''and' | '..shop.owner or''))
@@ -73,12 +95,22 @@ local function details(r)
 end
 local function entry(r,index)
     local B=A.host.imgui
-    item_title(r)
-    wrapped('Купить в лавке #'..r.seller.shop..': '..money(r.buy_price)..' '..r.currency..' / шт.')
-    wrapped('Сдать в лавку #'..r.buyer.shop..': '..money(r.sell_price)..' '..r.currency..' / шт.')
-    wrapped('Объём: '..money(r.qty)..' шт. | Прибыль: ~'..money(r.profit)..' '..r.currency)
+    caption(r.name);caption('ID '..r.id..' | '..r.currency..' за шт.')
+    wrapped('Купить в лавке #'..r.seller.shop..': '..money(r.buy_price))
+    wrapped('Сдать в лавку #'..r.buyer.shop..': '..money(r.sell_price))
+    wrapped('Прибыль: ~'..money(r.profit)..' '..r.currency)
+    wrapped('Объём: '..money(r.qty)..' шт.')
     if button('Посмотреть расчёт##pa_route_'..index,B.ImVec2(-1,0))then A.select_route(index)end
-    B.Spacing();B.Separator();B.Spacing()
+end
+local function tabs()
+    local B=A.host.imgui;local keys={'routes','resale','purchases'}
+    local labels={'Лавки','Рынок','Покупки'}
+    local width=math.max(1,(B.GetContentRegionAvail().x-B.GetStyle().ItemSpacing.x*2)/3)
+    for i,key in ipairs(keys)do
+        if i>1 then B.SameLine()end
+        if B.ButtonClickable((A.workspace_tab or'routes')~=key,A.host.utf8(labels[i]..'##pa_tab_'..key),B.ImVec2(width,0))
+            and(not A.host.can_click or A.host.can_click())then A.workspace_tab=key end
+    end
 end
 function A.draw_center()
     local h=A.host;local B=h.imgui
@@ -88,18 +120,21 @@ function A.draw_center()
     local width=math.max(1,math.min(h.center_width and h.center_width()or space.x,space.x-rail-gap))
     local visible=B.BeginChild('Central',B.ImVec2(width,-1),true)
     if visible then
-        local rows=A.current_results()
-        local selected=rows[A.selected]
-        local show_details=A.route_details and selected
-        B.CenterText(h.utf8('Арбитраж'))
+        tabs()
+        local tab=A.workspace_tab or'routes'
+        local rows=tab=='routes'and A.current_results()or A.workspace_rows and A.workspace_rows(tab)or{}
+        local selected=tab=='routes'and rows[A.selected]or tab=='resale'and rows[A.resale_selected]
+        local show_details=selected and(tab=='routes'and A.route_details or tab=='resale'and A.resale_details)
+        B.CenterText(h.utf8(tab=='resale'and'Перепродажа'or tab=='purchases'and'Мои закупки'or'Арбитраж'))
         wrapped(A.server_label())
         if show_details and button('< Все варианты##pa_back',B.ImVec2(-1,0))then
-            A.route_details=false;show_details=false
+            A.route_details=false;A.resale_details=false;show_details=false
         end
+        if tab=='purchases'and A.purchases_header then A.purchases_header()end
         B.Separator()
         local line=B.GetTextLineHeight()
         local gap_y=B.GetStyle().ItemSpacing.y
-        local footer=line+B.GetFrameHeight()+gap_y*4
+        local footer=line*(tab=='purchases'and 4 or 2)+gap_y*4
         if show_details then
             local available_width=math.max(1,B.GetContentRegionAvail().x)
             local function lines(s)return math.ceil(B.CalcTextSize(h.utf8(s)).x/available_width)+1 end
@@ -107,14 +142,14 @@ function A.draw_center()
                 lines('Прибыль: ~'..money(selected.profit)..' '..selected.currency))+gap_y*4
         end
         local body_height=math.max(1,B.GetContentRegionAvail().y-footer)
-        local per_page=body_height>=(line*7+gap_y*10)*2 and 2 or 1
-        local pages=math.max(1,math.ceil(#rows/per_page))
-        A.page=math.max(1,math.min(A.page,pages))
+        A.body_height=body_height
         if B.BeginChild('pa_arb_body',B.ImVec2(0,body_height),false)then
-            local view=h.server()..'/'..A.generation..'/'..
-                (show_details and'details/'..A.selected or'list/'..A.page..'/'..per_page)
-            if body_view~=view then B.SetScrollY(0);body_view=view end
-            if show_details then details(selected)
+            local view=h.server()..'/'..A.generation..'/'..tab..'/'..(tab=='purchases'and(A.book_revision or 0)or 0)..'/'..
+                (show_details and'details/'..tostring(tab=='routes'and A.selected or A.resale_selected)or'list')
+            A.reset_body_scroll=body_view~=view
+            if A.reset_body_scroll then B.SetScrollY(0);body_view=view end
+            if tab~='routes'and A.workspace_body then A.workspace_body(tab,rows,selected,show_details)
+            elseif show_details then details(selected)
             elseif #rows==0 then
                 if A.busy then wrapped('Обновляю цены и рассчитываю варианты...')
                 else
@@ -122,7 +157,7 @@ function A.draw_center()
                     wrapped('Нажмите «Расчёт», чтобы получить цены и найти варианты. Откройте лавки для сохранения своих снимков. Дополнительные источники — справа.')
                 end
             else
-                for index=(A.page-1)*per_page+1,math.min(#rows,A.page*per_page)do entry(rows[index],index)end
+                list(rows,'pa_route_row',entry)
             end
             if A.error then wrapped('Ошибка: '..A.error)end
             if A.notice then wrapped(A.notice)end
@@ -133,11 +168,8 @@ function A.draw_center()
             wrapped('План: '..money(selected.qty)..' шт.')
             wrapped('Прибыль: ~'..money(selected.profit)..' '..selected.currency)
         else
-            text('Страница '..A.page..' / '..pages)
-            local half=math.max(1,(B.GetContentRegionAvail().x-gap)/2)
-            if button('<##pa_page',B.ImVec2(half,0))then A.page=math.max(1,A.page-1)end
-            B.SameLine()
-            if button('>##pa_page',B.ImVec2(half,0))then A.page=math.min(pages,A.page+1)end
+            if tab=='purchases'and A.purchase_footer then A.purchase_footer(A.current_book_view or{})
+            else wrapped('Вариантов: '..#rows..'. Листайте вниз.')end
         end
     end
     B.EndChild()
@@ -150,6 +182,10 @@ local function calculate()
     if not budget or not tax or tax~=tax or tax<0 or tax>100 then
         A.error='Неверный бюджет или комиссия'
     else
+        if A.apply_resale_settings then
+            local valid,why=A.apply_resale_settings()
+            if not valid then A.error=why;return end
+        end
         A.options.budget=budget;A.options.tax_bp=math.floor(tax*100+0.5);A.calculate()
     end
 end
@@ -167,11 +203,17 @@ local function tile(id,label,icon,action,height)
 end
 local function settings()
     local B=A.host.imgui
+    local height=math.min(B.GetIO().DisplaySize.y*.45,B.GetTextLineHeight()*10)
+    if B.BeginChild('pa_arb_settings',B.ImVec2(0,height),false)then
     text('Бюджет (0 = без лимита)')
     if B.InputText('##pa_budget',input.budget,32)then A.follow_market=false;A.invalidate()end
     text('Комиссия, %')
     if B.InputFloat('##pa_tax',input.tax,0.1,1,'%.2f')then A.follow_market=false;A.invalidate()end
     B.Separator()
+    if A.resale_settings then A.resale_settings()end
+    B.ScrollMouse('pa_arb_settings',true)
+    end
+    B.EndChild()
 end
 local function sources()
     wrapped('Market Helper: получить лавки текущего мобильного сервера без ключа MCR. Это внешний источник; снимки могут отставать от игры.')
@@ -203,12 +245,12 @@ function A.draw_right()
         local icons=h.icons or{}
         local actions={}
         local function add(id,label,icon,action)actions[#actions+1]={id,label,icon,action}end
-        if A.busy then
+        if A.busy or A.resale_busy then
             add('stop','Стоп',icons.STOP or'X',function()A.follow_market=false;A.invalidate();A.status='Расчёт отменён'end)
         else add('calculate','Расчёт',icons.CALCULATOR or'=',calculate)end
         add('settings','Параметры',icons.GEAR or'*',function()h.open_popup('Параметры арбитража')end)
         add('sources','Источники',icons.DATABASE or'B',function()h.open_popup('Источники цен')end)
-        if A.selected_route()then
+        if (A.workspace_tab==nil or A.workspace_tab=='routes')and A.selected_route()then
             add('route','Маршрут',icons.LOCATION_DOT or'>',function()A.route_details=true end)
         end
         local area=B.GetContentRegionAvail()
@@ -237,9 +279,13 @@ function A.draw_right()
         end
         popup('Параметры арбитража',settings)
         popup('Источники цен',sources)
+        if A.workspace_popups then A.workspace_popups()end
+        if A.purchase_popups then A.purchase_popups()end
         B.ScrollMouse('RightSidebar',true)
     end
     B.EndChild()
 end
+A.ui={text=text,wrapped=wrapped,button=button,money=money,item_title=item_title,
+    caption=caption,age=age,list=list,popup=popup,quote=quote}
 return A
 end

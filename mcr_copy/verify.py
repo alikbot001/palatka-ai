@@ -9,7 +9,9 @@ import sys
 
 ROOT=Path(__file__).resolve().parents[1]
 TESTS=('engine','app','external','ui','ui_geometry','market','market_refresh','market_host',
-       'sha256','updater','update_file','update_host','autorefresh')
+       'sha256','updater','update_file','update_host','autorefresh','resale','purchases',
+       'workspace','workspace_market','purchase_runtime','host_read','popularity',
+       'vertical_list','workspace_ui','purchases_ui','popup_scope')
 
 def main():
     commands=[['luajit',f'mcr_copy/tests/test_{name}.lua']for name in TESTS]

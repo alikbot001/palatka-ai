@@ -116,6 +116,9 @@ assert(lIl_l_lI('POST','https://va-ta.com/api/premium/auth',{},nil,function()end
 assert(lIl_l_lI('GET',PalatkaMCR.update_base..'palatka_mcr_update.json')=='allowed'and calls==4)
 assert(lIl_l_lI('GET',PalatkaMCR.update_base..'palatka_mcr_local.lua')=='allowed'and calls==5)
 assert(lIl_l_lI('GET',PalatkaMCR.update_base..'another.lua',{},nil,function()end)==false and calls==5)
+assert(lIl_l_lI('GET','https://va-ta.com/api/site/market-list?server=102&page=1&limit=100&sort=popular')=='allowed'and calls==6)
+assert(lIl_l_lI('POST','https://va-ta.com/api/site/market-list?server=102&page=1&limit=100&sort=popular',{},nil,function()end)==false and calls==6)
+assert(lIl_l_lI('GET','https://va-ta.com/api/site/market-list?server=102&page=99&limit=100&sort=popular',{},nil,function()end)==false and calls==6)
 print('MCR requests blocked; no fake success; game/own bot transport preserved: OK')
 '''
         with tempfile.TemporaryDirectory()as tmp:

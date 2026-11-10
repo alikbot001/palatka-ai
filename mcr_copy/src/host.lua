@@ -1,6 +1,7 @@
 -- This block is assembled inside the original top-level lexical scope.
 do
     local root=getWorkingDirectory():gsub('\\','/')..'/PalatkaMCR'
+    local name_index
     F3.arbitrage=10
     PalatkaMCR.install({
         imgui=B,utf8=u8,now=os.time,
@@ -27,6 +28,18 @@ do
         input_string=function(buffer)return e.string(buffer)end,
         encode=T.encode,decode=T.decode,
         to_cp=NeomText.MixedToCp1251,
+        unique_item=function(name)
+            if not name_index then
+                name_index={}
+                for id,title in pairs(M)do
+                    if tonumber(id)and type(title)=='string'then
+                        if name_index[title]~=nil then name_index[title]=false
+                        else name_index[title]=tostring(id)end
+                    end
+                end
+            end
+            return name_index[name]or nil
+        end,
         market_server_id=function()
             local name=tostring(sampGetCurrentServerName()or ''):lower()
             if name:find('mobile%s*iii')or name:find('mobile%s*3')then return 103 end
@@ -55,6 +68,31 @@ do
                     done(response.text)
                 end,function(err)done(nil,err)end,20)
         end,
+        fetch_popularity=function(sid,done)
+            if sid~=101 and sid~=102 and sid~=103 then done(nil,'Мобильный сервер не определён');return end
+            local combined={ok=true,items={}}
+            local function page(number)
+                local url='https://va-ta.com/api/site/market-list?server='..sid..'&page='..number..'&limit=100&sort=popular'
+                lIl_l_lI('GET',url,nil,function(response)
+                    if response.status_code~=200 then done(nil,'Статистика HTTP '..tostring(response.status_code));return end
+                    if type(response.text)~='string'or #response.text>1024*1024 then done(nil,'Слишком большой ответ статистики');return end
+                    local ok,data=pcall(T.decode,response.text)
+                    if not ok or type(data)~='table'or data.ok~=true or type(data.items)~='table'
+                        or tonumber(data.page)~=number then done(nil,'Неверный ответ статистики');return end
+                    local count=0;for k in pairs(data.items)do
+                        if type(k)~='number'or k%1~=0 or k<1 then done(nil,'Неверный список статистики');return end
+                        count=count+1
+                    end
+                    if count~=#data.items or count>100 then done(nil,'Неверная страница статистики');return end
+                    for _,row in ipairs(data.items)do combined.items[#combined.items+1]=row end
+                    local pages=tonumber(data.pages)
+                    if not pages or pages%1~=0 or pages<1 then done(nil,'Нет числа страниц статистики');return end
+                    if number<math.min(3,pages)then page(number+1)
+                    else combined.partial=pages>3;done(combined)end
+                end,function(err)done(nil,err)end,20)
+            end
+            page(1)
+        end,
         open_main=function()o_(true)end,
         open=function()O3=F3.arbitrage;M3[0]=true end,
         find=function(number,server)
@@ -66,7 +104,11 @@ do
         end,
         read=function(name)
             local path=root..'/'..name
-            if not Y.attributes(path)then return nil end
+            local attributes,stat_error,stat_code=Y.attributes(path)
+            if not attributes then
+                if stat_code==2 then return nil end
+                return nil,stat_error or'Не удалось проверить файл'
+            end
             local file,err=io.open(path,'rb')
             if not file then return nil,err end
             local content=file:read(8*1024*1024+1)

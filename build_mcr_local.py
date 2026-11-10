@@ -12,8 +12,8 @@ import subprocess
 
 from build_mcr_copy import ROOT, assemble
 
-VERSION='3.0.0-local.9'
-BUILD=9
+VERSION='3.0.0-local.10'
+BUILD=10
 UPDATE_BASE='https://raw.githubusercontent.com/alikbot001/palatka-ai/feat/mcr-full-copy-arbitrage-20261108/outputs/'
 
 TOKEN=re.compile(r'''--\[(=*)\[.*?\]\1\]|--[^\n]*|\[(=*)\[.*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z_0-9]*|\S''',re.S)
@@ -211,7 +211,7 @@ def main():
     (ROOT/'outputs/palatka_mcr_local.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     manifest={'schema':1,'channel':'mcr-local','build':BUILD,'version':VERSION,
         'url':UPDATE_BASE+'palatka_mcr_local.lua','size':len(raw),'sha256':report['sha256'],
-        'notes':'Понятный арбитраж: карточки товаров, отдельные цены покупки и скупки, расчёт по шагам, закреплённые итог и навигация.'}
+        'notes':'Перепродажа от 10% после комиссии, учёт спроса и продаж за 30 дней; журнал закупок/частичных продаж; вертикальная прокрутка.'}
     (ROOT/'outputs/palatka_mcr_update.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))
 

@@ -22,10 +22,12 @@ def assemble(raw):
         source=source.replace(before,after,1)
         patches.append((before.encode('cp1251'),after.encode('cp1251')))
     modules=[]
-    for variable,name in [('E','engine'),('factory','app'),('ui','ui'),('external','external')]:
+    for variable,name in [('E','engine'),('factory','app'),('resale','resale'),('purchases','purchases'),
+        ('popularity','popularity'),('workspace','workspace'),('V','vertical_list'),('ui','ui'),
+        ('workspace_ui','workspace_ui'),('purchases_ui','purchases_ui'),('external','external')]:
         content=(ROOT/'mcr_copy/src'/f'{name}.lua').read_text()
         modules.append(f'local {variable}=(function()\n{content}\nend)()\n')
-    prefix="-- Palatka full MCR client preview; original attribution retained.\nPalatkaMCR=(function()\n"+''.join(modules)+"local A=factory(E);A.external=external;ui(A);return A\nend)()\n"
+    prefix="-- Palatka full MCR client preview; original attribution retained.\nPalatkaMCR=(function()\n"+''.join(modules)+"local A=factory(E);A.external=external;A.vertical_list=V;workspace(A,E,resale(E),purchases(E),popularity(E));ui(A);workspace_ui(A);purchases_ui(A);return A\nend)()\n"
     patch(source[:70],prefix+source[:70])
     ready='while not isSampAvailable()do wait(-244297-(-244297))end'
     patch(ready,ready+' PalatkaMCR.start();')
